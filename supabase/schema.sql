@@ -342,6 +342,41 @@ create trigger validate_user_cover_choice_trigger
 before insert or update on public.user_cover_choices
 for each row execute procedure public.validate_user_cover_choice();
 
+-- Revisão manual das capas encontradas pelo cover-variants-bot.
+create or replace function public.review_bot_action(p_action_id bigint, p_status text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_action public.bot_actions%rowtype;
+  v_item_id text;
+  v_variant_key text;
+  v_label text;
+  v_cover_url text;
+  v_source_url text;
+begin
+  if not public.is_admin() then raise exception 'Apenas administradores podem revisar ações de bots'; end if;
+  if p_status not in ('approved', 'rejected') then raise exception 'Status de revisão inválido'; end if;
+  select * into v_action from public.bot_actions where id = p_action_id for update;
+  if not found then raise exception 'Ação do bot não encontrada'; end if;
+  if v_action.status <> 'pending' then raise exception 'Esta ação já foi revisada'; end if;
+  if p_status = 'approved' and v_action.action = 'cover_variant_candidate' then
+    v_item_id := nullif(trim(v_action.metadata->>'item_id'), '');
+    v_variant_key := nullif(trim(v_action.metadata->>'variant_key'), '');
+    v_label := nullif(trim(v_action.metadata->>'label'), '');
+    v_cover_url := nullif(trim(v_action.metadata->>'cover_url'), '');
+    v_source_url := nullif(trim(v_action.metadata->>'source_url'), '');
+    if v_item_id is null or v_variant_key is null or v_label is null or v_cover_url is null or v_cover_url !~ '^https://' then
+      raise exception 'A proposta de capa não contém dados válidos';
+    end if;
+    insert into public.comic_cover_variants(item_id, variant_key, label, cover_url, source_url)
+    values (v_item_id, v_variant_key, left(v_label, 80), v_cover_url, v_source_url)
+    on conflict (item_id, variant_key) do update set label = excluded.label, cover_url = excluded.cover_url, source_url = excluded.source_url;
+  end if;
+  update public.bot_actions set status = p_status, reviewed_by = auth.uid(), reviewed_at = now() where id = p_action_id;
+end;
+$$;
+grant execute on function public.review_bot_action(bigint, text) to authenticated;
+
 create table if not exists public.comic_likes (
   user_id uuid not null references public.profiles(id) on delete cascade,
   item_id text not null,
@@ -879,6 +914,7 @@ drop policy if exists "moderation history visible to moderators" on public.moder
 drop policy if exists "moderators create moderation history" on public.moderation_actions;
 drop policy if exists "staff read bot actions" on public.bot_actions;
 drop policy if exists "admins review bot actions" on public.bot_actions;
+drop policy if exists "moderators review bot actions" on public.bot_actions;
 drop policy if exists "achievements are public" on public.achievements;
 drop policy if exists "user achievements are public" on public.user_achievements;
 drop policy if exists "admins manage achievements" on public.achievements;
@@ -1001,7 +1037,7 @@ create policy "users manage comment likes" on public.comment_likes for all using
 create policy "moderation history visible to moderators" on public.moderation_actions for select using (public.is_moderator());
 create policy "moderators create moderation history" on public.moderation_actions for insert with check (public.is_moderator() and auth.uid() = actor_id);
 create policy "staff read bot actions" on public.bot_actions for select using (public.is_moderator());
-create policy "admins review bot actions" on public.bot_actions for update using (public.is_admin()) with check (public.is_admin());
+create policy "moderators review bot actions" on public.bot_actions for update using (public.is_moderator()) with check (public.is_moderator());
 create policy "achievements are public" on public.achievements for select using (true);
 create policy "user achievements are public" on public.user_achievements for select using (true);
 create policy "admins manage achievements" on public.achievements for all using (public.is_admin()) with check (public.is_admin());

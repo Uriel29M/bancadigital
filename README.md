@@ -75,6 +75,21 @@ Não coloque o token em `js/supabase.js` nem no código do navegador. O usuário
 
 O formulário público de envio continua sendo uma fila local de análise; ele não publica automaticamente conteúdo enviado por leitores.
 
+### Bot de capas variantes
+
+O `cover-variants-bot` examina as edições enviadas pelo painel administrativo, consulta as fontes configuradas e verifica por HTTP se cada URL responde como imagem. As candidatas entram em `bot_actions` como pendentes; somente a aprovação da equipe no Monitoramento cadastra a variante em `comic_cover_variants`.
+
+Configure as fontes autorizadas como JSON nos secrets do Supabase. A URL pode usar `{item_id}`, `{series}`, `{issue}` e `{publisher}`:
+
+```text
+supabase secrets set COVER_VARIANT_SOURCES='[{"name":"Fonte autorizada","url":"https://fonte.exemplo/busca?serie={series}&edicao={issue}"}]'
+supabase functions deploy cover-variants-bot
+```
+
+Essa função faz a autenticação do administrador dentro do próprio código; por isso ela usa `verify_jwt = false` para que o preflight CORS do navegador seja aceito.
+
+Não configure fontes sem permissão para consulta. Depois da execução, confira a miniatura e o link da imagem no Monitoramento antes de aprovar.
+
 O catálogo publicado recebe uma nova versão e invalida o catálogo antigo salvo no `localStorage` quando os usuários recarregam o site.
 
 Para a versão online, substitua o DataStore por uma API com banco de dados. Uma estrutura simples seria:

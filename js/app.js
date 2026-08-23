@@ -17,6 +17,7 @@
   ];
   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
+  let lazyCoverObserver = null;
   const KNIGHT_TERRORS_VOLUME_GROUPS = [
     ["Principal", 7], ["Batman", 2], ["Devastadora", 2], ["Coringa", 2],
     ["Hera Venenosa", 2], ["Adão Negro", 2], ["Robin", 2], ["Flash", 2],
@@ -358,7 +359,7 @@
       state.section = "reader";
       state.readerItemId = readerId;
       render();
-      if (state.authReady) openReader(item, { routeSync: true });
+      openReader(item, { routeSync: true });
     } else {
       state.section = section;
       state.collectionId = params.get("colecao") || null;
@@ -420,11 +421,28 @@
     if (!sb || !state.session?.user?.id) return;
     if (state.presenceInterval) clearInterval(state.presenceInterval);
     const heartbeat = async () => {
-      const result = await sb.rpc("touch_profile");
-      if (!result.error && state.section === "ranking") loadRankingData(true);
+      try {
+        const result = await sb.rpc("touch_profile");
+        if (result.error) {
+          const message = String(result.error.message || "");
+          if (/network|fetch|address unreachable|offline|failed/i.test(message)) return false;
+          return true;
+        }
+        if (state.section === "ranking") loadRankingData(true);
+        return true;
+      } catch (error) {
+        const message = String(error?.message || error || "");
+        if (/network|fetch|address unreachable|offline|failed/i.test(message)) return false;
+        console.warn("NÃ£o foi possÃ­vel atualizar a presenÃ§a:", message);
+        return true;
+      }
     };
-    await heartbeat();
-    state.presenceInterval = setInterval(heartbeat, 60000);
+    if (await heartbeat()) state.presenceInterval = setInterval(async () => {
+      if (!(await heartbeat())) {
+        clearInterval(state.presenceInterval);
+        state.presenceInterval = null;
+      }
+    }, 60000);
   }
 
   async function loadRankingData(silent = false) {
@@ -1461,7 +1479,13 @@
           }
         });
         render();
-      }).subscribe();
+      }).subscribe(status => {
+        if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          const channel = state.notificationChannel;
+          state.notificationChannel = null;
+          channel?.unsubscribe?.();
+        }
+      });
     }
   }
 
@@ -1481,7 +1505,8 @@
       ...rows.map(row => ({ ...row, kind: "moderation", actorName: names.get(row.actor_id) || "monitor", targetName: names.get(row.target_id) || "usuário" })),
       ...(bots.data || []).map(row => ({ ...row, kind: "bot" }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    state.staffPendingCount = (bots.data || []).filter(row => row.status === "pending").length;
+    // Candidatas de capas têm contador próprio na tela "Examinar capas variantes".
+    state.staffPendingCount = 0;
   }
 
   function isNotificationFromOpenChat(notification) {
@@ -1708,6 +1733,20 @@
     });
   }
 
+  function openStyledCoverConfirm(message, onConfirm) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal cover-remove-confirm-modal"><div class="section-head"><div><div class="eyebrow">Administrador</div><h2>Remover capa variante?</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-close>Cancelar</button></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Manter capa</button><button type="button" class="btn btn-danger" data-confirm-remove>Remover</button></div></div>`;
+    $("#modal-root").appendChild(overlay);
+    $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $('[data-confirm-remove]', overlay).onclick = async event => {
+      event.currentTarget.disabled = true;
+      overlay.remove();
+      await onConfirm();
+    };
+  }
+
   function openCoverChoice(itemId, collectionId = "") {
     const existingOverlay = $("#modal-root .cover-choice-modal")?.closest(".modal-backdrop");
     if (existingOverlay) return;
@@ -1723,13 +1762,52 @@
     const collectionChoices = collectionId ? (collection?.coverChoices || {}) : null;
     const current = collectionId ? collectionChoices?.[itemId] : state.coverChoices.get(itemId);
     const variants = usableCoverVariants(item);
+    const botVariants = variants.filter(variant => String(variant.variant_key || "").startsWith("bot-"));
     const options = [{ variant_key: "__default", label: "Capa principal", cover_url: item.coverUrl || "" }, ...variants];
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal cover-choice-modal"><div class="section-head"><div><h2>Escolher capa</h2><div class="section-subtitle">${escapeHTML(itemDisplayTitle(item))}</div></div><button class="small-btn" data-close>Fechar</button></div><form id="cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="variantKey" value="${escapeHTML(option.variant_key)}" ${current?.variant_key === option.variant_key || (!current && option.variant_key === "__default") ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.cover_url))}" alt=""><span>${escapeHTML(option.label)}</span></label>`).join("")}</div>${variants.length ? "" : '<div class="empty">Nenhuma capa variante foi cadastrada para esta edição.</div>'}<div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal cover-choice-modal"><div class="section-head"><div><h2>Escolher capa</h2><div class="section-subtitle">${escapeHTML(itemDisplayTitle(item))}</div></div><button class="small-btn" data-close>Fechar</button></div><form id="cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="variantKey" value="${escapeHTML(option.variant_key)}" ${current?.variant_key === option.variant_key || (!current && option.variant_key === "__default") ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.cover_url))}" alt=""><span>${escapeHTML(option.label)}</span>${state.profile?.plan === "admin" && option.variant_key !== "__default" ? `<button type="button" class="small-btn danger cover-variant-remove" data-remove-bot-variant="${escapeHTML(option.variant_key)}">${String(option.variant_key).startsWith("bot-") ? "🤖 " : ""}Remover</button>` : ""}</label>`).join("")}</div>${variants.length ? "" : '<div class="empty">Nenhuma capa variante foi cadastrada para esta edição.</div>'}<div class="modal-actions">${state.profile?.plan === "admin" && botVariants.length ? `<button type="button" class="small-btn danger" data-remove-bot-variants>🤖 Remover capas do bot</button>` : ""}<button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $$('[data-remove-bot-variant]', overlay).forEach(button => button.addEventListener("click", async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const variantKey = button.dataset.removeBotVariant;
+      openStyledCoverConfirm(variantKey.startsWith("bot-") ? "Esta capa foi adicionada pelo bot." : "Esta capa variante será removida do catálogo.", async () => {
+        button.disabled = true;
+        const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "remove_variant", item_id: itemId, variant_key: variantKey } });
+        if (result.error) {
+          let detail = result.error.message || "Não foi possível remover esta capa.";
+          try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
+          button.disabled = false;
+          return toast(detail);
+        }
+        await loadCoverCatalog();
+        overlay.remove();
+        openCoverChoice(itemId, collectionId);
+        toast(variantKey.startsWith("bot-") ? "Capa do bot removida." : "Capa variante removida.");
+      });
+    }));
+    $('[data-remove-bot-variants]', overlay)?.addEventListener("click", event => {
+      const batchButton = event.currentTarget;
+      openStyledCoverConfirm(`${botVariants.length} capa(s) adicionada(s) pelo bot serão removidas desta edição.`, async () => {
+        batchButton.disabled = true;
+        const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "remove_bot_variants", item_id: itemId } });
+        if (result.error) {
+          let detail = result.error.message || "Não foi possível remover as capas do bot.";
+          try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
+          batchButton.disabled = false;
+          return toast(detail);
+        }
+        if (current?.variant_key?.startsWith("bot-") && !collectionId) {
+          await sb.from("user_cover_choices").delete().eq("user_id", state.session.user.id).eq("item_id", itemId);
+        }
+        await loadCoverCatalog();
+        overlay.remove();
+        toast(`${Number(result.data?.removed || botVariants.length)} capa(s) do bot removida(s).`);
+      });
+    });
     $("#cover-choice-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
@@ -2034,8 +2112,11 @@
   const coverMemoryCache = new Map();
   const coverLoading = new Map();
   const coverAbortControllers = new Map();
+  let deferredCoverObserver = null;
 
   function cancelCoverLoads() {
+    deferredCoverObserver?.disconnect();
+    deferredCoverObserver = null;
     for (const controller of coverAbortControllers.values()) controller.abort();
     coverAbortControllers.clear();
     coverLoading.clear();
@@ -2639,6 +2720,8 @@
   function openReader(item, options = {}) {
     if (!item) return;
 
+    prioritizeReaderLoading();
+
     if (!item.local && !options.routeSync) {
       navigate({ ler: item.id });
       return;
@@ -2867,7 +2950,8 @@
           method: "GET",
           mode: "cors",
           credentials: "omit",
-          cache: "no-store"
+          cache: "default",
+          priority: "high"
         });
         if (!response.ok) {
           const error = new Error(`Arquivo não encontrado (HTTP ${response.status})`);
@@ -3166,7 +3250,8 @@
         method: "GET",
         mode: "cors",
         credentials: "omit",
-        cache: "no-store",
+        cache: "default",
+        priority: "high",
         signal: downloadController.signal
       });
       if (!response.ok) throw new Error("HTTP " + response.status);
@@ -3461,6 +3546,7 @@
     }
 
     try {
+      const libarchivePromise = loadLibarchiveModule();
 
       // =========================================================
       // 1. BAIXAR CBR
@@ -3479,7 +3565,8 @@
           method: "GET",
           mode: "cors",
           credentials: "omit",
-          cache: "default"
+          cache: "default",
+          priority: "high"
         });
         console.log("[CBR] HTTP:", response.status);
         console.log("[CBR] Content-Type:", response.headers.get("content-type") || "desconhecido");
@@ -3588,24 +3675,7 @@
 
       status("Verificando biblioteca CBR…");
 
-      const LIBARCHIVE_MAIN = appAssetUrl("libarchive/libarchive.js");
-
-      const LIBARCHIVE_WORKER = appAssetUrl("libarchive/worker-bundle.js");
-
-      const LIBARCHIVE_WASM = appAssetUrl("libarchive/libarchive.wasm");
-
-      console.log("[CBR] MAIN:", LIBARCHIVE_MAIN);
-      console.log("[CBR] WORKER:", LIBARCHIVE_WORKER);
-      console.log("[CBR] WASM:", LIBARCHIVE_WASM);
-
-      const [mainResponse, workerResponse, wasmResponse] = await Promise.all([
-        fetch(LIBARCHIVE_MAIN, { cache: "default" }),
-        fetch(LIBARCHIVE_WORKER, { cache: "default" }),
-        fetch(LIBARCHIVE_WASM, { cache: "default" })
-      ]);
-      if (!mainResponse.ok) throw new Error(`LIBARCHIVE_MAIN_MISSING: HTTP ${mainResponse.status}`);
-      if (!workerResponse.ok) throw new Error(`LIBARCHIVE_WORKER_MISSING: HTTP ${workerResponse.status}`);
-      if (!wasmResponse.ok) throw new Error(`LIBARCHIVE_WASM_MISSING: HTTP ${wasmResponse.status}`);
+      // A importacao ja foi iniciada em paralelo com o download do CBR.
 
       // =========================================================
       // 4. IMPORTAR LIBARCHIVE
@@ -3613,7 +3683,7 @@
 
       status("Carregando biblioteca CBR…");
 
-      const module = await loadLibarchiveModule();
+      const module = await libarchivePromise;
 
       console.log(
         "[CBR] módulo carregado:",
@@ -3649,7 +3719,7 @@
 
       console.log(
         "[CBR] Worker configurado:",
-        LIBARCHIVE_WORKER
+        workerUrl
       );
 
       // =========================================================
@@ -4292,37 +4362,57 @@
       return response.arrayBuffer();
     }
 
-    const chunkSize = 4 * 1024 * 1024;
-    const chunks = [];
-    let total = 0;
-    let received = 0;
-    let start = 0;
-    while (start < total || start === 0) {
-      const end = start + chunkSize - 1;
-      const proxy = new URL(proxiedFileUrl(source));
-      const response = await fetch(proxy, {
-        headers: { Range: `bytes=${start}-${end}` },
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store"
-      });
-      if (!(response.ok || response.status === 206)) throw new Error(`HTTP ${response.status}`);
-      const part = new Uint8Array(await response.arrayBuffer());
-      const contentRange = response.headers.get("content-range") || "";
-      const match = contentRange.match(/bytes\s+(\d+)-(\d+)\/(\d+)/i);
-      if (match) total = Number(match[3]);
-      if (!part.byteLength) throw new Error("O Mega retornou um bloco vazio.");
-      chunks.push(part);
-      received += part.byteLength;
-      onProgress(received, total);
-      if (!total || part.byteLength < chunkSize) break;
-      start += part.byteLength;
-    }
-    const bytes = new Uint8Array(received);
-    let offset = 0;
-    chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
-    if (total && received !== total) throw new Error(`Download incompleto: ${received} de ${total} bytes.`);
-    return bytes.buffer;
+    const proxyUrl = proxiedFileUrl(source);
+    const downloadByRanges = async (startAt = 0, prefixChunks = [], prefixReceived = 0, totalHint = 0) => {
+      const chunkSize = 4 * 1024 * 1024;
+      const chunks = [...prefixChunks];
+      let total = totalHint;
+      let received = prefixReceived;
+      let start = startAt;
+      while (!total || start < total) {
+        const end = start + chunkSize - 1;
+        let response;
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            response = await fetch(proxyUrl, {
+              headers: { Range: `bytes=${start}-${end}` },
+              mode: "cors",
+              credentials: "omit",
+              cache: "no-store",
+              priority: "high"
+            });
+            if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status}`);
+            break;
+          } catch (error) {
+            lastError = error;
+            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+          }
+        }
+        if (!response) throw lastError || new Error("Falha ao baixar um bloco do Mega.");
+        const part = new Uint8Array(await response.arrayBuffer());
+        const contentRange = response.headers.get("content-range") || "";
+        const match = contentRange.match(/bytes\s+(\d+)-(\d+)\/(\d+)/i);
+        if (match) total = Number(match[3]);
+        if (!total) total = Number(response.headers.get("content-length")) || 0;
+        if (!part.byteLength) throw new Error("O Mega retornou um bloco vazio.");
+        chunks.push(part);
+        received += part.byteLength;
+        onProgress(received, total);
+        if (!total || part.byteLength < chunkSize) break;
+        start += part.byteLength;
+      }
+      const bytes = new Uint8Array(received);
+      let offset = 0;
+      chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
+      if (!received) throw new Error("O Mega retornou um arquivo vazio.");
+      if (total && received !== total) throw new Error(`Download incompleto: ${received} de ${total} bytes.`);
+      return bytes.buffer;
+    };
+
+    // Avoid long-lived HTTP/3 streams: this is the connection mode that was
+    // producing ERR_QUIC_PROTOCOL_ERROR. Each range is independently retried.
+    return downloadByRanges();
   }
 
   function proxiedImageUrl(url) {
@@ -4339,6 +4429,57 @@
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
     return proxy.toString();
+  }
+
+  function prepareLazyImages(root = document) {
+    if (!root) return;
+    const priorityRoot = root.closest?.(".modal-backdrop") || root.classList?.contains("modal-backdrop");
+    $$('img', root).forEach(image => {
+      if (priorityRoot) image.loading = "eager";
+      else if (!image.hasAttribute("loading")) image.loading = "lazy";
+      image.decoding = "async";
+    });
+    const backgrounds = $$('[style*="background-image"]', root).filter(element => element.dataset.coverSize !== "hero");
+    if (!backgrounds.length) return;
+    if (!("IntersectionObserver" in window)) {
+      backgrounds.forEach(element => element.classList.remove("is-lazy-cover"));
+      return;
+    }
+    if (!lazyCoverObserver) lazyCoverObserver = new IntersectionObserver(entries => {
+      entries.sort((a, b) => {
+        const first = a.target.getBoundingClientRect();
+        const second = b.target.getBoundingClientRect();
+        return first.top - second.top || first.left - second.left;
+      }).forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const element = entry.target;
+        if (element.dataset.lazyBackground) {
+          element.style.backgroundImage = element.dataset.lazyBackground;
+          delete element.dataset.lazyBackground;
+        }
+        element.classList.remove("is-lazy-cover");
+        lazyCoverObserver?.unobserve(element);
+      });
+    }, { rootMargin: "250px 0px" });
+    backgrounds.forEach(element => {
+      const background = element.style.backgroundImage;
+      if (!background || background === "none") return;
+      element.dataset.lazyBackground = background;
+      element.style.backgroundImage = "none";
+      element.classList.add("is-lazy-cover");
+      lazyCoverObserver.observe(element);
+    });
+  }
+
+  function prioritizeReaderLoading() {
+    cancelCoverLoads();
+    lazyCoverObserver?.disconnect();
+    lazyCoverObserver = null;
+    $$(".is-lazy-cover").forEach(element => {
+      delete element.dataset.lazyBackground;
+      element.style.backgroundImage = "none";
+      element.classList.remove("is-lazy-cover");
+    });
   }
 
   async function imageBlobToDataUrl(blob, maxWidth = 480) {
@@ -4469,8 +4610,9 @@
     const priority = elements.filter(element => element.classList.contains("hero-bg"));
     const deferred = elements.filter(element => !element.classList.contains("hero-bg"));
     const observeDeferred = () => {
-      const observer = "IntersectionObserver" in window ? new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { load(entry.target); observer.unobserve(entry.target); } }), { rootMargin: "500px" }) : null;
-      deferred.forEach(element => observer ? observer.observe(element) : load(element));
+      deferredCoverObserver?.disconnect();
+      deferredCoverObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { load(entry.target); deferredCoverObserver?.unobserve(entry.target); } }), { rootMargin: "500px" }) : null;
+      deferred.forEach(element => deferredCoverObserver ? deferredCoverObserver.observe(element) : load(element));
     };
     const priorityJobs = priority.map(load).filter(Boolean);
     if (priorityJobs.length) Promise.allSettled(priorityJobs).then(observeDeferred);
@@ -6080,10 +6222,194 @@
 
   function renderStaffActivities() {
     if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
-    const items = state.staffActivities.map(item => item.kind === "bot"
-      ? `<article class="staff-activity-item"><header><span>🤖 ${escapeHTML(item.bot_name)}</span><span>${escapeHTML(item.status)}</span></header><strong>${escapeHTML(item.title)} · ${escapeHTML(item.action)}</strong><p>${escapeHTML(item.body)}</p><small>${escapeHTML(formatCommentDate(item.created_at))}</small>${state.profile.plan === "admin" && item.status === "pending" ? `<div class="staff-activity-actions"><button class="small-btn" data-bot-review="${item.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-bot-review="${item.id}" data-status="rejected">Rejeitar</button></div>` : ""}</article>`
+    const items = state.staffActivities.filter(item => item.kind !== "bot").map(item => item.kind === "bot"
+      ? ""
       : `<article class="staff-activity-item"><header><span>⚖ ${escapeHTML(item.actorName)}</span><span>${escapeHTML(formatCommentDate(item.created_at))}</span></header><strong>${escapeHTML(item.action)}</strong><p>Alvo: @${escapeHTML(item.targetName)}</p>${item.duration_until ? `<small>Até ${escapeHTML(formatCommentDate(item.duration_until))}</small>` : ""}</article>`).join("");
     return `<div class="staff-activity-list">${items || '<div class="empty">Nenhuma ação interna registrada.</div>'}</div>`;
+  }
+
+  function coverVariantCandidates() {
+    const seen = new Set();
+    const creatorKey = value => String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, "").split(/\s[-–—]\s/)[0].replace(/\b(?:variante|variant|cover|capa|card stock|foil|sketch|blank|design|preto e branco|black and white|dc pride|homenagem)\b.*$/i, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+    const knownCreators = new Set();
+    state.coverVariants.forEach((variants, itemId) => variants.forEach(variant => {
+      const key = creatorKey(variant.label);
+      if (key) knownCreators.add(`${itemId}:${key}`);
+    }));
+    return state.staffActivities.filter(item => {
+      if (item.kind !== "bot" || item.action !== "cover_variant_candidate") return false;
+      if (item.status !== "pending") return false;
+      const url = String(item.metadata?.cover_url || "");
+      if (!String(item.metadata?.creator || "").trim()) return false;
+      if (/(?:logo|favicon|icon|avatar|banner|sprite|button|badge)/i.test(url)) return false;
+      if (/dcuguide/i.test(String(item.metadata?.source_url || "")) && !/cover[_%20-]*[b-z]/i.test(url)) return false;
+      const catalogItem = state.db.library.find(entry => String(entry.id) === String(item.metadata?.item_id));
+      const itemId = String(item.metadata?.item_id || "");
+      const candidateCreator = creatorKey(item.metadata?.creator || item.metadata?.label);
+      if (!candidateCreator || knownCreators.has(`${itemId}:${candidateCreator}`)) return false;
+      const imageKeys = value => { let key = String(value || "").trim().split(/[?#]/, 1)[0]; try { key = decodeURIComponent(key); } catch {} key = key.replace(/\/Special:FilePath\//i, "/images/").replace(/\/images\/thumb\/([^/]+\/[^/]+)\/[^/]+\/(?:\d+px-)?(.+)$/i, "/images/$1/$2").toLowerCase(); const file = (key.split("/").pop() || "").replace(/^\d+px[-_]/i, "").replace(/[^a-z0-9]+/gi, ""); return file ? [key, `file:${file}`] : [key]; };
+      const keys = imageKeys(url);
+      const primaryKeys = imageKeys(catalogItem?.coverUrl);
+      const storedKeys = (state.coverVariants.get(String(item.metadata?.item_id)) || []).flatMap(variant => imageKeys(variant.cover_url));
+      if (!url || keys.some(key => primaryKeys.includes(key) || storedKeys.includes(key) || seen.has(`${itemId}:${key}`))) return false;
+      if (seen.has(`${itemId}:creator:${candidateCreator}`)) return false;
+      keys.forEach(key => seen.add(`${itemId}:${key}`));
+      seen.add(`${itemId}:creator:${candidateCreator}`);
+      return true;
+    });
+  }
+
+  async function runCoverVariantsBot(button, overlay) {
+    button.disabled = true;
+    const items = state.db.library.map(item => ({ id: item.id, title: item.title, seriesTitle: item.seriesTitle, originalTitle: item.originalTitle, issue: item.issue, publisher: item.publisher, coverUrl: item.coverUrl }));
+    const batchSize = 20;
+    let candidates = 0;
+    try {
+      for (let offset = 0; offset < items.length; offset += batchSize) {
+        const result = await sb.functions.invoke("cover-variants-bot", { body: { items: items.slice(offset, offset + batchSize) } });
+        if (result.error) {
+          let detail = result.error.message || "Erro ao executar o bot de capas.";
+          try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
+          throw new Error(detail);
+        }
+        candidates += Number(result.data?.candidates || 0);
+      }
+    } catch (error) {
+      button.disabled = false;
+      return toast(error instanceof Error ? error.message : "Não foi possível executar o bot de capas.");
+    }
+    button.disabled = false;
+    await loadStaffActivities();
+    overlay?.remove();
+    openCoverVariantsReviewPopup();
+    toast(`${candidates} capa(s) candidata(s) encontrada(s).`);
+  }
+
+  function openCoverVariantsReviewPopup() {
+    closeNotificationsPopups();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    const candidates = coverVariantCandidates();
+    const itemFor = candidate => state.db.library.find(item => String(item.id) === String(candidate.metadata?.item_id));
+    const cards = candidates.map(candidate => {
+      const item = itemFor(candidate);
+      const seriesId = item?.seriesId || "";
+      const image = candidate.metadata?.cover_url || "";
+      const creator = candidate.metadata?.creator || candidate.metadata?.label || "Criador não identificado";
+      return `<article class="cover-variant-review-card"><img src="${escapeHTML(proxiedImageUrl(image))}" alt="Capa candidata" loading="lazy"><div class="cover-variant-review-copy"><strong>${escapeHTML(itemDisplayTitle(item) || candidate.title)}</strong><span>Criador: ${escapeHTML(creator)}</span><small>${escapeHTML(image)}</small><div class="staff-activity-actions">${seriesId ? `<button class="small-btn" data-bot-series="${escapeHTML(seriesId)}">Série</button>` : ""}${candidate.status === "pending" && state.profile?.plan === "admin" ? `<button class="small-btn" data-bot-review="${candidate.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-bot-review="${candidate.id}" data-status="rejected">Rejeitar</button>` : `<span class="status-pill">${escapeHTML(candidate.status)}</span>`}</div></div></article>`;
+    }).join("");
+    overlay.innerHTML = `<div class="modal cover-variants-review-modal"><div class="section-head"><div><h2>Examinar capas variantes</h2><div class="section-subtitle">Revise as capas encontradas antes de disponibilizá-las no catálogo.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="modal-actions"><button class="btn btn-danger" data-run-cover-variants-bot>Executar nova busca</button></div><div class="cover-variant-review-list">${cards || '<div class="empty">Nenhuma capa candidata aguardando revisão.</div>'}</div></div>`;
+    $("#modal-root").appendChild(overlay);
+    $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $('[data-remove-bot-variants]', overlay)?.addEventListener("click", event => {
+      const batchButton = event.currentTarget;
+      openStyledCoverConfirm(`${botVariants.length} capa(s) adicionada(s) pelo bot serão removidas desta edição.`, async () => {
+        batchButton.disabled = true;
+        const result = await sb.from("comic_cover_variants").delete().eq("item_id", itemId).like("variant_key", "bot-%");
+        if (result.error) { batchButton.disabled = false; return toast(result.error.message || "Não foi possível remover as capas do bot."); }
+        if (current?.variant_key?.startsWith("bot-") && !collectionId) await sb.from("user_cover_choices").delete().eq("user_id", state.session.user.id).eq("item_id", itemId);
+        await loadCoverCatalog();
+        overlay.remove();
+        toast("Capas adicionadas pelo bot removidas.");
+      });
+    });
+    $('[data-run-cover-variants-bot]', overlay)?.addEventListener("click", event => runCoverVariantsBot(event.currentTarget, overlay));
+    $$(".cover-variant-review-card", overlay).forEach((card, index) => {
+      const candidate = candidates[index];
+      const item = itemFor(candidate);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "small-btn";
+      button.textContent = "Variantes";
+      const variants = usableCoverVariants(item);
+      button.disabled = variants.length === 0;
+      button.dataset.botVariants = item?.id || "";
+      if (variants.length) {
+        const anchor = document.createElement("span");
+        anchor.className = "cover-tooltip-anchor";
+        const tooltip = document.createElement("span");
+        tooltip.className = "cover-image-tooltip";
+        const tooltipVariants = item?.coverUrl ? [{ cover_url: item.coverUrl, label: "Capa principal" }, ...variants] : variants;
+        tooltip.innerHTML = tooltipVariants.map(variant => `<span class="cover-image-tooltip-item"><img src="${escapeHTML(proxiedImageUrl(variant.cover_url))}" alt="${escapeHTML(variant.label || "Capa variante")}"><small>${escapeHTML(variant.label || "Capa variante")}</small></span>`).join("");
+        anchor.addEventListener("mouseenter", () => requestAnimationFrame(() => {
+          const rect = button.getBoundingClientRect();
+          const tooltipWidth = Math.min(360, window.innerWidth * .72);
+          const left = Math.max(8, Math.min(rect.left, window.innerWidth - tooltipWidth - 8));
+          tooltip.style.left = `${left}px`;
+          tooltip.style.right = "auto";
+          tooltip.style.bottom = "auto";
+          const height = tooltip.getBoundingClientRect().height;
+          tooltip.style.top = `${Math.max(8, rect.top - height - 8)}px`;
+        }));
+        anchor.append(button, tooltip);
+        $(".staff-activity-actions", card)?.prepend(anchor);
+        return;
+      }
+      $(".staff-activity-actions", card)?.prepend(button);
+    });
+    $$('[data-bot-series]', overlay).forEach(button => button.onclick = () => {
+      const first = state.db.library.find(item => item.seriesId === button.dataset.botSeries);
+      if (!first) return toast("Série não encontrada.");
+      overlay.remove();
+      openSeriesSelection(first, seriesEditions(first), true);
+    });
+    $$('[data-bot-variants]', overlay).forEach(button => button.onclick = () => {
+      if (!button.disabled) openCoverChoice(button.dataset.botVariants);
+    });
+    $$('[data-bot-review]', overlay).forEach(button => button.onclick = async () => {
+      button.disabled = true;
+      const reviewCard = button.closest(".cover-variant-review-card");
+      if (reviewCard) reviewCard.style.display = "none";
+      const actionId = Number(button.dataset.botReview);
+      const candidate = candidates.find(entry => Number(entry.id) === actionId);
+      const candidateItem = itemFor(candidate || {});
+      const result = button.dataset.status === "approved"
+        ? await sb.functions.invoke("cover-variants-bot", { body: { action: "approve_variant", action_id: actionId, primary_cover_url: candidateItem?.coverUrl || "" } })
+        : await sb.rpc("review_bot_action", { p_action_id: actionId, p_status: button.dataset.status });
+      if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível revisar a capa."); }
+      if (button.dataset.status === "approved" && !result.data?.duplicate && candidateItem?.id) {
+        const approvedVariant = {
+          item_id: candidateItem.id,
+          variant_key: candidate?.metadata?.variant_key || `bot-${actionId}`,
+          label: candidate?.metadata?.label || candidate?.metadata?.creator || "Capa variante",
+          cover_url: candidate?.metadata?.cover_url || "",
+          source_url: candidate?.metadata?.source_url || ""
+        };
+        const approvedVariants = [...(state.coverVariants.get(String(candidateItem.id)) || []), approvedVariant];
+        state.coverVariants.set(String(candidateItem.id), approvedVariants);
+        $$('[data-bot-variants]', overlay).forEach(variantButton => {
+          if (String(variantButton.dataset.botVariants) !== String(candidateItem.id)) return;
+          variantButton.disabled = false;
+          if (variantButton.closest(".cover-tooltip-anchor")) return;
+          const anchor = document.createElement("span");
+          anchor.className = "cover-tooltip-anchor";
+          const tooltip = document.createElement("span");
+          tooltip.className = "cover-image-tooltip";
+          const tooltipVariants = candidateItem.coverUrl ? [{ cover_url: candidateItem.coverUrl, label: "Capa principal" }, ...approvedVariants] : approvedVariants;
+          tooltip.innerHTML = tooltipVariants.map(variant => `<span class="cover-image-tooltip-item"><img src="${escapeHTML(proxiedImageUrl(variant.cover_url))}" alt="${escapeHTML(variant.label || "Capa variante")}"><small>${escapeHTML(variant.label || "Capa variante")}</small></span>`).join("");
+          anchor.addEventListener("mouseenter", () => requestAnimationFrame(() => {
+            const rect = variantButton.getBoundingClientRect();
+            const tooltipWidth = Math.min(360, window.innerWidth * .72);
+            const left = Math.max(8, Math.min(rect.left, window.innerWidth - tooltipWidth - 8));
+            tooltip.style.left = `${left}px`;
+            tooltip.style.right = "auto";
+            tooltip.style.bottom = "auto";
+            const height = tooltip.getBoundingClientRect().height;
+            tooltip.style.top = `${Math.max(8, rect.top - height - 8)}px`;
+          }));
+          variantButton.parentElement?.insertBefore(anchor, variantButton);
+          anchor.append(variantButton, tooltip);
+        });
+      }
+      state.staffActivities = state.staffActivities.filter(activity => Number(activity.id) !== actionId);
+      button.closest(".cover-variant-review-card")?.remove();
+      const reviewList = $(".cover-variant-review-list", overlay);
+      if (reviewList && !reviewList.querySelector(".cover-variant-review-card")) reviewList.innerHTML = '<div class="empty">Nenhuma capa candidata aguardando revisão.</div>';
+      if (button.dataset.status === "approved") void loadCoverCatalog();
+      void loadStaffActivities();
+      if (result.data?.duplicate) toast("Essa capa já existe nesta edição e foi descartada.");
+    });
   }
 
   function renderNotifications() {
@@ -6101,7 +6427,7 @@
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const staff = ["moderator", "admin"].includes(state.profile?.plan);
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button></div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $$('[data-close]', overlay).forEach(button => button.onclick = event => {
@@ -6111,11 +6437,14 @@
     });
     $$('[data-notification-tab]', overlay).forEach(button => button.onclick = () => openNotificationsPopup(button.dataset.notificationTab));
     $$('[data-bot-review]', overlay).forEach(button => button.onclick = async () => {
-      const result = await sb.from("bot_actions").update({ status: button.dataset.status, reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString() }).eq("id", button.dataset.botReview);
-      if (result.error) return toast(result.error.message || "Não foi possível revisar a ação do bot.");
+      button.disabled = true;
+      const result = await sb.rpc("review_bot_action", { p_action_id: Number(button.dataset.botReview), p_status: button.dataset.status });
+      if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível revisar a ação do bot."); }
+      if (button.dataset.status === "approved") await loadCoverCatalog();
       await loadStaffActivities();
       openNotificationsPopup("staff");
     });
+    $('[data-open-cover-variants]', overlay)?.addEventListener("click", () => openCoverVariantsReviewPopup());
     $$('[data-notification-open]', overlay).forEach(button => button.onclick = async event => {
       if (event.target.closest("[data-notification-profile]")) return;
       const notification = state.notifications.find(item => String(item.id) === String(button.dataset.notificationOpen));
@@ -6208,6 +6537,7 @@
     main.innerHTML = markup;
     bind();
     hydrateHomeCovers();
+    prepareLazyImages(main);
     decorateFactionNames(main);
   }
 
@@ -6428,7 +6758,7 @@
       const visible = state.session && ["moderator", "admin"].includes(state.profile?.plan);
       button.style.display = visible ? "" : "none";
       const badge = $(".staff-activity-badge", button);
-      if (badge) { badge.textContent = state.staffPendingCount > 99 ? "99+" : String(state.staffPendingCount); badge.hidden = !state.staffPendingCount; }
+      if (badge) badge.hidden = true;
     });
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
@@ -7086,7 +7416,7 @@
     });
   }
 
-  function openSeriesSelection(series, editions) {
+  function openSeriesSelection(series, editions, returnToCoverVariants = false) {
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const volumeGroups = new Map();
@@ -7104,7 +7434,7 @@
       <div class="modal series-modal">
         <div class="section-head">
           <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições disponíveis · clique em uma edição para ler</div></div>
-          <button class="small-btn" data-close>Fechar</button>
+          <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-close>Fechar</button></div>
         </div>
         ${volumeTabs}${volumePanels}
       </div>`;
@@ -7114,6 +7444,7 @@
       if (event.target === overlay) overlay.remove();
     });
     $("[data-close]", overlay).onclick = () => overlay.remove();
+    $('[data-back-cover-variants]', overlay)?.addEventListener("click", () => { overlay.remove(); openCoverVariantsReviewPopup(); });
     $$('[data-open]', overlay).forEach(el => el.addEventListener("click", () => {
       overlay.remove();
       openReader(state.db.library.find(x => x.id === el.dataset.open));
@@ -7613,6 +7944,12 @@
   window.addEventListener("popstate", applyRoute);
   window.BancaDigital = { state, openReader, openAdmin };
   const appRoot = document.getElementById("app");
+  const modalRoot = document.getElementById("modal-root");
+  if (modalRoot && "MutationObserver" in window) {
+    new MutationObserver(records => records.forEach(record => [...record.addedNodes].forEach(node => {
+      if (node.nodeType === Node.ELEMENT_NODE) prepareLazyImages(node);
+    }))).observe(modalRoot, { childList: true, subtree: true });
+  }
   const pathParts = window.location.pathname.split("/").filter(Boolean);
   const routeParts = pathParts[0]?.toLowerCase() === "banca-digital-quadrinhos-v3" ? pathParts.slice(1) : pathParts;
   const queryProfile = new URLSearchParams(window.location.search).get("perfil");
@@ -7644,7 +7981,7 @@
   });
   loadAccount()
     .then(async () => {
-      if (state.section === "reader") applyRoute();
+      if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection);
     })
     .catch(error => console.warn("Supabase indisponível:", error))
