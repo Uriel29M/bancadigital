@@ -263,6 +263,8 @@
     notifications: [],
     notificationUnreadCount: 0,
     notificationChannel: null,
+    staffActivities: [],
+    staffPendingCount: 0,
     localBoxFiles: [],
     localBoxVisible: false,
     publisherSettings: new Map(),
@@ -1393,6 +1395,7 @@
       await startPresence();
     }
     await loadNotifications();
+    await loadStaffActivities();
     state.authReady = true;
     syncTopAvatar();
     render();
@@ -1460,6 +1463,25 @@
         render();
       }).subscribe();
     }
+  }
+
+  async function loadStaffActivities() {
+    state.staffActivities = [];
+    state.staffPendingCount = 0;
+    if (!sb || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    const [moderation, bots] = await Promise.all([
+      sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
+      sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(100)
+    ]);
+    const rows = moderation.data || [];
+    const ids = [...new Set(rows.flatMap(row => [row.actor_id, row.target_id]).filter(Boolean))];
+    const profiles = ids.length ? await sb.from("profiles").select("id, username").in("id", ids) : { data: [] };
+    const names = new Map((profiles.data || []).map(profile => [profile.id, profile.username]));
+    state.staffActivities = [
+      ...rows.map(row => ({ ...row, kind: "moderation", actorName: names.get(row.actor_id) || "monitor", targetName: names.get(row.target_id) || "usuário" })),
+      ...(bots.data || []).map(row => ({ ...row, kind: "bot" }))
+    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    state.staffPendingCount = (bots.data || []).filter(row => row.status === "pending").length;
   }
 
   function isNotificationFromOpenChat(notification) {
@@ -6056,6 +6078,14 @@
     return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, blogs, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
   }
 
+  function renderStaffActivities() {
+    if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
+    const items = state.staffActivities.map(item => item.kind === "bot"
+      ? `<article class="staff-activity-item"><header><span>🤖 ${escapeHTML(item.bot_name)}</span><span>${escapeHTML(item.status)}</span></header><strong>${escapeHTML(item.title)} · ${escapeHTML(item.action)}</strong><p>${escapeHTML(item.body)}</p><small>${escapeHTML(formatCommentDate(item.created_at))}</small>${state.profile.plan === "admin" && item.status === "pending" ? `<div class="staff-activity-actions"><button class="small-btn" data-bot-review="${item.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-bot-review="${item.id}" data-status="rejected">Rejeitar</button></div>` : ""}</article>`
+      : `<article class="staff-activity-item"><header><span>⚖ ${escapeHTML(item.actorName)}</span><span>${escapeHTML(formatCommentDate(item.created_at))}</span></header><strong>${escapeHTML(item.action)}</strong><p>Alvo: @${escapeHTML(item.targetName)}</p>${item.duration_until ? `<small>Até ${escapeHTML(formatCommentDate(item.duration_until))}</small>` : ""}</article>`).join("");
+    return `<div class="staff-activity-list">${items || '<div class="empty">Nenhuma ação interna registrada.</div>'}</div>`;
+  }
+
   function renderNotifications() {
     if (!state.session) return renderLoginPage();
     return `<div class="content notifications-page"><div class="section-head"><div><div class="eyebrow">Central da conta</div><h1 class="section-title">Notificações</h1><div class="section-subtitle">${state.notificationUnreadCount} não lida(s)</div></div><button class="small-btn" data-mark-all-notifications>Marcar todas como lidas</button></div><div class="notification-list">${state.notifications.map(notification => { const actor = notification.actor; const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "A Banca Digital"; const actorMarkup = actor?.username ? `<a class="notification-actor" href="${escapeHTML(publicProfileHref(actor.username))}" data-notification-profile="${escapeHTML(actor.username)}">${avatarMarkup(actor, "notification-actor-avatar")}<span><b>${actorName}</b>${actor.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(actor.title)}</small>` : ""}</span></a>` : `<span class="notification-system-actor"><span class="notification-icon">${notificationIcon(notification.type)}</span><b>${actorName}</b></span>`; return `<div class="notification-item ${notification.read_at ? "" : "is-unread"}" role="button" tabindex="0" data-notification-open="${escapeHTML(notification.id)}"><span class="notification-icon">${notificationIcon(notification.type)}</span><span class="notification-copy">${actorMarkup}<strong>${escapeHTML(notification.title)}</strong><span>${escapeHTML(notification.body)}</span><small>${escapeHTML(formatCommentDate(notification.created_at))}</small></span></div>`; }).join("") || '<div class="empty">Você ainda não recebeu notificações.</div>'}</div></div>`;
@@ -6065,18 +6095,26 @@
     $$('.notifications-popup-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
   }
 
-  function openNotificationsPopup() {
+  function openNotificationsPopup(tab = "notifications") {
     if (!state.session) return openAuthPage();
     closeNotificationsPopups();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>Notificações</h2><div class="section-subtitle">${state.notificationUnreadCount} não lida(s)</div></div><button class="small-btn" data-close>Fechar</button></div>${renderNotifications()}</div>`;
+    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button></div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $$('[data-close]', overlay).forEach(button => button.onclick = event => {
       event.preventDefault();
       event.stopPropagation();
       overlay.remove();
+    });
+    $$('[data-notification-tab]', overlay).forEach(button => button.onclick = () => openNotificationsPopup(button.dataset.notificationTab));
+    $$('[data-bot-review]', overlay).forEach(button => button.onclick = async () => {
+      const result = await sb.from("bot_actions").update({ status: button.dataset.status, reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString() }).eq("id", button.dataset.botReview);
+      if (result.error) return toast(result.error.message || "Não foi possível revisar a ação do bot.");
+      await loadStaffActivities();
+      openNotificationsPopup("staff");
     });
     $$('[data-notification-open]', overlay).forEach(button => button.onclick = async event => {
       if (event.target.closest("[data-notification-profile]")) return;
@@ -6385,6 +6423,12 @@
         badge.textContent = state.notificationUnreadCount > 99 ? "99+" : String(state.notificationUnreadCount);
         badge.hidden = !state.notificationUnreadCount;
       }
+    });
+    $$('.staff-activity-button').forEach(button => {
+      const visible = state.session && ["moderator", "admin"].includes(state.profile?.plan);
+      button.style.display = visible ? "" : "none";
+      const badge = $(".staff-activity-badge", button);
+      if (badge) { badge.textContent = state.staffPendingCount > 99 ? "99+" : String(state.staffPendingCount); badge.hidden = !state.staffPendingCount; }
     });
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
@@ -6943,6 +6987,7 @@
       if (a === "open-auth") state.session ? setSection("shelf") : openAuthPage();
       if (a === "messages") openChat();
       if (a === "notifications-popup") openNotificationsPopup();
+      if (a === "staff-activity") { if (["moderator", "admin"].includes(state.profile?.plan)) openNotificationsPopup("staff"); }
       if (a === "logout") signOut();
       if (a === "profile") openProfileSettings();
       if (a === "submit") { if (isAdmin) openSubmission(); else toast("O envio de quadrinhos é exclusivo para administradores."); }

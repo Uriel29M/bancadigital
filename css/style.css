@@ -258,6 +258,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .icon-btn { width: 40px; height: 40px; font-size: 24px; }
 .notification-bell { position: relative; display: grid; place-items: center; padding: 0; }
+.staff-activity-button { position: relative; display: grid; place-items: center; padding: 0; }
+.staff-activity-badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface-2); border-radius: 999px; background: #ffd45c; color: #18151b; font-size: 9px; font-weight: 800; line-height: 13px; text-align: center; }
+.staff-activity-badge[hidden] { display: none !important; }
+.notification-tabs { display: flex; gap: 8px; margin: 0 0 14px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.notification-tab.is-active { border-color: var(--accent); color: white; }
+.staff-activity-list { display: grid; gap: 8px; }
+.staff-activity-item { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.staff-activity-item header { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
+.staff-activity-item strong { display: block; margin: 5px 0; }
+.staff-activity-item p { margin: 0; color: #d0d0d5; font-size: 12px; }
+.staff-activity-item small { display: block; margin-top: 8px; color: var(--muted); }
+.staff-activity-actions { display: flex; gap: 6px; margin-top: 10px; }
 .notification-bell-icon { line-height: 1; font-size: 19px; }
 .notification-badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface-2); border-radius: 999px; background: #e50914; color: white; font-size: 9px; font-weight: 800; line-height: 13px; text-align: center; }
 .messages-header-btn { position: relative; min-width: 42px; font-size: 19px; line-height: 1; }
