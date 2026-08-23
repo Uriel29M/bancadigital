@@ -41,6 +41,9 @@
 .profile-wall-comment .comment-author-row { align-items: center; }
 .profile-wall-comment p { margin: 8px 0 0; color: #ccc; line-height: 1.5; white-space: pre-wrap; }
 .profile-wall-comment-form { margin: 12px 0 18px; }
+.saved-publishers-list { display: grid; gap: 8px; }
+.saved-publisher-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.saved-publisher-card strong { color: var(--text); }
 .profile-activity-list { display: grid; gap: 8px; }
 .profile-activity-item { display: flex; align-items: flex-start; gap: 12px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .profile-activity-icon { display: grid; flex: 0 0 30px; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: rgba(229, 9, 20, .14); color: #ff8990; font-size: 15px; }

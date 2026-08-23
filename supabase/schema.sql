@@ -35,6 +35,9 @@ alter table public.profiles add column if not exists allow_mentions boolean not 
 alter table public.profiles add column if not exists allow_messages boolean not null default true;
 alter table public.profiles add column if not exists notifications_enabled boolean not null default true;
 alter table public.profiles add column if not exists shelf_blogs_public boolean not null default true;
+alter table public.profiles add column if not exists profile_wall_public boolean not null default true;
+alter table public.profiles add column if not exists shelf_saved_public_collections boolean not null default true;
+alter table public.profiles add column if not exists profile_activity_public boolean not null default true;
 alter table public.profiles add column if not exists xp integer not null default 0;
 alter table public.profiles add column if not exists level integer not null default 1;
 alter table public.profiles add column if not exists daily_streak integer not null default 0;
@@ -370,6 +373,15 @@ create table if not exists public.shelf_collection_likes (
   created_at timestamptz not null default now(),
   primary key (owner_id, collection_id, user_id)
 );
+
+create table if not exists public.publisher_saves (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  publisher_key text not null,
+  publisher_name text not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, publisher_key)
+);
+create index if not exists publisher_saves_user_idx on public.publisher_saves(user_id, created_at desc);
 
 create table if not exists public.shelf_collection_saves (
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -754,6 +766,7 @@ alter table public.notifications enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.chat_rooms enable row level security;
 alter table public.favorites enable row level security;
+alter table public.publisher_saves enable row level security;
 alter table public.comic_cover_variants enable row level security;
 alter table public.user_cover_choices enable row level security;
 alter table public.user_cover_styles enable row level security;
@@ -798,6 +811,8 @@ drop policy if exists "users update own profile" on public.profiles;
 drop policy if exists "users read own favorites" on public.favorites;
 drop policy if exists "favorites are public" on public.favorites;
 drop policy if exists "users manage own favorites" on public.favorites;
+drop policy if exists "publisher saves are public" on public.publisher_saves;
+drop policy if exists "users manage own publisher saves" on public.publisher_saves;
 drop policy if exists "cover variants are public" on public.comic_cover_variants;
 drop policy if exists "admins manage cover variants" on public.comic_cover_variants;
 drop policy if exists "cover choices are public" on public.user_cover_choices;
@@ -875,6 +890,8 @@ create policy "favorites are public" on public.favorites for select using (
   auth.uid() = user_id or exists (select 1 from public.profiles where id = user_id and likes_public)
 );
 create policy "users manage own favorites" on public.favorites for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "publisher saves are public" on public.publisher_saves for select using (true);
+create policy "users manage own publisher saves" on public.publisher_saves for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "cover variants are public" on public.comic_cover_variants for select using (true);
 create policy "admins manage cover variants" on public.comic_cover_variants for all using (public.is_admin()) with check (public.is_admin());
 create policy "cover choices are public" on public.user_cover_choices for select using (true);

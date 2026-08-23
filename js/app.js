@@ -240,6 +240,8 @@
     shelfExpanded: { saved: false, read: false },
     shelfCategories: [],
     savedPublicCollections: [],
+    savedPublisherKeys: new Set(),
+    savedPublishers: [],
     blogShelfCategories: [],
     shelfTab: "collections",
     publicShelfTab: "collections",
@@ -1339,6 +1341,9 @@
     if (session?.user) {
       const profile = await sb.from("profiles").select("*").eq("id", session.user.id).single();
       state.profile = profile.data;
+      const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name").eq("user_id", session.user.id).order("created_at", { ascending: false });
+      state.savedPublishers = savedPublishersResult.data || [];
+      state.savedPublisherKeys = new Set(state.savedPublishers.map(publisher => publisher.publisher_key));
       await loadFactions();
       const ownFollowers = await sb.from("profile_follows").select("follower_id").eq("following_id", session.user.id);
       const ownFollowing = await sb.from("profile_follows").select("following_id").eq("follower_id", session.user.id);
@@ -1498,7 +1503,7 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, allow_messages, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
       profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
@@ -1508,6 +1513,7 @@
       return;
     }
     const favorites = await sb.from("favorites").select("item_id").eq("user_id", profile.data.id);
+    const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false });
     const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", profile.data.id);
     const comicLikes = await sb.from("comic_likes").select("item_id").eq("user_id", profile.data.id);
     const activityResults = await Promise.all([
@@ -1521,6 +1527,7 @@
       sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id),
       sb.from("blog_saves").select("blog_id, created_at").eq("user_id", profile.data.id),
       sb.from("shelf_collection_saves").select("owner_id, collection_id, created_at").eq("user_id", profile.data.id),
+      sb.from("publisher_saves").select("publisher_name, created_at").eq("user_id", profile.data.id),
       sb.from("reading_progress").select("item_id, updated_at").eq("user_id", profile.data.id).eq("completed", true)
     ]);
     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
@@ -1574,6 +1581,7 @@
       savedBlogPosts: savedBlogs.data || [],
       collectionBlogPosts: collectionBlogs.data || [],
       favoriteIds: new Set((favorites.data || []).map(row => row.item_id)),
+      savedPublishers: savedPublishersResult.data || [],
       comicLikeIds: new Set((comicLikes.data || []).map(row => row.item_id)),
       readingProgress: new Map((progress.data || []).map(row => [row.item_id, row])),
       achievements: (achievements.data || []).map(row => row.achievements).filter(Boolean),
@@ -1601,7 +1609,7 @@
     state.notificationChannel = null;
     clearLocalBox();
     state.localBoxVisible = false;
-    state.session = null; state.profile = null; state.favoriteIds = new Set(); state.readingProgress = new Map(); state.shelfSnapshot = null; state.shelfCategories = []; state.comicLikeIds = new Set(); state.achievements = []; state.achievementChecks = new Set();
+    state.session = null; state.profile = null; state.favoriteIds = new Set(); state.readingProgress = new Map(); state.shelfSnapshot = null; state.shelfCategories = []; state.comicLikeIds = new Set(); state.achievements = []; state.achievementChecks = new Set(); state.savedPublisherKeys = new Set(); state.savedPublishers = [];
     state.notifications = [];
     state.notificationUnreadCount = 0;
     state.section = "home"; render(); toast("Você saiu da conta.");
@@ -2539,13 +2547,25 @@
     privacyField.className = "field full profile-privacy-settings";
     privacyField.innerHTML = `<label>Privacidade e notificações</label><label class="checkbox-inline"><input name="likesPublic" type="checkbox" ${state.profile?.likes_public !== false ? "checked" : ""}> Mostrar minhas curtidas publicamente</label><label class="checkbox-inline"><input name="allowMentions" type="checkbox" ${state.profile?.allow_mentions !== false ? "checked" : ""}> Receber marcações</label><label class="checkbox-inline"><input name="allowMessages" type="checkbox" ${state.profile?.allow_messages !== false ? "checked" : ""}> Receber mensagens privadas</label><label class="checkbox-inline"><input name="notificationsEnabled" type="checkbox" ${state.profile?.notifications_enabled !== false ? "checked" : ""}> Receber notificações</label>`;
     $(".form-grid", profileForm).appendChild(privacyField);
+    const profileSectionsPrivacy = document.createElement("div");
+    profileSectionsPrivacy.className = "field full profile-privacy-settings";
+    profileSectionsPrivacy.innerHTML = `<label>Seções do perfil público</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> Mostrar Mural</label><label class="checkbox-inline"><input name="savedPublicCollectionsPublic" type="checkbox" ${state.profile?.shelf_saved_public_collections !== false ? "checked" : ""}> Mostrar Públicas salvas</label><label class="checkbox-inline"><input name="activityPublic" type="checkbox" ${state.profile?.profile_activity_public !== false ? "checked" : ""}> Mostrar Histórico</label>`;
+    $(".form-grid", profileForm).appendChild(profileSectionsPrivacy);
     $("[name=shelfLikedPublic]", overlay)?.closest("label")?.remove();
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
     const originalProfileSubmit = async () => {};
+    const shelfBlogsCheckbox = $("[name=shelfBlogsPublic]", overlay);
+    if (shelfBlogsCheckbox) {
+      shelfBlogsCheckbox.closest("label")?.remove();
+      shelfVisibilityField?.insertAdjacentHTML("beforeend", `<input type="hidden" name="shelfBlogsPublic" value="${state.profile?.shelf_blogs_public !== false ? "on" : "off"}">`);
+    }
     profileForm.addEventListener("submit", async event => {
       event.preventDefault();
       const fd = new FormData(profileForm);
       const privacy = { likes_public: fd.has("likesPublic") ? fd.get("likesPublic") === "on" : state.profile?.likes_public !== false, allow_mentions: fd.get("allowMentions") === "on", allow_messages: fd.get("allowMessages") === "on", notifications_enabled: fd.get("notificationsEnabled") === "on" };
+      privacy.profile_wall_public = fd.get("wallPublic") === "on";
+      privacy.shelf_saved_public_collections = fd.get("savedPublicCollectionsPublic") === "on";
+      privacy.profile_activity_public = fd.get("activityPublic") === "on";
       const privacyUpdate = await sb.from("profiles").update(privacy).eq("id", state.session.user.id);
       if (privacyUpdate.error) return toast(privacyUpdate.error.message);
       state.profile = { ...state.profile, ...privacy };
@@ -4750,6 +4770,31 @@
     return '<section class="section saved-public-collections"><div class="section-head"><div><h2 class="section-title">Públicas salvas</h2><div class="section-subtitle">Coleções públicas salvas por este perfil.</div></div></div><div class="public-collections-grid">' + (collections.map(collection => publicCollectionCard(collection)).join("") || '<div class="empty">Nenhuma coleção pública salva.</div>') + '</div></section>';
   }
 
+  function savedPublishersMarkup(publishers = []) {
+    return `<section class="section saved-publishers"><div class="section-head"><div><h2 class="section-title">Editoras salvas</h2><div class="section-subtitle">Editoras acompanhadas por este perfil.</div></div></div><div class="saved-publishers-list">${publishers.map(publisher => `<article class="saved-publisher-card"><strong>${escapeHTML(publisher.publisher_name)}</strong><button class="small-btn" type="button" data-publisher="${escapeHTML(publisher.publisher_name)}">Abrir editora</button></article>`).join("") || '<div class="empty">Nenhuma editora salva.</div>'}</div></section>`;
+  }
+
+  async function togglePublisherSave(button) {
+    if (!state.session) return openAuthPage();
+    const publisherName = String(button.dataset.savePublisher || "").trim();
+    const key = publisherKey(publisherName);
+    if (!publisherName || !key) return;
+    const saved = state.savedPublisherKeys.has(key);
+    const result = saved
+      ? await sb.from("publisher_saves").delete().eq("user_id", state.session.user.id).eq("publisher_key", key)
+      : await sb.from("publisher_saves").insert({ user_id: state.session.user.id, publisher_key: key, publisher_name: publisherName });
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar a editora salva.");
+    if (saved) {
+      state.savedPublisherKeys.delete(key);
+      state.savedPublishers = state.savedPublishers.filter(publisher => publisher.publisher_key !== key);
+    } else {
+      const publisher = { publisher_key: key, publisher_name: publisherName };
+      state.savedPublisherKeys.add(key);
+      state.savedPublishers = [publisher, ...state.savedPublishers];
+    }
+    render();
+  }
+
   function publicProfileActivityMarkup(profileState) {
     const activities = profileState?.activity || [];
     const activityMarkup = activities.map(activity => `<article class="profile-activity-item"><span class="profile-activity-icon">${activity.icon}</span><div class="profile-activity-copy"><div><strong>${escapeHTML(activity.label)}</strong> ${activity.href ? `<a href="${escapeHTML(activity.href)}">${escapeHTML(activity.subject)}</a>` : `<span>${escapeHTML(activity.subject)}</span>`}</div>${activity.detail ? `<p>${escapeHTML(activity.detail)}</p>` : ""}<time datetime="${escapeHTML(activity.created_at)}">${escapeHTML(formatCommentDate(activity.created_at))}</time></div></article>`).join("");
@@ -5392,6 +5437,9 @@
     const readVisible = !["admin", "moderator", "premium"].includes(profile.plan) || profile.shelf_read_public !== false;
     const completedVisible = !["admin", "moderator", "premium"].includes(profile.plan) || profile.shelf_completed_public !== false;
     const likedVisible = !["admin", "moderator", "premium"].includes(profile.plan) || profile.shelf_liked_public !== false;
+    const wallVisible = profile.profile_wall_public !== false;
+    const savedPublicCollectionsVisible = profile.shelf_saved_public_collections !== false;
+    const activityVisible = profile.profile_activity_public !== false;
     const savedItems = uniqueCatalogItems(state.db.library.filter(item => publicState.favoriteIds.has(item.id)));
     const savedSeries = shelfItemsByIds([...publicState.favoriteIds].filter(isSeriesId), true);
     const readItems = uniqueCatalogItems(state.db.library.filter(item => publicState.readingProgress.get(item.id)?.completed));
@@ -5737,7 +5785,7 @@
   }
 
   async function buildPublicProfileActivity(profile, rows, collections) {
-    const [comicLikes, blogLikes, collectionLikes, follows, comments, blogComments, wallComments, favorites, blogSaves, collectionSaves, reads] = rows;
+    const [comicLikes, blogLikes, collectionLikes, follows, comments, blogComments, wallComments, favorites, blogSaves, collectionSaves, publisherSaves, reads] = rows;
     const blogIds = [...new Set([...blogLikes, ...blogComments, ...blogSaves].map(row => row.blog_id).filter(Boolean))];
     const followIds = [...new Set(follows.map(row => row.following_id).filter(Boolean))];
     const wallProfileIds = [...new Set(wallComments.map(row => row.profile_id).filter(Boolean))];
@@ -5754,6 +5802,7 @@
     const itemName = itemId => state.db.library.find(item => item.id === itemId)?.title || itemId;
     const itemHref = itemId => routeUrl({ ler: itemId });
     const blogHref = blogId => routeUrl({ pagina: "blogs", blog: blogId });
+    const publisherHref = publisherName => routeUrl({ pagina: "entidade", tipo: "publisher", valor: publisherName });
     const collectionHref = (ownerId, collectionId) => {
       const owner = profileNames.get(ownerId) || profile.username;
       return publicProfileHref(owner, collectionId);
@@ -5770,6 +5819,7 @@
     add(favorites, "save", row => ({ icon: "★", label: "Salvou", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
     add(blogSaves.filter(row => blogNames.has(String(row.blog_id))), "save", row => ({ icon: "★", label: "Salvou o blog", subject: blogNames.get(String(row.blog_id)), href: blogHref(row.blog_id) }));
     add(collectionSaves, "save", row => ({ icon: "★", label: "Salvou a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
+    add(publisherSaves, "save", row => ({ icon: "★", label: "Salvou a editora", subject: row.publisher_name, href: publisherHref(row.publisher_name) }));
     add(reads, "read", row => ({ icon: "✓", label: "Concluiu a leitura de", subject: itemName(row.item_id), href: itemHref(row.item_id) }), "updated_at");
     return events.filter(event => event.created_at).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100);
   }
@@ -6253,12 +6303,18 @@
         $("[data-shelf-tab-panel=wall]")?.setAttribute("hidden", "");
         $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
       }
+      const ownSavedPublicPanel = $("[data-shelf-tab-panel=saved-public]");
+      if (ownSavedPublicPanel && !$(".saved-publishers", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.savedPublishers));
       const showSpecialShelfTab = ["wall", "saved-public"].includes(state.shelfTab);
       $$(".shelf-page > .shelf-collection, .shelf-page > .shelf-categories, .shelf-page > .local-box-notice").forEach(element => { element.hidden = showSpecialShelfTab; });
       $$('[data-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.shelfTabPanel !== state.shelfTab; });
       $$('[data-shelf-media]').forEach(button => button.classList.toggle("is-active", button.dataset.shelfMedia === state.shelfTab));
     }
     if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
+      const publicProfile = state.publicProfile.profile;
+      const wallVisible = publicProfile.profile_wall_public !== false;
+      const savedPublicCollectionsVisible = publicProfile.shelf_saved_public_collections !== false;
+      const activityVisible = publicProfile.profile_activity_public !== false;
       const publicProfileInfo = $(".public-profile-page .profile-header > div:nth-child(2)");
       if (publicProfileInfo && !$(".profile-follow-summary", publicProfileInfo)) publicProfileInfo.insertAdjacentHTML("beforeend", followSummary(state.publicProfile.profile.id, state.publicProfile.followerCount, state.publicProfile.followingCount));
       if (!$(".public-profile-page .profile-xp-progress") && $(".public-profile-page .profile-header")) $(".public-profile-page .profile-header").insertAdjacentHTML("beforeend", profileXpProgressMarkup(state.publicProfile.profile, true));
@@ -6271,6 +6327,23 @@
       if ($(".public-shelf-media-tabs") && !$("[data-public-shelf-media=activity]")) {
         $(".public-shelf-media-tabs").insertAdjacentHTML("beforeend", '<button class="small-btn" data-public-shelf-media="activity">Histórico</button>');
         $(".public-shelf-media-tabs").parentElement?.insertAdjacentHTML("beforeend", `<div class="shelf-tab-panel public-activity-panel" data-public-shelf-tab-panel="activity">${publicProfileActivityMarkup(state.publicProfile)}</div>`);
+      }
+      const publicSavedPublicPanel = $("[data-public-shelf-tab-panel=saved-public]");
+      if (publicSavedPublicPanel && !$(".saved-publishers", publicSavedPublicPanel)) publicSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.publicProfile.savedPublishers || []));
+      if (!wallVisible) {
+        if (state.publicShelfTab === "wall") state.publicShelfTab = "collections";
+        $("[data-public-shelf-media=wall]")?.remove();
+        $("[data-public-shelf-tab-panel=wall]")?.remove();
+      }
+      if (!savedPublicCollectionsVisible) {
+        if (state.publicShelfTab === "saved-public") state.publicShelfTab = "collections";
+        $("[data-public-shelf-media=saved-public]")?.remove();
+        $("[data-public-shelf-tab-panel=saved-public]")?.remove();
+      }
+      if (!activityVisible) {
+        if (state.publicShelfTab === "activity") state.publicShelfTab = "collections";
+        $("[data-public-shelf-media=activity]")?.remove();
+        $("[data-public-shelf-tab-panel=activity]")?.remove();
       }
       const showSpecialPublicTab = ["wall", "saved-public", "activity"].includes(state.publicShelfTab);
       $$(".public-profile-page > .shelf-collection").forEach(element => { element.hidden = showSpecialPublicTab; });
@@ -6343,6 +6416,19 @@
     $$('[data-like-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(el.dataset.likeItem); }));
     $$('[data-share-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); shareComic(el.dataset.shareItem); }));
     $$('[data-publisher]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openEntityPage("publisher", el.dataset.publisher); }));
+    if (state.section === "entity" && state.entityFilter?.kind === "publisher") {
+      const actions = $(".publisher-page-actions");
+      if (actions && !$("[data-save-publisher]", actions)) {
+        const publisherName = String(state.entityFilter.value || "").trim();
+        const saved = state.savedPublisherKeys.has(publisherKey(publisherName));
+        const button = document.createElement("button");
+        button.className = `small-btn ${saved ? "is-liked" : ""}`;
+        button.dataset.savePublisher = publisherName;
+        button.textContent = saved ? "★ Editora salva" : "☆ Salvar editora";
+        button.onclick = () => togglePublisherSave(button);
+        actions.insertBefore(button, actions.firstChild);
+      }
+    }
     $$('[data-entity-kind]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       openEntityPage(el.dataset.entityKind, el.dataset.entityValue);
