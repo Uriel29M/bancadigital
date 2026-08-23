@@ -15,6 +15,9 @@ create table if not exists public.profiles (
 
 alter table public.profiles add column if not exists account_email text;
 alter table public.profiles add column if not exists title_color text default '#ffd45c';
+update public.profiles set title = left(trim(title), 10) where title is not null and char_length(title) > 10;
+alter table public.profiles drop constraint if exists profiles_title_length_check;
+alter table public.profiles add constraint profiles_title_length_check check (title is null or char_length(title) between 1 and 10);
 alter table public.profiles add column if not exists shelf_saved_public boolean not null default true;
 alter table public.profiles add column if not exists shelf_series_public boolean not null default true;
 alter table public.profiles add column if not exists shelf_read_public boolean not null default true;
@@ -48,6 +51,8 @@ create table if not exists public.profile_xp_events (
 );
 create index if not exists profile_xp_events_created_idx on public.profile_xp_events(created_at desc);
 create index if not exists profile_xp_events_user_created_idx on public.profile_xp_events(user_id, created_at desc);
+alter table public.profile_xp_events drop constraint if exists profile_xp_events_xp_check;
+alter table public.profile_xp_events add constraint profile_xp_events_xp_check check (xp <> 0);
 
 create table if not exists public.publisher_settings (
   publisher_key text primary key,
@@ -169,6 +174,7 @@ create table if not exists public.chat_messages (
   sender_id uuid not null references public.profiles(id) on delete cascade,
   recipient_id uuid not null references public.profiles(id) on delete cascade,
   body text not null check (char_length(body) between 1 and 2000),
+  metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null default (now() + interval '24 hours'),
   check (sender_id <> recipient_id)
@@ -192,6 +198,7 @@ insert into public.chat_rooms (id, name, access) values
 on conflict (id) do update set name = excluded.name, access = excluded.access;
 
 alter table public.chat_messages add column if not exists room_id text references public.chat_rooms(id) on delete cascade;
+alter table public.chat_messages add column if not exists metadata jsonb not null default '{}'::jsonb;
 alter table public.chat_messages alter column recipient_id drop not null;
 alter table public.chat_messages drop constraint if exists chat_messages_destination_check;
 alter table public.chat_messages add constraint chat_messages_destination_check check (
@@ -608,6 +615,7 @@ create trigger notify_moderation_action_trigger after insert on public.moderatio
 
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('publisher-covers', 'publisher-covers', true) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('faction-abafac', 'faction-abafac', true) on conflict (id) do nothing;
 drop policy if exists "publisher covers are public" on storage.objects;
 drop policy if exists "moderators upload publisher covers" on storage.objects;
 drop policy if exists "moderators update publisher covers" on storage.objects;
@@ -655,6 +663,19 @@ $$;
 create policy "publisher covers are public" on storage.objects for select using (bucket_id = 'publisher-covers');
 create policy "moderators upload publisher covers" on storage.objects for insert with check (bucket_id = 'publisher-covers' and public.is_moderator() and auth.uid()::text = (storage.foldername(name))[1]);
 create policy "moderators update publisher covers" on storage.objects for update using (bucket_id = 'publisher-covers' and public.is_moderator() and auth.uid()::text = (storage.foldername(name))[1]);
+drop policy if exists "faction abafacs are public" on storage.objects;
+drop policy if exists "faction managers upload abafacs" on storage.objects;
+drop policy if exists "faction managers delete abafacs" on storage.objects;
+create policy "faction abafacs are public" on storage.objects for select using (bucket_id = 'faction-abafac');
+create policy "faction managers upload abafacs" on storage.objects for insert with check (
+  bucket_id = 'faction-abafac'
+  and auth.uid()::text = (storage.foldername(name))[2]
+  and exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = (storage.foldername(name))[1] and role in ('leader', 'curator'))
+);
+create policy "faction managers delete abafacs" on storage.objects for delete using (
+  bucket_id = 'faction-abafac'
+  and exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = (storage.foldername(name))[1] and role in ('leader', 'curator'))
+);
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
@@ -799,6 +820,7 @@ create policy "users send chat messages" on public.chat_messages for insert with
     or (room_id is not null and recipient_id is null and public.can_access_chat_room(room_id))
   )
 );
+
 create policy "participants delete chat messages" on public.chat_messages for delete using (auth.uid() = sender_id or auth.uid() = recipient_id);
 create policy "users update own profile" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
 drop policy if exists "admins update user plans" on public.profiles;
@@ -1129,7 +1151,7 @@ begin
   elsif p_action = 'unban' then update public.profiles set is_banned = false where id = v_target.id;
   elsif p_action = 'hide' then update public.profiles set profile_hidden = true where id = v_target.id;
   elsif p_action = 'unhide' then update public.profiles set profile_hidden = false where id = v_target.id;
-  elsif p_action = 'title' then update public.profiles set title = nullif(trim(p_title), ''), title_color = coalesce(nullif(p_title_color, ''), title_color) where id = v_target.id;
+  elsif p_action = 'title' then update public.profiles set title = nullif(left(trim(p_title), 10), ''), title_color = coalesce(nullif(p_title_color, ''), title_color) where id = v_target.id;
   else raise exception 'Ação de moderação inválida';
   end if;
   insert into public.moderation_actions(actor_id, target_id, action, duration_until, details)
@@ -1137,3 +1159,794 @@ begin
 end;
 $$;
 grant execute on function public.moderate_user(text, text, text, text, text) to authenticated;
+
+-- Facções da comunidade: temporadas, filiação, XP e troca semanal.
+create table if not exists public.factions (
+  id text primary key,
+  page_key bigint,
+  name text not null unique,
+  color text not null check (color ~ '^#[0-9A-Fa-f]{6}$'),
+  emblem text not null default '◆',
+  description text not null default '',
+  sort_order integer not null default 0,
+  abafac_order jsonb not null default '["stats", "leadership", "members"]'::jsonb,
+  abafac_catalog_url text
+);
+
+alter table public.factions add column if not exists page_key bigint;
+alter table public.factions alter column page_key set default (100000000 + floor(random() * 900000000))::bigint;
+do $$
+declare
+  v_faction record;
+  v_page_key bigint;
+begin
+  for v_faction in select id from public.factions where page_key is null loop
+    loop
+      v_page_key := (100000000 + floor(random() * 900000000))::bigint;
+      exit when not exists (select 1 from public.factions where page_key = v_page_key);
+    end loop;
+    update public.factions set page_key = v_page_key where id = v_faction.id;
+  end loop;
+end;
+$$;
+create unique index if not exists factions_page_key_unique on public.factions(page_key);
+alter table public.factions alter column page_key set not null;
+
+alter table public.factions add column if not exists abafac_order jsonb not null default '["stats", "leadership", "members"]'::jsonb;
+alter table public.factions add column if not exists abafac_catalog_url text;
+update public.factions
+set abafac_order = jsonb_build_array('stats') || coalesce(abafac_order, '[]'::jsonb)
+where not coalesce(abafac_order, '[]'::jsonb) ? 'stats';
+alter table public.factions drop column if exists flag;
+
+create table if not exists public.faction_abafac_images (
+  id bigint generated by default as identity primary key,
+  faction_id text not null references public.factions(id) on delete cascade,
+  image_url text not null,
+  link_url text,
+  storage_path text not null unique,
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.faction_abafac_images add column if not exists link_url text;
+alter table public.faction_abafac_images drop constraint if exists faction_abafac_images_link_internal_check;
+update public.faction_abafac_images
+set link_url = null
+where link_url is not null
+  and (link_url like '//%' or link_url like '\\%' or link_url ~* '^[a-z][a-z0-9+.-]*:');
+alter table public.faction_abafac_images add constraint faction_abafac_images_link_internal_check check (
+  link_url is null
+  or (link_url not like '//%' and link_url not like '\\%' and link_url !~* '^[a-z][a-z0-9+.-]*:')
+);
+create index if not exists faction_abafac_images_faction_idx on public.faction_abafac_images(faction_id, created_at);
+
+insert into public.factions (id, name, color, emblem, description, sort_order) values
+  ('aurora-rubra', 'Maravilhas', '#e85b68', '✦', 'Coragem, paixão e espírito de liderança.', 1),
+  ('vigilia-cobalto', 'Legado', '#5ca9e8', '◈', 'Estratégia, conhecimento e visão de futuro.', 2),
+  ('forja-dourada', 'Ruptura', '#e7b94b', '✹', 'Constância, criatividade e dedicação.', 3),
+  ('nevoa-violeta', 'Horizonte', '#ae79e8', '✧', 'Mistério, imaginação e pensamento independente.', 4)
+on conflict (id) do update set name = excluded.name, color = excluded.color, emblem = excluded.emblem, description = excluded.description, sort_order = excluded.sort_order;
+create unique index if not exists factions_color_unique on public.factions(lower(color));
+create unique index if not exists factions_emblem_unique on public.factions(emblem);
+
+alter table public.profiles add column if not exists faction_id text references public.factions(id) on delete set null;
+alter table public.profiles add column if not exists faction_joined_at timestamptz;
+alter table public.profiles add column if not exists faction_changed_at timestamptz;
+
+create table if not exists public.faction_memberships (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  faction_id text not null references public.factions(id) on delete restrict,
+  joined_at timestamptz not null default now(),
+  changed_at timestamptz
+);
+create index if not exists faction_memberships_faction_idx on public.faction_memberships(faction_id);
+
+create table if not exists public.faction_seasons (
+  id bigint generated by default as identity primary key,
+  season_key date not null unique,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.faction_xp_events (
+  id bigint generated by default as identity primary key,
+  season_id bigint not null references public.faction_seasons(id) on delete cascade,
+  faction_id text not null references public.factions(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  event_type text not null,
+  event_key text not null,
+  xp integer not null check (xp > 0),
+  created_at timestamptz not null default now(),
+  unique (season_id, user_id, event_key)
+);
+alter table public.faction_xp_events drop constraint if exists faction_xp_events_xp_check;
+alter table public.faction_xp_events add constraint faction_xp_events_xp_check check (xp <> 0);
+create index if not exists faction_xp_events_rank_idx on public.faction_xp_events(season_id, faction_id, created_at desc);
+
+create table if not exists public.faction_roles (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  faction_id text not null references public.factions(id) on delete cascade,
+  role text not null check (role in ('leader', 'curator')),
+  slot integer not null default 1,
+  assigned_at timestamptz not null default now()
+);
+
+alter table public.faction_roles add column if not exists slot integer not null default 1;
+update public.faction_roles set role = 'curator' where role not in ('leader', 'curator');
+alter table public.faction_roles drop constraint if exists faction_roles_role_check;
+alter table public.faction_roles add constraint faction_roles_role_check check (role in ('leader', 'curator'));
+with ranked_curators as (
+  select user_id, row_number() over (partition by faction_id order by assigned_at, user_id) as curator_slot
+  from public.faction_roles where role = 'curator'
+)
+update public.faction_roles roles set slot = ranked_curators.curator_slot
+from ranked_curators where roles.user_id = ranked_curators.user_id;
+delete from public.faction_roles where role = 'curator' and slot > 3;
+with ranked_leaders as (
+  select user_id, row_number() over (partition by faction_id order by assigned_at, user_id) as leader_slot
+  from public.faction_roles where role = 'leader'
+)
+delete from public.faction_roles roles using ranked_leaders
+where roles.user_id = ranked_leaders.user_id and ranked_leaders.leader_slot > 1;
+create unique index if not exists faction_one_leader_idx on public.faction_roles(faction_id) where role = 'leader';
+create unique index if not exists faction_three_curators_idx on public.faction_roles(faction_id, slot) where role = 'curator';
+
+create table if not exists public.faction_bans (
+  faction_id text not null references public.factions(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  banned_by uuid not null references public.profiles(id),
+  reason text not null check (char_length(trim(reason)) between 3 and 500),
+  created_at timestamptz not null default now(),
+  primary key (faction_id, user_id)
+);
+
+create table if not exists public.faction_moderation_actions (
+  id bigint generated by default as identity primary key,
+  faction_id text not null references public.factions(id) on delete cascade,
+  actor_id uuid not null references public.profiles(id),
+  target_id uuid not null references public.profiles(id),
+  action text not null,
+  reason text not null check (char_length(trim(reason)) between 3 and 500),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.faction_xp_adjustments (
+  id bigint generated by default as identity primary key,
+  faction_id text not null references public.factions(id) on delete cascade,
+  actor_id uuid not null references public.profiles(id),
+  amount integer not null,
+  reason text not null check (char_length(trim(reason)) between 3 and 500),
+  created_at timestamptz not null default now()
+);
+
+create or replace function public.manage_faction_role(p_target_id uuid, p_role text, p_slot integer default 1)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_actor public.profiles%rowtype;
+  v_target public.profiles%rowtype;
+  v_faction text;
+begin
+  select * into v_actor from public.profiles where id = auth.uid();
+  select * into v_target from public.profiles where id = p_target_id;
+  if v_actor.plan <> 'admin' and v_actor.faction_id is null then raise exception 'Apenas a liderança da facção pode gerenciar cargos'; end if;
+  if v_target.id is null or v_target.faction_id is null then raise exception 'Membro sem facção'; end if;
+  v_faction := v_target.faction_id;
+  if v_actor.plan <> 'admin' and not exists (select 1 from public.faction_roles where user_id = v_actor.id and faction_id = v_faction and role = 'leader') then raise exception 'Apenas o líder pode gerenciar cargos'; end if;
+  if p_role not in ('leader', 'curator') then raise exception 'Cargo inválido'; end if;
+  if p_role = 'leader' and v_actor.plan <> 'admin' then raise exception 'Apenas administradores podem nomear um novo líder'; end if;
+  if p_role = 'curator' and (p_slot < 1 or p_slot > 3) then raise exception 'A facção possui apenas três vagas de curador'; end if;
+  if p_role = 'leader' then p_slot := 1; end if;
+  delete from public.faction_roles where user_id = p_target_id;
+  insert into public.faction_roles(user_id, faction_id, role, slot) values (p_target_id, v_faction, p_role, p_slot);
+  if v_target.plan = 'free' then update public.profiles set plan = 'premium' where id = p_target_id; end if;
+end;
+$$;
+grant execute on function public.manage_faction_role(uuid, text, integer) to authenticated;
+
+create or replace function public.update_faction_abafac_order(p_faction_id text, p_order jsonb)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_actor public.profiles%rowtype;
+  v_order jsonb;
+begin
+  select * into v_actor from public.profiles where id = auth.uid();
+  if v_actor.id is null or not exists (
+    select 1 from public.faction_roles
+    where user_id = v_actor.id and faction_id = p_faction_id and role in ('leader', 'curator')
+  ) then
+    raise exception 'Apenas líderes e curadores podem reorganizar as abas da facção';
+  end if;
+  if jsonb_typeof(p_order) <> 'array' then raise exception 'Ordem de abas inválida'; end if;
+  if not (p_order @> '["stats"]'::jsonb) then raise exception 'A aba de resumo da facção é obrigatória'; end if;
+  if jsonb_array_length(p_order) > 4 + (select count(*) from public.faction_abafac_images where faction_id = p_faction_id) then raise exception 'A ordem possui abas inválidas'; end if;
+  if exists (
+    select 1 from jsonb_array_elements_text(p_order) item(value)
+    where item.value not in ('stats', 'catalog', 'leadership', 'members')
+      and (item.value !~ '^image:[0-9]+$' or not exists (
+        select 1 from public.faction_abafac_images image
+        where image.id = split_part(item.value, ':', 2)::bigint and image.faction_id = p_faction_id
+      ))
+  ) then raise exception 'A ordem possui abas inválidas'; end if;
+  if p_order @> '["catalog"]'::jsonb and not exists (select 1 from public.factions where id = p_faction_id and nullif(trim(abafac_catalog_url), '') is not null) then
+    raise exception 'O catálogo público ainda não foi configurado';
+  end if;
+  if (select count(*) from jsonb_array_elements_text(p_order)) <> (select count(distinct value) from jsonb_array_elements_text(p_order)) then
+    raise exception 'A ordem possui abas repetidas';
+  end if;
+  v_order := p_order;
+  update public.factions set abafac_order = v_order where id = p_faction_id;
+end;
+$$;
+grant execute on function public.update_faction_abafac_order(text, jsonb) to authenticated;
+
+create or replace function public.remove_faction_abafac_image(p_image_id bigint)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare
+  v_image public.faction_abafac_images%rowtype;
+  v_path text;
+begin
+  select * into v_image from public.faction_abafac_images where id = p_image_id;
+  if not found then raise exception 'Imagem abafac não encontrada'; end if;
+  if not exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = v_image.faction_id and role in ('leader', 'curator')) then
+    raise exception 'Apenas líderes e curadores podem remover imagens abafac';
+  end if;
+  v_path := v_image.storage_path;
+  delete from public.faction_abafac_images where id = p_image_id;
+  update public.factions
+  set abafac_order = coalesce((select jsonb_agg(value) from jsonb_array_elements(coalesce(abafac_order, '[]'::jsonb)) item(value) where value <> to_jsonb('image:' || p_image_id::text)), '[]'::jsonb)
+  where id = v_image.faction_id;
+  return v_path;
+end;
+$$;
+grant execute on function public.remove_faction_abafac_image(bigint) to authenticated;
+
+create or replace function public.update_faction_abafac_link(p_image_id bigint, p_link_url text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_image public.faction_abafac_images%rowtype;
+  v_link text := nullif(trim(p_link_url), '');
+begin
+  select * into v_image from public.faction_abafac_images where id = p_image_id;
+  if not found then raise exception 'Imagem abafac não encontrada'; end if;
+  if not exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = v_image.faction_id and role in ('leader', 'curator')) then
+    raise exception 'Apenas líderes e curadores podem editar links de imagens abafac';
+  end if;
+  if v_link is not null and (v_link like '//%' or v_link like '\\%' or v_link ~* '^[a-z][a-z0-9+.-]*:') then
+    raise exception 'O link da abafac precisa apontar para dentro deste site';
+  end if;
+  update public.faction_abafac_images set link_url = v_link where id = p_image_id;
+end;
+$$;
+grant execute on function public.update_faction_abafac_link(bigint, text) to authenticated;
+
+create or replace function public.resign_faction_curator()
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_faction text;
+begin
+  select faction_id into v_faction
+  from public.faction_roles
+  where user_id = auth.uid() and role = 'curator';
+  if v_faction is null then raise exception 'Você não ocupa o cargo de curador'; end if;
+  delete from public.faction_roles where user_id = auth.uid();
+  perform public.ensure_faction_leadership(v_faction);
+end;
+$$;
+grant execute on function public.resign_faction_curator() to authenticated;
+
+create or replace function public.remove_faction_member(p_target_id uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare v_actor public.profiles%rowtype; v_target public.profiles%rowtype;
+begin
+  select * into v_actor from public.profiles where id = auth.uid();
+  select * into v_target from public.profiles where id = p_target_id;
+  if v_actor.faction_id is null or not exists (select 1 from public.faction_roles where user_id = v_actor.id and faction_id = v_actor.faction_id and role = 'leader') then raise exception 'Apenas o líder pode remover membros'; end if;
+  if v_target.faction_id <> v_actor.faction_id then raise exception 'O membro não pertence à sua facção'; end if;
+  if exists (select 1 from public.faction_roles where user_id = p_target_id and role = 'leader') then raise exception 'O líder não pode ser removido pela própria facção'; end if;
+  if char_length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Informe o motivo da remoção'; end if;
+  insert into public.faction_bans(faction_id, user_id, banned_by, reason) values (v_actor.faction_id, p_target_id, v_actor.id, left(trim(p_reason), 500)) on conflict (faction_id, user_id) do update set reason = excluded.reason, banned_by = excluded.banned_by, created_at = now();
+  insert into public.faction_moderation_actions(faction_id, actor_id, target_id, action, reason) values (v_actor.faction_id, v_actor.id, p_target_id, 'remove_member', left(trim(p_reason), 500));
+  delete from public.faction_memberships where user_id = p_target_id;
+  update public.profiles set faction_id = null, faction_changed_at = now() where id = p_target_id;
+  perform public.ensure_faction_leadership(v_actor.faction_id);
+end;
+$$;
+grant execute on function public.remove_faction_member(uuid, text) to authenticated;
+
+create or replace function public.adjust_faction_xp(p_faction_id text, p_amount integer, p_reason text)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_moderator() then raise exception 'Apenas moderadores e administradores podem ajustar XP'; end if;
+  if not exists (select 1 from public.factions where id = p_faction_id) then raise exception 'Facção não encontrada'; end if;
+  if char_length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Informe o motivo do ajuste'; end if;
+  insert into public.faction_xp_adjustments(faction_id, actor_id, amount, reason) values (p_faction_id, auth.uid(), p_amount, left(trim(p_reason), 500));
+end;
+$$;
+grant execute on function public.adjust_faction_xp(text, integer, text) to authenticated;
+
+drop function if exists public.update_faction_identity(text, text, text, text);
+create or replace function public.update_faction_identity(p_faction_id text, p_name text, p_color text, p_emblem text default '◆', p_description text default null)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if lower(coalesce(p_color, '')) not in ('#e85b68', '#a93345', '#5ca9e8', '#2d6295', '#e7b94b', '#9a6c12', '#ae79e8', '#6f3ca5', '#b8c2cc', '#59636f', '#ec8b55', '#a84c21', '#b8d957', '#6b821d', '#e17ab3', '#9b3f72') then raise exception 'Escolha uma cor da paleta'; end if;
+  if coalesce(p_emblem, '') not in ('✦', '◈', '✹', '✧', '★', '◆', '⚡', '☾', '♛', '🛡️', '🔥', '🌀') then raise exception 'Escolha um emoji da lista'; end if;
+  if exists (select 1 from public.factions where id <> p_faction_id and lower(color) = lower(p_color)) then raise exception 'Essa cor ja pertence a outra faccao'; end if;
+  if exists (select 1 from public.factions where id <> p_faction_id and emblem = p_emblem) then raise exception 'Esse emoji ja pertence a outra faccao'; end if;
+  if not public.is_admin() and not exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = p_faction_id and role = 'leader') then raise exception 'Apenas o líder pode editar a identidade da facção'; end if;
+  if char_length(trim(coalesce(p_name, ''))) < 3 or p_color !~ '^#[0-9A-Fa-f]{6}$' then raise exception 'Nome ou cor inválidos'; end if;
+  update public.factions set name = left(trim(p_name), 80), color = lower(p_color), emblem = p_emblem, description = nullif(left(trim(coalesce(p_description, '')), 500), '') where id = p_faction_id;
+end;
+$$;
+grant execute on function public.update_faction_identity(text, text, text, text, text) to authenticated;
+
+-- Atualiza os emblemas iniciais para a nova lista visualmente distinta.
+update public.factions set emblem = case id
+  when 'aurora-rubra' then '🦁'
+  when 'vigilia-cobalto' then '🐍'
+  when 'forja-dourada' then '🦊'
+  when 'nevoa-violeta' then '🐙'
+  else emblem
+end
+where id in ('aurora-rubra', 'vigilia-cobalto', 'forja-dourada', 'nevoa-violeta');
+
+drop function if exists public.update_faction_identity_v2(text, text, text, text, text, text);
+drop function if exists public.update_faction_identity_v2(text, text, text, text, text);
+create or replace function public.update_faction_identity_v2(p_faction_id text, p_name text, p_color text, p_emblem text default '🦁', p_description text default null, p_catalog_url text default null)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if lower(coalesce(p_color, '')) not in ('#e85b68', '#a93345', '#5ca9e8', '#2d6295', '#e7b94b', '#9a6c12', '#ae79e8', '#6f3ca5', '#b8c2cc', '#59636f', '#ec8b55', '#a84c21', '#b8d957', '#6b821d', '#e17ab3', '#9b3f72') then raise exception 'Escolha uma cor da paleta'; end if;
+  if coalesce(p_emblem, '') not in ('🦁', '🐍', '🦊', '🐙', '⚡', '🕷️', '🔥', '🌀', '🦋', '🌵', '🦈', '🎸', '☀️', '🦉', '🐉', '🦅', '🐺', '🌿', '⚔️', '🛸') then raise exception 'Escolha um emoji da lista'; end if;
+  if exists (select 1 from public.factions where id <> p_faction_id and lower(color) = lower(p_color)) then raise exception 'Essa cor ja pertence a outra faccao'; end if;
+  if exists (select 1 from public.factions where id <> p_faction_id and emblem = p_emblem) then raise exception 'Esse emoji ja pertence a outra faccao'; end if;
+  if not public.is_admin() and not exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = p_faction_id and role = 'leader') then raise exception 'Apenas o lider pode editar a identidade da faccao'; end if;
+  if char_length(trim(coalesce(p_name, ''))) < 3 then raise exception 'Nome invalido'; end if;
+  if nullif(trim(p_catalog_url), '') is not null and (trim(p_catalog_url) like '//%' or trim(p_catalog_url) ilike 'http:%' or trim(p_catalog_url) ilike 'https:%' or trim(p_catalog_url) !~ '(^|[?&])perfil=[A-Za-z0-9_]{3,24}(&|$)' or trim(p_catalog_url) !~ '(^|[?&])lista=[^&#]+') then
+    raise exception 'O catálogo deve ser um link interno de uma coleção pública deste site';
+  end if;
+  if nullif(trim(p_catalog_url), '') is not null and not exists (
+    select 1
+    from public.profiles owner
+    join public.shelf_collections collection on collection.owner_id = owner.id
+    where lower(owner.username) = lower((regexp_match(trim(p_catalog_url), '(^|[?&])perfil=([A-Za-z0-9_]{3,24})(&|$)'))[2])
+      and collection.id = (regexp_match(trim(p_catalog_url), '(^|[?&])lista=([^&#]+)'))[2]
+      and collection.is_public
+      and collection.collection_type = 'comic'
+  ) then
+    raise exception 'A coleção precisa ser pública e pertencer a este site';
+  end if;
+  update public.factions set name = left(trim(p_name), 80), color = lower(p_color), emblem = p_emblem, description = nullif(left(trim(coalesce(p_description, '')), 500), ''), abafac_catalog_url = nullif(trim(p_catalog_url), '') where id = p_faction_id;
+end;
+$$;
+grant execute on function public.update_faction_identity_v2(text, text, text, text, text, text) to authenticated;
+
+-- Preenche somente vagas vazias. Assim, não substitui uma eleição ou uma gestão existente.
+create or replace function public.ensure_faction_leadership(p_faction_id text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_season public.faction_seasons%rowtype;
+  v_candidate uuid;
+  v_slot integer;
+begin
+  if not exists (select 1 from public.factions where id = p_faction_id) then return; end if;
+  if auth.uid() is not null and not public.is_moderator()
+    and not exists (select 1 from public.profiles where id = auth.uid() and faction_id = p_faction_id)
+    and not exists (select 1 from public.faction_memberships where user_id = auth.uid() and faction_id = p_faction_id)
+  then raise exception 'Você só pode organizar a sua própria facção'; end if;
+  v_season := public.current_faction_season();
+
+  -- profiles.faction_id é a fonte de verdade. Recria associações antigas
+  -- que possam ter ficado sem registro em faction_memberships.
+  insert into public.faction_memberships (user_id, faction_id, joined_at, changed_at)
+  select profile.id, profile.faction_id, coalesce(profile.faction_joined_at, now()), profile.faction_changed_at
+  from public.profiles profile
+  where profile.faction_id = p_faction_id
+    and profile.plan not in ('moderator', 'admin')
+  on conflict (user_id) do update
+    set faction_id = excluded.faction_id,
+        changed_at = excluded.changed_at;
+
+  -- Remove cargos órfãos deixados por uma troca de facção interrompida.
+  delete from public.faction_roles roles
+  where roles.faction_id = p_faction_id
+    and not exists (
+      select 1 from public.profiles profile
+      where profile.id = roles.user_id
+        and profile.faction_id = p_faction_id
+    )
+    and not exists (
+      select 1 from public.faction_memberships membership
+      where membership.user_id = roles.user_id
+        and membership.faction_id = p_faction_id
+    );
+
+  if not exists (select 1 from public.faction_roles roles where roles.faction_id = p_faction_id and roles.role = 'leader') then
+    select candidate.user_id into v_candidate
+    from (
+      select member_profile.id as user_id,
+        coalesce(sum(case when xp.season_id = v_season.id then xp.xp else 0 end), 0) as faction_xp,
+        coalesce(member_profile.last_seen_at, to_timestamp(0)) as last_seen
+      from public.profiles member_profile
+      left join public.faction_xp_events xp on xp.user_id = member_profile.id and xp.faction_id = p_faction_id
+      where member_profile.plan not in ('moderator', 'admin')
+        and (
+          member_profile.faction_id = p_faction_id
+          or exists (
+            select 1
+            from public.faction_memberships membership
+            where membership.user_id = member_profile.id
+              and membership.faction_id = p_faction_id
+          )
+        )
+      group by member_profile.id, member_profile.last_seen_at
+      order by faction_xp desc, last_seen desc, member_profile.id
+    ) candidate
+    where not exists (select 1 from public.faction_roles role where role.user_id = candidate.user_id)
+    limit 1;
+    if v_candidate is not null then
+      insert into public.faction_roles(user_id, faction_id, role, slot) values (v_candidate, p_faction_id, 'leader', 1);
+      update public.profiles set plan = 'premium' where id = v_candidate and plan = 'free';
+    end if;
+  end if;
+
+  for v_slot in 1..3 loop
+    if not exists (select 1 from public.faction_roles roles where roles.faction_id = p_faction_id and roles.role = 'curator' and roles.slot = v_slot) then
+      select candidate.user_id into v_candidate
+      from (
+        select member_profile.id as user_id,
+          coalesce(sum(case when xp.season_id = v_season.id then xp.xp else 0 end), 0) as faction_xp,
+          coalesce(member_profile.last_seen_at, to_timestamp(0)) as last_seen
+        from public.profiles member_profile
+        left join public.faction_xp_events xp on xp.user_id = member_profile.id and xp.faction_id = p_faction_id
+        where member_profile.plan not in ('moderator', 'admin')
+          and (
+            member_profile.faction_id = p_faction_id
+            or exists (
+              select 1
+              from public.faction_memberships membership
+              where membership.user_id = member_profile.id
+                and membership.faction_id = p_faction_id
+            )
+          )
+        group by member_profile.id, member_profile.last_seen_at
+        order by faction_xp desc, last_seen desc, member_profile.id
+      ) candidate
+      where not exists (select 1 from public.faction_roles role where role.user_id = candidate.user_id)
+      limit 1;
+      if v_candidate is null then exit; end if;
+      insert into public.faction_roles(user_id, faction_id, role, slot) values (v_candidate, p_faction_id, 'curator', v_slot);
+      update public.profiles set plan = 'premium' where id = v_candidate and plan = 'free';
+    end if;
+  end loop;
+end;
+$$;
+grant execute on function public.ensure_faction_leadership(text) to authenticated;
+
+create or replace function public.ensure_faction_leadership_after_join()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  perform public.ensure_faction_leadership(new.faction_id);
+  return new;
+end;
+$$;
+
+drop trigger if exists ensure_faction_leadership_after_join_trigger on public.faction_memberships;
+create trigger ensure_faction_leadership_after_join_trigger
+after insert on public.faction_memberships
+for each row execute procedure public.ensure_faction_leadership_after_join();
+
+create or replace function public.resign_faction_leader()
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_actor public.profiles%rowtype;
+  v_successor uuid;
+  v_faction text;
+begin
+  select * into v_actor from public.profiles where id = auth.uid();
+  if not exists (select 1 from public.faction_roles where user_id = v_actor.id and role = 'leader') then raise exception 'Você não ocupa o cargo de líder'; end if;
+  v_faction := v_actor.faction_id;
+  select role_user.user_id into v_successor
+  from public.faction_roles role_user
+  join public.profiles member on member.id = role_user.user_id
+  where role_user.faction_id = v_faction and role_user.role = 'curator'
+  order by coalesce((select sum(xp.xp) from public.faction_xp_events xp where xp.user_id = role_user.user_id and xp.faction_id = v_faction and xp.season_id = (select id from public.faction_seasons where season_key = date_trunc('month', current_date)::date)), 0) desc, member.last_seen_at desc, role_user.slot
+  limit 1;
+  if v_successor is null then
+    select member.user_id into v_successor
+    from public.faction_memberships member
+    join public.profiles profile on profile.id = member.user_id
+    where member.faction_id = v_faction and member.user_id <> v_actor.id and profile.plan not in ('moderator', 'admin')
+    order by profile.last_seen_at desc, member.user_id
+    limit 1;
+  end if;
+  delete from public.faction_roles where user_id = v_actor.id;
+  if v_successor is not null then
+    delete from public.faction_roles where user_id = v_successor;
+    insert into public.faction_roles(user_id, faction_id, role, slot) values (v_successor, v_faction, 'leader', 1);
+    update public.profiles set plan = 'premium' where id = v_successor and plan = 'free';
+  end if;
+  perform public.ensure_faction_leadership(v_faction);
+end;
+$$;
+grant execute on function public.resign_faction_leader() to authenticated;
+
+create or replace function public.promote_faction_curator(p_target_id uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare v_actor public.profiles%rowtype; v_target public.profiles%rowtype;
+begin
+  select * into v_actor from public.profiles where id = auth.uid();
+  select * into v_target from public.profiles where id = p_target_id;
+  if not exists (select 1 from public.faction_roles where user_id = v_actor.id and faction_id = v_actor.faction_id and role = 'leader') then raise exception 'Apenas o líder pode promover um curador'; end if;
+  if not exists (select 1 from public.faction_roles where user_id = v_target.id and faction_id = v_actor.faction_id and role = 'curator') then raise exception 'O usuário precisa ser um curador da sua facção'; end if;
+  delete from public.faction_roles where user_id in (v_actor.id, v_target.id);
+  insert into public.faction_roles(user_id, faction_id, role, slot) values (v_target.id, v_actor.faction_id, 'leader', 1);
+  update public.profiles set plan = 'premium' where id = v_target.id and plan = 'free';
+  perform public.ensure_faction_leadership(v_actor.faction_id);
+end;
+$$;
+grant execute on function public.promote_faction_curator(uuid) to authenticated;
+
+create or replace function public.current_faction_season()
+returns public.faction_seasons
+language plpgsql volatile security definer set search_path = public
+as $$
+declare
+  v_season public.faction_seasons%rowtype;
+  v_start date := date_trunc('month', current_date)::date;
+begin
+  select * into v_season from public.faction_seasons where season_key = v_start;
+  if not found then
+    insert into public.faction_seasons (season_key, starts_at, ends_at)
+    values (v_start, v_start::timestamptz, (v_start + interval '1 month')::timestamptz)
+    on conflict (season_key) do nothing;
+    select * into v_season from public.faction_seasons where season_key = v_start;
+  end if;
+  return v_season;
+end;
+$$;
+
+create or replace function public.choose_faction(p_faction_id text default null)
+returns table(faction_id text, name text, color text, emblem text, description text, changed_at timestamptz)
+language plpgsql security definer set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  v_user_id uuid := auth.uid();
+  v_profile public.profiles%rowtype;
+  v_target text;
+  v_changed timestamptz;
+  v_season public.faction_seasons%rowtype;
+  v_result_faction_id text;
+  v_result_name text;
+  v_result_color text;
+  v_result_emblem text;
+  v_result_description text;
+  v_result_changed_at timestamptz;
+begin
+  if v_user_id is null then return; end if;
+  select * into v_profile from public.profiles where id = v_user_id;
+  if not found or v_profile.plan in ('moderator', 'admin') then return; end if;
+  if v_profile.faction_id is not null then
+    if p_faction_id is null or p_faction_id = v_profile.faction_id then
+      select f.id, f.name, f.color, f.emblem, f.description, v_profile.faction_changed_at into v_result_faction_id, v_result_name, v_result_color, v_result_emblem, v_result_description, v_result_changed_at from public.factions f where f.id = v_profile.faction_id;
+      faction_id := v_result_faction_id; name := v_result_name; color := v_result_color; emblem := v_result_emblem; description := v_result_description; changed_at := v_result_changed_at;
+      return next; return;
+    end if;
+    if v_profile.faction_changed_at is not null and v_profile.faction_changed_at > now() - interval '7 days' then
+      raise exception 'Você só pode trocar de facção uma vez por semana';
+    end if;
+  end if;
+  if p_faction_id is not null and exists (select 1 from public.factions where id = p_faction_id) then
+    if exists (select 1 from public.faction_bans bans where bans.faction_id = p_faction_id and bans.user_id = v_user_id) then raise exception 'Você não pode entrar novamente nesta facção'; end if;
+    v_target := p_faction_id;
+  else
+    with counts as (
+      select f.id, count(m.user_id)::bigint as members,
+        coalesce(sum(case when x.created_at >= now() - interval '7 days' then x.xp else 0 end), 0)::bigint as activity
+      from public.factions f
+      left join public.faction_memberships m on m.faction_id = f.id
+      left join public.faction_xp_events x on x.faction_id = f.id
+      group by f.id
+    ) select id into v_target from counts where not exists (select 1 from public.faction_bans b where b.faction_id = counts.id and b.user_id = v_user_id) order by members asc, activity asc, random() limit 1;
+  end if;
+  if v_profile.faction_id is not null and v_profile.faction_id is distinct from v_target then
+    v_season := public.current_faction_season();
+    insert into public.faction_xp_events(season_id, faction_id, user_id, event_type, event_key, xp)
+    values (v_season.id, v_profile.faction_id, v_user_id, 'desertion', 'desertion:' || v_user_id::text || ':' || clock_timestamp()::text, -25);
+    insert into public.profile_xp_events(user_id, event_type, event_key, xp)
+    values (v_user_id, 'desertion', 'faction-desertion:' || v_user_id::text || ':' || clock_timestamp()::text, -50);
+    update public.profiles
+    set xp = greatest(0, xp - 50),
+        level = public.profile_level_for_xp(greatest(0, xp - 50))
+    where id = v_user_id;
+    delete from public.faction_roles where user_id = v_user_id;
+  end if;
+  delete from public.faction_memberships where user_id = v_user_id;
+  insert into public.faction_memberships (user_id, faction_id, joined_at, changed_at)
+  values (v_user_id, v_target, coalesce(v_profile.faction_joined_at, now()), case when v_profile.faction_id is null then null else now() end);
+  update public.profiles as profile set faction_id = v_target, faction_joined_at = coalesce(profile.faction_joined_at, now()), faction_changed_at = case when profile.faction_id is null then null else now() end where profile.id = v_user_id;
+  -- Só repara a facção anterior depois de remover definitivamente o desertor.
+  -- Caso contrário, ele ainda era candidato e podia receber um cargo antigo.
+  if v_profile.faction_id is not null and v_profile.faction_id is distinct from v_target then
+    perform public.ensure_faction_leadership(v_profile.faction_id);
+  end if;
+  -- O perfil agora já aponta para a nova facção; preenche imediatamente
+  -- qualquer vaga com o membro elegível mais ativo.
+  perform public.ensure_faction_leadership(v_target);
+  select f.id, f.name, f.color, f.emblem, f.description, p.faction_changed_at into v_result_faction_id, v_result_name, v_result_color, v_result_emblem, v_result_description, v_result_changed_at from public.factions f join public.profiles p on p.faction_id = f.id where f.id = v_target and p.id = v_user_id;
+  faction_id := v_result_faction_id; name := v_result_name; color := v_result_color; emblem := v_result_emblem; description := v_result_description; changed_at := v_result_changed_at;
+  return next;
+end;
+$$;
+grant execute on function public.choose_faction(text) to authenticated;
+
+create or replace function public.grant_faction_xp(p_event_type text, p_event_key text default null)
+returns integer language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_faction text;
+  v_season public.faction_seasons%rowtype;
+  v_xp integer;
+  v_key text;
+  v_total integer;
+begin
+  select profile.faction_id into v_faction from public.profiles profile where profile.id = v_user_id and profile.plan not in ('moderator', 'admin');
+  if v_faction is null then return 0; end if;
+  v_xp := case p_event_type when 'read' then 10 when 'comment' then 5 when 'like' then 2 when 'chat' then 3 when 'blog' then 8 when 'follow' then 2 else 0 end;
+  if v_xp <= 0 then return 0; end if;
+  v_season := public.current_faction_season();
+  v_key := coalesce(nullif(trim(p_event_key), ''), p_event_type || ':' || clock_timestamp()::text);
+  insert into public.faction_xp_events(season_id, faction_id, user_id, event_type, event_key, xp)
+  values (v_season.id, v_faction, v_user_id, p_event_type, v_key, v_xp)
+  on conflict (season_id, user_id, event_key) do nothing;
+  if not found then return 0; end if;
+  select coalesce(sum(events.xp), 0) into v_total from public.faction_xp_events events where events.season_id = v_season.id and events.faction_id = v_faction;
+  perform public.ensure_faction_leadership(v_faction);
+  return v_total;
+end;
+$$;
+grant execute on function public.grant_faction_xp(text, text) to authenticated;
+
+alter table public.factions enable row level security;
+alter table public.faction_memberships enable row level security;
+alter table public.faction_seasons enable row level security;
+alter table public.faction_xp_events enable row level security;
+alter table public.faction_roles enable row level security;
+alter table public.faction_bans enable row level security;
+alter table public.faction_moderation_actions enable row level security;
+alter table public.faction_xp_adjustments enable row level security;
+alter table public.faction_abafac_images enable row level security;
+drop policy if exists "factions are public" on public.factions;
+drop policy if exists "faction memberships are public" on public.faction_memberships;
+drop policy if exists "faction seasons are public" on public.faction_seasons;
+drop policy if exists "faction xp is public" on public.faction_xp_events;
+drop policy if exists "faction roles are public" on public.faction_roles;
+drop policy if exists "faction bans are visible to staff" on public.faction_bans;
+drop policy if exists "faction moderation is visible to staff" on public.faction_moderation_actions;
+drop policy if exists "faction xp adjustments are visible to staff" on public.faction_xp_adjustments;
+drop policy if exists "faction abafac images are public" on public.faction_abafac_images;
+drop policy if exists "faction managers create abafac images" on public.faction_abafac_images;
+drop policy if exists "faction managers delete abafac images" on public.faction_abafac_images;
+create policy "factions are public" on public.factions for select using (true);
+create policy "faction memberships are public" on public.faction_memberships for select using (true);
+create policy "faction seasons are public" on public.faction_seasons for select using (true);
+create policy "faction xp is public" on public.faction_xp_events for select using (true);
+create policy "faction roles are public" on public.faction_roles for select using (true);
+create policy "faction bans are visible to staff" on public.faction_bans for select using (public.is_moderator() or auth.uid() = user_id or auth.uid() = banned_by);
+create policy "faction moderation is visible to staff" on public.faction_moderation_actions for select using (public.is_moderator() or auth.uid() = target_id or auth.uid() = actor_id);
+create policy "faction xp adjustments are visible to staff" on public.faction_xp_adjustments for select using (public.is_moderator());
+create policy "faction abafac images are public" on public.faction_abafac_images for select using (true);
+create policy "faction managers create abafac images" on public.faction_abafac_images for insert with check (
+  auth.uid() = created_by and exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = faction_abafac_images.faction_id and role in ('leader', 'curator'))
+);
+create policy "faction managers delete abafac images" on public.faction_abafac_images for delete using (
+  exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = faction_abafac_images.faction_id and role in ('leader', 'curator'))
+);
+
+create or replace function public.protect_profile_progress()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if current_user not in ('postgres', 'service_role') then
+    new.xp := old.xp;
+    new.level := old.level;
+    new.daily_streak := old.daily_streak;
+    new.last_checkin_at := old.last_checkin_at;
+    new.faction_id := old.faction_id;
+    new.faction_joined_at := old.faction_joined_at;
+    new.faction_changed_at := old.faction_changed_at;
+  end if;
+  return new;
+end;
+$$;
+
+-- Salas públicas de cada facção. A política de envio é adicionada abaixo.
+insert into public.chat_rooms (id, name, access) values
+  ('faccao-aurora-rubra', 'Maravilhas', 'public'),
+  ('faccao-vigilia-cobalto', 'Legado', 'public'),
+  ('faccao-forja-dourada', 'Ruptura', 'public'),
+  ('faccao-nevoa-violeta', 'Horizonte', 'public')
+on conflict (id) do update set name = excluded.name;
+
+alter table public.chat_rooms add column if not exists faction_id text references public.factions(id) on delete cascade;
+update public.chat_rooms set faction_id = replace(id, 'faccao-', '') where id like 'faccao-%';
+
+create or replace function public.can_access_chat_room(p_room_id text)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.chat_rooms room
+    left join public.profiles profile on profile.id = auth.uid()
+    where room.id = p_room_id and (
+      (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+    )
+  )
+$$;
+
+create or replace function public.can_send_chat_room(p_room_id text)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.chat_rooms room
+    left join public.profiles profile on profile.id = auth.uid()
+    where room.id = p_room_id and profile.id = auth.uid() and (
+      (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+    )
+  )
+$$;
+
+drop policy if exists "users send chat messages" on public.chat_messages;
+create policy "users send chat messages" on public.chat_messages for insert with check (
+  auth.uid() = sender_id
+  and expires_at <= now() + interval '24 hours'
+  and expires_at > now()
+  and (
+    (room_id is null and recipient_id is not null and auth.uid() <> recipient_id and exists (select 1 from public.profiles where id = recipient_id and allow_messages))
+    or (room_id is not null and recipient_id is null and public.can_send_chat_room(room_id))
+  )
+);
+
+-- Repara gestões que já existiam antes da criação automática de cargos.
+do $$
+declare v_faction record;
+begin
+  for v_faction in select id from public.factions loop
+    perform public.ensure_faction_leadership(v_faction.id);
+  end loop;
+end;
+$$;
+
+-- Versao final da identidade: inclui todos os emojis disponiveis e impede duplicidade.
+drop function if exists public.update_faction_identity(text, text, text, text, text);
+create or replace function public.update_faction_identity(p_faction_id text, p_name text, p_color text, p_emblem text default '◆', p_description text default null)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if lower(coalesce(p_color, '')) not in ('#e85b68', '#a93345', '#5ca9e8', '#2d6295', '#e7b94b', '#9a6c12', '#ae79e8', '#6f3ca5', '#b8c2cc', '#59636f', '#ec8b55', '#a84c21', '#b8d957', '#6b821d', '#e17ab3', '#9b3f72') then raise exception 'Escolha uma cor da paleta'; end if;
+  if coalesce(p_emblem, '') not in ('✦', '◈', '✹', '✧', '★', '◆', '⚡', '☾', '♛', '🛡️', '🔥', '🌀', '☀️', '🦉', '🐉', '🦅', '🐺', '🌿', '⚔️', '🧭') then raise exception 'Escolha um emoji da lista'; end if;
+  if exists (select 1 from public.factions where id <> p_faction_id and lower(color) = lower(p_color)) then raise exception 'Essa cor ja pertence a outra faccao'; end if;
+  if exists (select 1 from public.factions where id <> p_faction_id and emblem = p_emblem) then raise exception 'Esse emoji ja pertence a outra faccao'; end if;
+  if not public.is_admin() and not exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = p_faction_id and role = 'leader') then raise exception 'Apenas o lider pode editar a identidade da faccao'; end if;
+  if char_length(trim(coalesce(p_name, ''))) < 3 then raise exception 'Nome invalido'; end if;
+  update public.factions set name = left(trim(p_name), 80), color = lower(p_color), emblem = p_emblem, description = nullif(left(trim(coalesce(p_description, '')), 500), '') where id = p_faction_id;
+end;
+$$;
+grant execute on function public.update_faction_identity(text, text, text, text, text) to authenticated;

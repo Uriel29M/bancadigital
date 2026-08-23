@@ -5,6 +5,17 @@
   // --- Fim da Inicialização ---
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
   const DEFAULT_AVATAR_URL = "https://i.pinimg.com/736x/be/17/10/be1710edaace144c17bdaf6deb2d2cc8.jpg";
+  const FACTION_COLOR_OPTIONS = [
+    { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
+    { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
+    { family: "gold", label: "Dourado", light: "#e7b94b", dark: "#9a6c12" },
+    { family: "violet", label: "Violeta", light: "#ae79e8", dark: "#6f3ca5" },
+    { family: "silver", label: "Prata", light: "#b8c2cc", dark: "#59636f" },
+    { family: "orange", label: "Âmbar", light: "#ec8b55", dark: "#a84c21" },
+    { family: "lime", label: "Lima", light: "#b8d957", dark: "#6b821d" },
+    { family: "pink", label: "Rosa", light: "#e17ab3", dark: "#9b3f72" }
+  ];
+  const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
   const KNIGHT_TERRORS_VOLUME_GROUPS = [
     ["Principal", 7], ["Batman", 2], ["Devastadora", 2], ["Coringa", 2],
@@ -244,6 +255,7 @@
     followerCount: 0,
     followingCount: 0,
     chatContact: null,
+    messageUnreadCount: 0,
     notifications: [],
     notificationUnreadCount: 0,
     notificationChannel: null,
@@ -264,11 +276,24 @@
     blogCommentThreads: new Map(),
     blogEditorRange: null
     ,rankingPeriod: "week"
+    ,rankingFaction: null
     ,rankingMembers: []
     ,rankingCategory: null
     ,rankingSearch: ""
     ,rankingLoading: false
     ,presenceInterval: null
+    ,factions: []
+    ,factionStats: new Map()
+    ,factionRoles: []
+    ,factionRoleMembers: []
+    ,factionMembers: []
+    ,factionAbafacImages: []
+    ,factionAbafacCatalogs: new Map()
+    ,factionPageId: null
+    ,factionMembersView: false
+    ,factionMemberSearch: ""
+    ,factionByUser: new Map()
+    ,factionChoiceOpen: false
   };
 
   let activeReaderCleanup = null;
@@ -277,8 +302,8 @@
   const sectionRoutes = {
     home: "",
     comic: "quadrinhos",
-    blog: "blogs",
     ranking: "ranking",
+    factions: "faccoes",
     collections: "colecoes",
     search: "pesquisar",
     shelf: "estante",
@@ -331,12 +356,18 @@
       state.section = section;
       state.collectionId = params.get("colecao") || null;
       state.rankingCategory = section === "ranking" ? params.get("categoria") || null : null;
+      const factionRouteValue = section === "factions" ? params.get("faccao") || null : null;
+      const routedFaction = factionRouteValue ? state.factions.find(faction => String(faction.page_key) === String(factionRouteValue) || faction.id === factionRouteValue) : null;
+      state.factionPageId = routedFaction?.id || factionRouteValue;
+      state.factionMembersView = section === "factions" && params.get("membros") === "1";
+      state.factionMemberSearch = state.factionMembersView ? params.get("busca") || "" : "";
       if (section === "blog") state.blogOpenId = params.get("blog") || null;
       if (section === "search") state.search = params.get("q") || "";
       if (section === "entity") state.entityFilter = { kind: params.get("tipo") || "character", value: params.get("valor") || "" };
       render();
       if (section === "blog" && !state.blogPosts.length) loadBlogPosts();
       if (section === "ranking" && state.authReady) loadRankingData();
+      if (section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     }
     handlingRoute = false;
   }
@@ -395,6 +426,10 @@
     if (!silent) render();
     const result = await sb.rpc("get_profile_ranking", { p_period: state.rankingPeriod, p_limit: 500 });
     state.rankingMembers = result.error ? [] : (result.data || []);
+    const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
+    const factionRows = rankingIds.length ? await sb.from("profiles").select("id, faction_id").in("id", rankingIds) : { data: [] };
+    state.factionByUser = new Map((factionRows.data || []).map(row => [row.id, row.faction_id]));
+    state.rankingMembers = state.rankingMembers.map(member => ({ ...member, faction_id: state.factionByUser.get(member.user_id) || null }));
     state.rankingLoading = false;
     if (state.section === "ranking") render();
   }
@@ -402,6 +437,259 @@
   async function awardProfileXp(eventType, eventKey) {
     if (!sb || !state.session?.user?.id) return;
     await sb.rpc("grant_profile_xp", { p_event_type: eventType, p_event_key: eventKey });
+    await sb.rpc("grant_faction_xp", { p_event_type: eventType, p_event_key: eventKey });
+  }
+
+  async function loadFactions() {
+    if (!sb) return;
+    const result = await sb.from("factions").select("id, page_key, name, color, emblem, description, sort_order, abafac_order, abafac_catalog_url").order("sort_order", { ascending: true });
+    state.factions = result.error ? [] : (result.data || []);
+    const routeFactionKey = new URLSearchParams(window.location.search).get("faccao");
+    if (state.section === "factions" && routeFactionKey) {
+      const routeFaction = state.factions.find(faction => String(faction.page_key) === String(routeFactionKey) || faction.id === routeFactionKey);
+      if (routeFaction) {
+        state.factionPageId = routeFaction.id;
+        if (routeFaction.page_key && String(routeFaction.page_key) !== String(routeFactionKey)) {
+          const params = new URLSearchParams(window.location.search);
+          params.set("faccao", String(routeFaction.page_key));
+          window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+        }
+      }
+    }
+    state.factionAbafacCatalogs = new Map();
+    await Promise.all(state.factions.filter(faction => faction.abafac_catalog_url).map(async faction => {
+      const parts = parsePublicCatalogLink(faction.abafac_catalog_url);
+      if (!parts) return;
+      const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+      if (owner.error || !owner.data) return;
+      const collection = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, cover_styles, cover_choices").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
+      if (collection.error || !collection.data) return;
+      state.factionAbafacCatalogs.set(faction.id, { ...collection.data, username: owner.data.username });
+    }));
+    const abafacImages = await sb.from("faction_abafac_images").select("id, faction_id, image_url, link_url, storage_path, created_by, created_at").order("created_at", { ascending: true });
+    state.factionAbafacImages = abafacImages.error ? [] : (abafacImages.data || []);
+    if (state.session?.user?.id && state.factions.length) {
+      const factionsToRepair = ["moderator", "admin"].includes(state.profile?.plan) ? state.factions : state.factions.filter(faction => faction.id === state.profile?.faction_id);
+      await Promise.all(factionsToRepair.map(faction => sb.rpc("ensure_faction_leadership", { p_faction_id: faction.id })));
+    }
+    const roles = await sb.from("faction_roles").select("user_id, faction_id, role, slot");
+    state.factionRoles = roles.error ? [] : (roles.data || []);
+    const roleIds = state.factionRoles.map(role => role.user_id).filter(Boolean);
+    const roleProfiles = roleIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, plan, faction_id").in("id", roleIds) : { data: [] };
+    const roleProfileMap = new Map((roleProfiles.data || []).map(profile => [profile.id, profile]));
+    state.factionRoleMembers = state.factionRoles.map(role => ({ ...role, profile: roleProfileMap.get(role.user_id) || null }));
+    const memberships = await sb.from("faction_memberships").select("user_id, faction_id, joined_at").order("joined_at", { ascending: false });
+    const memberIds = (memberships.data || []).map(row => row.user_id).filter(Boolean);
+    const memberProfiles = memberIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id").in("id", memberIds) : { data: [] };
+    const memberProfileMap = new Map((memberProfiles.data || []).map(profile => [profile.id, profile]));
+    state.factionMembers = (memberships.data || []).map(row => ({ ...row, profile: memberProfileMap.get(row.user_id) || null }));
+    const season = await sb.from("faction_seasons").select("id, starts_at").order("season_key", { ascending: false }).limit(1).maybeSingle();
+    const xp = season.data?.id ? await sb.from("faction_xp_events").select("faction_id, xp").eq("season_id", season.data.id) : { data: [] };
+    const adjustments = season.data?.id ? await sb.from("faction_xp_adjustments").select("faction_id, amount").gte("created_at", season.data.starts_at) : { data: [] };
+    const stats = new Map(state.factions.map(faction => [faction.id, { members: 0, xp: 0 }]));
+    (memberships.data || []).forEach(row => { if (stats.has(row.faction_id)) stats.get(row.faction_id).members += 1; });
+    (xp.data || []).forEach(row => { if (stats.has(row.faction_id)) stats.get(row.faction_id).xp += Number(row.xp) || 0; });
+    (adjustments.data || []).forEach(row => { if (stats.has(row.faction_id)) stats.get(row.faction_id).xp += Number(row.amount) || 0; });
+    state.factionStats = stats;
+  }
+
+  async function joinFaction(factionId) {
+    if (!sb || !state.session?.user?.id || !factionId || ["moderator", "admin"].includes(state.profile?.plan)) return;
+    const result = await sb.rpc("choose_faction", { p_faction_id: factionId });
+    if (result.error) return toast(result.error.message || "Não foi possível entrar nesta facção.");
+    const selected = result.data?.[0];
+    state.profile = { ...state.profile, faction_id: selected?.faction_id, faction_joined_at: selected?.changed_at || state.profile.faction_joined_at, faction_changed_at: selected?.changed_at || state.profile.faction_changed_at };
+    await loadFactions();
+    render();
+    toast(`Você agora faz parte de ${selected?.name || "uma nova facção"}.`);
+  }
+
+  function factionDot(profile = {}) {
+    const factionId = profile.faction_id || state.factionByUser.get(profile.id);
+    const faction = state.factions.find(item => item.id === factionId) || { color: profile.faction_color, name: "Facção", emblem: "" };
+    return faction?.emblem ? `<button type="button" class="faction-emblem-button" data-faction-open="${escapeHTML(factionId || "")}" title="Abrir ${escapeHTML(faction.name || "Facção")}" aria-label="Abrir ${escapeHTML(faction.name || "Facção")}">${escapeHTML(faction.emblem)}</button>` : "";
+  }
+
+  function factionRouteKey(factionId) {
+    const faction = state.factions.find(item => item.id === factionId);
+    return faction?.page_key ? String(faction.page_key) : factionId;
+  }
+
+  function factionName(profile = {}, username = "usuário") {
+    return `${factionDot(profile)}@${escapeHTML(username || "usuário")}`;
+  }
+
+  function decorateFactionNames(root = document) {
+    const profiles = [
+      state.profile,
+      state.publicProfile?.profile,
+      ...(state.rankingMembers || []),
+      ...(state.factionMembers || []).map(item => item.profile),
+      ...(state.factionRoleMembers || []).map(item => item.profile),
+      ...(state.notifications || []).map(item => item.actor),
+      ...(state.blogPosts || []).map(item => item.author),
+      ...(state.authoredBlogPosts || []).map(item => item.author),
+      ...(state.savedBlogPosts || []).map(item => item.author),
+      ...(state.collectionBlogPosts || []).map(item => item.author)
+    ].filter(profile => profile?.username && profile?.faction_id);
+    const byUsername = new Map(profiles.map(profile => [String(profile.username).toLowerCase(), profile]));
+    if (!byUsername.size) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      const parent = node.parentElement;
+      if (!parent || ["SCRIPT", "STYLE", "TEXTAREA", "INPUT", "OPTION"].includes(parent.tagName) || parent.closest(".faction-emblem-button") || parent.querySelector(".faction-emblem-button")) return;
+      const text = node.nodeValue || "";
+      const matches = [...text.matchAll(/@([A-Za-z0-9_]{3,24})/g)];
+      if (!matches.length) return;
+      const fragment = document.createDocumentFragment();
+      let cursor = 0;
+      matches.forEach(match => {
+        const profile = byUsername.get(match[1].toLowerCase());
+        if (!profile) return;
+        fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+        const faction = state.factions.find(item => item.id === profile.faction_id);
+        if (faction?.emblem) {
+          const emblem = document.createElement("button");
+          emblem.type = "button";
+          emblem.className = "faction-emblem-button";
+          emblem.dataset.factionOpen = profile.faction_id;
+          emblem.textContent = faction.emblem;
+          emblem.title = faction.name || "Facção";
+          emblem.setAttribute("aria-label", faction.name || "Facção");
+          fragment.appendChild(emblem);
+        }
+        fragment.appendChild(document.createTextNode(match[0]));
+        cursor = match.index + match[0].length;
+      });
+      if (cursor) {
+        fragment.appendChild(document.createTextNode(text.slice(cursor)));
+        node.replaceWith(fragment);
+      }
+    });
+  }
+
+  function factionOverviewMarkup() {
+    return `<div class="faction-overview-grid">${state.factions.map(faction => { const stats = state.factionStats.get(faction.id) || { members: 0, xp: 0 }; const current = state.profile?.faction_id === faction.id; return `<article class="faction-overview-card ${current ? "is-current" : ""}" data-faction-open="${escapeHTML(faction.id)}" style="--faction-color:${escapeHTML(faction.color)}" tabindex="0" role="link"><span class="faction-overview-emblem">${escapeHTML(faction.emblem)}</span><span><strong>${escapeHTML(faction.name)}</strong><small>${stats.members} membro(s) · ${stats.xp.toLocaleString("pt-BR")} XP</small></span></article>`; }).join("")}</div>`;
+  }
+
+  function factionOverviewNoticeMarkup() {
+    if (!state.session) return '<div class="notice faction-access-notice">Você não tem uma facção. Faça login ou crie uma conta para entrar em uma.</div>';
+    if (["moderator", "admin"].includes(state.profile?.plan)) return '<div class="notice faction-access-notice">Moderadores e administradores não podem participar de facções.</div>';
+    if (!state.profile?.faction_id) return '<div class="notice faction-access-notice">Você ainda não tem uma facção. Escolha uma para participar da disputa.</div>';
+    return "";
+  }
+
+  function openFactionConfirm(faction) {
+    return new Promise(resolve => {
+      const color = faction?.color || "#e85b68";
+      const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop faction-modal-backdrop";
+    overlay.innerHTML = `<div class="modal faction-modal" style="--faction-color:${escapeHTML(color)}"><div class="section-head"><div><div class="eyebrow">${escapeHTML(faction?.name || "Facção")}</div><h2>Desistir da liderança?</h2><div class="section-subtitle">O curador mais ativo assumirá o cargo.</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="button" class="small-btn faction-modal-primary" data-faction-modal-confirm>Desistir da liderança</button></div></div>`;
+    overlay.innerHTML = overlay.innerHTML.replaceAll("Desistir da liderança", "Renunciar");
+      const finish = value => { overlay.remove(); resolve(value); };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(false);
+      $("[data-faction-modal-confirm]", overlay).onclick = () => finish(true);
+      $("#modal-root").appendChild(overlay);
+    });
+  }
+
+  function openFactionIdentityEditorV2(faction) {
+    return new Promise(resolve => {
+      const currentColor = String(faction?.color || FACTION_COLOR_OPTIONS[0].light).toLowerCase();
+      const currentEmblem = FACTION_EMBLEM_OPTIONS.includes(faction?.emblem) ? faction.emblem : FACTION_EMBLEM_OPTIONS[0];
+      const otherColors = new Set(state.factions.filter(item => item.id !== faction?.id).map(item => String(item.color || "").toLowerCase()));
+      const usedFamilies = new Set(FACTION_COLOR_OPTIONS.filter(option => otherColors.has(option.light) || otherColors.has(option.dark)).map(option => option.family));
+      const blockedLabels = FACTION_COLOR_OPTIONS.filter(option => usedFamilies.has(option.family)).map(option => option.label);
+      const otherEmblems = new Set(state.factions.filter(item => item.id !== faction?.id).map(item => item.emblem).filter(Boolean));
+      let colorChoices = FACTION_COLOR_OPTIONS.map(option => [
+        { tone: "claro", value: option.light },
+        { tone: "escuro", value: option.dark }
+      ].map(choice => {
+        const blocked = usedFamilies.has(option.family) && currentColor !== choice.value;
+        const selected = currentColor === choice.value;
+        return `<button type="button" class="faction-color-choice ${selected ? "is-selected" : ""}" data-color="${choice.value}" style="--choice-color:${choice.value}" ${blocked ? "disabled" : ""} aria-label="${option.label} ${choice.tone}" title="${blocked ? "Cor já usada por outra facção" : `${option.label} · ${choice.tone}`}"${blocked ? " aria-disabled=\"true\"" : ""}></button>`;
+      }).join("")).join("");
+      colorChoices = colorChoices.replace(/<button([^>]*data-color="([^"]+)"[^>]*)><\/button>/g, (_, attributes, value) => {
+        const option = FACTION_COLOR_OPTIONS.find(item => item.light === value || item.dark === value);
+        const tone = option?.light === value ? "claro" : "escuro";
+        return `<button${attributes}><span>${escapeHTML(option?.label || "Cor")}<small>${tone}</small></span></button>`;
+      });
+      if (blockedLabels.length) colorChoices += `<small class="faction-identity-warning">Bloqueadas por já pertencerem a outras facções: ${escapeHTML(blockedLabels.join(", "))}.</small>`;
+      const emblemChoices = FACTION_EMBLEM_OPTIONS.map(emblem => { const blocked = otherEmblems.has(emblem); return `<button type="button" class="faction-emblem-choice ${emblem === currentEmblem ? "is-selected" : ""}" data-emblem="${escapeHTML(emblem)}" ${blocked ? "disabled" : ""} aria-disabled="${blocked ? "true" : "false"}" aria-label="Emoji ${escapeHTML(emblem)}" title="${blocked ? "Emoji já usado por outra facção" : "Escolher este emoji"}">${escapeHTML(emblem)}</button>`; }).join("");
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal faction-identity-modal" style="--faction-color:${escapeHTML(currentColor)}"><div class="section-head"><div><div class="eyebrow">Identidade da facção</div><h2>Editar facção</h2><div class="section-subtitle">Escolha a cor, o emoji e a descrição da sua facção.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Nome da facção</span><input name="name" type="text" minlength="3" maxlength="80" value="${escapeHTML(faction?.name || "")}" required></label><div class="field"><span>Cor da facção</span><div class="faction-color-palette">${colorChoices}</div><small class="faction-identity-help">Em cada cor, o quadrado da esquerda é claro e o da direita é escuro. Quadrados apagados já pertencem a outra facção.</small><input name="color" type="hidden" value="${escapeHTML(currentColor)}"></div><div class="field"><span>Emoji da facção</span><div class="faction-emblem-palette">${emblemChoices}</div><input name="emblem" type="hidden" value="${escapeHTML(currentEmblem)}"></div><label class="field"><span>Descrição</span><textarea name="description" maxlength="500" rows="4">${escapeHTML(faction?.description || "")}</textarea></label><label class="field"><span>Catálogo público como abafac (opcional)</span><input name="catalogUrl" type="text" maxlength="500" value="${escapeHTML(faction?.abafac_catalog_url || "")}" placeholder="?perfil=usuario&lista=id"><small class="faction-identity-help">Cole o link de uma coleção pública de quadrinhos deste site. Deixe vazio para remover o catálogo.</small></label><label class="field"><span>Enviar imagem abafac</span><input name="abafacImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><small class="faction-identity-help">A imagem será adicionada como uma nova abafac. Depois ela poderá ser movida ou removida, mas uma imagem removida precisará ser enviada novamente.</small></label><label class="field"><span>Link interno da imagem (opcional)</span><input name="abafacLink" type="text" maxlength="500" placeholder="?pagina=blogs ou /index.html?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. O link será aplicado ao card inteiro.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar alterações</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const modal = $(".faction-modal", overlay);
+      const form = $(".faction-identity-form", overlay);
+      form.elements.abafacLink?.closest("label")?.remove();
+      $$('[data-color]', form).forEach(button => button.addEventListener("click", () => {
+        const value = button.dataset.color;
+        $('[name=color]', form).value = value;
+        modal.style.setProperty("--faction-color", value);
+        $$('[data-color]', form).forEach(item => item.classList.toggle("is-selected", item === button));
+      }));
+      $$('[data-emblem]', form).forEach(button => button.addEventListener("click", () => {
+        $('[name=emblem]', form).value = button.dataset.emblem;
+        $$('[data-emblem]', form).forEach(item => item.classList.toggle("is-selected", item === button));
+      }));
+      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ name: String(data.get("name") || "").trim(), color: String(data.get("color") || "").trim(), emblem: String(data.get("emblem") || "").trim(), description: String(data.get("description") || "").trim(), catalogUrl: String(data.get("catalogUrl") || "").trim(), imageFile: form.elements.abafacImage?.files?.[0] || null, imageLink: String(data.get("abafacLink") || "").trim() }); });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
+      $("[name=name]", form).focus();
+    });
+  }
+
+  function openFactionIdentityEditor(faction) {
+    return new Promise(resolve => {
+      const color = /^#[0-9A-Fa-f]{6}$/.test(faction?.color || "") ? faction.color : "#e85b68";
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal faction-identity-modal" style="--faction-color:${escapeHTML(color)}"><div class="section-head"><div><div class="eyebrow">Identidade da facção</div><h2>Editar facção</h2><div class="section-subtitle">Atualize o nome, a cor e a descrição exibidos para a comunidade.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Nome da facção</span><input name="name" type="text" minlength="3" maxlength="80" value="${escapeHTML(faction?.name || "")}" required></label><label class="field"><span>Cor da facção</span><div class="faction-color-field"><input name="color" type="color" value="${escapeHTML(color)}"><input name="colorText" type="text" value="${escapeHTML(color)}" pattern="^#[0-9A-Fa-f]{6}$" maxlength="7" required></div></label><label class="field"><span>Descrição</span><textarea name="description" maxlength="500" rows="4">${escapeHTML(faction?.description || "")}</textarea></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar alterações</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const form = $(".faction-identity-form", overlay);
+      const colorInput = $("[name=color]", form);
+      const colorText = $("[name=colorText]", form);
+      colorInput.addEventListener("input", () => { colorText.value = colorInput.value; overlay.querySelector(".faction-modal").style.setProperty("--faction-color", colorInput.value); });
+      colorText.addEventListener("input", () => { if (/^#[0-9A-Fa-f]{6}$/.test(colorText.value)) { colorInput.value = colorText.value; overlay.querySelector(".faction-modal").style.setProperty("--faction-color", colorText.value); } });
+      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ name: String(data.get("name") || "").trim(), color: String(data.get("colorText") || "").trim(), description: String(data.get("description") || "").trim() }); });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
+      $("[name=name]", form).focus();
+    });
+  }
+
+  function openFactionChoice() {
+    if (!state.session || !state.profile || ["moderator", "admin"].includes(state.profile.plan) || state.factionChoiceOpen || !state.factions.length) return;
+    state.factionChoiceOpen = true;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop faction-choice-backdrop";
+    overlay.innerHTML = `<div class="modal faction-choice-modal"><div class="section-head"><div><div class="eyebrow">Uma casa para sua jornada</div><h2>${state.profile.faction_id ? "Trocar de facção" : "Escolha sua facção"}</h2><div class="section-subtitle">${state.profile.faction_id ? "A troca pode ser feita uma vez a cada sete dias." : "Faça parte de uma comunidade, ajude sua facção e dispute a temporada."}</div></div><button class="small-btn" data-close>Fechar</button></div><div class="faction-choice-grid">${state.factions.map(faction => `<button class="faction-choice-card ${state.profile.faction_id === faction.id ? "is-current" : ""}" type="button" data-faction-choose="${escapeHTML(faction.id)}" style="--faction-color:${escapeHTML(faction.color)}"><span class="faction-choice-emblem">${escapeHTML(faction.emblem)}</span><strong>${escapeHTML(faction.name)}</strong><span>${escapeHTML(faction.description)}</span></button>`).join("")}</div>${state.profile.faction_id ? "" : '<button class="small-btn faction-auto-choice" type="button" data-faction-auto>Escolher a facção com menor presença</button>'}</div>`;
+    $("#modal-root").appendChild(overlay);
+    $("[data-close]", overlay).onclick = () => choose(null);
+    const choose = async factionId => {
+      const result = await sb.rpc("choose_faction", { p_faction_id: factionId || null });
+      if (result.error) return toast(result.error.message || "Não foi possível escolher sua facção.");
+      const selected = result.data?.[0];
+      state.profile = { ...state.profile, faction_id: selected?.faction_id, faction_joined_at: selected?.changed_at || state.profile.faction_joined_at, faction_changed_at: selected?.changed_at || state.profile.faction_changed_at };
+      if (selected?.faction_id) await sb.rpc("ensure_faction_leadership", { p_faction_id: selected.faction_id });
+      // Recarrega cargos e membros antes de renderizar a página da facção.
+      // Sem isso, a tela continuava usando a lista anterior ao ingresso.
+      await loadFactions();
+      state.factionChoiceOpen = false;
+      overlay.remove();
+      render();
+      toast(`Você agora faz parte de ${selected?.name || "uma nova facção"}.`);
+    };
+    $$('[data-faction-choose]', overlay).forEach(button => button.onclick = () => choose(button.dataset.factionChoose));
+    $('[data-faction-auto]', overlay).onclick = () => choose(null);
   }
 
   async function publishCatalog() {
@@ -541,7 +829,7 @@
     } else {
       const posts = result.data || [];
       const authorIds = [...new Set(posts.map(post => post.author_id).filter(Boolean))];
-      const authors = authorIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color").in("id", authorIds) : { data: [] };
+      const authors = authorIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", authorIds) : { data: [] };
       const authorsById = new Map((authors.data || []).map(author => [author.id, author]));
       state.blogPosts = posts.map(post => ({ ...post, author: authorsById.get(post.author_id) || null }));
       const blogIds = state.blogPosts.map(post => post.id);
@@ -567,22 +855,34 @@
     return sb.storage.from("blog-images").getPublicUrl(path).data.publicUrl;
   }
 
+  function normalizeBlogImageUrl(value, required = false) {
+    const raw = String(value || "").trim();
+    if (!raw) return required ? false : null;
+    try {
+      const url = new URL(raw);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return false;
+      return url.href;
+    } catch {
+      return false;
+    }
+  }
+
   async function publishBlogPost(form) {
     if (!state.session) return openAuthPage();
     const data = new FormData(form);
     const title = String(data.get("title") || "").trim();
     const excerpt = String(data.get("excerpt") || "").trim();
     const content = safeBlogHtml($("#blog-editor")?.innerHTML || "");
-    const coverFile = data.get("cover");
+    const coverUrl = normalizeBlogImageUrl(data.get("cover"), true);
+    const image2Url = normalizeBlogImageUrl(data.get("image2"));
+    const image3Url = normalizeBlogImageUrl(data.get("image3"));
     if (title.length < 3) return toast("Informe um título para o blog.");
-    if (!coverFile?.size) return toast("Adicione uma capa para publicar o blog.");
+    if (coverUrl === false) return toast("Informe uma URL vÃ¡lida para a capa principal.");
+    if (image2Url === false || image3Url === false) return toast("Confira as URLs das imagens laterais.");
     if (!content) return toast("Escreva o conteúdo do blog antes de publicar.");
     const button = $("button[type=submit]", form);
     if (button) button.disabled = true;
     try {
-      const coverUrl = await uploadBlogImage(coverFile, 1);
-      const image2Url = data.get("image2")?.size ? await uploadBlogImage(data.get("image2"), 2) : null;
-      const image3Url = data.get("image3")?.size ? await uploadBlogImage(data.get("image3"), 3) : image2Url;
       const staff = ["moderator", "admin"].includes(state.profile?.plan);
       const result = await sb.from("blog_posts").insert({
         author_id: state.session.user.id,
@@ -726,7 +1026,7 @@
     const author = post.author || {};
     const username = author.username || "usuário";
     const avatar = author.avatar_url || "https://i.pinimg.com/736x/be/17/10/be1710edaace144c17bdaf6deb2d2cc8.jpg";
-    return `<a href="${escapeHTML(publicProfileHref(username))}" class="blog-author-card"><img src="${escapeHTML(avatar)}" alt="Foto de @${escapeHTML(username)}"><span><span class="eyebrow">Publicado por</span><span class="blog-author-name">@${escapeHTML(username)}</span>${author.title ? `<span class="blog-author-title" style="color:${escapeHTML(safeTitleColor(author.title_color))}">${escapeHTML(author.title)}</span>` : ""}</span></a>`;
+    return `<a href="${escapeHTML(publicProfileHref(username))}" class="blog-author-card">${avatarMarkup(author, "blog-author-avatar")}<span><span class="eyebrow">Publicado por</span><span class="blog-author-name">@${escapeHTML(username)}</span>${author.title ? `<span class="blog-author-title" style="color:${escapeHTML(safeTitleColor(author.title_color))}">${escapeHTML(author.title)}</span>` : ""}</span></a>`;
   }
 
   function blogCommentsSection(post) {
@@ -890,8 +1190,12 @@
   }
 
   function avatarMarkup(profile, className = "profile-avatar") {
-    const planClass = profile?.plan === "admin" ? "avatar-admin" : profile?.plan === "moderator" ? "avatar-moderator" : profile?.plan === "premium" ? "avatar-premium" : "";
-    return `<img class="${className} ${planClass}" src="${escapeHTML(profile?.avatar_url || DEFAULT_AVATAR_URL)}" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
+    const factionId = profile?.faction_id || state.factionByUser.get(profile?.id);
+    const faction = state.factions.find(item => item.id === factionId);
+    const staff = ["moderator", "admin"].includes(profile?.plan);
+    const avatarClass = staff ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
+    const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
+    return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(profile?.avatar_url || DEFAULT_AVATAR_URL)}" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
   function syncTopAvatar() {
@@ -899,9 +1203,7 @@
     if (!headerAvatar) return;
     headerAvatar.innerHTML = avatarMarkup(state.profile, "top-avatar-img");
     headerAvatar.title = state.session ? "Abrir minha estante" : "Entrar ou abrir minha estante";
-    headerAvatar.classList.toggle("avatar-admin", state.profile?.plan === "admin");
-    headerAvatar.classList.toggle("avatar-moderator", state.profile?.plan === "moderator");
-    headerAvatar.classList.toggle("avatar-premium", state.profile?.plan === "premium");
+    headerAvatar.classList.toggle("avatar-staff", ["moderator", "admin"].includes(state.profile?.plan));
   }
 
   function appAssetUrl(path) {
@@ -1015,6 +1317,7 @@
     if (session?.user) {
       const profile = await sb.from("profiles").select("*").eq("id", session.user.id).single();
       state.profile = profile.data;
+      await loadFactions();
       const ownFollowers = await sb.from("profile_follows").select("follower_id").eq("following_id", session.user.id);
       const ownFollowing = await sb.from("profile_follows").select("following_id").eq("follower_id", session.user.id);
       state.followerCount = (ownFollowers.data || []).length;
@@ -1056,6 +1359,7 @@
     state.authReady = true;
     syncTopAvatar();
     render();
+    if (state.session && state.profile && !["moderator", "admin"].includes(state.profile.plan) && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
     if (state.section === "ranking") loadRankingData();
   }
 
@@ -1065,20 +1369,25 @@
       state.notificationChannel = null;
       state.notifications = [];
       state.notificationUnreadCount = 0;
+      state.messageUnreadCount = 0;
       return;
     }
     const result = await sb.from("notifications").select("id, actor_id, type, title, body, href, metadata, read_at, created_at").eq("user_id", state.session.user.id).order("created_at", { ascending: false }).limit(100);
     if (result.error) {
       state.notifications = [];
       state.notificationUnreadCount = 0;
+      state.messageUnreadCount = 0;
       return;
     }
-    const actorIds = [...new Set((result.data || []).map(notification => notification.actor_id).filter(Boolean))];
+    const chatNotificationTypes = ["message", "chat_mention"];
+    state.messageUnreadCount = (result.data || []).filter(notification => chatNotificationTypes.includes(notification.type) && !notification.read_at).length;
+    const visibleNotifications = (result.data || []).filter(notification => !chatNotificationTypes.includes(notification.type));
+    const actorIds = [...new Set(visibleNotifications.map(notification => notification.actor_id).filter(Boolean))];
     const actorsResult = actorIds.length
-      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan").in("id", actorIds)
+      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
       : { data: [] };
     const actors = new Map((actorsResult.data || []).map(actor => [actor.id, actor]));
-    state.notifications = (result.data || [])
+    state.notifications = visibleNotifications
       .map(notification => ({ ...notification, actor: actors.get(notification.actor_id) || null }))
       .filter(notification => !isNotificationFromOpenChat(notification));
     state.notificationUnreadCount = state.notifications.filter(notification => !notification.read_at).length;
@@ -1096,7 +1405,7 @@
   function isNotificationFromOpenChat(notification) {
     return Boolean(
       state.chatContact?.id &&
-      notification.type === "message" &&
+      ["message", "chat_mention"].includes(notification.type) &&
       String(notification.actor_id) === String(state.chatContact.id)
     );
   }
@@ -1107,9 +1416,18 @@
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", state.session.user.id)
       .eq("actor_id", contactId)
-      .eq("type", "message")
+      .in("type", ["message", "chat_mention"])
       .is("read_at", null);
     if (result.error) console.warn("NÃ£o foi possÃ­vel marcar as notificaÃ§Ãµes da conversa como lidas:", result.error.message);
+  }
+
+  async function markChatMentionsRead() {
+    if (!sb || !state.session?.user?.id) return;
+    await sb.from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("user_id", state.session.user.id)
+      .eq("type", "chat_mention")
+      .is("read_at", null);
   }
 
   async function loadPublicProfile(username, collectionId = null) {
@@ -1123,9 +1441,9 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, allow_messages, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
-      profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at").ilike("username", username).maybeSingle();
+      profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
     if (profile.error || !profile.data) {
       state.publicProfile = { error: "Perfil não encontrado.", username };
@@ -1396,6 +1714,9 @@
   function updateCoverStyleImages(itemId) {
     const style = coverStyleFor({ id: itemId });
     $$('[data-cover-id]').filter(element => element.dataset.coverId === itemId).forEach(element => { element.dataset.coverStyle = style; });
+    $$('[data-favorite]').filter(element => element.dataset.favorite === itemId).forEach(element => {
+      element.classList.toggle("has-cover-filter", style !== "normal" && element.classList.contains("is-favorite"));
+    });
     $$('[data-cover-style-item]').filter(element => element.dataset.coverStyleItem === itemId).forEach(element => { element.dataset.coverStyle = style; });
     $$('[data-cover-effect-item]').filter(element => element.dataset.coverEffectItem === itemId).forEach(element => {
       const premium = ["premium", "moderator", "admin"].includes(state.profile?.plan);
@@ -1450,10 +1771,60 @@
     updateComicLikeButtons(itemId);
   }
 
+  function comicLinkWithSenderAppearance(rawUrl) {
+    const original = String(rawUrl || "");
+    let linkUrl;
+    try { linkUrl = new URL(original, window.location.href); } catch { return original; }
+    if (linkUrl.origin !== window.location.origin) return original;
+    const itemId = linkUrl.searchParams.get("ler");
+    const item = itemId ? state.db.library.find(entry => String(entry.id) === String(itemId) && entry.type === "comic") : null;
+    if (!item) return original;
+    const publicCollection = state.section === "public-profile" && state.publicProfile?.collectionId
+      ? state.publicProfile.collections?.find(collection => collection.id === state.publicProfile.collectionId)
+      : null;
+    const choice = (publicCollection?.coverChoices?.[item.id] || null) || state.coverChoices.get(item.id);
+    if (!linkUrl.searchParams.get("capa_url") && choice?.cover_url) linkUrl.searchParams.set("capa_url", choice.cover_url);
+    if (!linkUrl.searchParams.get("capa") && choice?.variant_key) linkUrl.searchParams.set("capa", choice.variant_key);
+    const style = senderCoverStyleFor(item, publicCollection);
+    if (style === "normal") linkUrl.searchParams.delete("efeito");
+    else linkUrl.searchParams.set("efeito", style);
+    return linkUrl.href;
+  }
+
+  function senderCoverStyleFor(item, publicCollection = null) {
+    const collectionStyle = publicCollection?.coverStyles?.[item?.id]
+      || (item?.seriesId && publicCollection?.coverStyles?.[item.seriesId]);
+    if (["normal", "grayscale", "gold"].includes(collectionStyle)) return collectionStyle;
+    const userStyle = state.coverStyles.get(item?.id) || (item?.seriesId && state.coverStyles.get(item.seriesId));
+    return ["normal", "grayscale", "gold"].includes(userStyle) ? userStyle : "normal";
+  }
+
+  function prepareChatMessage(rawBody) {
+    const source = String(rawBody || "").trim();
+    const previews = [];
+    const body = source.replace(/https?:\/\/[^\s<]+/gi, rawUrl => {
+      const enrichedUrl = comicLinkWithSenderAppearance(rawUrl);
+      let parsed;
+      try { parsed = new URL(enrichedUrl, window.location.href); } catch { return enrichedUrl; }
+      const itemId = parsed.searchParams.get("ler");
+      const item = itemId ? state.db.library.find(entry => String(entry.id) === String(itemId) && entry.type === "comic") : null;
+      if (!item) return enrichedUrl;
+      previews.push({
+        url: enrichedUrl,
+        item_id: String(item.id),
+        cover_url: parsed.searchParams.get("capa_url") || null,
+        variant_key: parsed.searchParams.get("capa") || null,
+        cover_style: senderCoverStyleFor(item)
+      });
+      return enrichedUrl;
+    });
+    return { body, metadata: previews.length ? { comic_previews: previews } : {} };
+  }
+
   async function shareComic(itemId) {
     const item = state.db.library.find(entry => entry.id === itemId);
     if (!item) return;
-    const link = new URL(routeUrl({ ler: item.id }), window.location.href).href;
+    const link = comicLinkWithSenderAppearance(new URL(routeUrl({ ler: item.id }), window.location.href).href);
     try {
       if (navigator.share) await navigator.share({ title: item.title || "Quadrinho", text: `Leia ${item.title || "este quadrinho"} na Banca Digital`, url: link });
       else { await navigator.clipboard.writeText(link); toast("Link do quadrinho copiado."); }
@@ -1469,7 +1840,12 @@
     return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? value : "#ffd45c";
   }
 
+  function profileTitle(value) {
+    return String(value || "").trim().slice(0, 10);
+  }
+
   function trophyRoom(achievements = []) {
+    return "";
     return `<div class="trophy-room"><div class="trophy-room-title">Sala de troféus</div><div class="achievement-list">${achievements.length ? achievements.map(a => `<span title="${escapeHTML(a.description || "")}">${escapeHTML(a.icon || "★")} ${escapeHTML(a.name)}</span>`).join("") : '<span class="trophy-empty">Nenhuma insígnia conquistada ainda.</span>'}</div></div>`;
   }
 
@@ -1767,7 +2143,7 @@
     overlay.appendChild(panel);
     const list = $(".comments-list", panel);
     const refresh = async () => {
-      const result = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan)").eq("item_id", item.id).order("created_at", { ascending: false });
+      const result = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan, faction_id)").eq("item_id", item.id).order("created_at", { ascending: false });
       if (result.error) {
         list.innerHTML = '<span class="section-subtitle">Não foi possível carregar os comentários.</span>';
         return;
@@ -1811,7 +2187,7 @@
     titleButton.onclick = () => { overlay.remove(); openReader(item); };
     $(".section-head .section-subtitle", overlay)?.replaceWith(titleButton);
     const refresh = async () => {
-      const result = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan)").eq("item_id", item.id).order("created_at", { ascending: false });
+      const result = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan, faction_id)").eq("item_id", item.id).order("created_at", { ascending: false });
       if (result.error) { list.innerHTML = '<span class="section-subtitle">Não foi possível carregar os comentários.</span>'; return; }
       list.innerHTML = (result.data || []).map(comment => {
         const username = cleanUsername(comment.profiles?.username || "usuário");
@@ -1904,9 +2280,9 @@
   }
 
   async function loadCommentThread(item) {
-    let result = await sb.from("comments").select("id, parent_id, body, created_at, profiles(username, avatar_url, title, plan)").eq("item_id", item.id).order("created_at", { ascending: false });
+    let result = await sb.from("comments").select("id, parent_id, body, created_at, profiles(username, avatar_url, title, plan, faction_id)").eq("item_id", item.id).order("created_at", { ascending: false });
     if (result.error && /parent_id|schema cache|column/i.test(result.error.message || "")) {
-      const legacyResult = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan)").eq("item_id", item.id).order("created_at", { ascending: false });
+      const legacyResult = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan, faction_id)").eq("item_id", item.id).order("created_at", { ascending: false });
       result = { ...legacyResult, data: (legacyResult.data || []).map(comment => ({ ...comment, parent_id: null })) };
     }
     if (result.error) return { error: result.error };
@@ -2050,6 +2426,9 @@
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div>${["admin", "moderator", "premium"].includes(state.profile?.plan) ? `<div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label></div>` : ""}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     const profileForm = $("#profile-form", overlay);
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $("[name=shelfLikedPublic]", overlay)?.closest("label")?.remove();
+    $("[name=likesPublic]", overlay)?.closest("label")?.remove();
     if (!["admin", "moderator", "premium"].includes(state.profile?.plan)) $(".form-grid", overlay)?.insertAdjacentHTML("beforeend", `<div class="field full"><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas no perfil público</label></div>`);
     const shelfVisibilityField = $$(".field.full", overlay).find(field => field.textContent.includes("Visibilidade"));
     if (["admin", "moderator", "premium"].includes(state.profile?.plan) && shelfVisibilityField) {
@@ -2058,7 +2437,7 @@
     profileForm.addEventListener("submit", async event => {
       if (!["admin", "moderator", "premium"].includes(state.profile?.plan)) return;
       const formData = new FormData(event.currentTarget);
-      const visibility = { shelf_completed_public: formData.get("shelfCompletedPublic") === "on", shelf_liked_public: formData.get("shelfLikedPublic") === "on" };
+      const visibility = { shelf_completed_public: formData.get("shelfCompletedPublic") === "on", shelf_liked_public: formData.has("shelfLikedPublic") ? formData.get("shelfLikedPublic") === "on" : state.profile?.shelf_liked_public !== false };
       const likedVisibility = await sb.from("profiles").update(visibility).eq("id", state.session.user.id);
       if (likedVisibility.error) toast(likedVisibility.error.message);
       else {
@@ -2076,16 +2455,18 @@
     privacyField.className = "field full profile-privacy-settings";
     privacyField.innerHTML = `<label>Privacidade e notificações</label><label class="checkbox-inline"><input name="likesPublic" type="checkbox" ${state.profile?.likes_public !== false ? "checked" : ""}> Mostrar minhas curtidas publicamente</label><label class="checkbox-inline"><input name="allowMentions" type="checkbox" ${state.profile?.allow_mentions !== false ? "checked" : ""}> Receber marcações</label><label class="checkbox-inline"><input name="allowMessages" type="checkbox" ${state.profile?.allow_messages !== false ? "checked" : ""}> Receber mensagens privadas</label><label class="checkbox-inline"><input name="notificationsEnabled" type="checkbox" ${state.profile?.notifications_enabled !== false ? "checked" : ""}> Receber notificações</label>`;
     $(".form-grid", profileForm).appendChild(privacyField);
-    const originalProfileSubmit = profileForm.onsubmit;
-    profileForm.onsubmit = async event => {
+    $("[name=shelfLikedPublic]", overlay)?.closest("label")?.remove();
+    $("[name=likesPublic]", overlay)?.closest("label")?.remove();
+    const originalProfileSubmit = async () => {};
+    profileForm.addEventListener("submit", async event => {
       event.preventDefault();
       const fd = new FormData(profileForm);
-      const privacy = { likes_public: fd.get("likesPublic") === "on", allow_mentions: fd.get("allowMentions") === "on", allow_messages: fd.get("allowMessages") === "on", notifications_enabled: fd.get("notificationsEnabled") === "on" };
+      const privacy = { likes_public: fd.has("likesPublic") ? fd.get("likesPublic") === "on" : state.profile?.likes_public !== false, allow_mentions: fd.get("allowMentions") === "on", allow_messages: fd.get("allowMessages") === "on", notifications_enabled: fd.get("notificationsEnabled") === "on" };
       const privacyUpdate = await sb.from("profiles").update(privacy).eq("id", state.session.user.id);
       if (privacyUpdate.error) return toast(privacyUpdate.error.message);
       state.profile = { ...state.profile, ...privacy };
       await originalProfileSubmit(event);
-    };
+    });
     $("#profile-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); if (!/^[a-z0-9_]{3,24}$/.test(username)) return toast("@ inválido."); let avatar_url = state.profile?.avatar_url || null; const file = fd.get("avatar"); if (file?.size) { const path = `${state.session.user.id}/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, "_")}`; const upload = await sb.storage.from("avatars").upload(path, file, { upsert: true }); if (upload.error) return toast(upload.error.message); avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl; } const eligible = ["admin", "moderator", "premium"].includes(state.profile?.plan); const preferences = eligible ? { shelf_saved_public: fd.get("shelfSavedPublic") === "on", shelf_series_public: fd.get("shelfSeriesPublic") === "on", shelf_read_public: fd.get("shelfReadPublic") === "on", shelf_completed_public: fd.get("shelfCompletedPublic") === "on", shelf_blogs_public: fd.get("shelfBlogsPublic") === "on" } : { shelf_series_public: fd.get("shelfSeriesPublic") === "on" }; const update = await sb.from("profiles").update({ username, avatar_url, ...preferences }).eq("id", state.session.user.id); if (update.error) return toast(update.error.message.includes("duplicate") ? "Esse @ já está em uso." : update.error.message); state.profile = { ...state.profile, username, avatar_url, ...preferences }; overlay.remove(); render(); toast("Perfil atualizado."); };
     $("#profile-form", overlay).addEventListener("submit", async event => {
       const email = String(new FormData(event.currentTarget).get("email") || "").trim().toLowerCase();
@@ -4262,13 +4643,13 @@
       : await sb.from("profile_follows").select("following_id").eq("follower_id", profileId);
     if (relation.error) return toast("Não foi possível carregar essa lista.");
     const ids = (relation.data || []).map(row => isFollowers ? row.follower_id : row.following_id).filter(Boolean);
-    const profiles = ids.length ? await sb.from("profiles").select("id, username, avatar_url, title").in("id", ids) : { data: [] };
+    const profiles = ids.length ? await sb.from("profiles").select("id, username, avatar_url, title, plan, faction_id").in("id", ids) : { data: [] };
     if (profiles.error) return toast("Não foi possível carregar os perfis.");
     const byId = new Map((profiles.data || []).map(profile => [profile.id, profile]));
     const title = isFollowers ? "Seguidores" : "Seguindo";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal follow-list-modal"><div class="section-head"><div><h2>${title}</h2><div class="section-subtitle">${ids.length} perfil(is)</div></div><button class="small-btn" data-close>Fechar</button></div><div class="follow-list">${ids.map(id => { const profile = byId.get(id); return profile ? `<a class="follow-list-item" href="${escapeHTML(publicProfileHref(profile.username))}"><img src="${escapeHTML(profile.avatar_url || "https://i.pinimg.com/736x/be/17/10/be1710edaace144c17bdaf6deb2d2cc8.jpg")}" alt=""><span><b>@${escapeHTML(profile.username)}</b>${profile.title ? `<small>${escapeHTML(profile.title)}</small>` : ""}</span></a>` : ""; }).join("") || '<div class="empty">Nenhum perfil nesta lista.</div>'}</div></div>`;
+    overlay.innerHTML = `<div class="modal follow-list-modal"><div class="section-head"><div><h2>${title}</h2><div class="section-subtitle">${ids.length} perfil(is)</div></div><button class="small-btn" data-close>Fechar</button></div><div class="follow-list">${ids.map(id => { const profile = byId.get(id); return profile ? `<a class="follow-list-item" href="${escapeHTML(publicProfileHref(profile.username))}">${avatarMarkup(profile, "follow-list-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b>${profile.title ? `<small>${escapeHTML(profile.title)}</small>` : ""}</span></a>` : ""; }).join("") || '<div class="empty">Nenhum perfil nesta lista.</div>'}</div></div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
   }
@@ -4278,10 +4659,15 @@
     { id: "decenautas", name: "Decenautas", access: "public" },
     { id: "marvetes", name: "Marvetes", access: "public" },
     { id: "leitores-colecionadores", name: "Leitores e Colecionadores", access: "premium" },
-    { id: "staff", name: "Chat da Staff", access: "staff" }
+    { id: "staff", name: "Chat da Staff", access: "staff" },
+    { id: "faccao-aurora-rubra", name: "Maravilhas", access: "public", factionId: "aurora-rubra" },
+    { id: "faccao-vigilia-cobalto", name: "Legado", access: "public", factionId: "vigilia-cobalto" },
+    { id: "faccao-forja-dourada", name: "Ruptura", access: "public", factionId: "forja-dourada" },
+    { id: "faccao-nevoa-violeta", name: "Horizonte", access: "public", factionId: "nevoa-violeta" }
   ];
 
   function canOpenChatRoom(room) {
+    if (room.factionId) return ["moderator", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
     return room.access === "public"
       || (room.access === "premium" && ["premium", "admin"].includes(state.profile?.plan))
       || (room.access === "staff" && ["moderator", "admin"].includes(state.profile?.plan));
@@ -4291,23 +4677,75 @@
     return room.access === "premium" ? "Premium" : room.access === "staff" ? "Staff" : "Público";
   }
 
-  function chatBodyMarkup(body) {
-    return escapeHTML(String(body || "")).replace(/@([A-Za-z0-9_]{3,24})/g, (match, mentionedUsername) => `<a class="comment-mention" href="${escapeHTML(publicProfileHref(mentionedUsername))}" target="_blank" rel="noopener">${match}</a>`);
+  async function loadChatSenderVisuals(senderIds) {
+    const ids = [...new Set(senderIds.filter(Boolean))];
+    const visuals = new Map(ids.map(id => [id, { coverChoices: new Map(), coverStyles: new Map() }]));
+    if (!ids.length || !sb) return visuals;
+    const [choicesResult, stylesResult] = await Promise.all([
+      sb.from("user_cover_choices").select("user_id, item_id, variant_key, cover_url").in("user_id", ids),
+      sb.from("user_cover_styles").select("user_id, item_id, style").in("user_id", ids)
+    ]);
+    (choicesResult.data || []).forEach(choice => visuals.get(choice.user_id)?.coverChoices.set(choice.item_id, choice));
+    (stylesResult.data || []).forEach(style => visuals.get(style.user_id)?.coverStyles.set(style.item_id, style.style));
+    return visuals;
   }
 
-  function chatMessageMarkup(message, profile = {}) {
+  function chatBodyMarkup(body, metadata = {}, senderVisual = null) {
+    const mentionMarkup = text => escapeHTML(String(text || "")).replace(/@([A-Za-z0-9_]{3,24})/g, (match, mentionedUsername) => `<a class="comment-mention" href="${escapeHTML(publicProfileHref(mentionedUsername))}" target="_blank" rel="noopener">${match}</a>`);
+    const sharedPreviews = Array.isArray(metadata?.comic_previews) ? metadata.comic_previews : [];
+    const comicPreview = rawUrl => {
+      const cleanUrl = String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
+      let parsed;
+      try { parsed = new URL(cleanUrl, window.location.href); } catch { return null; }
+      if (parsed.origin !== window.location.origin) return null;
+      const itemId = parsed.searchParams.get("ler");
+      const item = itemId ? state.db.library.find(entry => String(entry.id) === String(itemId) && entry.type === "comic") : null;
+      if (!item) return null;
+      const sharedPreview = sharedPreviews.find(preview => preview?.url === cleanUrl || String(preview?.item_id) === String(item.id));
+      const senderChoice = senderVisual?.coverChoices?.get(item.id);
+      const sharedCoverUrl = senderChoice?.cover_url || sharedPreview?.cover_url || parsed.searchParams.get("capa_url");
+      const sharedVariantKey = senderChoice?.variant_key || sharedPreview?.variant_key || parsed.searchParams.get("capa");
+      const sharedVariant = usableCoverVariants(item).find(variant => variant.variant_key === sharedVariantKey);
+      const sharedCover = /^https?:\/\//i.test(sharedCoverUrl || "") ? sharedCoverUrl : sharedVariant?.cover_url;
+      const hasSharedAppearance = parsed.searchParams.has("capa") || parsed.searchParams.has("capa_url") || parsed.searchParams.has("efeito");
+      const defaultCover = item.coverUrl || item.cover || instantCover(item);
+      const previewCover = sharedCover ? proxiedImageUrl(sharedCover) : hasSharedAppearance ? proxiedImageUrl(defaultCover) : coverFor(item);
+      const senderStyle = senderVisual?.coverStyles?.get(item.id) || (item.seriesId && senderVisual?.coverStyles?.get(item.seriesId));
+      const requestedStyle = sharedPreview?.cover_style || senderStyle || parsed.searchParams.get("efeito");
+      // No chat, nunca consultar o estado visual de quem recebe.
+      const coverStyle = ["normal", "grayscale", "gold"].includes(requestedStyle) ? requestedStyle : "normal";
+      const title = itemDisplayTitle(item) || item.title || "Quadrinho";
+      const year = item.year ? ` · ${item.year}` : "";
+      return `<a class="chat-comic-preview" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener"><div class="chat-comic-preview-cover" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(previewCover)}')"></div><span class="chat-comic-preview-copy"><b>${escapeHTML(title)}</b><small>${escapeHTML(year.replace(/^ · /, ""))}</small></span></a>`;
+    };
+    const source = String(body || "");
+    const urlPattern = /https?:\/\/[^\s<]+/gi;
+    let output = "";
+    let cursor = 0;
+    for (const match of source.matchAll(urlPattern)) {
+      output += mentionMarkup(source.slice(cursor, match.index));
+      output += comicPreview(match[0]) || mentionMarkup(match[0]);
+      cursor = match.index + match[0].length;
+    }
+    return output + mentionMarkup(source.slice(cursor));
+  }
+
+  function chatMessageMarkup(message, profile = {}, senderVisual = null) {
     const username = cleanUsername(profile.username || "usuário");
     const title = String(profile.title || "").trim();
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}"><a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a><div>${chatBodyMarkup(message.body)}</div><small>${escapeHTML(formatCommentDate(message.created_at))}</small></div>`;
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}"><a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a><div>${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><small>${escapeHTML(formatCommentDate(message.created_at))}</small></div>`;
   }
 
   async function openChatRoom(room) {
+    await markChatMentionsRead();
     if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><button class="small-btn" data-close>Fechar</button></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
     $("#modal-root").appendChild(overlay);
+    if (state.messageUnreadCount) $(".chat-modal h2", overlay)?.insertAdjacentHTML("beforeend", ` <span class="message-card-badge">${state.messageUnreadCount > 99 ? "99+" : state.messageUnreadCount}</span>`);
+    if (room.factionId && ["moderator", "admin"].includes(state.profile?.plan)) $("#chat-room-compose", overlay)?.remove();
     let closed = false;
     let channel = null;
     const close = event => {
@@ -4319,6 +4757,9 @@
       overlay.remove();
     };
     $("[data-close]", overlay).onclick = close;
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) close(event);
+    });
     const messagesRoot = $("[data-chat-messages]", overlay);
     const chatInput = $("#chat-room-compose textarea", overlay);
     const resizeChatInput = () => {
@@ -4326,29 +4767,35 @@
       chatInput.style.height = "auto";
       chatInput.style.height = `${chatInput.scrollHeight}px`;
     };
-    chatInput?.addEventListener("input", resizeChatInput);
-    resizeChatInput();
     const renderMessages = async () => {
-      const result = await sb.from("chat_messages").select("id, sender_id, body, created_at, profiles!chat_messages_sender_id_fkey(username, avatar_url, title, title_color, plan)").eq("room_id", room.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: true }).limit(200);
+      const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at, profiles!chat_messages_sender_id_fkey(username, avatar_url, title, title_color, plan, faction_id)").eq("room_id", room.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: true }).limit(200);
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
-      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {})).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
+      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
     };
     await renderMessages();
     channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).subscribe();
-    $("#chat-room-compose", overlay).onsubmit = async event => {
+    const chatCompose = $("#chat-room-compose", overlay);
+    if (chatCompose) chatCompose.onsubmit = async event => {
       event.preventDefault();
       const composeForm = event.currentTarget;
       const form = new FormData(composeForm);
-      const body = String(form.get("body") || "").trim();
+      const prepared = prepareChatMessage(String(form.get("body") || "").trim());
+      const body = prepared.body;
       const button = $("button[type=submit]", composeForm);
       if (!body || button.disabled) return;
       button.disabled = true;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: prepared.metadata, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
       if (result.error) { console.error("[chat room] erro ao enviar mensagem", result.error); toast(result.error.message || "Não foi possível enviar a mensagem."); }
-      else { awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); resizeChatInput(); await renderMessages(); }
+      else { awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); await renderMessages(); }
       button.disabled = false;
     };
+    chatInput?.addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      chatCompose?.requestSubmit();
+    });
   }
 
   async function openChat(contact = null) {
@@ -4356,6 +4803,11 @@
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     if (!state.session || !sb) return openAuthPage();
     if (contact?.id === state.session.user.id) return toast("Você não pode enviar mensagens para si mesmo.");
+    if (contact?.id && contact.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
+    if (contact?.id && contact.allow_messages === undefined) {
+      const recipient = await sb.from("profiles").select("allow_messages").eq("id", contact.id).maybeSingle();
+      if (recipient.data?.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
+    }
     state.chatContact = contact?.id ? contact : null;
     if (contact?.id) {
       state.notifications = state.notifications.filter(notification => !isNotificationFromOpenChat(notification));
@@ -4364,10 +4816,12 @@
     (contact?.id ? markChatNotificationsRead(contact.id) : Promise.resolve())
       .then(() => loadNotifications())
       .then(() => render());
+    const messageBadgeMarkup = state.messageUnreadCount ? `<span class="message-card-badge">${state.messageUnreadCount > 99 ? "99+" : state.messageUnreadCount}</span>` : "";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)}</b></div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div>`}</div>`;
     $("#modal-root").appendChild(overlay);
+    if (messageBadgeMarkup) $(".chat-modal h2", overlay)?.insertAdjacentHTML("beforeend", ` ${messageBadgeMarkup}`);
     let closed = false;
     const close = event => {
       event?.preventDefault();
@@ -4380,17 +4834,21 @@
       loadNotifications().then(() => render());
     };
     $("[data-close]", overlay).onclick = close;
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) close(event);
+    });
     let channel = null;
     if (!contact) {
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
-      $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span><small>${chatRoomLabel(room)}</small></button>`).join("")}</div>`);
+      $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title"><span>Salas de conversa</span>${messageBadgeMarkup}</div>${availableRooms.map(room => `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span><small>${chatRoomLabel(room)}</small></button>`).join("")}</div>`);
       $$('[data-chat-room]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
       $("#chat-contact-form", overlay).onsubmit = async event => {
         event.preventDefault();
         const username = String(new FormData(event.currentTarget).get("username") || "").trim();
         if (!username) return;
-        const result = await sb.from("profiles").select("id, username, avatar_url, title").ilike("username", username).maybeSingle();
+        const result = await sb.from("profiles").select("id, username, avatar_url, title, allow_messages").ilike("username", username).maybeSingle();
         if (result.error || !result.data) return toast("Usuário não encontrado.");
+        if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
         overlay.remove();
         openChat(result.data);
       };
@@ -4399,12 +4857,13 @@
     const messagesRoot = $("[data-chat-messages]", overlay);
     const renderMessages = async () => {
       const now = new Date().toISOString();
-      const result = await sb.from("chat_messages").select("id, sender_id, body, created_at").or(`and(sender_id.eq.${state.session.user.id},recipient_id.eq.${contact.id}),and(sender_id.eq.${contact.id},recipient_id.eq.${state.session.user.id})`).gt("expires_at", now).order("created_at", { ascending: true }).limit(200);
+      const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at").or(`and(sender_id.eq.${state.session.user.id},recipient_id.eq.${contact.id}),and(sender_id.eq.${contact.id},recipient_id.eq.${state.session.user.id})`).gt("expires_at", now).order("created_at", { ascending: true }).limit(200);
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderIds = [...new Set((result.data || []).map(message => message.sender_id).filter(Boolean))];
-      const profilesResult = senderIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan").in("id", senderIds) : { data: [] };
+      const profilesResult = senderIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", senderIds) : { data: [] };
       const profilesById = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
-      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, profilesById.get(message.sender_id) || (message.sender_id === state.session.user.id ? state.profile : {}))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      const senderVisuals = await loadChatSenderVisuals(senderIds);
+      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, profilesById.get(message.sender_id) || (message.sender_id === state.session.user.id ? state.profile : {}), senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
     };
     await renderMessages();
@@ -4413,7 +4872,8 @@
       event.preventDefault();
       const composeForm = event.currentTarget;
       const form = new FormData(event.currentTarget);
-      const body = String(form.get("body") || "").trim();
+      const prepared = prepareChatMessage(String(form.get("body") || "").trim());
+      const body = prepared.body;
       if (!body) return;
       const submitButton = $("button[type=submit]", event.currentTarget);
       if (!submitButton || submitButton.disabled) return;
@@ -4422,7 +4882,7 @@
       messagesRoot.insertAdjacentHTML("beforeend", `<div class="chat-message is-mine chat-message-pending" data-chat-pending="${optimisticId}"><div>${escapeHTML(body)}</div><small>Enviando…</small></div>`);
       event.currentTarget.reset();
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: prepared.metadata, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
       if (result.error) {
         $(`[data-chat-pending="${optimisticId}"]`, messagesRoot)?.remove();
         submitButton.disabled = false;
@@ -4433,6 +4893,11 @@
       awardProfileXp("chat", `chat:${Date.now()}`);
       submitButton.disabled = false;
     };
+    $("#chat-compose textarea", overlay)?.addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      $("#chat-compose", overlay)?.requestSubmit();
+    });
   }
 
   async function saveShelfCategories(categories) {
@@ -4460,6 +4925,39 @@
     }
   }
 
+  function shelfComicPickerMarkup(items, selectedIds = []) {
+    const normalize = value => String(value || "").trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const groups = new Map();
+    items.forEach(item => {
+      const publisher = String(item.publisher || "").trim() || "Sem editora";
+      const imprint = String(item.imprint || "").trim() || "Sem selo";
+      const series = String(item.seriesTitle || item.title || "").trim() || "Sem série";
+      const first = normalize(series).charAt(0).toUpperCase();
+      const letter = /^[A-Z]$/.test(first) ? first : "#";
+      if (!groups.has(publisher)) groups.set(publisher, new Map());
+      if (!groups.get(publisher).has(imprint)) groups.get(publisher).set(imprint, new Map());
+      if (!groups.get(publisher).get(imprint).has(letter)) groups.get(publisher).get(imprint).set(letter, new Map());
+      if (!groups.get(publisher).get(imprint).get(letter).has(series)) groups.get(publisher).get(imprint).get(letter).set(series, []);
+      groups.get(publisher).get(imprint).get(letter).get(series).push(item);
+    });
+    const sortLabels = (a, b) => String(a).localeCompare(String(b), "pt-BR", { sensitivity: "base" });
+    const details = (className, label, content, searchText) => `<details class="collection-picker-group ${className}" data-picker-group data-picker-text="${escapeHTML(normalize(searchText))}" open><summary>${escapeHTML(label)}</summary>${content}</details>`;
+    const publishers = [...groups.entries()].sort(([a], [b]) => sortLabels(a, b)).map(([publisher, imprints]) => {
+      const imprintMarkup = [...imprints.entries()].sort(([a], [b]) => sortLabels(a, b)).map(([imprint, letters]) => {
+        const letterMarkup = [...letters.entries()].sort(([a], [b]) => sortLabels(a, b)).map(([letter, seriesMap]) => {
+          const seriesMarkup = [...seriesMap.entries()].sort(([a], [b]) => sortLabels(a, b)).map(([series, seriesItems]) => {
+            const issueMarkup = seriesItems.slice().sort((a, b) => issueSortValue(a) - issueSortValue(b) || sortLabels(itemDisplayTitle(a), itemDisplayTitle(b))).map(item => `<label class="collection-picker-item" data-picker-item data-picker-text="${escapeHTML(normalize(`${itemDisplayTitle(item)} ${item.issue || ""} ${item.seriesTitle || ""} ${item.publisher || ""} ${item.imprint || ""}`))}"><input type="checkbox" name="itemIds" value="${escapeHTML(item.id)}" ${selectedIds.map(String).includes(String(item.id)) ? "checked" : ""}> ${escapeHTML(itemDisplayTitle(item))}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</label>`).join("");
+            return details("collection-picker-series", `${series} (${seriesItems.length})`, `<div class="collection-picker-items">${issueMarkup}</div>`, `${series} ${publisher} ${imprint} ${letter}`);
+          }).join("");
+          return details("collection-picker-letter", letter, `<div class="collection-picker-nested">${seriesMarkup}</div>`, `${publisher} ${imprint} ${letter}`);
+        }).join("");
+        return details("collection-picker-imprint", imprint, `<div class="collection-picker-nested">${letterMarkup}</div>`, `${publisher} ${imprint}`);
+      }).join("");
+      return details("collection-picker-publisher", publisher, `<div class="collection-picker-nested">${imprintMarkup}</div>`, publisher);
+    }).join("");
+    return `<div class="collection-picker collection-picker-comics"><div class="collection-picker-search"><input type="search" data-collection-picker-search placeholder="Pesquisar quadrinho, série, selo ou editora"><span data-collection-picker-count>${items.length} quadrinho(s)</span></div><div data-collection-picker-tree>${publishers || '<div class="empty">Salve algum quadrinho primeiro.</div>'}</div></div>`;
+  }
+
   function openShelfCategoryForm(categoryId = null) {
     const existing = state.shelfCategories.find(category => category.id === categoryId);
     const savedItems = shelfItemsByIds([...ensureShelfSnapshot().saved]);
@@ -4467,6 +4965,31 @@
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>${existing ? "Editar coleção" : "Nova coleção"}</h2><div class="section-subtitle">Organize seus itens salvos e escolha se a coleção será compartilhável</div></div><button class="small-btn" data-close>Fechar</button></div><form id="shelf-category-form"><div class="form-grid"><div class="field full"><label>Nome da coleção</label><input name="name" required maxlength="60" value="${escapeHTML(existing?.name || "")}" placeholder="Ex.: Favoritos, Para reler"></div><div class="field full"><label>Imagem da coleção (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(existing?.coverUrl || "")}" placeholder="https://.../imagem.jpg"><small class="format-hint">Apenas para coleções públicas.</small></div><div class="field full"><label><input name="isPublic" type="checkbox" ${existing?.isPublic !== false ? "checked" : ""}> Coleção pública — aparecerá no perfil e poderá ser compartilhada</label></div><div class="field full"><label>Quadrinhos nesta coleção</label><div class="collection-picker">${savedItems.map(item => `<label><input type="checkbox" name="itemIds" value="${escapeHTML(item.id)}" ${existing?.itemIds?.includes(item.id) ? "checked" : ""}> ${escapeHTML(item.seriesTitle || item.title)}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</label>`).join("") || "Salve algum quadrinho primeiro."}</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar coleção</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
+    const comicPicker = $(".collection-picker", overlay);
+    if (comicPicker) {
+      comicPicker.outerHTML = shelfComicPickerMarkup(savedItems, existing?.itemIds || []);
+      const search = $("[data-collection-picker-search]", overlay);
+      const tree = $("[data-collection-picker-tree]", overlay);
+      const count = $("[data-collection-picker-count]", overlay);
+      const normalizeSearch = value => String(value || "").trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const filterPicker = () => {
+        const query = normalizeSearch(search?.value);
+        let visibleCount = 0;
+        $$('[data-picker-item]', tree).forEach(item => {
+          const visible = !query || normalizeSearch(item.dataset.pickerText).includes(query);
+          item.hidden = !visible;
+          if (visible) visibleCount += 1;
+        });
+        $$('[data-picker-group]', tree).reverse().forEach(group => {
+          const hasVisible = Boolean($('[data-picker-item]:not([hidden])', group));
+          group.hidden = !hasVisible;
+          if (query && hasVisible) group.open = true;
+        });
+        if (count) count.textContent = `${visibleCount} quadrinho(s)`;
+      };
+      search?.addEventListener("input", filterPicker);
+      filterPicker();
+    }
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     $("#shelf-category-form", overlay).onsubmit = async event => {
       event.preventDefault();
@@ -4532,7 +5055,7 @@
   function publicCollectionCard(collection, canManage = false) {
     const blog = collection.collection_type === "blog";
     const count = blog ? (Array.isArray(collection.blog_ids) ? collection.blog_ids.length : 0) : (Array.isArray(collection.item_ids) ? collection.item_ids.length : 0);
-    const cover = collection.cover_url || instantCover({ title: collection.name });
+    const cover = collection.cover_url || collection.coverUrl || instantCover({ title: collection.name });
     return `<article class="public-shelf-collection-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username || "")}" role="link" tabindex="0"><div class="public-shelf-collection-cover has-image" style="background-image:url('${escapeHTML(cover)}')"></div><div class="public-shelf-collection-info"><div class="eyebrow">${collection.is_featured ? "Destaque · " : ""}${blog ? "Blogs" : "Quadrinhos"}</div><h3>${escapeHTML(collection.name)}</h3><p>${count} item(ns) · @${escapeHTML(collection.username || "usuário")}</p><div class="shelf-section-actions"><span class="shelf-visibility is-public">Pública</span><a class="small-btn" href="${escapeHTML(publicProfileHref(collection.username, collection.id))}">Abrir</a>${canManage ? `<button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(collection.username)}">Compartilhar</button><button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}</div></div></article>`;
   }
 
@@ -4615,6 +5138,7 @@
 
   async function runModerationAction(target, action, duration = null, title = null, titleColor = null) {
     if (!sb || !target?.username) return;
+    if (action === "title") title = profileTitle(title);
     const result = await sb.rpc("moderate_user", { p_username: target.username, p_action: action, p_duration: duration, p_title: title, p_title_color: titleColor });
     if (result.error) return toast(result.error.message || "Não foi possível aplicar a moderação.");
     toast("Ação de moderação aplicada.");
@@ -4723,7 +5247,7 @@
       <div class="profile-header">
         ${avatarMarkup(profile)}
         <div>
-          <div class="eyebrow">@${escapeHTML(profile.username)}</div>
+          <div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)}</div>
           ${profile.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : '<div class="section-subtitle">Perfil público</div>'}
           ${trophyRoom(publicState.achievements)}
         </div>
@@ -4858,9 +5382,12 @@
   function rankingMemberMarkup(member, showRank = false) {
     const online = member.is_online === true;
     const current = state.session?.user?.id === member.user_id;
+    const staff = ["moderator", "admin"].includes(member.plan);
+    const faction = state.factions.find(item => item.id === member.faction_id);
+    const lineColor = staff ? "#ffffff" : faction?.color || "#ffffff";
     const rank = showRank && member.ranking ? `<span class="ranking-position">${member.ranking}º</span>` : "";
     const title = member.title ? `<span class="ranking-title" style="--title-bg:${safeTitleColor(member.title_color)}">${escapeHTML(member.title)}</span>` : "";
-    return `<a class="ranking-member ${current ? "is-current" : ""}" href="${escapeHTML(publicProfileHref(member.username))}">${rank}<span class="ranking-avatar-wrap ${online ? "is-online" : ""}">${avatarMarkup(member, "ranking-avatar")}<span class="ranking-online-dot" aria-label="Online"></span></span><span class="ranking-member-copy"><strong>@${escapeHTML(member.username)}</strong>${title}<small>Nível ${member.level} · ${Number(member.xp || 0).toLocaleString("pt-BR")} XP</small></span><span class="ranking-period-xp">+${Number(member.period_xp || 0).toLocaleString("pt-BR")} XP</span></a>`;
+    return `<a class="ranking-member ${current ? "is-current" : ""}" style="--member-faction-color:${escapeHTML(lineColor)}" href="${escapeHTML(publicProfileHref(member.username))}">${rank}<span class="ranking-avatar-wrap ${online ? "is-online" : ""}">${avatarMarkup(member, "ranking-avatar")}<span class="ranking-online-dot" aria-label="Online"></span></span><span class="ranking-member-copy"><strong>${factionDot({ faction_id: member.faction_id })}@${escapeHTML(member.username)}</strong>${title}<small>Nível ${member.level} · ${Number(member.xp || 0).toLocaleString("pt-BR")} XP</small></span><span class="ranking-period-xp">+${Number(member.period_xp || 0).toLocaleString("pt-BR")} XP</span></a>`;
   }
 
   function rankingCategoryMembers(members, plan) {
@@ -4878,7 +5405,7 @@
   function renderRankingPage() {
     const members = state.rankingMembers || [];
     if (state.rankingCategory) return renderRankingCategoryPage(members);
-    const eligibleMembers = members.filter(member => ["free", "premium"].includes(member.plan));
+    const eligibleMembers = members.filter(member => ["free", "premium"].includes(member.plan) && (!state.rankingFaction || member.faction_id === state.rankingFaction));
     const periodLabels = { day: "24 horas", week: "7 dias", all: "Hall da fama" };
     const topMembers = eligibleMembers.slice(0, 3);
     const groups = [
@@ -4886,7 +5413,375 @@
       ["premium", "Premium"],
       ["free", "Free"]
     ];
-    return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${state.profile ? `<div class="ranking-self"><strong>Nível ${state.profile.level || 1}</strong><span>${Number(state.profile.xp || 0).toLocaleString("pt-BR")} XP · Check-in: 🔥 ${state.profile.daily_streak || 0} dia(s)</span></div>` : ""}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Free</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Premium</strong><p>Todos os benefícios Free, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Premium, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Free ou Premium no ranking.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = plan === "staff" ? members.filter(member => ["moderator", "admin"].includes(member.plan)) : members.filter(member => member.plan === plan); return `<section class="ranking-group"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
+    return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${state.profile ? `<div class="ranking-self"><strong>Nível ${state.profile.level || 1}</strong><span>${Number(state.profile.xp || 0).toLocaleString("pt-BR")} XP · Check-in: 🔥 ${state.profile.daily_streak || 0} dia(s)</span></div>` : ""}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Free</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Premium</strong><p>Todos os benefícios Free, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Premium, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div><div class="ranking-faction-tabs"><button class="small-btn ${!state.rankingFaction ? "is-active" : ""}" data-ranking-faction="">Todas as facções</button>${state.factions.map(faction => `<button class="small-btn ${state.rankingFaction === faction.id ? "is-active" : ""}" data-ranking-faction="${escapeHTML(faction.id)}" style="--faction-filter-color:${escapeHTML(faction.color)}"><span class="faction-dot" style="--faction-color:${escapeHTML(faction.color)}"></span>${escapeHTML(faction.name)}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Free ou Premium nesta seleção.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = plan === "staff" ? members.filter(member => ["moderator", "admin"].includes(member.plan)) : members.filter(member => member.plan === plan && (!state.rankingFaction || member.faction_id === state.rankingFaction)); const sectionFactionId = state.profile?.faction_id; const sectionColor = state.factions.find(faction => faction.id === sectionFactionId)?.color || "#ffffff"; return `<section class="ranking-group ranking-group-abafac linhafac" style="--ranking-section-color:${escapeHTML(sectionColor)}"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
+  }
+
+  function legacyFactionLeadershipMarkup(factionId) {
+    const role = state.factionRoles.find(item => item.faction_id === factionId && item.user_id === state.session?.user?.id);
+    const members = state.factionRoleMembers.filter(item => item.faction_id === factionId);
+    const leader = members.find(item => item.role === "leader");
+    const curators = members.filter(item => item.role === "curator").sort((a, b) => a.slot - b.slot);
+    const person = item => item?.profile ? `<span class="faction-role-person">${avatarMarkup(item.profile, "faction-role-avatar")}<strong>@${escapeHTML(item.profile.username)}</strong></span>` : '<span class="faction-role-person faction-role-empty">Vaga disponível</span>';
+    const currentRole = role ? (role.role === "leader" ? "líder" : "curador") : "membro";
+    return `<section class="section faction-leadership-tools"><div class="section-head"><div><h2 class="section-title">Cargos da facção</h2><div class="section-subtitle">Líder: ${person(leader)} · Curadores: ${curators.length}/3</div></div></div><div class="faction-role-list"><div><small>Líder</small>${person(leader)}</div><div><small>Curadores</small>${[1, 2, 3].map(slot => person(curators.find(item => item.slot === slot))).join("")}</div></div>${role ? `<p class="faction-management-note">Você é ${currentRole}. ${role.role === "leader" ? "O líder pode editar a identidade, promover curadores ou desistir do cargo." : "Os curadores organizam a página e os eventos em conjunto."}</p>${role.role === "leader" ? '<div class="faction-leader-actions"><button class="small-btn" data-faction-edit-identity>Editar identidade</button><button class="small-btn" data-faction-resign>Desistir da liderança</button></div>' : ""}` : '<p class="faction-management-note">Os cargos são preenchidos automaticamente conforme a atividade dos membros.</p>'}</section>`;
+  }
+
+  function factionLeadershipMarkup(factionId) {
+    const role = state.factionRoles.find(item => item.faction_id === factionId && item.user_id === state.session?.user?.id);
+    const roles = state.factionRoleMembers.filter(item => item.faction_id === factionId);
+    const leader = roles.find(item => item.role === "leader");
+    const curators = roles.filter(item => item.role === "curator").sort((a, b) => a.slot - b.slot);
+    const roleCard = (item, label, slot = "") => item ? `<article class="faction-featured-role-card" style="--faction-color:${escapeHTML(state.factions.find(faction => faction.id === factionId)?.color || "#e85b68")}">${item.profile ? avatarMarkup(item.profile, "faction-role-avatar") : ""}<div><strong>${item.profile ? `@${escapeHTML(item.profile.username)}` : "Membro da facção"}</strong><span>${label}${slot ? ` ${slot}` : ""}</span></div></article>` : `<article class="faction-featured-role-card is-empty" style="--faction-color:${escapeHTML(state.factions.find(faction => faction.id === factionId)?.color || "#e85b68")}"><div><strong>Vaga disponível</strong><span>${label}${slot ? ` ${slot}` : ""}</span></div></article>`;
+    const memberCards = state.factionMembers.filter(item => item.faction_id === factionId).sort((a, b) => new Date(b.joined_at || 0) - new Date(a.joined_at || 0)).slice(0, 4).map(member => {
+      if (!member.profile) return "";
+      const memberRole = roles.find(item => item.user_id === member.user_id);
+      const roleLabel = memberRole ? memberRole.role === "leader" ? "Líder" : `Curador ${memberRole.slot}` : "Membro";
+      return `<article class="faction-member-card" style="--faction-color:${escapeHTML(state.factions.find(faction => faction.id === factionId)?.color || "#e85b68")}">${avatarMarkup(member.profile, "faction-member-avatar")}<div><strong>@${escapeHTML(member.profile.username)}</strong>${member.profile.title ? `<small>${escapeHTML(member.profile.title)}</small>` : ""}<span class="faction-member-role">${roleLabel}</span></div></article>`;
+    }).join("");
+    return `<section class="section faction-leadership-tools"><div class="section-head"><div><h2 class="section-title">Cargos da facção</h2><div class="section-subtitle">Liderança e curadoria em destaque.</div></div></div><div class="faction-featured-role-grid">${roleCard(leader, "Líder")}${[1, 2, 3].map(slot => roleCard(curators.find(item => item.slot === slot), "Curador", slot)).join("")}</div>${role ? `<p class="faction-management-note">Você é ${role.role === "leader" ? "líder" : "curador"}. ${role.role === "leader" ? "O líder pode editar a identidade, promover curadores ou desistir do cargo." : "Os curadores organizam a página e os eventos em conjunto."}</p>${role.role === "leader" ? '<div class="faction-leader-actions"><button class="small-btn" data-faction-edit-identity>Editar identidade</button><button class="small-btn" data-faction-resign>Desistir da liderança</button></div>' : ""}` : ""}</section><section class="section faction-members-section"><div class="section-head"><div><h2 class="section-title">Membros da facção</h2><div class="section-subtitle">Todos os membros desta facção.</div></div></div><div class="faction-member-grid">${memberCards || '<div class="empty">Nenhum membro encontrado.</div>'}</div></section>`;
+  }
+
+  function factionAbafacOrder(factionId) {
+    const faction = state.factions.find(item => item.id === factionId);
+    const saved = faction?.abafac_order;
+    const allowed = ["stats", ...(faction?.abafac_catalog_url ? ["catalog"] : []), "leadership", "members", ...state.factionAbafacImages.filter(image => image.faction_id === factionId).map(image => `image:${image.id}`)];
+    if (!Array.isArray(saved)) return allowed;
+    const order = [...new Set(saved.filter(key => allowed.includes(key)))];
+    if (!order.includes("stats")) order.unshift("stats");
+    return [...order, ...allowed.filter(key => !order.includes(key))];
+  }
+
+  function normalizeInternalFactionLink(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const isCompleteUrl = /^https?:\/\//i.test(raw);
+    if (raw.startsWith("//") || raw.includes("\\") || (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !isCompleteUrl)) return false;
+    try {
+      const url = new URL(raw, window.location.href);
+      const allowedHosts = new Set([window.location.hostname, "localhost", "127.0.0.1", "uriel29m.github.io"]);
+      if (!['http:', 'https:'].includes(url.protocol) || !allowedHosts.has(url.hostname.toLowerCase()) || url.username || url.password) return false;
+      return `${isCompleteUrl ? window.location.pathname : url.pathname}${url.search}${url.hash}`;
+    } catch {
+      return false;
+    }
+  }
+
+  async function isRealInternalFactionLink(value) {
+    const normalized = normalizeInternalFactionLink(value);
+    if (normalized === false) return false;
+    if (normalized === null) return true;
+    const url = new URL(normalized, window.location.href);
+    const currentPath = window.location.pathname;
+    const appPaths = new Set([
+      currentPath,
+      currentPath.endsWith("/index.html") ? currentPath.slice(0, -"index.html".length) : `${currentPath.replace(/\/$/, "")}/index.html`,
+      currentPath.endsWith("/") ? `${currentPath}index.html` : `${currentPath}/index.html`
+    ]);
+    if (!appPaths.has(url.pathname)) return false;
+    const page = url.searchParams.get("pagina") || "";
+    const knownPages = new Set(Object.values(sectionRoutes).filter(Boolean));
+    const hasCollectionRoute = url.searchParams.has("colecao");
+    const username = String(url.searchParams.get("perfil") || "").trim();
+    if (page && !knownPages.has(page)) return false;
+    if (!page && !hasCollectionRoute && username) {
+      if (!/^[A-Za-z0-9_]{3,24}$/.test(username)) return false;
+      const profile = await sb.from("profiles").select("id").ilike("username", username).maybeSingle();
+      return !profile.error && Boolean(profile.data);
+    }
+    if (hasCollectionRoute) {
+      const collectionId = String(url.searchParams.get("colecao") || "").trim();
+      if (!collectionId) return false;
+      const collection = await sb.from("shelf_collections").select("id").eq("id", collectionId).eq("is_public", true).maybeSingle();
+      return !collection.error && Boolean(collection.data);
+    }
+    if (page === "faccoes" && url.searchParams.has("faccao")) {
+      const factionKey = String(url.searchParams.get("faccao") || "");
+      return state.factions.some(faction => faction.id === factionKey || String(faction.page_key) === factionKey);
+    }
+    if (page === "blogs" && url.searchParams.has("blog")) {
+      const blogId = Number(url.searchParams.get("blog"));
+      if (!Number.isInteger(blogId)) return false;
+      const blog = await sb.from("blog_posts").select("id").eq("id", blogId).eq("status", "published").maybeSingle();
+      return !blog.error && Boolean(blog.data);
+    }
+    return Boolean(!page || knownPages.has(page));
+  }
+
+  function parsePublicCatalogLink(value) {
+    const raw = String(value || "").trim();
+    if (!raw || raw.startsWith("//")) return null;
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (url.origin !== window.location.origin) return null;
+      const username = cleanUsername(url.searchParams.get("perfil"));
+      const collectionId = String(url.searchParams.get("lista") || "").trim();
+      if (!/^[a-z0-9_]{3,24}$/.test(username) || !collectionId || url.searchParams.has("pagina")) return null;
+      return { username, collectionId };
+    } catch {
+      return null;
+    }
+  }
+
+  async function validatePublicCatalogLink(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const parts = parsePublicCatalogLink(raw);
+    if (!parts) return false;
+    const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+    if (owner.error || !owner.data) return false;
+    const collection = await sb.from("shelf_collections").select("id, is_public, collection_type").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
+    if (collection.error || !collection.data) return false;
+    return publicProfileHref(owner.data.username, collection.data.id);
+  }
+
+  async function uploadFactionAbafacImage(factionId, file, link) {
+    if (!file) return true;
+    if (!String(file.type || "").startsWith("image/")) return toast("Escolha um arquivo de imagem.");
+    if (file.size > 8 * 1024 * 1024) return toast("A imagem deve ter no máximo 8 MB.");
+    const normalizedLink = normalizeInternalFactionLink(link);
+    if (normalizedLink === false) return toast("O link da abafac precisa apontar para dentro deste site.");
+    const extension = String(file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+    const path = `${factionId}/${state.session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+    const upload = await sb.storage.from("faction-abafac").upload(path, file, { upsert: false });
+    if (upload.error) return toast(upload.error.message || "Não foi possível enviar a imagem.");
+    const publicUrl = sb.storage.from("faction-abafac").getPublicUrl(path).data.publicUrl;
+    const inserted = await sb.from("faction_abafac_images").insert({ faction_id: factionId, image_url: publicUrl, link_url: normalizedLink, storage_path: path, created_by: state.session.user.id }).select("id").single();
+    if (inserted.error) {
+      await sb.storage.from("faction-abafac").remove([path]);
+      return toast(inserted.error.message || "Não foi possível registrar a imagem.");
+    }
+    const order = [...factionAbafacOrder(factionId), `image:${inserted.data.id}`];
+    const ordered = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+    if (ordered.error) {
+      await sb.from("faction_abafac_images").delete().eq("id", inserted.data.id);
+      await sb.storage.from("faction-abafac").remove([path]);
+      return toast(ordered.error.message || "Não foi possível adicionar a abafac.");
+    }
+    return true;
+  }
+
+  async function removeFactionAbafacImage(factionId, key) {
+    const imageId = Number(String(key).split(":")[1]);
+    if (!Number.isInteger(imageId)) return;
+    const image = state.factionAbafacImages.find(item => item.id === imageId && item.faction_id === factionId);
+    const result = await sb.rpc("remove_faction_abafac_image", { p_image_id: imageId });
+    if (result.error) return toast(result.error.message || "Não foi possível remover esta imagem.");
+    if (image?.storage_path) await sb.storage.from("faction-abafac").remove([image.storage_path]);
+    await loadFactions();
+    render();
+  }
+
+  function openFactionAbafacLinkEditor(image) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal faction-abafac-link-modal"><div class="section-head"><div><div class="eyebrow">Imagem abafac</div><h2>Editar link</h2><div class="section-subtitle">Defina o destino que será aberto ao clicar na imagem.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Link interno da imagem (opcional)</span><input name="link" type="text" maxlength="500" value="${escapeHTML(image?.link_url || "")}" placeholder="?pagina=blogs ou /index.html?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. Deixe vazio para remover o link.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar link</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const form = $(".faction-identity-form", overlay);
+      form.addEventListener("submit", async event => {
+        event.preventDefault();
+        const normalizedLink = normalizeInternalFactionLink(new FormData(form).get("link"));
+        if (normalizedLink === false) return toast("O link da abafac precisa apontar para dentro deste site.");
+        if (normalizedLink !== null && !await isRealInternalFactionLink(normalizedLink)) return toast("Informe uma página real deste site.");
+        finish(normalizedLink);
+      });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
+      $("[name=link]", form).focus();
+    });
+  }
+
+  async function editFactionAbafacLink(factionId, key) {
+    const imageId = Number(String(key).split(":")[1]);
+    const image = state.factionAbafacImages.find(item => item.id === imageId && item.faction_id === factionId);
+    if (!image) return;
+    const link = await openFactionAbafacLinkEditor(image);
+    if (link === null) return;
+    const result = await sb.rpc("update_faction_abafac_link", { p_image_id: imageId, p_link_url: link });
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar o link da imagem.");
+    await loadFactions();
+    render();
+  }
+
+  async function moveFactionAbafac(factionId, key, direction) {
+    const order = factionAbafacOrder(factionId);
+    const index = order.indexOf(key);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    const result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+    if (result.error) return toast(result.error.message || "Não foi possível reorganizar as abas.");
+    await loadFactions();
+    render();
+  }
+
+  async function removeFactionAbafac(factionId, key) {
+    const order = factionAbafacOrder(factionId).filter(item => item !== key);
+    const result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+    if (result.error) return toast(result.error.message || "Não foi possível remover esta abafac.");
+    await loadFactions();
+    render();
+  }
+
+  function openFactionAbafacManager(factionId) {
+    const labels = { stats: "Resumo da facção", ...(state.factions.find(item => item.id === factionId)?.abafac_catalog_url ? { catalog: "Catálogo público" } : {}), leadership: "Cargos da facção", members: "Membros da facção" };
+    state.factionAbafacImages.filter(image => image.faction_id === factionId).forEach(image => { labels[`image:${image.id}`] = "Imagem abafac"; });
+    const active = new Set(factionAbafacOrder(factionId));
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal faction-abafac-modal"><div class="section-head"><div><div class="eyebrow">Abafac da facção</div><h2>Gerenciar abas</h2><div class="section-subtitle">As abas fixas removidas podem ser recuperadas e voltarão abaixo das demais. Imagens removidas são apagadas definitivamente.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="faction-abafac-manager">${Object.entries(labels).map(([key, label]) => `<div class="faction-abafac-manager-row"><span>${label}</span>${active.has(key) ? '<small>Ativa</small>' : `<button type="button" class="small-btn" data-faction-abafac-restore="${key}">Recuperar</button>`}</div>`).join("")}</div></div>`;
+    $("#modal-root").appendChild(overlay);
+    $("[data-close]", overlay).onclick = () => overlay.remove();
+    $$('[data-faction-abafac-restore]', overlay).forEach(button => button.addEventListener("click", async () => {
+      const order = [...factionAbafacOrder(factionId), button.dataset.factionAbafacRestore];
+      const result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+      if (result.error) return toast(result.error.message || "Não foi possível recuperar esta abafac.");
+      overlay.remove();
+      await loadFactions();
+      render();
+    }));
+  }
+
+  function applyFactionAbafacOrder(factionId) {
+    const page = $(".faction-detail-page");
+    if (!page) return;
+    const sections = {
+      stats: $(".faction-stats-abafac", page),
+      catalog: $(".faction-catalog-abafac", page),
+      leadership: $(".faction-leadership-tools", page),
+      members: $(".faction-members-section", page)
+    };
+    state.factionAbafacImages.filter(image => image.faction_id === factionId).forEach(image => {
+      const key = `image:${image.id}`;
+      const section = document.createElement("section");
+      section.className = "section faction-abafac-image-section linhafac";
+      section.dataset.factionAbafac = key;
+      const imageCard = `<div class="faction-abafac-image-card"><img src="${escapeHTML(image.image_url)}" alt="Imagem abafac da facção" loading="lazy"></div>`;
+      const imageContent = image.link_url ? `<a class="faction-abafac-image-link" href="${escapeHTML(image.link_url)}">${imageCard}</a>` : imageCard;
+      section.innerHTML = `<div class="faction-abafac-image-layout">${imageContent}</div>`;
+      page.appendChild(section);
+      sections[key] = section;
+    });
+    const order = factionAbafacOrder(factionId);
+    const role = state.factionRoles.find(item => item.faction_id === factionId && item.user_id === state.session?.user?.id);
+    const canManage = role && ["leader", "curator"].includes(role.role);
+    const anchor = $(".faction-detail-hero", page);
+    let previous = anchor;
+    order.forEach((key, index) => {
+      const section = sections[key];
+      if (!section) return;
+      section.hidden = !order.includes(key);
+      section.dataset.factionAbafac = key;
+      previous?.after(section);
+      previous = section;
+      if ((!canManage && key !== "members") || $("[data-faction-abafac-controls]", section)) return;
+      const head = $(".section-head", section);
+      if (!key.startsWith("image:") && key !== "stats" && !head) return;
+      const controls = document.createElement("div");
+      controls.className = "faction-abafac-controls";
+      controls.dataset.factionAbafacControls = "true";
+      controls.innerHTML = `${canManage ? `<button type="button" class="small-btn" data-faction-abafac-move="up" data-faction-abafac-key="${key}" ${index === 0 ? "disabled" : ""} title="Mover aba para cima" aria-label="Mover aba para cima">↑</button><button type="button" class="small-btn" data-faction-abafac-move="down" data-faction-abafac-key="${key}" ${index === order.length - 1 ? "disabled" : ""} title="Mover aba para baixo" aria-label="Mover aba para baixo">↓</button>` : ""}${key.startsWith("image:") ? `<button type="button" class="small-btn" data-faction-abafac-link="${key}" title="Editar link da imagem" aria-label="Editar link da imagem">↗</button>` : ""}${key === "members" ? `<button type="button" class="small-btn" data-faction-view-members="${factionId}" title="Ver todos os membros" aria-label="Ver todos os membros">Ver todos</button>` : ""}${canManage && !["stats", "catalog"].includes(key) ? `<button type="button" class="small-btn danger" data-faction-abafac-remove="${key}" title="Remover abafac" aria-label="Remover abafac">×</button>` : ""}`;
+      if (key.startsWith("image:")) {
+        $(".faction-abafac-image-layout", section)?.appendChild(controls);
+      } else if (key === "stats") {
+        section.appendChild(controls);
+      } else {
+        head.appendChild(controls);
+      }
+      $$('[data-faction-abafac-move]', controls).forEach(button => button.addEventListener("click", () => moveFactionAbafac(factionId, key, button.dataset.factionAbafacMove === "up" ? -1 : 1)));
+      $('[data-faction-abafac-link]', controls)?.addEventListener("click", () => editFactionAbafacLink(factionId, key));
+      $('[data-faction-view-members]', controls)?.addEventListener("click", () => navigate({ pagina: "faccoes", faccao: factionRouteKey(factionId), membros: "1" }));
+      $('[data-faction-abafac-remove]', controls)?.addEventListener("click", () => key.startsWith("image:") ? removeFactionAbafacImage(factionId, key) : removeFactionAbafac(factionId, key));
+    });
+    Object.entries(sections).forEach(([key, section]) => { if (section && !order.includes(key)) section.hidden = true; });
+    $$('[data-faction-resign], .faction-management-note', page).forEach(element => { element.textContent = element.textContent.replaceAll("Desistir da liderança", "Renunciar").replaceAll("desistir do cargo", "renunciar"); });
+
+    if (canManage) {
+      const detailHead = $(".faction-detail-page > .section-head");
+      const backButton = $("[data-faction-back]", detailHead);
+      let detailActions = $(".faction-detail-actions", detailHead);
+      if (!detailActions && backButton) {
+        detailActions = document.createElement("div");
+        detailActions.className = "faction-detail-actions";
+        backButton.replaceWith(detailActions);
+        detailActions.appendChild(backButton);
+      }
+      if (detailActions && !$("[data-faction-abafac-manage]", detailActions)) {
+        const manageButton = document.createElement("button");
+        manageButton.type = "button";
+        manageButton.className = "small-btn";
+        manageButton.dataset.factionAbafacManage = "true";
+        manageButton.textContent = "Gerenciar abafacs";
+        manageButton.onclick = () => openFactionAbafacManager(factionId);
+        detailActions.appendChild(manageButton);
+      }
+      const roleActions = $(".faction-leader-actions", page);
+      if (detailActions && roleActions) {
+        $$('button', roleActions).forEach(button => detailActions.appendChild(button));
+        roleActions.remove();
+      }
+      if (detailActions && role.role === "curator" && !$("[data-faction-resign-curator]", detailActions)) {
+        const resignCurator = document.createElement("button");
+        resignCurator.type = "button";
+        resignCurator.className = "small-btn";
+        resignCurator.dataset.factionResignCurator = "true";
+        resignCurator.textContent = "Renunciar à curadoria";
+        resignCurator.onclick = async () => {
+          const result = await sb.rpc("resign_faction_curator");
+          if (result.error) return toast(result.error.message || "Não foi possível renunciar à curadoria.");
+          await loadFactions();
+          render();
+        };
+        detailActions.appendChild(resignCurator);
+      }
+    }
+  }
+
+  function factionCatalogMarkup(faction) {
+    const catalog = state.factionAbafacCatalogs.get(faction.id);
+    if (!catalog) return "";
+    const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : [];
+    const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean);
+    const collectionContext = { id: catalog.id, ownerId: catalog.owner_id, coverStyles: new Map(Object.entries(catalog.cover_styles || {})), coverChoices: new Map(Object.entries(catalog.cover_choices || {})) };
+    return `<section class="section faction-catalog-abafac" data-faction-abafac="catalog" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo público</div><h2 class="section-title">${escapeHTML(catalog.name)}</h2><div class="section-subtitle">Coleção de @${escapeHTML(catalog.username)} · ${items.length} item(ns)</div></div></div><div class="results-grid">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, false, collectionContext)).join("") || '<div class="empty">Nenhuma edição nesta coleção pública.</div>'}</div></section>`;
+  }
+
+  function factionMembersResultsMarkup(factionId, search = "") {
+    const roles = state.factionRoleMembers.filter(item => item.faction_id === factionId);
+    const query = String(search || "").trim().toLocaleLowerCase("pt-BR");
+    const members = state.factionMembers
+      .filter(item => item.faction_id === factionId && item.profile)
+      .filter(item => {
+        if (!query) return true;
+        const text = `${item.profile.username || ""} ${item.profile.title || ""}`.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return text.includes(query.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+      })
+      .sort((a, b) => new Date(b.joined_at || 0) - new Date(a.joined_at || 0));
+    return members.map(member => {
+      const role = roles.find(item => item.user_id === member.user_id);
+      const roleLabel = role ? role.role === "leader" ? "Líder" : `Curador ${role.slot}` : "Membro";
+      return `<article class="faction-member-card" style="--faction-color:${escapeHTML(state.factions.find(faction => faction.id === factionId)?.color || "#e85b68")}">${avatarMarkup(member.profile, "faction-member-avatar")}<div><strong>@${escapeHTML(member.profile.username)}</strong>${member.profile.title ? `<small>${escapeHTML(member.profile.title)}</small>` : ""}<span class="faction-member-role">${roleLabel}</span></div></article>`;
+    }).join("") || '<div class="empty">Nenhum membro corresponde à busca.</div>';
+  }
+
+  function renderFactionMembersPage() {
+    if (!state.session) return renderLoginPage();
+    const faction = state.factions.find(item => item.id === state.factionPageId);
+    if (!faction) return renderFactionPage();
+    const total = state.factionMembers.filter(item => item.faction_id === faction.id).length;
+    return `<div class="content faction-page faction-members-directory" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">${escapeHTML(faction.emblem)} ${escapeHTML(faction.name)}</div><h1 class="section-title">Todos os membros</h1><div class="section-subtitle">${total} membro(s) · os mais recentes aparecem primeiro.</div></div><button class="small-btn" data-faction-members-back>Voltar à facção</button></div><section class="section"><label class="ranking-user-search-wrap"><span>Pesquisar membro</span><input id="faction-member-search-input" class="ranking-user-search" type="search" data-faction-members-search value="${escapeHTML(state.factionMemberSearch)}" placeholder="Nome ou título..." autocomplete="off"></label><div class="faction-member-directory-grid" data-faction-member-results>${factionMembersResultsMarkup(faction.id, state.factionMemberSearch)}</div></section></div>`;
+  }
+
+  function renderFactionPage() {
+    if (!state.session) return renderLoginPage();
+    const selected = state.factions.find(faction => faction.id === state.factionPageId);
+    if (selected) {
+      const stats = state.factionStats.get(selected.id) || { members: 0, xp: 0 };
+      return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats"><span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionCatalogMarkup(selected)}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">A identidade desta facção</h2><div class="section-subtitle">Espaço para história, ordens, eventos e coleções da equipe.</div></div></div><p>Os curadores organizam o conteúdo e os eventos. O líder coordena a equipe e responde pela condução da facção.</p></section></div>`;
+    }
+    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, blogs, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
   }
 
   function renderNotifications() {
@@ -4952,12 +5847,37 @@
   }
 
   function render() {
+    const isBlogTheme = state.section === "blog";
+    document.body.classList.toggle("blogs-theme", isBlogTheme);
+    const brandLogo = document.querySelector(".brand-logo");
+    const brandName = document.querySelector(".brand > span:last-child");
+    const footerTitle = document.querySelector(".footer > div:first-child > strong");
+    const footerDescription = document.querySelector(".footer > div:first-child > span");
+    if (brandLogo) {
+      brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitalicon.png?v=1";
+      brandLogo.alt = isBlogTheme ? "Bobojaco" : "Banca Digital";
+    }
+    if (brandName) brandName.innerHTML = isBlogTheme ? 'Bobo<span class="brand-accent">jaco</span>' : 'Banca<span class="brand-accent">Digital</span>';
+    if (footerTitle) footerTitle.textContent = isBlogTheme ? "Bobojaco" : "Banca Digital";
+    if (footerDescription) footerDescription.textContent = isBlogTheme
+      ? "Um espaço para publicar, descobrir e conversar sobre histórias."
+      : "Uma banca de quadrinhos feita para a era digital.";
+    document.title = isBlogTheme ? "Bobojaco — Blogs" : "Banca Digital — Quadrinhos & Mangás";
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) metaDescription.content = isBlogTheme
+      ? "Bobojaco: um espaço para publicar, descobrir e conversar sobre histórias."
+      : "Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.";
+    const favicon = document.querySelector('link[rel="icon"]');
+    if (favicon) favicon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitalicon.png?v=1";
+    const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+    if (appleIcon) appleIcon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitalicon.png?v=1";
     const main = $("#main");
     let markup = "";
     if (state.section === "home") markup = renderHome();
     else if (state.section === "comic") markup = renderCatalog("comic");
     else if (state.section === "blog") markup = renderBlogsPage();
     else if (state.section === "ranking") markup = renderRankingPage();
+    else if (state.section === "factions") markup = state.factionMembersView ? renderFactionMembersPage() : renderFactionPage();
     else if (state.section === "manga") markup = renderCatalog("manga");
     else if (state.section === "collections") markup = renderCollections();
     else if (state.section === "collection") markup = renderCollectionPage();
@@ -4976,6 +5896,7 @@
     main.innerHTML = markup;
     bind();
     hydrateHomeCovers();
+    decorateFactionNames(main);
   }
 
   function syncActiveNav() {
@@ -5042,6 +5963,7 @@
     if (state.section === "ranking") {
       const rankingPage = $(".ranking-page");
       const benefits = $(".ranking-benefits", rankingPage);
+      $(".ranking-benefit-card.is-moderator", benefits)?.remove();
       if (rankingPage && benefits) rankingPage.appendChild(benefits);
       if (rankingPage && !state.rankingCategory) {
         const categoryByLabel = { Moderadores: "staff", Premium: "premium", Free: "free" };
@@ -5056,12 +5978,12 @@
           cards.forEach(card => list.appendChild(card));
           list.classList.add("ranking-member-list-preview");
           const category = categoryByLabel[$("h3", groupElement)?.firstChild?.textContent?.trim()];
-          if (category && cards.length && !$('[data-ranking-category]', groupElement)) list.insertAdjacentHTML("afterend", `<button class="small-btn ranking-view-all" data-ranking-category="${category}">Ver todos</button>`);
+          if (category && cards.length && !$('[data-ranking-category]', groupElement)) list.insertAdjacentHTML("afterend", `<div class="faction-abafac-controls ranking-view-all-controls"><button type="button" class="small-btn ranking-view-all" data-ranking-category="${category}">Ver todos</button></div>`);
         });
       }
       const directory = $(".ranking-directory", rankingPage);
-      if (directory) {
-        if (!$(".ranking-user-search", directory)) directory.insertAdjacentHTML("afterbegin", `<label class="ranking-user-search-wrap"><span>Pesquisar usuários</span><input class="ranking-user-search" type="search" value="${escapeHTML(state.rankingSearch || "")}" placeholder="Nome ou título..." autocomplete="off"></label>`);
+      if (false) {
+        if (false) directory.insertAdjacentHTML("afterbegin", `<label class="ranking-user-search-wrap"><span>Pesquisar usuários</span><input class="ranking-user-search" type="search" value="${escapeHTML(state.rankingSearch || "")}" placeholder="Nome ou título..." autocomplete="off"></label>`);
         const searchInput = $(".ranking-user-search", directory);
         const applyRankingSearch = () => {
           state.rankingSearch = searchInput.value;
@@ -5082,30 +6004,49 @@
       $(".content .profile-header")?.insertAdjacentHTML("afterend", profileXpProgressMarkup(state.profile));
     }
     if (state.section === "shelf" && state.session) {
+      const profileInfo = $(".content .profile-header > div:nth-child(2)");
+      if (profileInfo && !$(".profile-follow-summary", profileInfo)) profileInfo.insertAdjacentHTML("beforeend", followSummary(state.session.user.id, state.followerCount, state.followingCount));
+      const shelfProfileHandle = $(".content .profile-header > div:nth-child(2) > .eyebrow");
+      if (shelfProfileHandle && !shelfProfileHandle.dataset.profileLinkBound) {
+        shelfProfileHandle.dataset.profileLinkBound = "true";
+        shelfProfileHandle.classList.add("profile-shelf-username");
+        shelfProfileHandle.setAttribute("role", "link");
+        shelfProfileHandle.setAttribute("tabindex", "0");
+        const openPublicProfile = () => { window.location.href = publicProfileHref(state.profile.username); };
+        shelfProfileHandle.addEventListener("click", openPublicProfile);
+        shelfProfileHandle.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPublicProfile(); } });
+      }
       const shelfHeading = $(".content > .section-head .section-title");
       if (shelfHeading) {
-        shelfHeading.textContent = `Estante de @${state.profile?.username || state.session.user.user_metadata?.username || "usuário"}`;
-        if (!$(".profile-follow-summary", shelfHeading.parentElement)) shelfHeading.insertAdjacentHTML("afterend", followSummary(state.session.user.id, state.followerCount, state.followingCount));
+        shelfHeading.textContent = "Minha estante";
       }
     }
     if (state.section === "shelf" && state.session) {
       const shelfHead = $(".content > .section-head");
       if (shelfHead && !$(".shelf-media-tabs")) {
-        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn ${state.shelfTab === "comics" ? "is-active" : ""}" data-shelf-media="comics">Quadrinhos</button><button class="small-btn ${state.shelfTab === "blogs" ? "is-active" : ""}" data-shelf-media="blogs">Blogs</button></div><div class="shelf-blog-panel-mount"></div>`);
+        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="comics">Quadrinhos</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-blog-panel-mount"></div>`);
+        $("[data-action=open-local-box]", shelfHead.nextElementSibling)?.addEventListener("click", () => { state.localBoxVisible = true; setSection("local-box"); });
         $(".shelf-blog-panel-mount").innerHTML = blogShelfPanelMarkup();
       }
       $(".content").classList.toggle("shelf-show-blogs", state.shelfTab === "blogs");
     }
     if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
-      if (!$(".public-profile-page .profile-xp-progress") && $(".public-profile-page .profile-header")) $(".public-profile-page .profile-header").insertAdjacentHTML("afterend", profileXpProgressMarkup(state.publicProfile.profile, true));
+      const publicProfileInfo = $(".public-profile-page .profile-header > div:nth-child(2)");
+      if (publicProfileInfo && !$(".profile-follow-summary", publicProfileInfo)) publicProfileInfo.insertAdjacentHTML("beforeend", followSummary(state.publicProfile.profile.id, state.publicProfile.followerCount, state.publicProfile.followingCount));
+      if (!$(".public-profile-page .profile-xp-progress") && $(".public-profile-page .profile-header")) $(".public-profile-page .profile-header").insertAdjacentHTML("beforeend", profileXpProgressMarkup(state.publicProfile.profile, true));
       const publicSummary = $(".public-profile-page > .section-head .section-subtitle");
-      if (publicSummary) publicSummary.innerHTML = followSummary(state.publicProfile.profile.id, state.publicProfile.followerCount, state.publicProfile.followingCount);
+      if (publicSummary) publicSummary.textContent = "Coleções públicas do perfil";
       const publicHead = $(".public-profile-page > .section-head");
       if (publicHead && !$(".public-shelf-media-tabs")) {
-        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn ${state.publicShelfTab === "comics" ? "is-active" : ""}" data-public-shelf-media="comics">Quadrinhos</button><button class="small-btn ${state.publicShelfTab === "blogs" ? "is-active" : ""}" data-public-shelf-media="blogs">Blogs</button></div><div class="public-shelf-blog-panel-mount"></div>`);
+        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="comics">Quadrinhos</button></div><div class="public-shelf-blog-panel-mount"></div>`);
         $(".public-shelf-blog-panel-mount").innerHTML = blogShelfPanelMarkup(state.publicProfile);
       }
       $(".public-profile-page").classList.toggle("shelf-show-blogs", state.publicShelfTab === "blogs");
+    }
+    if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
+      $(".public-profile-page > .section-head > div:first-child")?.remove();
+      $(".public-profile-page > .section-head [data-section=home]")?.remove();
+      $(".public-shelf-media-tabs [data-public-shelf-media=comics]")?.remove();
     }
     if (state.section === "entity" && !$("[data-entity-filter-form]")) {
       const filter = state.collectionFilter || { field: "all", query: "" };
@@ -5122,7 +6063,14 @@
     syncTopAvatar();
     $$('[data-action="open-admin"]').forEach(button => { button.style.display = canManage ? "" : "none"; });
     $$('[data-action="submit"]').forEach(button => { button.style.display = isAdmin ? "" : "none"; });
-    $$('.messages-nav, .messages-mobile-btn').forEach(button => { button.style.display = state.session ? "" : "none"; });
+    $$('.messages-header-btn').forEach(button => {
+      button.style.display = state.session ? "" : "none";
+      const badge = $(".message-badge", button);
+      if (badge) {
+        badge.textContent = state.messageUnreadCount > 99 ? "99+" : String(state.messageUnreadCount);
+        badge.hidden = !state.messageUnreadCount;
+      }
+    });
     $$('.notification-bell').forEach(button => {
       button.style.display = state.session ? "" : "none";
       const badge = $(".notification-badge", button);
@@ -5171,16 +6119,119 @@
       render();
       loadRankingData();
     }));
+    $$('[data-ranking-faction]').forEach(el => el.addEventListener("click", () => { state.rankingFaction = el.dataset.rankingFaction || null; render(); }));
     $$('[data-ranking-category]').forEach(el => el.addEventListener("click", () => navigate({ pagina: "ranking", categoria: el.dataset.rankingCategory })));
     $('[data-ranking-back]')?.addEventListener("click", () => navigate({ pagina: "ranking" }));
+    $('[data-open-faction-choice]')?.addEventListener("click", openFactionChoice);
+    $$('[data-faction-open]').forEach(el => {
+      if (el.dataset.factionOpenBound) return;
+      el.dataset.factionOpenBound = "true";
+      el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); navigate({ pagina: "faccoes", faccao: factionRouteKey(el.dataset.factionOpen) }); });
+      el.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); el.click(); } });
+    });
+    $('[data-faction-members-back]')?.addEventListener("click", () => navigate({ pagina: "faccoes", faccao: factionRouteKey(state.factionPageId) }));
+    $('[data-faction-members-search]')?.addEventListener("input", event => {
+      state.factionMemberSearch = event.currentTarget.value;
+      const results = $("[data-faction-member-results]");
+      if (results) results.innerHTML = factionMembersResultsMarkup(state.factionPageId, state.factionMemberSearch);
+    });
+    const factionBackButton = $('[data-faction-back]');
+    if (factionBackButton) {
+      factionBackButton.textContent = "Voltar";
+      factionBackButton.onclick = () => {
+        if (state.profile?.faction_id && state.factionPageId === state.profile.faction_id) return navigate({});
+        const ownFactionId = state.profile?.faction_id || state.factionPageId;
+        navigate(ownFactionId ? { pagina: "faccoes", faccao: factionRouteKey(ownFactionId) } : {});
+      };
+    }
+    if (state.section === "factions" && state.factionPageId && state.profile && !["moderator", "admin"].includes(state.profile.plan) && state.profile.faction_id !== state.factionPageId && !$("[data-faction-join]")) {
+      const joinButton = document.createElement("button");
+      joinButton.type = "button";
+      joinButton.className = "small-btn faction-join-button";
+      joinButton.dataset.factionJoin = state.factionPageId;
+      joinButton.textContent = "Entrar nesta facção";
+      joinButton.dataset.tooltip = "A troca só pode ser feita uma vez a cada 7 dias. Ao desertar, você perde 50 XP e a facção abandonada perde 25 XP.";
+      const detailHead = $(".faction-detail-page > .section-head");
+      if (detailHead && factionBackButton) {
+        const detailActions = document.createElement("div");
+        detailActions.className = "faction-detail-actions";
+        factionBackButton.replaceWith(detailActions);
+        detailActions.append(factionBackButton, joinButton);
+      } else detailHead?.appendChild(joinButton);
+      joinButton.addEventListener("click", () => joinFaction(state.factionPageId));
+    }
+    if (state.section === "factions" && !state.factionPageId && $(".faction-page:not(.faction-detail-page) .section-title")) {
+      $(".faction-page:not(.faction-detail-page) .section-title").textContent = "Facção";
+    }
+    if (state.section === "factions" && state.factionPageId && $(".faction-detail-page") && !$(".faction-leadership-tools")) {
+      $(".faction-detail-page").insertAdjacentHTML("beforeend", factionLeadershipMarkup(state.factionPageId));
+      applyFactionAbafacOrder(state.factionPageId);
+      $('[data-faction-resign]')?.addEventListener("click", async () => {
+        const faction = state.factions.find(item => item.id === state.factionPageId);
+        if (!await openFactionConfirm(faction)) return;
+        const result = await sb.rpc("resign_faction_leader");
+        if (result.error) return toast(result.error.message || "Não foi possível renunciar.");
+        await loadFactions();
+        render();
+      });
+      $('[data-faction-edit-identity]')?.addEventListener("click", async () => {
+        const faction = state.factions.find(item => item.id === state.factionPageId);
+        if (!faction) return;
+        const values = await openFactionIdentityEditorV2(faction);
+        if (!values) return;
+        const catalogUrl = await validatePublicCatalogLink(values.catalogUrl);
+        if (catalogUrl === false) return toast("Informe o link de um catálogo público de quadrinhos deste site.");
+        const result = await sb.rpc("update_faction_identity_v2", { p_faction_id: faction.id, p_name: values.name, p_color: values.color, p_emblem: values.emblem, p_description: values.description, p_catalog_url: catalogUrl });
+        if (result.error) return toast(result.error.message || "Não foi possível atualizar a facção.");
+        if (values.imageFile) await uploadFactionAbafacImage(faction.id, values.imageFile, values.imageLink);
+        await loadFactions();
+        const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: faction.id, p_order: factionAbafacOrder(faction.id) });
+        if (orderResult.error) return toast(orderResult.error.message || "Não foi possível atualizar a ordem das abafacs.");
+        await loadFactions();
+        render();
+      });
+    }
+    if (state.section === "ranking" && $(".ranking-benefits") && !$(".ranking-faction-overview")) {
+      const overview = document.createElement("section");
+      overview.className = "section ranking-faction-overview";
+      overview.innerHTML = `<div class="section-head"><div><h2 class="section-title">Facções</h2><div class="section-subtitle">Escolha um lado para conhecer sua página e acompanhar a disputa.</div></div></div>${factionOverviewNoticeMarkup()}${factionOverviewMarkup()}`;
+      $(".ranking-benefits").before(overview);
+      $$('[data-faction-open]', overview).forEach(el => {
+        el.dataset.factionOpenBound = "true";
+        el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); navigate({ pagina: "faccoes", faccao: factionRouteKey(el.dataset.factionOpen) }); });
+        el.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); el.click(); } });
+      });
+    }
     $$('[data-follow-list]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openFollowList(el.dataset.followList, el.dataset.followProfileId); }));
     $$('[data-notification-open]').forEach(el => el.addEventListener("click", () => markNotificationRead(el.dataset.notificationOpen)));
     $('[data-mark-all-notifications]')?.addEventListener("click", markAllNotificationsRead);
-    if (state.section === "public-profile" && state.publicProfile?.profile && state.session?.user?.id !== state.publicProfile.profile.id && !$("[data-open-chat]")) {
+    if (state.section === "public-profile" && state.publicProfile?.profile && state.publicProfile.profile.allow_messages !== false && state.session?.user?.id !== state.publicProfile.profile.id && !$("[data-open-chat]")) {
       const actions = $(".public-profile-page > .section-head .profile-actions");
       if (actions) { const button = document.createElement("button"); button.className = "small-btn"; button.dataset.openChat = "true"; button.textContent = "Enviar mensagem"; actions.prepend(button); }
     }
+    if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
+      const profileHeader = $(".public-profile-page .profile-header");
+      const xp = $(".public-profile-page .profile-xp-progress");
+      const actions = $(".public-profile-page > .section-head .profile-actions");
+      if (profileHeader && xp && actions && !$("[data-public-profile-header-side]", profileHeader)) {
+        const side = document.createElement("div");
+        side.className = "public-profile-header-side";
+        side.dataset.publicProfileHeaderSide = "true";
+        xp.replaceWith(side);
+        side.append(xp, actions);
+        actions.closest(".section-head")?.remove();
+      }
+    }
     $('[data-open-chat]')?.addEventListener("click", () => openChat(state.publicProfile?.profile));
+    if (!document.body.dataset.commentEnterBound) {
+      document.body.dataset.commentEnterBound = "true";
+      document.addEventListener("keydown", event => {
+        const textarea = event.target.closest?.(".comment-form textarea");
+        if (!textarea || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+        event.preventDefault();
+        textarea.form?.requestSubmit();
+      });
+    }
     $$('[data-blog-tab]').forEach(el => el.addEventListener("click", () => { state.blogTab = el.dataset.blogTab; navigate({ pagina: "blogs" }); }));
     if (state.section === "blog" && !state.blogOpenId && $(".blogs-page") && !$(".blog-highlights-sidebar")) $(".blogs-page").insertAdjacentHTML("beforeend", blogHighlightsSidebar());
     if (state.section === "blog" && !state.blogOpenId && state.featuredBlogCollections?.length && $(".blogs-page") && !$("[data-featured-blog-collections]")) {
@@ -5215,7 +6266,6 @@
     $$('[data-blog-share]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); const post = findBlogPost(el.dataset.blogShare); if (post) shareBlog(post.id, post.title); }));
     if ($("#blog-form") && $(".blog-toolbar") && !$("#blog-inline-image")) {
       $(".blog-toolbar").insertAdjacentHTML("beforeend", '<button type="button" data-blog-command="strikeThrough">Riscado</button><button type="button" data-blog-command="insertOrderedList">1. Lista</button><button type="button" data-blog-command="justifyLeft">Esquerda</button><button type="button" data-blog-command="justifyCenter">Centro</button><button type="button" data-blog-command="justifyRight">Direita</button><button type="button" data-blog-command="undo">Desfazer</button><button type="button" data-blog-command="redo">Refazer</button><button type="button" data-blog-command="removeFormat">Limpar</button><button type="button" data-blog-break-box>Quebrar caixa</button><button type="button" data-blog-image>Imagem no texto</button>');
-      $(".blog-toolbar").insertAdjacentHTML("afterend", '<input id="blog-inline-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>');
     }
     $$('[data-blog-command]').forEach(el => el.addEventListener("click", () => {
       const command = el.dataset.blogCommand;
@@ -5234,7 +6284,13 @@
     $('[data-blog-image]')?.addEventListener("click", () => {
       const selection = window.getSelection();
       state.blogEditorRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-      $("#blog-inline-image")?.click();
+      const url = normalizeBlogImageUrl(window.prompt("Cole a URL da imagem para inserir no artigo:") || "");
+      if (url === false) return toast("Informe uma URL de imagem vÃ¡lida.");
+      if (!url) return;
+      const editor = $("#blog-editor");
+      if (!editor) return;
+      editor.focus();
+      document.execCommand("insertHTML", false, `<p><br></p><img src="${escapeHTML(url)}" alt="Imagem inserida no artigo"><p><br></p>`);
     });
     $("#blog-inline-image")?.addEventListener("change", async event => {
       const file = event.currentTarget.files?.[0];
@@ -5263,8 +6319,33 @@
     });
     if ($("#blog-form") && $(".blog-image-fields")) $(".blog-image-fields").insertAdjacentHTML("beforebegin", '<p class="format-hint blog-image-hint">Formato recomendado: capa vertical 720×1440; imagens laterais quadradas 900×900. Elas serão exibidas com a capa maior e as duas laterais empilhadas.</p>');
     const blogForm = $("#blog-form");
+    if (blogForm) {
+      const imageLabels = { cover: "URL da capa principal", image2: "URL da imagem lateral 1", image3: "URL da imagem lateral 2" };
+      Object.entries(imageLabels).forEach(([name, label]) => {
+        const input = $(`input[name=${name}]`, blogForm);
+        if (!input) return;
+        input.type = "url";
+        input.removeAttribute("accept");
+        input.placeholder = "https://exemplo.com/imagem.jpg";
+        const labelElement = input.closest("label") || input.parentElement?.querySelector("label");
+        if (labelElement) labelElement.textContent = label;
+      });
+    }
     if (blogForm) $("input[name=cover]", blogForm)?.setAttribute("required", "");
     $("#blog-form")?.addEventListener("submit", event => { event.preventDefault(); publishBlogPost(event.currentTarget); });
+    if (state.section === "home") {
+      $$(".featured-collections-rail .public-shelf-collection-cover").forEach((coverElement, index) => {
+        const collection = state.featuredComicCollections?.[index];
+        const coverUrl = collection?.cover_url || collection?.coverUrl;
+        if (!coverUrl || $(".public-shelf-collection-cover-image", coverElement)) return;
+        const image = document.createElement("img");
+        image.className = "public-shelf-collection-cover-image";
+        image.src = coverUrl;
+        image.alt = `Capa da coleção ${collection.name || ""}`;
+        image.loading = "lazy";
+        coverElement.appendChild(image);
+      });
+    }
     $$('[data-public-collection]').forEach(el => el.addEventListener("click", event => { if (event.target.closest("a, button")) return; event.stopPropagation(); loadPublicProfile(el.dataset.publicOwner, el.dataset.publicCollection); }));
     $$('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
     $$('[data-publisher-series-toggle]').forEach(el => el.addEventListener("click", event => {
@@ -5376,6 +6457,12 @@
     }); });
     $$("[data-section]").forEach(el => el.addEventListener("click", () => {
       const s = el.dataset.section;
+      if (s === "factions") {
+        const canOpenOwnFaction = state.session && state.profile?.faction_id && !["moderator", "admin"].includes(state.profile?.plan);
+        return canOpenOwnFaction
+          ? navigate({ pagina: "faccoes", faccao: factionRouteKey(state.profile.faction_id) })
+          : navigate({ pagina: "ranking", secao: "faccoes" });
+      }
       setSection(s === "comics" ? "comic" : s);
     }));
     $$("[data-action]").forEach(el => el.addEventListener("click", () => {
