@@ -239,9 +239,10 @@
     shelfSnapshot: null,
     shelfExpanded: { saved: false, read: false },
     shelfCategories: [],
+    savedPublicCollections: [],
     blogShelfCategories: [],
-    shelfTab: "comics",
-    publicShelfTab: "comics",
+    shelfTab: "collections",
+    publicShelfTab: "collections",
     blogSaveIds: new Set(),
     authoredBlogPosts: [],
     savedBlogPosts: [],
@@ -256,6 +257,7 @@
     followingCount: 0,
     chatContact: null,
     messageUnreadCount: 0,
+    chatRoomUnreadCounts: {},
     notifications: [],
     notificationUnreadCount: 0,
     notificationChannel: null,
@@ -275,6 +277,7 @@
     blogCommentCounts: new Map(),
     blogCommentThreads: new Map(),
     blogEditorRange: null
+    ,wallComments: []
     ,rankingPeriod: "week"
     ,rankingFaction: null
     ,rankingMembers: []
@@ -1278,6 +1281,25 @@
     state.seriesCoverChoices = result.error ? new Map() : new Map((result.data || []).map(choice => [choice.series_id, choice]));
   }
 
+  async function loadProfileWallComments(profileId) {
+    if (!sb || !profileId) return [];
+    let result = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id)").eq("profile_id", profileId).order("created_at", { ascending: false });
+    if (!result.error) return result.data || [];
+    let fallback = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
+    if (fallback.error && /parent_id|schema cache|column/i.test(fallback.error.message || "")) {
+      const legacy = await sb.from("profile_wall_comments").select("id, user_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
+      fallback = { ...legacy, data: (legacy.data || []).map(comment => ({ ...comment, parent_id: null })) };
+    }
+    if (fallback.error) {
+      console.warn("Não foi possível carregar os comentários do mural:", fallback.error.message);
+      return [];
+    }
+    const userIds = [...new Set((fallback.data || []).map(comment => comment.user_id).filter(Boolean))];
+    const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id").in("id", userIds) : { data: [] };
+    const byId = new Map((profiles.data || []).map(profile => [profile.id, profile]));
+    return (fallback.data || []).map(comment => ({ ...comment, profiles: byId.get(comment.user_id) || {} }));
+  }
+
   async function loadAccount() {
     if (!sb) {
       state.authReady = true;
@@ -1331,6 +1353,16 @@
       }
       const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", session.user.id).order("created_at", { ascending: true });
       state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
+      const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
+      const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+      const savedCollectionsResult = savedCollectionIds.length
+        ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+        : { data: [] };
+      const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
+      const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+      const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
+      state.savedPublicCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+      state.wallComments = await loadProfileWallComments(session.user.id);
       state.blogShelfCategories = (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] }));
       const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", session.user.id).eq("status", "published").order("published_at", { ascending: false });
       state.authoredBlogPosts = authoredBlogs.data || [];
@@ -1370,6 +1402,7 @@
       state.notifications = [];
       state.notificationUnreadCount = 0;
       state.messageUnreadCount = 0;
+      state.chatRoomUnreadCounts = {};
       return;
     }
     const result = await sb.from("notifications").select("id, actor_id, type, title, body, href, metadata, read_at, created_at").eq("user_id", state.session.user.id).order("created_at", { ascending: false }).limit(100);
@@ -1377,10 +1410,17 @@
       state.notifications = [];
       state.notificationUnreadCount = 0;
       state.messageUnreadCount = 0;
+      state.chatRoomUnreadCounts = {};
       return;
     }
     const chatNotificationTypes = ["message", "chat_mention"];
-    state.messageUnreadCount = (result.data || []).filter(notification => chatNotificationTypes.includes(notification.type) && !notification.read_at).length;
+    const unreadChatNotifications = (result.data || []).filter(notification => chatNotificationTypes.includes(notification.type) && !notification.read_at);
+    state.messageUnreadCount = unreadChatNotifications.length;
+    state.chatRoomUnreadCounts = unreadChatNotifications.reduce((counts, notification) => {
+      const roomId = notification.type === "chat_mention" ? notification.metadata?.room_id : null;
+      if (roomId) counts[roomId] = (counts[roomId] || 0) + 1;
+      return counts;
+    }, {});
     const visibleNotifications = (result.data || []).filter(notification => !chatNotificationTypes.includes(notification.type));
     const actorIds = [...new Set(visibleNotifications.map(notification => notification.actor_id).filter(Boolean))];
     const actorsResult = actorIds.length
@@ -1397,6 +1437,21 @@
           await markChatNotificationsRead(payload.new.actor_id);
         }
         await loadNotifications();
+        $$('[data-chat-room]').forEach(button => {
+          const unread = state.chatRoomUnreadCounts?.[button.dataset.chatRoom] || 0;
+          let badge = $(".message-badge", button);
+          if (unread) {
+            if (!badge) {
+              badge = document.createElement("span");
+              badge.className = "message-badge";
+              button.querySelector("small")?.before(badge);
+            }
+            badge.textContent = unread > 99 ? "99+" : String(unread);
+            badge.setAttribute("aria-label", `${unread} marcação(ões) não lida(s)`);
+          } else {
+            badge?.remove();
+          }
+        });
         render();
       }).subscribe();
     }
@@ -1421,18 +1476,20 @@
     if (result.error) console.warn("NÃ£o foi possÃ­vel marcar as notificaÃ§Ãµes da conversa como lidas:", result.error.message);
   }
 
-  async function markChatMentionsRead() {
+  async function markChatMentionsRead(roomId = null) {
     if (!sb || !state.session?.user?.id) return;
-    await sb.from("notifications")
+    let query = sb.from("notifications")
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", state.session.user.id)
       .eq("type", "chat_mention")
       .is("read_at", null);
+    if (roomId) query = query.contains("metadata", { room_id: roomId });
+    await query;
   }
 
   async function loadPublicProfile(username, collectionId = null) {
     state.publicProfile = { loading: true, username, collectionId };
-    state.publicShelfTab = "comics";
+    state.publicShelfTab = "collections";
     state.collectionFilter = { field: "all", query: "" };
     state.section = "public-profile";
     render();
@@ -1441,7 +1498,7 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, allow_messages, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, allow_messages, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
       profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
@@ -1453,6 +1510,19 @@
     const favorites = await sb.from("favorites").select("item_id").eq("user_id", profile.data.id);
     const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", profile.data.id);
     const comicLikes = await sb.from("comic_likes").select("item_id").eq("user_id", profile.data.id);
+    const activityResults = await Promise.all([
+      sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id),
+      sb.from("blog_likes").select("blog_id, created_at").eq("user_id", profile.data.id),
+      sb.from("shelf_collection_likes").select("owner_id, collection_id, created_at").eq("user_id", profile.data.id),
+      sb.from("profile_follows").select("following_id, created_at").eq("follower_id", profile.data.id),
+      sb.from("comments").select("id, item_id, body, created_at").eq("user_id", profile.data.id),
+      sb.from("blog_comments").select("id, blog_id, body, created_at").eq("user_id", profile.data.id),
+      sb.from("profile_wall_comments").select("id, profile_id, body, created_at").eq("user_id", profile.data.id),
+      sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id),
+      sb.from("blog_saves").select("blog_id, created_at").eq("user_id", profile.data.id),
+      sb.from("shelf_collection_saves").select("owner_id, collection_id, created_at").eq("user_id", profile.data.id),
+      sb.from("reading_progress").select("item_id, updated_at").eq("user_id", profile.data.id).eq("completed", true)
+    ]);
     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
     if (collections.error) {
       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
@@ -1484,6 +1554,17 @@
     const publicCoverStyles = new Map((publicCoverStylesResult.data || []).map(choice => [choice.item_id, choice.style]));
     const publicSeriesCoverChoicesResult = await sb.from("user_series_cover_choices").select("series_id, item_id, cover_url, variant_key, is_variant").eq("user_id", profile.data.id);
     const publicSeriesCoverChoices = new Map((publicSeriesCoverChoicesResult.data || []).map(choice => [choice.series_id, choice]));
+    const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", profile.data.id);
+    const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+    const savedCollectionsResult = savedCollectionIds.length
+      ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+      : { data: [] };
+    const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
+    const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+    const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
+    const savedPublicCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+    const wallCommentsResult = await loadProfileWallComments(profile.data.id);
+    const activity = await buildPublicProfileActivity(profile.data, activityResults.map(result => result.data || []), [...(collections.data || []), ...(savedCollectionsResult.data || [])]);
     state.publicProfile = {
       profile: profile.data,
       collectionId,
@@ -1501,6 +1582,9 @@
       coverChoices: publicCoverChoices
       ,coverStyles: publicCoverStyles
       ,seriesCoverChoices: publicSeriesCoverChoices
+      ,savedPublicCollections
+      ,wallComments: wallCommentsResult
+      ,activity
       ,moderationHistory: (moderationHistory.data || []).map(entry => ({ ...entry, actor_username: actorNames.get(entry.actor_id) || "moderador" }))
       ,isFollowing
       ,followerCount: (followers.data || []).length
@@ -2472,6 +2556,7 @@
       const email = String(new FormData(event.currentTarget).get("email") || "").trim().toLowerCase();
       if (!email) return;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast("Informe um email válido.");
+      if (email === currentEmail.trim().toLowerCase()) return;
       if (email !== currentEmail) {
         const result = await sb.auth.updateUser({ email });
         if (result.error) return toast(result.error.message);
@@ -2481,6 +2566,25 @@
       state.session.user.email = email;
       toast(email === currentEmail ? "Email de recuperação salvo." : "Email atualizado. Verifique sua caixa de entrada para confirmar o endereço.");
     });
+  }
+
+  function openWallDescriptionEditor() {
+    if (!state.session || !sb) return openAuthPage();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Editar descrição</h2><div class="section-subtitle">Essa descrição aparece no seu mural.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="wall-description-form"><div class="field"><label>Descrição</label><textarea name="description" maxlength="500" rows="5" placeholder="Escreva uma breve apresentação...">${escapeHTML(state.profile?.wall_description || "")}</textarea></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar descrição</button></div></form></div>`;
+    $("#modal-root").appendChild(overlay);
+    $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    $("#wall-description-form", overlay).onsubmit = async event => {
+      event.preventDefault();
+      const description = String(new FormData(event.currentTarget).get("description") || "").trim().slice(0, 500);
+      const result = await sb.from("profiles").update({ wall_description: description }).eq("id", state.session.user.id);
+      if (result.error) return toast(result.error.message || "Não foi possível salvar a descrição.");
+      state.profile = { ...state.profile, wall_description: description };
+      overlay.remove();
+      render();
+      toast("Descrição atualizada.");
+    };
   }
 
   function openAchievementAdmin() {
@@ -4631,6 +4735,27 @@
     return shelfItemsByIds(category.itemIds || []).filter(item => publicState.favoriteIds.has(item.id) || (item.seriesId && publicState.favoriteIds.has(item.seriesId)));
   }
 
+  function profileWallMarkup(profileState, own = false) {
+    const profile = own ? state.profile : profileState.profile;
+    const comments = own ? state.wallComments : (profileState.wallComments || []);
+    const renderComment = (comment, reply = false) => {
+      const author = comment.profiles || {};
+      return '<article class="profile-wall-comment"><div class="comment-author-row">' + avatarMarkup(author, "comment-avatar") + '<div class="comment-author-info"><b>' + factionDot(author) + '@' + escapeHTML(author.username || "usuário") + '</b></div><time class="comment-date">' + escapeHTML(formatCommentDate(comment.created_at)) + '</time></div><p>' + escapeHTML(comment.body) + '</p></article>';
+    };
+    const commentMarkup = comments.map(comment => renderComment(comment, Boolean(comment.parent_id))).join("");
+    return '<section class="section profile-wall"><div class="section-head"><div><h2 class="section-title">Mural</h2><div class="section-subtitle">Uma apresentação e comentários do perfil.</div></div>' + (own ? '<button class="small-btn" data-action="profile">Editar descrição</button>' : "") + '</div><div class="profile-wall-description">' + (profile?.wall_description ? escapeHTML(profile.wall_description) : '<span class="section-subtitle">Este perfil ainda não adicionou uma descrição.</span>') + '</div>' + (state.session ? '<form class="comment-form profile-wall-comment-form" data-profile-wall-comment-form><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>') + '<div class="section-head profile-wall-comments-head"><div><h3 class="section-title">Comentários do perfil</h3><div class="section-subtitle">' + comments.length + ' comentário(s)</div></div></div><div class="profile-wall-comments">' + (commentMarkup || '<div class="empty">Nenhum comentário neste mural.</div>') + '</div></section>';
+  }
+
+  function savedPublicCollectionsMarkup(collections = []) {
+    return '<section class="section saved-public-collections"><div class="section-head"><div><h2 class="section-title">Públicas salvas</h2><div class="section-subtitle">Coleções públicas salvas por este perfil.</div></div></div><div class="public-collections-grid">' + (collections.map(collection => publicCollectionCard(collection)).join("") || '<div class="empty">Nenhuma coleção pública salva.</div>') + '</div></section>';
+  }
+
+  function publicProfileActivityMarkup(profileState) {
+    const activities = profileState?.activity || [];
+    const activityMarkup = activities.map(activity => `<article class="profile-activity-item"><span class="profile-activity-icon">${activity.icon}</span><div class="profile-activity-copy"><div><strong>${escapeHTML(activity.label)}</strong> ${activity.href ? `<a href="${escapeHTML(activity.href)}">${escapeHTML(activity.subject)}</a>` : `<span>${escapeHTML(activity.subject)}</span>`}</div>${activity.detail ? `<p>${escapeHTML(activity.detail)}</p>` : ""}<time datetime="${escapeHTML(activity.created_at)}">${escapeHTML(formatCommentDate(activity.created_at))}</time></div></article>`).join("");
+    return `<section class="section profile-activity"><div class="section-head"><div><h2 class="section-title">Histórico</h2><div class="section-subtitle">Atividades recentes de @${escapeHTML(profileState?.profile?.username || "usuário")}.</div></div></div><div class="profile-activity-list">${activityMarkup || '<div class="empty">Nenhuma atividade pública registrada.</div>'}</div></section>`;
+  }
+
   function followSummary(profileId, followerCount, followingCount) {
     return `<div class="profile-follow-summary"><button class="profile-follow-link" data-follow-list="followers" data-follow-profile-id="${escapeHTML(profileId)}">${followerCount || 0} seguidores</button><span> · </span><button class="profile-follow-link" data-follow-list="following" data-follow-profile-id="${escapeHTML(profileId)}">${followingCount || 0} seguindo</button></div>`;
   }
@@ -4737,14 +4862,14 @@
   }
 
   async function openChatRoom(room) {
-    await markChatMentionsRead();
+    await markChatMentionsRead(room?.id);
+    await loadNotifications();
     if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><button class="small-btn" data-close>Fechar</button></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
+    overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
     $("#modal-root").appendChild(overlay);
-    if (state.messageUnreadCount) $(".chat-modal h2", overlay)?.insertAdjacentHTML("beforeend", ` <span class="message-card-badge">${state.messageUnreadCount > 99 ? "99+" : state.messageUnreadCount}</span>`);
     if (room.factionId && ["moderator", "admin"].includes(state.profile?.plan)) $("#chat-room-compose", overlay)?.remove();
     let closed = false;
     let channel = null;
@@ -4757,6 +4882,7 @@
       overlay.remove();
     };
     $("[data-close]", overlay).onclick = close;
+    $("[data-chat-back]", overlay).onclick = event => { close(event); openChat(); };
     overlay.addEventListener("click", event => {
       if (event.target === overlay) close(event);
     });
@@ -4813,15 +4939,14 @@
       state.notifications = state.notifications.filter(notification => !isNotificationFromOpenChat(notification));
       state.notificationUnreadCount = state.notifications.filter(notification => !notification.read_at).length;
     }
-    (contact?.id ? markChatNotificationsRead(contact.id) : Promise.resolve())
-      .then(() => loadNotifications())
-      .then(() => render());
-    const messageBadgeMarkup = state.messageUnreadCount ? `<span class="message-card-badge">${state.messageUnreadCount > 99 ? "99+" : state.messageUnreadCount}</span>` : "";
+    if (contact?.id) await markChatNotificationsRead(contact.id);
+    await loadNotifications();
+    render();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)}</b></div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div>`}</div>`;
+    overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${contact ? `<button class="small-btn" type="button" data-chat-back>Voltar</button>` : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)}</b></div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`;
     $("#modal-root").appendChild(overlay);
-    if (messageBadgeMarkup) $(".chat-modal h2", overlay)?.insertAdjacentHTML("beforeend", ` ${messageBadgeMarkup}`);
+    let channel = null;
     let closed = false;
     const close = event => {
       event?.preventDefault();
@@ -4834,14 +4959,52 @@
       loadNotifications().then(() => render());
     };
     $("[data-close]", overlay).onclick = close;
+    $("[data-chat-back]", overlay)?.addEventListener("click", event => { close(event); openChat(); });
     overlay.addEventListener("click", event => {
       if (event.target === overlay) close(event);
     });
-    let channel = null;
     if (!contact) {
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
-      $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title"><span>Salas de conversa</span>${messageBadgeMarkup}</div>${availableRooms.map(room => `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span><small>${chatRoomLabel(room)}</small></button>`).join("")}</div>`);
+      $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => { const unread = state.chatRoomUnreadCounts?.[room.id] || 0; return `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span>${unread ? `<span class="message-badge" aria-label="${unread} marcação(ões) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : ""}<small>${chatRoomLabel(room)}</small></button>`; }).join("")}</div>`);
       $$('[data-chat-room]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
+      const privateChatList = $("[data-private-chat-list]", overlay);
+      const privateMessages = await sb.from("chat_messages")
+        .select("id, sender_id, recipient_id, body, created_at")
+        .or(`sender_id.eq.${state.session.user.id},recipient_id.eq.${state.session.user.id}`)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(500);
+      const conversations = new Map();
+      (privateMessages.data || []).forEach(message => {
+        const incoming = String(message.recipient_id) === String(state.session.user.id);
+        const contactId = incoming ? message.sender_id : message.recipient_id;
+        if (!contactId) return;
+        const conversation = conversations.get(contactId) || { latest: message, hasIncoming: false };
+        conversation.hasIncoming ||= incoming;
+        if (new Date(message.created_at) > new Date(conversation.latest.created_at)) conversation.latest = message;
+        conversations.set(contactId, conversation);
+      });
+      const contactIds = [...conversations.entries()].filter(([, conversation]) => conversation.hasIncoming).map(([id]) => id);
+      if (contactIds.length) {
+        const profilesResult = await sb.from("profiles").select("id, username, avatar_url, title, title_color, allow_messages").in("id", contactIds);
+        const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
+        const cards = contactIds.map(contactId => {
+          const profile = profiles.get(contactId);
+          const conversation = conversations.get(contactId);
+          if (!profile || !conversation) return "";
+          return `<button type="button" class="chat-private-card" data-private-chat-user="${escapeHTML(profile.id)}">${avatarMarkup(profile, "chat-private-card-avatar")}<span class="chat-private-card-copy"><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b><small>${escapeHTML(conversation.latest.body.slice(0, 100))}</small></span><time>${escapeHTML(formatCommentDate(conversation.latest.created_at))}</time></button>`;
+        }).join("");
+        if (cards) {
+          privateChatList.hidden = false;
+          privateChatList.innerHTML = `<div class="chat-room-list-title">Conversas recentes</div><div class="chat-private-card-list">${cards}</div>`;
+          $$('[data-private-chat-user]', privateChatList).forEach(button => button.onclick = () => {
+            const contact = profiles.get(button.dataset.privateChatUser);
+            if (!contact) return;
+            overlay.remove();
+            openChat(contact);
+          });
+        }
+      }
       $("#chat-contact-form", overlay).onsubmit = async event => {
         event.preventDefault();
         const username = String(new FormData(event.currentTarget).get("username") || "").trim();
@@ -5376,6 +5539,8 @@
   }
 
   function notificationIcon(type) {
+    if (type === "profile_wall_comment") return "💬";
+    if (type === "profile_wall_reply") return "↩";
     return ({ achievement: "🏆", moderation: "⚖", plan: "★", message: "✉", chat_mention: "@", follow: "♥", collection_like: "♥", comment_reply: "↩", comment_like: "♥", mention: "@", announcement: "!" }[type] || "•");
   }
 
@@ -5568,6 +5733,63 @@
     if (result.error) return toast(result.error.message || "Não foi possível remover esta imagem.");
     if (image?.storage_path) await sb.storage.from("faction-abafac").remove([image.storage_path]);
     await loadFactions();
+    render();
+  }
+
+  async function buildPublicProfileActivity(profile, rows, collections) {
+    const [comicLikes, blogLikes, collectionLikes, follows, comments, blogComments, wallComments, favorites, blogSaves, collectionSaves, reads] = rows;
+    const blogIds = [...new Set([...blogLikes, ...blogComments, ...blogSaves].map(row => row.blog_id).filter(Boolean))];
+    const followIds = [...new Set(follows.map(row => row.following_id).filter(Boolean))];
+    const wallProfileIds = [...new Set(wallComments.map(row => row.profile_id).filter(Boolean))];
+    const savedOwnerIds = [...new Set(collectionSaves.map(row => row.owner_id).filter(Boolean))];
+    const [blogsResult, followsResult, wallProfilesResult, savedOwnersResult] = await Promise.all([
+      blogIds.length ? sb.from("blog_posts").select("id, title, status").in("id", blogIds) : { data: [] },
+      followIds.length ? sb.from("profiles").select("id, username").in("id", followIds) : { data: [] },
+      wallProfileIds.length ? sb.from("profiles").select("id, username").in("id", wallProfileIds) : { data: [] },
+      savedOwnerIds.length ? sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] }
+    ]);
+    const blogNames = new Map((blogsResult.data || []).map(blog => [String(blog.id), blog.title || "blog"]));
+    const profileNames = new Map([...(followsResult.data || []), ...(wallProfilesResult.data || []), ...(savedOwnersResult.data || [])].map(row => [row.id, row.username]));
+    const collectionNames = new Map(collections.map(collection => [String(collection.id), { name: collection.name, owner_id: collection.owner_id }]));
+    const itemName = itemId => state.db.library.find(item => item.id === itemId)?.title || itemId;
+    const itemHref = itemId => routeUrl({ ler: itemId });
+    const blogHref = blogId => routeUrl({ pagina: "blogs", blog: blogId });
+    const collectionHref = (ownerId, collectionId) => {
+      const owner = profileNames.get(ownerId) || profile.username;
+      return publicProfileHref(owner, collectionId);
+    };
+    const events = [];
+    const add = (rows, type, build, dateKey = "created_at") => rows.forEach(row => events.push({ ...build(row), created_at: row[dateKey] || row.created_at }));
+    add(comicLikes, "like", row => ({ icon: "♥", label: "Curtiu o quadrinho", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
+    add(blogLikes.filter(row => blogNames.has(String(row.blog_id))), "like", row => ({ icon: "♥", label: "Curtiu o blog", subject: blogNames.get(String(row.blog_id)), href: blogHref(row.blog_id) }));
+    add(collectionLikes, "like", row => ({ icon: "♥", label: "Curtiu a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
+    add(follows, "follow", row => ({ icon: "＋", label: "Seguiu", subject: `@${profileNames.get(row.following_id) || "usuário"}`, href: profileNames.get(row.following_id) ? publicProfileHref(profileNames.get(row.following_id)) : "" }));
+    add(comments, "comment", row => ({ icon: "💬", label: "Comentou em", subject: itemName(row.item_id), detail: row.body, href: itemHref(row.item_id) }));
+    add(blogComments.filter(row => blogNames.has(String(row.blog_id))), "comment", row => ({ icon: "💬", label: "Comentou em", subject: blogNames.get(String(row.blog_id)), detail: row.body, href: blogHref(row.blog_id) }));
+    add(wallComments, "comment", row => ({ icon: "💬", label: "Comentou no mural de", subject: `@${profileNames.get(row.profile_id) || "usuário"}`, detail: row.body, href: profileNames.get(row.profile_id) ? publicProfileHref(profileNames.get(row.profile_id)) : "" }));
+    add(favorites, "save", row => ({ icon: "★", label: "Salvou", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
+    add(blogSaves.filter(row => blogNames.has(String(row.blog_id))), "save", row => ({ icon: "★", label: "Salvou o blog", subject: blogNames.get(String(row.blog_id)), href: blogHref(row.blog_id) }));
+    add(collectionSaves, "save", row => ({ icon: "★", label: "Salvou a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
+    add(reads, "read", row => ({ icon: "✓", label: "Concluiu a leitura de", subject: itemName(row.item_id), href: itemHref(row.item_id) }), "updated_at");
+    return events.filter(event => event.created_at).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100);
+  }
+
+  async function toggleSavePublicCollection(button) {
+    if (!state.session) return openAuthPage();
+    const collectionId = button.dataset.savePublicCollection;
+    const ownerId = button.dataset.savePublicOwner;
+    const saved = state.savedPublicCollections?.some(collection => collection.id === collectionId);
+    const result = saved
+      ? await sb.from("shelf_collection_saves").delete().eq("user_id", state.session.user.id).eq("collection_id", collectionId)
+      : await sb.from("shelf_collection_saves").insert({ user_id: state.session.user.id, owner_id: ownerId, collection_id: collectionId });
+    if (result.error) return toast(result.error.message || "Não foi possível salvar a coleção.");
+    if (saved) state.savedPublicCollections = state.savedPublicCollections.filter(collection => collection.id !== collectionId);
+    else {
+      const publicProfileCollection = state.publicProfile?.collections?.find(item => item.id === collectionId);
+      const collection = [...state.featuredComicCollections, ...state.popularPublicCollections, ...(state.savedPublicCollections || [])].find(item => item.id === collectionId)
+        || (publicProfileCollection ? { ...publicProfileCollection, owner_id: ownerId, username: state.publicProfile.profile.username, item_ids: publicProfileCollection.itemIds || [] } : null);
+      if (collection) state.savedPublicCollections = [...state.savedPublicCollections, collection];
+    }
     render();
   }
 
@@ -5819,6 +6041,8 @@
         else openNotificationsPopup();
       } else if (notification?.type === "collection_like" && notification.metadata?.collection_id) {
         openCollection(String(notification.metadata.collection_id));
+      } else if ((notification?.type === "profile_wall_comment" || notification?.type === "profile_wall_reply") && notification.metadata?.profile_username) {
+        await loadPublicProfile(notification.metadata.profile_username);
       } else if ((notification?.type === "comment_reply" || notification?.type === "comment_like" || notification?.type === "mention") && notification.metadata?.blog_id) {
         navigate({ pagina: "blogs", blog: String(notification.metadata.blog_id) });
       } else if (notification?.type === "mention" && notification.metadata?.item_id) {
@@ -6024,11 +6248,15 @@
     if (state.section === "shelf" && state.session) {
       const shelfHead = $(".content > .section-head");
       if (shelfHead && !$(".shelf-media-tabs")) {
-        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="comics">Quadrinhos</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-blog-panel-mount"></div>`);
+        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Públicas salvas</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
         $("[data-action=open-local-box]", shelfHead.nextElementSibling)?.addEventListener("click", () => { state.localBoxVisible = true; setSection("local-box"); });
-        $(".shelf-blog-panel-mount").innerHTML = blogShelfPanelMarkup();
+        $("[data-shelf-tab-panel=wall]")?.setAttribute("hidden", "");
+        $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
       }
-      $(".content").classList.toggle("shelf-show-blogs", state.shelfTab === "blogs");
+      const showSpecialShelfTab = ["wall", "saved-public"].includes(state.shelfTab);
+      $$(".shelf-page > .shelf-collection, .shelf-page > .shelf-categories, .shelf-page > .local-box-notice").forEach(element => { element.hidden = showSpecialShelfTab; });
+      $$('[data-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.shelfTabPanel !== state.shelfTab; });
+      $$('[data-shelf-media]').forEach(button => button.classList.toggle("is-active", button.dataset.shelfMedia === state.shelfTab));
     }
     if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
       const publicProfileInfo = $(".public-profile-page .profile-header > div:nth-child(2)");
@@ -6038,10 +6266,16 @@
       if (publicSummary) publicSummary.textContent = "Coleções públicas do perfil";
       const publicHead = $(".public-profile-page > .section-head");
       if (publicHead && !$(".public-shelf-media-tabs")) {
-        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="comics">Quadrinhos</button></div><div class="public-shelf-blog-panel-mount"></div>`);
-        $(".public-shelf-blog-panel-mount").innerHTML = blogShelfPanelMarkup(state.publicProfile);
+        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Públicas salvas</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
       }
-      $(".public-profile-page").classList.toggle("shelf-show-blogs", state.publicShelfTab === "blogs");
+      if ($(".public-shelf-media-tabs") && !$("[data-public-shelf-media=activity]")) {
+        $(".public-shelf-media-tabs").insertAdjacentHTML("beforeend", '<button class="small-btn" data-public-shelf-media="activity">Histórico</button>');
+        $(".public-shelf-media-tabs").parentElement?.insertAdjacentHTML("beforeend", `<div class="shelf-tab-panel public-activity-panel" data-public-shelf-tab-panel="activity">${publicProfileActivityMarkup(state.publicProfile)}</div>`);
+      }
+      const showSpecialPublicTab = ["wall", "saved-public", "activity"].includes(state.publicShelfTab);
+      $$(".public-profile-page > .shelf-collection").forEach(element => { element.hidden = showSpecialPublicTab; });
+      $$('[data-public-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.publicShelfTabPanel !== state.publicShelfTab; });
+      $$('[data-public-shelf-media]').forEach(button => button.classList.toggle("is-active", button.dataset.publicShelfMedia === state.publicShelfTab));
     }
     if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
       $(".public-profile-page > .section-head > div:first-child")?.remove();
@@ -6347,6 +6581,51 @@
       });
     }
     $$('[data-public-collection]').forEach(el => el.addEventListener("click", event => { if (event.target.closest("a, button")) return; event.stopPropagation(); loadPublicProfile(el.dataset.publicOwner, el.dataset.publicCollection); }));
+    $$('.public-shelf-collection-card').forEach(cardElement => {
+      if ($('[data-save-public-collection]', cardElement) || !state.session || cardElement.dataset.publicOwner === state.profile?.username) return;
+      const collectionId = cardElement.dataset.publicCollection;
+      const collection = [...(state.featuredComicCollections || []), ...(state.popularPublicCollections || []), ...(state.savedPublicCollections || [])].find(item => item.id === collectionId);
+      if (!collection || collection.collection_type === "blog") return;
+      const actions = $(".shelf-section-actions", cardElement);
+      if (!actions) return;
+      const saved = state.savedPublicCollections?.some(item => item.id === collectionId);
+      const button = document.createElement("button");
+      button.className = `small-btn ${saved ? "is-liked" : ""}`;
+      button.dataset.savePublicCollection = collectionId;
+      button.dataset.savePublicOwner = collection.owner_id;
+      button.textContent = saved ? "★ Salva" : "☆ Salvar";
+      actions.appendChild(button);
+      button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
+    });
+    if (state.section === "public-profile" && state.publicProfile?.collectionId) {
+      const category = state.publicProfile.collections?.find(item => item.id === state.publicProfile.collectionId);
+      const actions = $(".public-collection-page .shelf-section-actions");
+      if (category && actions && state.session && state.publicProfile.profile.id !== state.session.user.id && !$("[data-save-public-collection]", actions)) {
+        const saved = state.savedPublicCollections?.some(item => item.id === category.id);
+        const button = document.createElement("button");
+        button.className = `small-btn ${saved ? "is-liked" : ""}`;
+        button.dataset.savePublicCollection = category.id;
+        button.dataset.savePublicOwner = state.publicProfile.profile.id;
+        button.textContent = saved ? "★ Salva" : "☆ Salvar";
+        actions.insertBefore(button, actions.firstChild);
+        button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
+      }
+    }
+    if (state.section === "public-profile" && !state.publicProfile?.collectionId && state.session && state.publicProfile?.profile?.id !== state.session.user.id) {
+      (state.publicProfile.collections || []).filter(category => category.isPublic !== false).forEach(category => {
+        const copyButton = $$('[data-copy-collection]').find(button => button.dataset.copyCollection === category.id);
+        const actions = copyButton?.closest(".shelf-section-actions");
+        if (!actions || $("[data-save-public-collection]", actions)) return;
+        const button = document.createElement("button");
+        const saved = state.savedPublicCollections?.some(item => item.id === category.id);
+        button.className = `small-btn ${saved ? "is-liked" : ""}`;
+        button.dataset.savePublicCollection = category.id;
+        button.dataset.savePublicOwner = state.publicProfile.profile.id;
+        button.textContent = saved ? "★ Salva" : "☆ Salvar";
+        actions.insertBefore(button, actions.firstChild);
+        button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
+      });
+    }
     $$('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
     $$('[data-publisher-series-toggle]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
@@ -6362,6 +6641,109 @@
     $$('[data-shelf-expand]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); state.shelfExpanded[el.dataset.shelfExpand] = !state.shelfExpanded[el.dataset.shelfExpand]; render(); }));
     $$('[data-shelf-media]').forEach(el => el.addEventListener("click", () => { state.shelfTab = el.dataset.shelfMedia; render(); }));
     $$('[data-public-shelf-media]').forEach(el => el.addEventListener("click", () => { state.publicShelfTab = el.dataset.publicShelfMedia; render(); }));
+    $$('[data-profile-wall-comment-form]').forEach(form => form.onsubmit = async event => {
+      event.preventDefault();
+      if (!state.session || !sb) return openAuthPage();
+      const body = String(new FormData(form).get("body") || "").trim();
+      const profileId = state.section === "public-profile" ? state.publicProfile?.profile?.id : state.session.user.id;
+      if (!body || !profileId) return;
+      const result = await sb.from("profile_wall_comments").insert({ profile_id: profileId, user_id: state.session.user.id, body });
+      if (result.error) return toast(result.error.message || "Não foi possível publicar o comentário.");
+      const newComment = { id: `wall-local-${Date.now()}`, user_id: state.session.user.id, body, created_at: new Date().toISOString(), profiles: { ...state.profile } };
+      if (state.section === "public-profile") state.publicProfile.wallComments = [newComment, ...(state.publicProfile.wallComments || [])];
+      else state.wallComments = [newComment, ...(state.wallComments || [])];
+      render();
+    });
+    const visibleWallComments = state.section === "public-profile" ? (state.publicProfile?.wallComments || []) : (state.wallComments || []);
+    const wallArticles = $$(".profile-wall-comment");
+    const wallCommentById = new Map();
+    wallArticles.forEach((article, index) => {
+      const comment = visibleWallComments[index];
+      if (!comment) return;
+      article.dataset.wallCommentId = comment.id;
+      wallCommentById.set(String(comment.id), { article, comment });
+    });
+    wallArticles.forEach(({ dataset }) => {
+      const entry = wallCommentById.get(String(dataset.wallCommentId));
+      const comment = entry?.comment;
+      const article = entry?.article;
+      if (!comment || !article || !comment.parent_id) return;
+      const parent = wallCommentById.get(String(comment.parent_id))?.article;
+      if (!parent) return;
+      let replies = $(".profile-wall-replies", parent);
+      if (!replies) {
+        replies = document.createElement("div");
+        replies.className = "profile-wall-replies";
+        parent.appendChild(replies);
+      }
+      replies.hidden = true;
+      article.classList.add("is-reply");
+      replies.appendChild(article);
+    });
+    $$(".profile-wall-replies").forEach(replies => {
+      const parent = replies.parentElement;
+      if (!parent || $("[data-wall-replies-toggle]", parent)) return;
+      const toggle = document.createElement("button");
+      toggle.className = "comment-action profile-wall-replies-toggle";
+      toggle.dataset.wallRepliesToggle = "true";
+      toggle.textContent = `Ver ${replies.children.length} resposta${replies.children.length === 1 ? "" : "s"}`;
+      toggle.onclick = () => {
+        replies.hidden = !replies.hidden;
+        toggle.textContent = replies.hidden ? `Ver ${replies.children.length} resposta${replies.children.length === 1 ? "" : "s"}` : "Ocultar respostas";
+      };
+      parent.appendChild(toggle);
+    });
+    wallArticles.forEach(article => {
+      const comment = wallCommentById.get(String(article.dataset.wallCommentId))?.comment;
+      if (!comment) return;
+      const actions = document.createElement("div");
+      actions.className = "comment-actions";
+      const reply = document.createElement("button");
+      reply.className = "comment-action";
+      reply.textContent = "Responder";
+      reply.onclick = () => {
+        if ($("[data-wall-reply-form]", article)) return;
+        article.insertAdjacentHTML("beforeend", `<form class="comment-form profile-wall-reply-form" data-wall-reply-form><textarea name="body" maxlength="1000" required placeholder="Escreva uma resposta..."></textarea><button class="small-btn" type="submit">Responder</button></form>`);
+        $("[data-wall-reply-form]", article).onsubmit = async event => {
+          event.preventDefault();
+          const body = String(new FormData(event.currentTarget).get("body") || "").trim();
+          if (!body) return;
+          const profileId = state.section === "public-profile" ? state.publicProfile?.profile?.id : state.session.user.id;
+          const result = await sb.from("profile_wall_comments").insert({ profile_id: profileId, user_id: state.session.user.id, parent_id: comment.id, body });
+          if (result.error) return toast(result.error.message || "Não foi possível publicar a resposta.");
+          const newComment = { id: `wall-local-${Date.now()}`, user_id: state.session.user.id, parent_id: comment.id, body, created_at: new Date().toISOString(), profiles: { ...state.profile } };
+          if (state.section === "public-profile") state.publicProfile.wallComments = [...(state.publicProfile.wallComments || []), newComment];
+          else state.wallComments = [...(state.wallComments || []), newComment];
+          render();
+        };
+      };
+      actions.appendChild(reply);
+      if (comment.user_id === state.session?.user?.id || ["moderator", "admin"].includes(state.profile?.plan)) {
+        const remove = document.createElement("button");
+        remove.className = "comment-action comment-delete-action";
+        remove.textContent = "Excluir";
+      remove.onclick = async () => {
+        if (String(comment.id).startsWith("wall-local-")) {
+          const filterLocal = entry => String(entry.id) !== String(comment.id) && String(entry.parent_id || "") !== String(comment.id);
+          if (state.section === "public-profile") state.publicProfile.wallComments = (state.publicProfile.wallComments || []).filter(filterLocal);
+          else state.wallComments = (state.wallComments || []).filter(filterLocal);
+          return render();
+        }
+        const result = await sb.from("profile_wall_comments").delete().eq("id", comment.id);
+          if (result.error) return toast(result.error.message || "Não foi possível excluir o comentário.");
+          const filter = entry => String(entry.id) !== String(comment.id) && String(entry.parent_id || "") !== String(comment.id);
+          if (state.section === "public-profile") state.publicProfile.wallComments = (state.publicProfile.wallComments || []).filter(filter);
+          else state.wallComments = (state.wallComments || []).filter(filter);
+          render();
+        };
+        actions.appendChild(remove);
+      }
+      article.appendChild(actions);
+    });
+    $$('.profile-wall [data-action="profile"]').forEach(button => {
+      button.removeAttribute("data-action");
+      button.addEventListener("click", openWallDescriptionEditor);
+    });
     $('[data-blog-shelf-new]')?.addEventListener("click", openBlogShelfCollectionForm);
     $$('[data-blog-shelf-edit]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openBlogShelfCollectionForm(el.dataset.blogShelfEdit); }));
     $$('[data-blog-shelf-delete]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteBlogShelfCollection(el.dataset.blogShelfDelete); }));
