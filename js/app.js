@@ -528,6 +528,75 @@
     if (entry?.url && window.caches) { try { const cache = await caches.open(READER_FILE_CACHE); await cache.delete(downloadCacheKey(entry.url)); } catch {} }
     render(); toast("Download excluído deste navegador.");
   }
+  async function deleteSeriesDownloads(seriesId) {
+    const target = String(seriesId || "__downloads-oneshots");
+    const entries = [...state.downloads.values()].filter(entry => {
+      const item = state.db.library.find(candidate => String(candidate.id) === String(entry.id)) || entry.snapshot;
+      return entry.status === "completed" && String(item?.seriesId || "__downloads-oneshots") === target;
+    });
+    if (!entries.length) return;
+    askDownloadConfirmation("Todos os quadrinhos concluídos desta série serão removidos deste navegador.", "Excluir série?", "Excluir série").then(async confirmed => {
+      if (!confirmed) return;
+      entries.forEach(entry => state.downloads.delete(String(entry.id)));
+      persistDownloads();
+      render();
+      if (window.caches) {
+        try {
+          const cache = await caches.open(READER_FILE_CACHE);
+          await Promise.all(entries.filter(entry => entry.url).map(entry => cache.delete(downloadCacheKey(entry.url))));
+        } catch {}
+      }
+      toast("Downloads da série excluídos deste navegador.");
+    });
+  }
+  async function deleteAllCompletedDownloads() {
+    const entries = [...state.downloads.values()].filter(entry => entry.status === "completed");
+    if (!entries.length) return;
+    askDownloadConfirmation("Todos os quadrinhos disponíveis offline serão removidos deste navegador.", "Excluir downloads offline?", "Excluir todos").then(async confirmed => {
+      if (!confirmed) return;
+      entries.forEach(entry => state.downloads.delete(String(entry.id)));
+      persistDownloads();
+      render();
+      if (window.caches) {
+        try {
+          const cache = await caches.open(READER_FILE_CACHE);
+          await Promise.all(entries.filter(entry => entry.url).map(entry => cache.delete(downloadCacheKey(entry.url))));
+        } catch {}
+      }
+      toast("Todos os downloads offline foram excluídos.");
+    });
+  }
+  function resumeAllPendingDownloads() {
+    const items = [...state.downloads.values()]
+      .filter(entry => entry.status === "paused")
+      .map(entry => state.db.library.find(item => String(item.id) === String(entry.id)) || entry.snapshot)
+      .filter(Boolean);
+    if (!items.length) return;
+    items.forEach(item => startDownload(item));
+  }
+  function askDownloadConfirmation(message, title = "Limpar fila?", confirmLabel = "Limpar fila") {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal download-confirm-modal"><div class="section-head"><div><div class="eyebrow">Downloads</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Manter downloads</button><button type="button" class="btn btn-danger" data-confirm-clear>${escapeHTML(confirmLabel)}</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => finish(false)));
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+      $('[data-confirm-clear]', overlay).addEventListener("click", () => finish(true));
+    });
+  }
+  function clearDownloadQueue() {
+    const entries = [...state.downloads.values()].filter(entry => entry.status !== "completed");
+    if (!entries.length) return;
+    askDownloadConfirmation("Os downloads baixando, aguardando ou interrompidos serão removidos da fila.").then(confirmed => {
+      if (!confirmed) return;
+      entries.forEach(entry => state.downloads.delete(String(entry.id)));
+      persistDownloads();
+      render();
+      toast("Fila de downloads limpa.");
+    });
+  }
 
   const downloadCoverHydrations = new Map();
   function updateDownloadCoverImage(itemId) {
@@ -7910,20 +7979,29 @@
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
     const downloadsSortHead = $(".downloads-completed .section-head");
     if (downloadsSortHead && !$("[data-download-sort]", downloadsSortHead)) {
-      downloadsSortHead.insertAdjacentHTML("beforeend", `<label class="shelf-sort-control"><span>Ordenar</span><select data-download-sort>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${escapeHTML(value)}" ${state.downloadsSortOrder === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`);
+      const completedCount = [...state.downloads.values()].filter(entry => entry.status === "completed").length;
+      downloadsSortHead.insertAdjacentHTML("beforeend", `<span class="downloads-total-count" data-download-total>${completedCount} ${completedCount === 1 ? "edição" : "edições"}</span><label class="shelf-sort-control"><span>Ordenar</span><select data-download-sort>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${escapeHTML(value)}" ${state.downloadsSortOrder === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><button class="small-btn danger" data-delete-all-downloads>Excluir todos</button>`);
     }
     $("[data-download-sort]")?.addEventListener("change", event => {
       state.downloadsSortOrder = event.currentTarget.value;
       try { localStorage.setItem("bancaDigitalDownloadsSort", state.downloadsSortOrder); } catch {}
       render();
     });
+    $("[data-delete-all-downloads]")?.addEventListener("click", deleteAllCompletedDownloads);
+    const downloadsPendingHead = $(".downloads-pending .section-head");
+    if (downloadsPendingHead && !$("[data-download-pending-actions]", downloadsPendingHead)) {
+      const pausedCount = [...state.downloads.values()].filter(entry => entry.status === "paused").length;
+      downloadsPendingHead.insertAdjacentHTML("beforeend", `<div class="downloads-pending-actions" data-download-pending-actions><button class="small-btn" data-resume-all-downloads ${pausedCount ? "" : "disabled"}>Retomar todos</button><button class="small-btn danger" data-clear-download-queue>Limpar fila</button></div>`);
+    }
+    $("[data-resume-all-downloads]")?.addEventListener("click", resumeAllPendingDownloads);
+    $("[data-clear-download-queue]")?.addEventListener("click", clearDownloadQueue);
     $$('.downloads-series-head').forEach(head => {
       if ($('[data-download-series-sort]', head)) return;
       const series = head.closest('.downloads-series');
       const firstCard = $('[data-download-row]', series);
       const seriesId = firstCard?.dataset.downloadRow ? (state.downloads?.get(firstCard.dataset.downloadRow)?.snapshot?.seriesId || state.db.library.find(item => String(item.id) === String(firstCard.dataset.downloadRow))?.seriesId || '__downloads-oneshots') : '__downloads-oneshots';
       const selected = state.downloadsSeriesSortOrders?.[seriesId] || state.downloadsSortOrder || 'added_desc';
-      head.insertAdjacentHTML('beforeend', `<label class="downloads-series-sort"><span>Ordenar</span><select data-download-series-sort="${escapeHTML(seriesId)}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${escapeHTML(value)}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>`);
+      head.insertAdjacentHTML('beforeend', `<label class="downloads-series-sort"><span>Ordenar</span><select data-download-series-sort="${escapeHTML(seriesId)}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${escapeHTML(value)}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="small-btn danger" data-delete-download-series="${escapeHTML(seriesId)}">Excluir série</button>`);
     });
     $$('[data-download-series-sort]').forEach(select => select.addEventListener('change', event => {
       const seriesId = event.currentTarget.dataset.downloadSeriesSort;
@@ -7931,6 +8009,7 @@
       try { localStorage.setItem('bancaDigitalDownloadsSeriesSort', JSON.stringify(state.downloadsSeriesSortOrders)); } catch {}
       render();
     }));
+    $$('[data-delete-download-series]').forEach(button => button.addEventListener('click', () => deleteSeriesDownloads(button.dataset.deleteDownloadSeries)));
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
     $$('[data-download]').forEach(el => {
       const entry = downloaded(el.dataset.download);

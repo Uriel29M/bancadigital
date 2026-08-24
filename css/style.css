@@ -302,9 +302,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .download-info { min-width: 0; flex: 1; }
 .downloads-pending { margin-bottom: 30px; }
 .downloads-series { margin-top: 24px; }
-.downloads-series-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.downloads-series-head { display: flex; align-items: center; justify-content: flex-start; gap: 4px; margin-bottom: 10px; }
 .downloads-series-head h3 { margin: 0; font-size: 17px; }
 .downloads-series-head span { color: var(--muted); font-size: 11px; }
+.downloads-series-head h3 { margin-right: auto; }
+.downloads-series-head > .small-btn { margin-left: 1px; }
+.downloads-completed > .section-head { gap: 4px; }
+.downloads-completed > .section-head > div:first-child { margin-right: auto; }
+.downloads-total-count { color: var(--muted); font-size: 11px; }
+.downloads-pending-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.downloads-pending-actions [data-resume-all-downloads]:disabled { opacity: .35; cursor: not-allowed; }
+.download-confirm-modal { width: min(420px, calc(100vw - 32px)); }
 .downloads-series-sort { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; opacity: .62; transition: opacity .18s ease; }
 .downloads-series-sort:hover, .downloads-series-sort:focus-within { opacity: .9; }
 .downloads-series-sort select { max-width: 150px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--muted); font: inherit; }
