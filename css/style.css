@@ -1780,6 +1780,11 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
   .rail { grid-auto-columns: calc((100% - 75px) / 6); }
 }
 @media (max-width: 600px) {
+  .series-modal { width: 100%; padding: 16px; }
+  .series-modal .results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .series-modal .results-grid > .card-wrap,
+  .series-modal .results-grid > .card { width: 100%; min-width: 0; }
+  .series-modal .card-title { font-size: 12px; }
   .moderation-grid, .moderation-button-grid, .moderation-title-fields { grid-template-columns: 1fr; }
   .moderation-modal { width: min(100%, calc(100vw - 24px)); }
   .topbar { padding: 10px 14px 8px; gap: 10px; }
