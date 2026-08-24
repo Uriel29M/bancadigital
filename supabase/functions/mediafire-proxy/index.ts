@@ -2,6 +2,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition, Content-Range, Accept-Ranges",
 };
 
 const MAX_REDIRECTS = 5;
@@ -80,8 +81,12 @@ Deno.serve(async request => {
 
     const source = parseAllowedUrl(input);
     const downloadUrl = await resolveDownload(source);
+    const range = request.headers.get("range");
     const upstream = await fetchAllowed(downloadUrl, {
-      headers: { Accept: "application/octet-stream,*/*" },
+      headers: {
+        Accept: "application/octet-stream,*/*",
+        ...(range ? { Range: range } : {}),
+      },
     });
     if (!upstream.response.ok) return responseBody(`Download indisponível (HTTP ${upstream.response.status}).`, 502);
 
@@ -94,19 +99,19 @@ Deno.serve(async request => {
       return responseBody("O link do MediaFire expirou ou retornou uma página em vez do arquivo. Use a URL permanente /file/... .", 502);
     }
 
-    // Materializa o arquivo antes de responder. Repassar o stream do MediaFire
-    // diretamente pode causar ERR_HTTP2_PROTOCOL_ERROR no navegador.
-    const data = await upstream.response.arrayBuffer();
-    if (data.byteLength > MAX_FILE_BYTES) return responseBody("Arquivo excede o limite permitido.", 413);
-
     const headers = new Headers(corsHeaders);
     headers.set("Content-Type", upstream.response.headers.get("content-type") || "application/octet-stream");
     const contentDisposition = upstream.response.headers.get("content-disposition");
     if (contentDisposition) headers.set("Content-Disposition", contentDisposition);
-    headers.set("Content-Length", String(data.byteLength));
+    if (length) headers.set("Content-Length", String(length));
+    const contentRange = upstream.response.headers.get("content-range");
+    if (contentRange) headers.set("Content-Range", contentRange);
+    headers.set("Accept-Ranges", "bytes");
     headers.set("Cache-Control", "public, max-age=300");
 
-    return new Response(data, { status: 200, headers });
+    // Entrega o arquivo conforme chega. Assim o navegador pode começar a
+    // processar a resposta enquanto o restante ainda está sendo recebido.
+    return new Response(upstream.response.body, { status: upstream.response.status, headers });
   } catch (error) {
     console.error("mediafire-proxy", error);
     return responseBody(error instanceof Error ? error.message : "Falha ao acessar o MediaFire.", 502);

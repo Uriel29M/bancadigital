@@ -4,7 +4,7 @@
   // --- Inicialização de Bibliotecas ---
   // --- Fim da Inicialização ---
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
-  const DEFAULT_AVATAR_URL = "assets/bancadigitalicon.png?v=1";
+  const DEFAULT_AVATAR_URL = "assets/bancadigitaliconbranco.png?v=1";
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
@@ -18,6 +18,7 @@
   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
   let lazyCoverObserver = null;
+  let readerIsOpen = false;
   const KNIGHT_TERRORS_VOLUME_GROUPS = [
     ["Principal", 7], ["Batman", 2], ["Devastadora", 2], ["Coringa", 2],
     ["Hera Venenosa", 2], ["Adão Negro", 2], ["Robin", 2], ["Flash", 2],
@@ -307,6 +308,7 @@
   let activeReaderCleanup = null;
   let handlingRoute = false;
   const readerFilePrefetches = new Map();
+  const MAX_READER_PREFETCHES = 1;
 
   function waitForPrefetchedBuffer(value, timeoutMs = 15000) {
     if (!value) return Promise.resolve(null);
@@ -314,6 +316,33 @@
       Promise.resolve(value),
       new Promise(resolve => window.setTimeout(() => resolve(null), timeoutMs))
     ]).catch(() => null);
+  }
+
+  function createArchivePageCache(files, extract) {
+    const cache = new Map();
+    const pending = new Map();
+    const thirdSize = Math.max(1, Math.ceil(files.length / 3));
+    const get = index => {
+      if (cache.has(index)) return Promise.resolve(cache.get(index));
+      if (!pending.has(index)) {
+        pending.set(index, Promise.resolve(extract(files[index])).then(value => {
+          cache.set(index, value);
+          pending.delete(index);
+          return value;
+        }).catch(error => {
+          pending.delete(index);
+          throw error;
+        }));
+      }
+      return pending.get(index);
+    };
+    const prefetchThird = third => {
+      if (third < 0 || third > 2) return Promise.resolve();
+      const start = third * thirdSize;
+      const end = Math.min(files.length, start + thirdSize);
+      return Promise.all(Array.from({ length: end - start }, (_, offset) => get(start + offset))).then(() => undefined);
+    };
+    return { get, prefetchThird, thirdSize };
   }
 
   async function fetchCbzBuffer(url, signal, onProgress = () => {}) {
@@ -358,11 +387,11 @@
     const format = String(item.format || extension(url)).toLowerCase();
     if (!/^https?:\/\//i.test(url) || !["pdf", "cbz", "cbr"].includes(format)) return null;
     if (readerFilePrefetches.has(url)) return readerFilePrefetches.get(url);
-    const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(url);
-    const promise = isMega ? fetchFileArrayBuffer(url) : fetchCbzBuffer(url);
+    if (readerFilePrefetches.size >= MAX_READER_PREFETCHES) return null;
+    const promise = fetchFileArrayBuffer(url);
     readerFilePrefetches.set(url, promise);
     promise.catch(() => { if (readerFilePrefetches.get(url) === promise) readerFilePrefetches.delete(url); });
-    window.setTimeout(() => { if (readerFilePrefetches.get(url) === promise) readerFilePrefetches.delete(url); }, 120000);
+    window.setTimeout(() => { if (readerFilePrefetches.get(url) === promise) readerFilePrefetches.delete(url); }, 30000);
     return promise;
   }
 
@@ -2800,6 +2829,9 @@
       return;
     }
 
+    readerIsOpen = true;
+    prioritizeReaderLoading();
+
     const prefetchedBuffer = readerFilePrefetches.get(resolvedUrl) || null;
     readerFilePrefetches.delete(resolvedUrl);
     const itemFormat = String(item.format || "").toLowerCase();
@@ -2844,7 +2876,7 @@
       <div class="reader-body" id="reader-body"></div>
       <div class="reader-bottom-controls">
         <div class="reader-series-controls reader-series-prev" id="reader-series-prev"></div>
-        <div class="reader-controls" id="reader-controls"><span class="reader-page">Carregando…</span></div>
+        <div class="reader-controls" id="reader-controls"><span class="reader-page">O primeiro carregamento costuma ser demorado.</span></div>
         <div class="reader-series-controls reader-series-next" id="reader-series-next"></div>
       </div>
     `;
@@ -2853,8 +2885,10 @@
     const closeReaderButton = $("[data-close-reader]", overlay);
     const cleanupReader = () => {
       if (activeReaderCleanup === cleanupReader) activeReaderCleanup = null;
+      readerIsOpen = false;
       overlay._cbzDownloadController?.abort();
       overlay.remove();
+      resumeCoverLoading();
       if (options.localObjectUrl) URL.revokeObjectURL(options.localObjectUrl);
     };
     activeReaderCleanup = cleanupReader;
@@ -2959,7 +2993,12 @@
     } else if (format === "cbr" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbr")) {
       renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
-      body.innerHTML = `<img class="reader-image" src="${escapeHTML(resolvedUrl)}" alt="">`;
+      body.innerHTML = `<img class="reader-image" src="${escapeHTML(resolvedUrl)}" alt="" fetchpriority="high">`;
+      const readerImage = $(".reader-image", body);
+      if (readerImage) {
+        readerImage.loading = "eager";
+        readerImage.fetchPriority = "high";
+      }
       controls.innerHTML = `<span class="reader-page">Imagem</span>`;
       saveReadingProgress(item, 1, 1);
     } else if (item.seriesUrl && !item.fileUrl && !item.telegramUrl) {
@@ -3001,7 +3040,7 @@
 
       // Fetch the PDF data manually to have better control over errors.
       // This helps distinguish between "file not found" and "invalid file".
-      body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Baixando PDF…</div><progress class="reader-progress"></progress></div>`;
+      body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Abrindo arquivo PDF…</div><progress class="reader-progress"></progress></div>`;
       let pdfData;
       if (prefetchedBuffer) {
         pdfData = await prefetchedBuffer;
@@ -3306,12 +3345,12 @@
       }
       progressSpinner.hidden = true;
     };
-    showCbzProgress("Baixando páginas do CBZ…");
+    showCbzProgress("Abrindo arquivo CBZ…");
     try {
       const JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
       if (!JSZipLib) throw new Error("JSZip não carregou.");
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
-      if (buffer) showCbzProgress("Arquivo CBZ baixado. Preparando p\u00e1ginas...", 100, "Download conclu\u00eddo");
+      if (buffer) showCbzProgress("Arquivo CBZ carregado. Preparando p\u00e1ginas...", 100, "Abertura conclu\u00edda");
       if (!buffer) {
       const response = await fetch(proxiedFileUrl(url), {
         method: "GET",
@@ -3332,7 +3371,7 @@
           if (part.done) break;
           chunks.push(part.value);
           received += part.value.byteLength;
-          showCbzProgress("Baixando páginas do CBZ…", Math.min(99, Math.round(received / contentLength * 100)), `${(received / 1048576).toFixed(1)} MB de ${(contentLength / 1048576).toFixed(1)} MB`);
+          showCbzProgress("Abrindo arquivo CBZ…", Math.min(99, Math.round(received / contentLength * 100)), `${(received / 1048576).toFixed(1)} MB de ${(contentLength / 1048576).toFixed(1)} MB`);
         }
         const bytes = new Uint8Array(received);
         let offset = 0;
@@ -3353,12 +3392,16 @@
 
       if (currentReadingMode === 'single-page') {
         let page = Math.max(0, Math.min(resumePage - 1, names.length - 1));
+        const pageCache = createArchivePageCache(names, name => zip.files[name].async("blob"));
         const img = document.createElement("img");
         img.className = "reader-image";
         body.replaceChildren(img);
 
         async function draw() {
-          const blob = await zip.files[names[page]].async("blob");
+          const currentThird = Math.floor(page / pageCache.thirdSize);
+          await pageCache.prefetchThird(currentThird);
+          void pageCache.prefetchThird(currentThird + 1).catch(() => {});
+          const blob = await pageCache.get(page);
           if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
           const objectUrl = URL.createObjectURL(blob);
           img.dataset.url = objectUrl;
@@ -3556,16 +3599,34 @@
     let objectUrl = null;
     let archive = null;
     let objectUrls = null; // For continuous scroll
+    let cbrProgressRoot;
+    let cbrProgressLabel;
+    let cbrProgressBar;
+    let cbrProgressDetail;
 
-    function showCbrProgress(message, value = null, detail = "") {
-      const progress = value === null
-        ? `<div class="reader-loading"><div class="reader-loading-label">${escapeHTML(message)}</div><progress class="reader-progress"></progress></div>`
-        : `<div class="reader-loading"><div class="reader-loading-label">${escapeHTML(message)}</div><progress class="reader-progress" max="100" value="${Math.max(0, Math.min(100, value))}"></progress><div class="reader-loading-detail">${escapeHTML(detail)}</div></div>`;
-      body.innerHTML = progress;
+    function showCbrProgress(message, value = 0, detail = "Aguardando abertura…") {
+      const safeValue = Number.isFinite(Number(value)) ? Math.max(0, Math.min(100, Number(value))) : 0;
+      if (!cbrProgressRoot || !cbrProgressRoot.isConnected) {
+        cbrProgressRoot = document.createElement("div");
+        cbrProgressRoot.className = "reader-loading";
+        cbrProgressLabel = document.createElement("div");
+        cbrProgressLabel.className = "reader-loading-label";
+        cbrProgressBar = document.createElement("progress");
+        cbrProgressBar.className = "reader-progress";
+        cbrProgressBar.max = 100;
+        cbrProgressDetail = document.createElement("div");
+        cbrProgressDetail.className = "reader-loading-detail";
+        cbrProgressRoot.append(cbrProgressLabel, cbrProgressBar, cbrProgressDetail);
+        body.replaceChildren(cbrProgressRoot);
+      }
+      cbrProgressLabel.textContent = message;
+      cbrProgressBar.value = safeValue;
+      cbrProgressDetail.textContent = detail || `${safeValue.toFixed(0)}%`;
+      cbrProgressDetail.hidden = !detail;
     }
 
     function status(message) {
-      showCbrProgress(message);
+      showCbrProgress(message, 0, "Preparando arquivo…");
       return;
       body.innerHTML = `
       <div class="empty" style="margin:auto;max-width:650px">
@@ -3619,14 +3680,10 @@
       // 1. BAIXAR CBR
       // =========================================================
 
-      status("Baixando CBR…");
+      status("Abrindo arquivo CBR…");
 
       console.log("[CBR] URL:", url);
-      const downloadUrl = proxiedFileUrl(url);
-      console.log("[CBR] URL usada no fetch:", downloadUrl);
-
       const isMegaSource = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
-      let response = null;
 
       // =========================================================
       // 2. LER ARQUIVO
@@ -3634,49 +3691,18 @@
 
       status("Lendo arquivo CBR…");
 
-      const totalBytes = Number(response?.headers.get("content-length")) || 0;
       const formatCbrBytes = bytes => bytes >= 1024 * 1024
         ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
         : `${Math.round(bytes / 1024)} KB`;
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
-      if (!buffer && !isMegaSource) {
-        response = await fetch(downloadUrl, {
-          method: "GET",
-          mode: "cors",
-          credentials: "omit",
-          cache: "default",
-          priority: "high"
-        });
-        console.log("[CBR] HTTP:", response.status);
-        console.log("[CBR] Content-Type:", response.headers.get("content-type") || "desconhecido");
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      }
       if (buffer) {
-        showCbrProgress("Arquivo CBR baixado. Preparando pÃ¡ginasâ€¦", 100, "Download concluÃ­do");
-      } else if (isMegaSource) {
-        buffer = await fetchFileArrayBuffer(url, (received, total) => {
-          const value = total ? (received / total) * 100 : null;
-          showCbrProgress("Lendo arquivo CBR…", value, total ? `${formatCbrBytes(received)} de ${formatCbrBytes(total)}` : formatCbrBytes(received));
-        });
-        console.log("[CBR] Mega baixado em partes:", buffer.byteLength, "bytes");
-      } else if (response.body?.getReader) {
-        const reader = response.body.getReader();
-        const chunks = [];
-        let receivedBytes = 0;
-        while (true) {
-          const part = await reader.read();
-          if (part.done) break;
-          chunks.push(part.value);
-          receivedBytes += part.value.byteLength;
-          const value = totalBytes ? (receivedBytes / totalBytes) * 100 : null;
-          showCbrProgress("Lendo arquivo CBR…", value, totalBytes ? `${formatCbrBytes(receivedBytes)} de ${formatCbrBytes(totalBytes)}` : formatCbrBytes(receivedBytes));
-        }
-        const bytes = new Uint8Array(receivedBytes);
-        let offset = 0;
-        chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
-        buffer = bytes.buffer;
+        showCbrProgress("Arquivo CBR carregado. Preparando páginas…", 100, "Abertura concluída");
       } else {
-        buffer = await response.arrayBuffer();
+        buffer = await fetchFileArrayBuffer(url, (received, total) => {
+          const value = total ? (received / total) * 100 : 0;
+        showCbrProgress("Abrindo arquivo CBR…", value, total ? `${value.toFixed(0)}% · ${formatCbrBytes(received)} de ${formatCbrBytes(total)}` : `${formatCbrBytes(received)} processados`);
+        });
+        console.log(`[CBR] ${isMegaSource ? "Mega" : "Arquivo"} baixado:`, buffer.byteLength, "bytes");
       }
 
       console.log(
@@ -3725,6 +3751,12 @@
         "[CBR] Formato detectado:",
         rarVersion
       );
+
+      if (rarVersion === "UNKNOWN" && !isZipContainer) {
+        const header = Array.from(bytes.slice(0, 16), byte => byte.toString(16).padStart(2, "0")).join(" ");
+        console.error("[CBR] Cabeçalho inválido; arquivo baixado não é RAR/ZIP:", header);
+        throw new Error("CBR_INVALID_ARCHIVE");
+      }
 
       if (rarVersion === "RAR5") {
         status("RAR5 detectado. Preparando leitor…");
@@ -3975,6 +4007,7 @@
 
       if (currentReadingMode === 'single-page') {
         let page = Math.max(0, Math.min(resumePage - 1, imageFiles.length - 1));
+        const pageCache = createArchivePageCache(imageFiles, file => withTimeout(file.extract(), 120000, "A pÃ¡gina demorou mais de 120 segundos para ser extraÃ­da."));
         const img = document.createElement("img");
         img.className = "reader-image";
         img.alt = "Página do quadrinho";
@@ -3983,8 +4016,10 @@
 
         async function draw() {
           controls.innerHTML = `<span class="reader-page">Extraindo página ${page + 1}…</span>`;
-          const current = imageFiles[page];
-          const extracted = await withTimeout(current.extract(), 120000, "A página demorou mais de 120 segundos para ser extraída.");
+          const currentThird = Math.floor(page / pageCache.thirdSize);
+          await pageCache.prefetchThird(currentThird);
+          void pageCache.prefetchThird(currentThird + 1).catch(() => {});
+          const extracted = await pageCache.get(page);
           const blob = extracted instanceof Blob ? extracted : new Blob([extracted], { type: "image/jpeg" });
           if (objectUrl) URL.revokeObjectURL(objectUrl);
           objectUrl = URL.createObjectURL(blob);
@@ -4276,7 +4311,7 @@
 
         fail(
           "CBR vazio ou inválido.",
-          "O arquivo baixado não contém dados suficientes."
+          "O arquivo recebido não contém dados suficientes."
         );
 
       } else if (errorText.includes("CBR_HTML_RESPONSE")) {
@@ -4422,16 +4457,172 @@
     return proxy.toString();
   }
 
+  const READER_FILE_CACHE = "banca-reader-files-v2";
+  const MAX_READER_CACHE_BYTES = 300 * 1024 * 1024;
+  const MAX_READER_CACHE_FILES = 4;
+
+  async function readReaderFileCache(proxyUrl, onProgress) {
+    if (!window.caches) return null;
+    try {
+      const cache = await window.caches.open(READER_FILE_CACHE);
+      const cached = await cache.match(proxyUrl);
+      if (!cached) return null;
+      const buffer = await cached.arrayBuffer();
+      if (!buffer.byteLength) return null;
+      onProgress(buffer.byteLength, buffer.byteLength);
+      cache.put(proxyUrl, new Response(buffer, {
+        headers: {
+          "Content-Type": cached.headers.get("Content-Type") || "application/octet-stream",
+          "X-Reader-Size": String(buffer.byteLength),
+          "X-Reader-Used": String(Date.now())
+        }
+      })).catch(() => {});
+      return buffer;
+    } catch (error) {
+      console.warn("Não foi possível ler o cache do leitor:", error);
+      return null;
+    }
+  }
+
+  async function writeReaderFileCache(proxyUrl, buffer) {
+    if (!window.caches || !buffer?.byteLength) return;
+    try {
+      const cache = await window.caches.open(READER_FILE_CACHE);
+      const keys = await cache.keys();
+      const entries = [];
+      for (const key of keys) {
+        const response = await cache.match(key);
+        const size = Number(response?.headers.get("X-Reader-Size")) || 0;
+        const used = Number(response?.headers.get("X-Reader-Used")) || 0;
+        entries.push({ key, size, used });
+      }
+      let total = entries.reduce((sum, entry) => sum + entry.size, 0);
+      const existingIndex = entries.findIndex(entry => entry.key.url === proxyUrl);
+      if (existingIndex >= 0) {
+        const [existing] = entries.splice(existingIndex, 1);
+        await cache.delete(existing.key);
+        total -= existing.size;
+      }
+      entries.sort((a, b) => a.used - b.used);
+      while (entries.length && (total + buffer.byteLength > MAX_READER_CACHE_BYTES || entries.length >= MAX_READER_CACHE_FILES)) {
+        const oldest = entries.shift();
+        await cache.delete(oldest.key);
+        total -= oldest.size;
+      }
+      await cache.put(proxyUrl, new Response(buffer, {
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Reader-Size": String(buffer.byteLength),
+          "X-Reader-Used": String(Date.now())
+        }
+      }));
+    } catch (error) {
+      console.warn("Não foi possível salvar o arquivo no cache do leitor:", error);
+    }
+  }
+
+  async function readResponseBuffer(response, onProgress) {
+    const total = Number(response.headers.get("content-length")) || 0;
+    if (!response.body?.getReader) {
+      const buffer = await response.arrayBuffer();
+      onProgress(buffer.byteLength, total || buffer.byteLength);
+      return buffer;
+    }
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        chunks.push(part.value);
+        received += part.value.byteLength;
+        onProgress(received, total);
+      }
+    } catch (error) {
+      error.readerTransfer = { chunks, received, total };
+      throw error;
+    }
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
+    return bytes.buffer;
+  }
+
   async function fetchFileArrayBuffer(url, onProgress = () => {}) {
     const source = String(url || "");
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(source);
+    const proxyUrl = proxiedFileUrl(source);
+    const cacheKey = `${proxyUrl}${proxyUrl.includes("?") ? "&" : "?"}v=240`;
+    const cached = await readReaderFileCache(cacheKey, onProgress);
+    if (cached) return cached;
+
     if (!isMega) {
-      const response = await fetch(proxiedFileUrl(source), { mode: "cors", credentials: "omit", cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.arrayBuffer();
+      const chunkSize = 4 * 1024 * 1024;
+      const chunks = [];
+      let received = 0;
+      let total = 0;
+      while (!total || received < total) {
+        const end = received + chunkSize - 1;
+        let response;
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            response = await fetch(proxyUrl, {
+              headers: { Range: `bytes=${received}-${end}` },
+              mode: "cors",
+              credentials: "omit",
+              cache: "no-store",
+              priority: "high"
+            });
+            if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status}`);
+            break;
+          } catch (error) {
+            lastError = error;
+            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+        if (!response) throw lastError || new Error("Falha ao baixar um bloco do MediaFire.");
+        const part = new Uint8Array(await response.arrayBuffer());
+        const contentRange = response.headers.get("content-range") || "";
+        const match = contentRange.match(/bytes\s+(\d+)-(\d+)\/(\d+)/i);
+        if (match) total = Number(match[3]);
+        if (!total) total = Number(response.headers.get("content-length")) || 0;
+        if (!part.byteLength) throw new Error("O MediaFire retornou um bloco vazio.");
+        chunks.push(part);
+        received += part.byteLength;
+        onProgress(received, total);
+        if (response.status !== 206 || part.byteLength < chunkSize) break;
+      }
+      const bytes = new Uint8Array(received);
+      let offset = 0;
+      chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
+      if (total && received !== total) throw new Error(`Download incompleto: ${received} de ${total} bytes.`);
+      await writeReaderFileCache(cacheKey, bytes.buffer);
+      return bytes.buffer;
     }
 
-    const proxyUrl = proxiedFileUrl(source);
+    // Uma única resposta evita uma chamada à Edge Function para cada bloco.
+    // Se a conexão cair, usamos o modo por faixas abaixo como fallback.
+    let continuousError = null;
+    try {
+      const response = await fetch(proxyUrl, {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        priority: "high"
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
+      if (!buffer.byteLength) throw new Error("O Mega retornou um arquivo vazio.");
+      await writeReaderFileCache(cacheKey, buffer);
+      return buffer;
+    } catch (error) {
+      continuousError = error;
+      console.warn("Download contínuo do Mega falhou; tentando por blocos:", error);
+    }
+
     const downloadByRanges = async (startAt = 0, prefixChunks = [], prefixReceived = 0, totalHint = 0) => {
       const chunkSize = 4 * 1024 * 1024;
       const chunks = [...prefixChunks];
@@ -4481,7 +4672,17 @@
 
     // Avoid long-lived HTTP/3 streams: this is the connection mode that was
     // producing ERR_QUIC_PROTOCOL_ERROR. Each range is independently retried.
-    return downloadByRanges();
+    // Recomeça as faixas desde o início; não mistura um stream interrompido
+    // com blocos descriptografados independentemente pelo proxy do Mega.
+    const partial = null;
+    const buffer = await downloadByRanges(
+      partial?.received || 0,
+      partial?.chunks || [],
+      partial?.received || 0,
+      partial?.total || 0
+    );
+    await writeReaderFileCache(cacheKey, buffer);
+    return buffer;
   }
 
   function proxiedImageUrl(url) {
@@ -4501,7 +4702,7 @@
   }
 
   function prepareLazyImages(root = document) {
-    if (!root) return;
+    if (!root || readerIsOpen) return;
     const priorityRoot = root.closest?.(".modal-backdrop") || root.classList?.contains("modal-backdrop");
     $$('img', root).forEach(image => {
       if (priorityRoot) image.loading = "eager";
@@ -4548,6 +4749,33 @@
       delete element.dataset.lazyBackground;
       element.style.backgroundImage = "none";
       element.classList.remove("is-lazy-cover");
+    });
+    $$('#main [style*="background-image"]').forEach(element => {
+      if (element.dataset.readerPausedBackground === undefined && element.style.backgroundImage && element.style.backgroundImage !== "none") {
+        element.dataset.readerPausedBackground = element.style.backgroundImage;
+        element.style.backgroundImage = "none";
+      }
+    });
+    $$('#main img').forEach(image => {
+      if (image.dataset.readerPausedSrc === undefined) {
+        image.dataset.readerPausedSrc = image.getAttribute("src") || "";
+        image.dataset.readerPausedSrcset = image.getAttribute("srcset") || "";
+        image.removeAttribute("src");
+        image.removeAttribute("srcset");
+      }
+    });
+  }
+
+  function resumeCoverLoading() {
+    $$('[data-reader-paused-background]').forEach(element => {
+      element.style.backgroundImage = element.dataset.readerPausedBackground || "";
+      delete element.dataset.readerPausedBackground;
+    });
+    $$('[data-reader-paused-src]').forEach(image => {
+      if (image.dataset.readerPausedSrc) image.setAttribute("src", image.dataset.readerPausedSrc);
+      if (image.dataset.readerPausedSrcset) image.setAttribute("srcset", image.dataset.readerPausedSrcset);
+      delete image.dataset.readerPausedSrc;
+      delete image.dataset.readerPausedSrcset;
     });
   }
 
@@ -4659,9 +4887,11 @@
   }
 
   function hydrateHomeCovers() {
+    if (readerIsOpen) return;
     const elements = $$('[data-cover-id]');
     if (!elements.length) return;
     const load = element => {
+      if (readerIsOpen) return;
       const item = state.db.library.find(x => x.id === element.dataset.coverId) || state.localBoxFiles.find(x => x.id === element.dataset.coverId);
       if (!item || element.dataset.coverReady === "true") return;
       element.dataset.coverReady = "true";
@@ -4681,6 +4911,7 @@
     const priority = elements.filter(element => element.classList.contains("hero-bg"));
     const deferred = elements.filter(element => !element.classList.contains("hero-bg"));
     const observeDeferred = () => {
+      if (readerIsOpen) return;
       deferredCoverObserver?.disconnect();
       deferredCoverObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { load(entry.target); deferredCoverObserver?.unobserve(entry.target); } }), { rootMargin: "500px" }) : null;
       deferred.forEach(element => deferredCoverObserver ? deferredCoverObserver.observe(element) : load(element));
@@ -6566,7 +6797,7 @@
     const footerTitle = document.querySelector(".footer > div:first-child > strong");
     const footerDescription = document.querySelector(".footer > div:first-child > span");
     if (brandLogo) {
-      brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitalicon.png?v=1";
+      brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitaliconbranco.png?v=1";
       brandLogo.alt = isBlogTheme ? "Bobojaco" : "Banca Digital";
     }
     if (brandName) brandName.innerHTML = isBlogTheme ? 'Bobo<span class="brand-accent">jaco</span>' : 'Banca<span class="brand-accent">Digital</span>';
@@ -6580,9 +6811,9 @@
       ? "Bobojaco: um espaço para publicar, descobrir e conversar sobre histórias."
       : "Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.";
     const favicon = document.querySelector('link[rel="icon"]');
-    if (favicon) favicon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitalicon.png?v=1";
+    if (favicon) favicon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitaliconbranco.png?v=1";
     const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-    if (appleIcon) appleIcon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitalicon.png?v=1";
+    if (appleIcon) appleIcon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitaliconbranco.png?v=1";
     const main = $("#main");
     let markup = "";
     if (state.section === "home") markup = renderHome();
@@ -6854,6 +7085,9 @@
       el.addEventListener("click", event => { event.stopPropagation(); openSeriesCoverChoice(el.dataset.seriesCoverChoice); });
     });
     $$('[data-read-item]').forEach(el => el.addEventListener("pointerdown", () => {
+      prefetchReaderFile(state.db.library.find(x => x.id === el.dataset.readItem));
+    }, { once: true }));
+    $$('[data-read-item]').forEach(el => el.addEventListener("pointerenter", () => {
       prefetchReaderFile(state.db.library.find(x => x.id === el.dataset.readItem));
     }, { once: true }));
     $$('[data-read-item]').forEach(el => el.addEventListener("click", event => {
@@ -8044,8 +8278,9 @@
   else applyRoute();
   syncTopAvatar();
   const warmLibarchive = () => loadLibarchiveModule().catch(error => console.warn("Biblioteca CBR indisponível:", error));
-  if ("requestIdleCallback" in window) window.requestIdleCallback(warmLibarchive, { timeout: 4000 });
-  else window.setTimeout(warmLibarchive, 2500);
+  // A biblioteca é pequena perto dos arquivos CBR e precisa estar pronta
+  // antes do primeiro clique para não competir com o download.
+  warmLibarchive();
   loadComicReadCounts()
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de leitura indisponÃ­veis:", error));
