@@ -424,7 +424,7 @@
     // Mantém a URL da variante como fallback sem gerar uma requisição 400.
     try {
       const fetchSource = imageProxyFetchUrl(source);
-      const response = await fetch(fetchSource, { mode: "cors", credentials: "omit", cache: "force-cache" });
+      const response = await fetch(fetchSource, { mode: "cors", credentials: "omit", cache: "no-store" });
       if (!response.ok) return "";
       const blob = await response.blob();
       const dataUrl = await blobToDataUrl(blob);
@@ -518,13 +518,36 @@
         current.preparing = false;
         current.status = "completed"; current.progress = 100; current.completedAt = new Date().toISOString(); state.downloads.set(id, current);
         updateDownloadButtons(id);
+        refreshSeriesDownloadButton(item.seriesId);
       }
       persistDownloads(); render(); toast("Quadrinho disponível para leitura offline.");
     } catch (error) { state.downloads.delete(id); persistDownloads(); render(); toast("Não foi possível concluir o download."); console.warn("Download falhou", error); }
       pumpDownloadQueue();
   }
+  function startSeriesDownload(editions) {
+    if (!state.session) return openAuthPage();
+    const pending = editions.filter(item => !["completed", "downloading", "waiting"].includes(downloaded(item.id)?.status));
+    if (!pending.length) return toast("Todas as edições desta série já estão baixadas ou na fila.");
+    pending.forEach(item => startDownload(item));
+    refreshSeriesDownloadButton(pending[0]?.seriesId || editions[0]?.seriesId);
+  }
+  function refreshSeriesDownloadButton(seriesId) {
+    const first = state.db.library.find(item => String(item.seriesId) === String(seriesId));
+    const editions = first ? seriesEditions(first) : [];
+    const entries = editions.map(item => downloaded(item.id));
+    const completed = editions.length > 0 && entries.every(entry => entry?.status === "completed");
+    const busy = entries.some(entry => entry?.status === "downloading" || entry?.status === "waiting");
+    $$('[data-series-download-modal]').filter(button => String(button.dataset.seriesDownloadModal) === String(seriesId)).forEach(button => {
+      button.disabled = completed || busy;
+      button.classList.toggle("is-downloaded", completed);
+      button.classList.toggle("is-downloading", !completed && busy);
+      button.textContent = completed ? "✓ Série baixada" : busy ? "… Baixando série" : "↓ Baixar série";
+      button.title = completed ? "Todas as edições desta série estão disponíveis offline" : busy ? "Há edições desta série baixando ou aguardando na fila" : "Permitir leitura offline de todas as edições";
+    });
+  }
   async function deleteDownload(itemId) {
     const entry = downloaded(itemId); state.downloads.delete(String(itemId)); updateDownloadButtons(itemId); persistDownloads();
+    refreshSeriesDownloadButton(entry?.snapshot?.seriesId || state.db.library.find(item => String(item.id) === String(itemId))?.seriesId);
     if (entry?.url && window.caches) { try { const cache = await caches.open(READER_FILE_CACHE); await cache.delete(downloadCacheKey(entry.url)); } catch {} }
     render(); toast("Download excluído deste navegador.");
   }
@@ -625,8 +648,13 @@
     downloadCoverHydrations.set(id, task);
   }
   let offlineCoverHydrationRunning = false;
+  let offlineCoverHydrationQueued = false;
   async function hydrateOfflineCoverData(items) {
-    if (offlineCoverHydrationRunning || !window.caches || !items?.length) return;
+    if (!window.caches || !items?.length) return;
+    if (offlineCoverHydrationRunning) {
+      offlineCoverHydrationQueued = true;
+      return;
+    }
     offlineCoverHydrationRunning = true;
     try {
       const cache = await caches.open(OFFLINE_COVER_CACHE);
@@ -645,6 +673,17 @@
       console.warn("NÃ£o foi possÃ­vel carregar as capas offline:", error);
     } finally {
       offlineCoverHydrationRunning = false;
+      if (offlineCoverHydrationQueued) {
+        offlineCoverHydrationQueued = false;
+        const currentItems = [...state.downloads.values()]
+          .filter(entry => entry.status === "completed")
+          .map(entry => {
+            const catalogItem = state.db.library.find(item => String(item.id) === String(entry.id));
+            return { entry, item: catalogItem && entry.snapshot ? { ...catalogItem, ...entry.snapshot } : catalogItem || entry.snapshot };
+          })
+          .filter(row => row.item);
+        hydrateOfflineCoverData(currentItems);
+      }
     }
   }
 
@@ -1679,7 +1718,8 @@
     const staff = ["moderator", "admin"].includes(profile?.plan);
     const avatarClass = staff ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
     const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
-    return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(profile?.avatar_url || DEFAULT_AVATAR_URL)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
+    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (profile?.avatar_url || DEFAULT_AVATAR_URL);
+    return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(avatarUrl)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
   function syncTopAvatar() {
@@ -5379,7 +5419,7 @@
 
   function imageProxyFetchUrl(url) {
     const source = String(url || "").trim();
-    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:(?:i\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com|(?:www\.)?dcuguide\.com|multiversohq\.com|www\.midtowncomics\.com|(?:i\.)?ibb\.co)\//i.test(source)) return proxiedImageUrl(source);
+    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:(?:i\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com|(?:www\.)?dcuguide\.com|multiversohq\.com|www\.midtowncomics\.com|(?:i\.)?ibb\.co|image\.keycollectorcomics\.com|comicvine\.gamespot\.com|static\.pulps\.fr)\//i.test(source)) return proxiedImageUrl(source);
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
     proxy.searchParams.set("v", "2");
@@ -8633,10 +8673,29 @@
       event.stopPropagation();
       openSeriesById(el.dataset.viewSeries);
     }));
-    $$('.series-card[data-open-series]').forEach(el => el.addEventListener("click", event => {
-      if (event.target.closest("button")) return;
-      openSeriesById(el.dataset.openSeries);
-    }));
+    $$('.series-card[data-open-series]').forEach(el => {
+      if (state.session && !$("[data-series-download]", el)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "card-download series-download-button";
+        button.dataset.seriesDownload = el.dataset.openSeries;
+        button.title = "Permitir leitura offline da série";
+        button.textContent = "↓";
+        const footerActions = $(".series-card-footer-actions", el);
+        const filterControl = $(".cover-effect-controls", footerActions);
+        const saveButton = $("[data-series-favorite]", footerActions);
+        if (footerActions) footerActions.insertBefore(button, filterControl || saveButton || null);
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          const first = state.db.library.find(item => String(item.seriesId) === String(el.dataset.openSeries));
+          if (first) startSeriesDownload(seriesEditions(first));
+        });
+      }
+      el.addEventListener("click", event => {
+        if (event.target.closest("button")) return;
+        openSeriesById(el.dataset.openSeries);
+      });
+    });
     if ($('[data-action="clear-local-box"]')) $('[data-action="clear-local-box"]').onclick = () => { clearLocalBox(); render(); toast("Minha caixa foi limpa."); };
     $("#local-folder-input")?.addEventListener("change", event => {
       const files = [...event.target.files].filter(supportedLocalFile);
@@ -8741,6 +8800,13 @@
         ${volumeTabs}${volumePanels}
       </div>`;
     $("#modal-root").appendChild(overlay);
+    const downloadSeriesButton = document.createElement("button");
+    downloadSeriesButton.className = "small-btn";
+    downloadSeriesButton.type = "button";
+    downloadSeriesButton.dataset.seriesDownloadModal = series.seriesId;
+    $(".modal-actions", overlay)?.prepend(downloadSeriesButton);
+    downloadSeriesButton.addEventListener("click", () => startSeriesDownload(editions));
+    refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
     overlay.addEventListener("click", event => {
       if (event.target === overlay) overlay.remove();
@@ -9304,8 +9370,10 @@
     reconnecting = true;
     try {
       if (!sb) {
-        state.session = { ...state.session, offline: false };
-        render();
+        // A página pode ter sido aberta sem carregar o cliente Supabase.
+        // Recarregar online permite que o script externo seja carregado e a
+        // sessão volte ao fluxo normal, em vez de reativar o modo offline.
+        window.setTimeout(() => window.location.reload(), 100);
         return;
       }
       const refreshed = await sb.auth.refreshSession();

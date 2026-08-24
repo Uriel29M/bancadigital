@@ -13,7 +13,7 @@ function errorResponse(message: string, status: number) {
 
 function isAllowedImageHost(hostname: string) {
   const host = hostname.toLowerCase();
-  return host === "i.imgur.com" || host === "imgur.com" || host === "www.imgur.com" || host === "zonafantasmanet.files.wordpress.com" || host === "static.dc.com" || host === "dcuguide.com" || host === "www.dcuguide.com" || host === "multiversohq.com" || host === "www.multiversohq.com" || host === "www.midtowncomics.com" || host === "midtowncomics.com" || host === "i.ibb.co" || host === "ibb.co";
+  return host === "i.imgur.com" || host === "imgur.com" || host === "www.imgur.com" || host === "zonafantasmanet.files.wordpress.com" || host === "static.dc.com" || host === "dcuguide.com" || host === "www.dcuguide.com" || host === "multiversohq.com" || host === "www.multiversohq.com" || host === "www.midtowncomics.com" || host === "midtowncomics.com" || host === "i.ibb.co" || host === "ibb.co" || host === "image.keycollectorcomics.com" || host === "comicvine.gamespot.com" || host === "static.pulps.fr";
 }
 
 Deno.serve(async request => {

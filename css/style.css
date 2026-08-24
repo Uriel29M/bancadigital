@@ -282,16 +282,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid var(--surface-2); border-radius: 999px; background: #e50914; color: white; font-size: 9px; font-weight: 800; line-height: 13px; text-align: center; }
 .message-badge[hidden], .notification-badge[hidden] { display: none !important; }
 .messages-header-btn .message-badge { position: absolute; top: -5px; right: -5px; }
-.downloads-header-btn { position: relative; min-width: 42px; font-size: 22px; line-height: 1; }
+.downloads-header-btn { position: relative; min-width: 42px; font-size: 24px; font-weight: 900; line-height: 1; -webkit-text-stroke: .55px currentColor; }
 .downloads-header-btn.is-downloaded { color: #79e68d; }
 .downloads-header-btn.is-downloading { animation: download-pulse 1s ease-in-out infinite; }
 .download-badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; border-radius: 999px; background: #8af0ad; color: #111; font-size: 9px; }
 .reader-btn { padding: 9px 12px; }
-.card-download { position: absolute; top: 9px; right: 44px; z-index: 2; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.58); color: #aaa; font-size: 17px; line-height: 30px; cursor: pointer; opacity: .62; }
+.card-download { position: absolute; top: 9px; right: 44px; z-index: 2; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.58); color: #aaa; font-size: 20px; font-weight: 900; line-height: 30px; cursor: pointer; opacity: .62; -webkit-text-stroke: .55px currentColor; }
 .card-download:hover { color: #ddd; opacity: .9; }
 .card-download.is-downloaded { border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.85); color: #79e68d; opacity: 1; }
 .card-download.is-downloaded { font-size: 0; }
-.card-download.is-downloaded::after { content: "✓"; font-size: 17px; }
+.card-download.is-downloaded::after { content: "✓"; font-size: 20px; }
 .card-download.is-downloading { color: #d7d7d7; opacity: .82; animation: download-pulse 1s ease-in-out infinite; }
 @keyframes download-pulse { 50% { opacity: .42; } }
 .downloads-list { display: grid; gap: 12px; max-width: 860px; }
@@ -313,6 +313,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .downloads-pending-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 .downloads-pending-actions [data-resume-all-downloads]:disabled { opacity: .35; cursor: not-allowed; }
 .download-confirm-modal { width: min(420px, calc(100vw - 32px)); }
+.series-modal [data-series-download-modal].is-downloaded { border-color: rgba(121,230,141,.45); color: #79e68d; opacity: .62; cursor: not-allowed; }
+.series-modal [data-series-download-modal].is-downloading { color: #d7d7d7; opacity: .72; cursor: not-allowed; animation: download-pulse 1s ease-in-out infinite; }
 .downloads-series-sort { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; opacity: .62; transition: opacity .18s ease; }
 .downloads-series-sort:hover, .downloads-series-sort:focus-within { opacity: .9; }
 .downloads-series-sort select { max-width: 150px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--muted); font: inherit; }
@@ -1315,6 +1317,7 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .status-pill { padding: 3px 6px; border: 1px solid var(--line); border-radius: 999px; }
 .series-cover-modal-effects { display: flex; align-items: center; gap: 7px; margin: 4px 0 14px; color: var(--muted); font-size: 12px; }
 .series-card { position: relative; min-width: 0; aspect-ratio: 2 / 3; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; cursor: pointer; }
+.series-download-button { position: static; top: auto; right: auto; z-index: auto; }
 .series-card:hover, .series-card:focus-visible { border-color: #e50914; box-shadow: 0 0 0 1px #e50914, 0 12px 28px rgba(229,9,20,.16); transform: translateY(-2px); outline: none; }
 .series-card-cover { position: absolute; inset: 0; background: center / cover no-repeat; opacity: .82; transition: opacity .18s ease; }
 .series-card-cover[data-cover-style="grayscale"] { filter: grayscale(1); }

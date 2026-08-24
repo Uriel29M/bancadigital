@@ -8,9 +8,6 @@
   <link rel="modulepreload" href="libarchive/libarchive.js">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css?v=2.2.7.237">
 </head>
 <body>
@@ -82,7 +79,7 @@
   </script>
   <!-- JSZip para CBZ: tenta CDNs alternativos sem bloquear o restante da página. -->
   <script>
-    window.jszipReady = new Promise((resolve, reject) => {
+    window.jszipReady = navigator.onLine === false ? Promise.resolve(null) : new Promise(resolve => {
       const sources = [
         "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
         "https://unpkg.com/jszip@3.10.1/dist/jszip.min.js",
@@ -90,7 +87,7 @@
       ];
       const load = index => {
         if (window.JSZip) return resolve(window.JSZip);
-        if (index >= sources.length) return reject(new Error("JSZip indisponível"));
+        if (index >= sources.length) return resolve(null);
         const script = document.createElement("script");
         script.src = sources[index];
         script.async = true;
@@ -110,13 +107,15 @@
   </script>
   <script>
     // Leitor ZIP com HTTP Range: permite abrir a primeira página sem baixar o CBZ inteiro.
-    window.zipJsReady = import("https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.57/+esm")
-      .catch(error => { console.warn("zip.js progressivo indisponível:", error); return null; });
+    window.zipJsReady = navigator.onLine === false
+      ? Promise.resolve(null)
+      : import("https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.57/+esm")
+        .catch(error => { console.warn("zip.js progressivo indisponível:", error); return null; });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>if (navigator.onLine !== false) document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></scr' + 'ipt>');</script>
   <script src="js/supabase.js"></script>
   <script src="js/data.js?v=2.2.7.38"></script>
-  <script src="js/app.js?v=2.2.7.270"></script>
+  <script src="js/app.js?v=2.2.7.292"></script>
 </body>
 </html>
 
