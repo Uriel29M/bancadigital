@@ -178,6 +178,37 @@ Deno.serve(async request => {
       if (removed.error) throw removed.error;
       return json({ ok: true, removed: removed.data?.length || 0 });
     }
+    if (payload.action === "change_review_status") {
+      const actionId = Number(payload.action_id);
+      const nextStatus = String(payload.status || "").trim();
+      if (!Number.isInteger(actionId) || actionId < 1 || !["pending", "rejected"].includes(nextStatus)) {
+        return json({ error: "Invalid cover review transition" }, 400);
+      }
+      const actionResult = await service.from("bot_actions")
+        .select("id, action, status, metadata")
+        .eq("id", actionId)
+        .maybeSingle();
+      if (actionResult.error) throw actionResult.error;
+      const action = actionResult.data;
+      if (!action || action.action !== "cover_variant_candidate") return json({ error: "Cover candidate not found" }, 404);
+      const itemId = String(action.metadata?.item_id || "").trim();
+      const variantKey = String(action.metadata?.variant_key || "").trim();
+      const validTransition = (action.status === "approved" && nextStatus === "rejected") || (action.status === "rejected" && nextStatus === "pending");
+      if (!validTransition) return json({ error: "This cover cannot be moved to the selected status" }, 409);
+      if (action.status === "approved" && nextStatus === "rejected") {
+        const removed = await service.from("comic_cover_variants")
+          .delete()
+          .eq("item_id", itemId)
+          .eq("variant_key", variantKey);
+        if (removed.error) throw removed.error;
+        await service.from("user_cover_choices").delete().eq("item_id", itemId).eq("variant_key", variantKey);
+      }
+      const updated = await service.from("bot_actions")
+        .update({ status: nextStatus, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .eq("id", actionId);
+      if (updated.error) throw updated.error;
+      return json({ ok: true, status: nextStatus });
+    }
     if (payload.action === "approve_variant") {
       const actionId = Number(payload.action_id);
       if (!Number.isInteger(actionId) || actionId < 1) return json({ error: "Invalid bot action" }, 400);
@@ -246,16 +277,20 @@ Deno.serve(async request => {
       if (row.item_id && key) knownCreators.add(`${row.item_id}:${key}`);
     }
     for (const item of items) rememberImage(item.id, item.coverUrl);
-    const pending = await service.from("bot_actions").select("id, metadata").eq("bot_name", "cover-variants-bot").eq("action", "cover_variant_candidate").eq("status", "pending");
-    if (pending.error) throw pending.error;
+    const history = await service.from("bot_actions").select("id, metadata, status")
+      .eq("bot_name", "cover-variants-bot")
+      .eq("action", "cover_variant_candidate")
+      .in("status", ["pending", "approved", "rejected"]);
+    if (history.error) throw history.error;
     const duplicatePendingIds: number[] = [];
-    for (const row of pending.data || []) {
+    for (const row of history.data || []) {
       const itemId = row.metadata?.item_id;
       const coverUrl = row.metadata?.cover_url;
       const creator = creatorKey(String(row.metadata?.creator || row.metadata?.label || ""));
       const identities = imageKeys(String(coverUrl || "")).map(key => `${itemId}:${key}`);
-      if (identities.some(key => knownImages.has(key)) || (creator && knownCreators.has(`${itemId}:${creator}`))) duplicatePendingIds.push(row.id);
-      else {
+      if (identities.some(key => knownImages.has(key)) || (creator && knownCreators.has(`${itemId}:${creator}`))) {
+        if (row.status === "pending") duplicatePendingIds.push(row.id);
+      } else {
         rememberImage(itemId, coverUrl);
         if (creator) knownCreators.add(`${itemId}:${creator}`);
       }
@@ -263,8 +298,9 @@ Deno.serve(async request => {
     if (duplicatePendingIds.length) await service.from("bot_actions").delete().in("id", duplicatePendingIds);
     const failedSources = new Map<string, number>();
 
-    const scanLimit = 10;
-    for (const item of items.slice(0, scanLimit)) {
+    // The caller already sends the catalog in small batches. Applying another
+    // limit here silently skipped items after the first ten of each request.
+    for (const item of items) {
       if (!item.id) continue;
       for (const source of sources) {
         const sourceUrl = expandTemplate(source.url, item);
@@ -312,7 +348,7 @@ Deno.serve(async request => {
       const inserted = await service.from("bot_actions").insert(rows);
       if (inserted.error) throw inserted.error;
     }
-    return json({ ok: true, scanned: Math.min(items.length, scanLimit), total_items: items.length, truncated: items.length > scanLimit, candidates: candidates.length, sources: sources.length, failed_sources: Object.fromEntries(failedSources) });
+    return json({ ok: true, scanned: items.length, total_items: items.length, truncated: false, candidates: candidates.length, sources: sources.length, failed_sources: Object.fromEntries(failedSources) });
   } catch (error) {
     console.error("cover-variants-bot", error);
     return json({ error: error instanceof Error ? error.message : "Cover bot failed" }, 500);

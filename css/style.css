@@ -1356,18 +1356,24 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .cover-choice-option img { width: 100%; aspect-ratio: 2 / 3; object-fit: contain; border-radius: 6px; background: #222; }
 .cover-choice-option input { accent-color: #e50914; }
 .cover-variants-review-modal { max-width: 980px; }
+.cover-variants-review-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.cover-variant-review-tabs { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 0 4px; border-bottom: 1px solid var(--line); }
+.cover-variant-review-tab { color: var(--muted); }
+.cover-variant-review-tab.is-active { border-color: var(--accent); color: #fff; background: rgba(229,9,20,.16); }
+.cover-variant-review-tab span { display: inline-flex; min-width: 18px; justify-content: center; margin-left: 3px; color: inherit; font-size: 10px; }
 .cover-variant-review-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; max-height: 66vh; overflow: auto; padding: 14px 0; }
 .cover-variant-review-card { display: flex; gap: 11px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.03); }
 .cover-variant-review-card > img { width: 92px; height: 132px; flex: 0 0 92px; object-fit: contain; border-radius: 5px; background: #17171b; }
 .cover-variant-review-copy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .cover-variant-review-copy strong { color: var(--text); }
 .cover-variant-review-copy span, .cover-variant-review-copy small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.cover-variant-review-copy .cover-variant-review-decision { color: var(--text); font-size: 10px; }
 .cover-variant-review-copy .staff-activity-actions { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .cover-variant-review-card .staff-activity-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
-.cover-variant-review-card .staff-activity-actions > button[data-bot-variants], .cover-variant-review-card .cover-tooltip-anchor > button { min-height: 34px; padding: 8px 13px; font-size: 12px; }
-.cover-variant-review-card .staff-activity-actions > button[data-bot-variants] { grid-column: 1 / -1; }
-.cover-variant-review-card .staff-activity-actions > button[data-bot-variants]:disabled { opacity: .32; cursor: not-allowed; }
+.cover-variant-review-card .cover-tooltip-anchor > button { min-height: 34px; padding: 8px 13px; font-size: 12px; }
+.cover-variant-review-card [data-bot-review][data-status="approved"] { font-size: 10px; }
 .cover-variant-review-card .cover-tooltip-anchor { width: 100%; grid-column: 1 / -1; }
+.cover-variant-review-card .staff-activity-actions > .cover-tooltip-anchor { grid-column: auto; }
 .cover-variant-review-card .cover-tooltip-anchor > button { width: 100%; }
 .cover-tooltip-anchor { position: relative; display: inline-flex; }
 .cover-image-tooltip { position: fixed; z-index: 1000; top: 8px; left: 8px; display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; width: min(360px, 72vw); padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #17171b; box-shadow: 0 10px 24px rgba(0,0,0,.4); opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease; }

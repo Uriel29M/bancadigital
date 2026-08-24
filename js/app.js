@@ -237,6 +237,7 @@
     collectionSortOrders: {},
     coverVariants: new Map(),
     coverChoices: new Map(),
+    previewCoverChoices: new Map(),
     coverStyles: new Map(),
     seriesCoverChoices: new Map(),
     offlineCoverData: new Map(),
@@ -286,6 +287,7 @@
     notificationChannel: null,
     staffActivities: [],
     staffPendingCount: 0,
+    coverVariantReviewTab: "pending",
     localBoxFiles: [],
     localBoxVisible: false,
     publisherSettings: new Map(),
@@ -2126,15 +2128,16 @@
     if (!sb || state.session?.offline || navigator.onLine === false || !["moderator", "admin"].includes(state.profile?.plan)) return;
     const [moderation, bots] = await Promise.all([
       sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
-      sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(100)
+      sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000)
     ]);
     const rows = moderation.data || [];
-    const ids = [...new Set(rows.flatMap(row => [row.actor_id, row.target_id]).filter(Boolean))];
+    const botReviewerIds = (bots.data || []).map(row => row.reviewed_by).filter(Boolean);
+    const ids = [...new Set([...rows.flatMap(row => [row.actor_id, row.target_id]), ...botReviewerIds].filter(Boolean))];
     const profiles = ids.length ? await sb.from("profiles").select("id, username").in("id", ids) : { data: [] };
     const names = new Map((profiles.data || []).map(profile => [profile.id, profile.username]));
     state.staffActivities = [
       ...rows.map(row => ({ ...row, kind: "moderation", actorName: names.get(row.actor_id) || "monitor", targetName: names.get(row.target_id) || "usuário" })),
-      ...(bots.data || []).map(row => ({ ...row, kind: "bot" }))
+      ...(bots.data || []).map(row => ({ ...row, kind: "bot", reviewerName: names.get(row.reviewed_by) || "Administrador" }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     // Candidatas de capas têm contador próprio na tela "Examinar capas variantes".
     state.staffPendingCount = 0;
@@ -2374,10 +2377,13 @@
     });
   }
 
-  function openStyledCoverConfirm(message, onConfirm) {
+  function openStyledCoverConfirm(message, onConfirm, options = {}) {
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal cover-remove-confirm-modal"><div class="section-head"><div><div class="eyebrow">Administrador</div><h2>Remover capa variante?</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-close>Cancelar</button></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Manter capa</button><button type="button" class="btn btn-danger" data-confirm-remove>Remover</button></div></div>`;
+    const title = options.title || "Remover capa variante?";
+    const cancelLabel = options.cancelLabel || "Cancelar";
+    const confirmLabel = options.confirmLabel || "Remover";
+    overlay.innerHTML = `<div class="modal cover-remove-confirm-modal"><div class="section-head"><div><div class="eyebrow">Administrador</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-close>${escapeHTML(cancelLabel)}</button></div><div class="modal-actions"><button type="button" class="small-btn" data-close>${escapeHTML(cancelLabel)}</button><button type="button" class="btn btn-danger" data-confirm-remove>${escapeHTML(confirmLabel)}</button></div></div>`;
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
@@ -2395,13 +2401,16 @@
     if (!["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A escolha de capas variantes é exclusiva para usuários Premium, moderadores e administradores.");
     const item = state.db.library.find(entry => entry.id === itemId);
     if (!item) return;
-    const savedForCover = state.favoriteIds.has(itemId) || (item.seriesId && state.favoriteIds.has(item.seriesId));
+    const isAdmin = state.profile?.plan === "admin";
+    const savedForCover = isAdmin || state.favoriteIds.has(itemId) || (item.seriesId && state.favoriteIds.has(item.seriesId));
     if (!savedForCover) return toast("Salve o quadrinho ou a série na estante antes de escolher uma capa.");
     const collection = collectionId ? state.publicProfile?.collections?.find(entry => entry.id === collectionId) : null;
     const collectionOwner = collection?.ownerId || state.publicProfile?.profile?.id;
     if (collectionId && collectionOwner !== state.session.user.id) return toast("Somente o criador pode alterar capas nesta coleção.");
     const collectionChoices = collectionId ? (collection?.coverChoices || {}) : null;
-    const current = collectionId ? collectionChoices?.[itemId] : state.coverChoices.get(itemId);
+    const current = collectionId
+      ? collectionChoices?.[itemId]
+      : state.previewCoverChoices.get(itemId) || state.previewCoverChoices.get(String(itemId)) || state.coverChoices.get(itemId) || state.coverChoices.get(String(itemId));
     const variants = usableCoverVariants(item);
     const botVariants = variants.filter(variant => String(variant.variant_key || "").startsWith("bot-"));
     const options = [{ variant_key: "__default", label: "Capa principal", cover_url: item.coverUrl || "" }, ...variants];
@@ -2411,6 +2420,23 @@
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    if (isAdmin && !collectionId) {
+      const previewButton = document.createElement("button");
+      previewButton.type = "button";
+      previewButton.className = "small-btn";
+      previewButton.textContent = "Usar sem salvar";
+      previewButton.onclick = () => {
+        const selectedKey = String(new FormData($("#cover-choice-form", overlay)).get("variantKey") || "__default");
+        const choice = variants.find(option => option.variant_key === selectedKey);
+        state.previewCoverChoices.set(itemId, choice
+          ? { item_id: itemId, variant_key: choice.variant_key, label: choice.label, cover_url: choice.cover_url }
+          : { item_id: itemId, variant_key: "__default", label: "Capa principal", cover_url: item.coverUrl || "" });
+        overlay.remove();
+        updateCoverChoiceImages(itemId);
+        toast("Capa aplicada sem salvar.");
+      };
+      $(".modal-actions", overlay)?.prepend(previewButton);
+    }
     $$('[data-remove-bot-variant]', overlay).forEach(button => button.addEventListener("click", async event => {
       event.preventDefault();
       event.stopPropagation();
@@ -2473,6 +2499,7 @@
         if (collectionId) collection.coverChoices = nextChoices;
         else state.coverChoices.set(itemId, { item_id: itemId, ...choice });
       } else return toast("Essa capa variante não está cadastrada para esta edição.");
+      state.previewCoverChoices.delete(itemId);
       overlay.remove();
       if (collectionId) await loadPublicProfile(state.publicProfile.profile.username, collectionId);
       else updateCoverChoiceImages(itemId);
@@ -5165,7 +5192,10 @@
     // padrão: ela seria substituída depois pela variante escolhida.
     if (!state.authReady) return instantCover(item);
     const activeChoices = coverChoices || (state.section === "public-profile" ? state.publicProfile?.coverChoices : state.coverChoices);
-    const selectedCover = (activeChoices?.get?.(item.id) || activeChoices?.get?.(String(item.id)))?.cover_url;
+    const previewChoice = state.previewCoverChoices?.get?.(item.id) || state.previewCoverChoices?.get?.(String(item.id));
+    const selectedCover = previewChoice
+      ? (previewChoice.cover_url || item.coverUrl || item.cover)
+      : (activeChoices?.get?.(item.id) || activeChoices?.get?.(String(item.id)))?.cover_url;
     if (selectedCover) return proxiedImageUrl(selectedCover);
     if (variant === "hero" && item.featuredCoverUrl) return proxiedImageUrl(item.featuredCoverUrl);
     if (item.coverUrl) return proxiedImageUrl(item.coverUrl);
@@ -5779,7 +5809,8 @@
     const hasCoverVariants = coverVariants.length > 0;
     const savedForCover = favoriteIds.has(item.id) || (seriesContext && item.seriesId && favoriteIds.has(item.seriesId));
     const collectionOwner = activeCollectionContext?.ownerId === state.session?.user?.id;
-    const canChooseCover = state.session && ["premium", "moderator", "admin"].includes(state.profile?.plan) && (collectionOwner || (favoriteIds === state.favoriteIds && savedForCover)) && hasCoverVariants;
+    const adminCanChooseCover = state.profile?.plan === "admin" && !activeCollectionContext?.id;
+    const canChooseCover = state.session && ["premium", "moderator", "admin"].includes(state.profile?.plan) && (collectionOwner || adminCanChooseCover || (favoriteIds === state.favoriteIds && savedForCover)) && hasCoverVariants;
     const coverStyle = coverStyleFor(item, activeCollectionContext?.coverStyles || null);
     const canSetCoverStyle = collectionOwner || (Boolean(state.session) && favoriteIds === state.favoriteIds);
     const coverEffects = coverStyleControl(item.id, coverStyle, canSetCoverStyle, activeCollectionContext?.id || "");
@@ -5798,7 +5829,7 @@
           <div class="card-title">${escapeHTML(displayTitle)}</div>
           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${entityButton("character", item.character)}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
           ${authors.length ? `<div class="card-authors">${authors.map(author => entityButton("author", author)).join(" ")}</div>` : ""}
-          <div class="card-stats"><span>♥ ${Number(item.clicks || 0).toLocaleString("pt-BR")} leituras</span>${canChooseCover ? `<button type="button" class="card-cover-choice" data-cover-choice="${escapeHTML(item.id)}" ${activeCollectionContext?.id ? `data-cover-choice-collection="${escapeHTML(activeCollectionContext.id)}"` : ""} title="${activeCollectionContext?.id ? "Capa variante somente nesta coleção" : "Capa variante"}">Capa</button>` : hasCoverVariants ? `<span class="card-variant-info" title="Esta edição possui capas variantes">Capa variante</span>` : ""}${coverEffects}</div>
+          <div class="card-stats"><span>♥ ${Number(item.clicks || 0).toLocaleString("pt-BR")} leituras</span>${canChooseCover ? `<button type="button" class="card-cover-choice" data-cover-choice="${escapeHTML(item.id)}" ${activeCollectionContext?.id ? `data-cover-choice-collection="${escapeHTML(activeCollectionContext.id)}"` : ""} title="${activeCollectionContext?.id ? "Capa variante somente nesta coleção" : "Escolher capa"}">${state.profile?.plan === "admin" && !activeCollectionContext?.id ? "Escolher capa" : "Capa"}</button>` : hasCoverVariants ? `<span class="card-variant-info" title="Esta edição possui capas variantes">Capa variante</span>` : ""}${coverEffects}</div>
           <div class="card-actions"><button class="card-like ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}" title="Curtir quadrinho">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="card-share" data-share-item="${escapeHTML(item.id)}" title="Compartilhar quadrinho">Compartilhar</button><button class="card-comment" data-comment-item="${escapeHTML(item.id)}" title="Ver comentários">Comentários</button>${item.seriesId ? `<button class="card-series" data-view-series="${escapeHTML(item.seriesId)}" title="Ver série">Série</button>` : ""}</div>
         </div>
       </article>${cardActions}</div>`;
@@ -7775,7 +7806,7 @@
     return `<div class="staff-activity-list">${items || '<div class="empty">Nenhuma ação interna registrada.</div>'}</div>`;
   }
 
-  function coverVariantCandidates() {
+  function coverVariantCandidates(status = "pending") {
     const seen = new Set();
     const creatorKey = value => String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\([^)]*\)/g, "").split(/\s[-–—]\s/)[0].replace(/\b(?:variante|variant|cover|capa|card stock|foil|sketch|blank|design|preto e branco|black and white|dc pride|homenagem)\b.*$/i, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
     const knownCreators = new Set();
@@ -7785,7 +7816,7 @@
     }));
     return state.staffActivities.filter(item => {
       if (item.kind !== "bot" || item.action !== "cover_variant_candidate") return false;
-      if (item.status !== "pending") return false;
+      if (item.status !== status) return false;
       const url = String(item.metadata?.cover_url || "");
       if (!String(item.metadata?.creator || "").trim()) return false;
       if (/(?:logo|favicon|icon|avatar|banner|sprite|button|badge)/i.test(url)) return false;
@@ -7793,6 +7824,7 @@
       const catalogItem = state.db.library.find(entry => String(entry.id) === String(item.metadata?.item_id));
       const itemId = String(item.metadata?.item_id || "");
       const candidateCreator = creatorKey(item.metadata?.creator || item.metadata?.label);
+      if (status !== "pending") return Boolean(url && candidateCreator);
       if (!candidateCreator || knownCreators.has(`${itemId}:${candidateCreator}`)) return false;
       const imageKeys = value => { let key = String(value || "").trim().split(/[?#]/, 1)[0]; try { key = decodeURIComponent(key); } catch {} key = key.replace(/\/Special:FilePath\//i, "/images/").replace(/\/images\/thumb\/([^/]+\/[^/]+)\/[^/]+\/(?:\d+px-)?(.+)$/i, "/images/$1/$2").toLowerCase(); const file = (key.split("/").pop() || "").replace(/^\d+px[-_]/i, "").replace(/[^a-z0-9]+/gi, ""); return file ? [key, `file:${file}`] : [key]; };
       const keys = imageKeys(url);
@@ -7809,7 +7841,9 @@
   async function runCoverVariantsBot(button, overlay) {
     button.disabled = true;
     const items = state.db.library.map(item => ({ id: item.id, title: item.title, seriesTitle: item.seriesTitle, originalTitle: item.originalTitle, issue: item.issue, publisher: item.publisher, coverUrl: item.coverUrl }));
-    const batchSize = 20;
+    // The Edge Function scans the complete payload. Keep the payload small
+    // enough for slow image sources while ensuring every catalog item is sent.
+    const batchSize = 10;
     let candidates = 0;
     try {
       for (let offset = 0; offset < items.length; offset += batchSize) {
@@ -7836,19 +7870,39 @@
     closeNotificationsPopups();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    const candidates = coverVariantCandidates();
+    const reviewTab = ["pending", "approved", "rejected"].includes(state.coverVariantReviewTab) ? state.coverVariantReviewTab : "pending";
+    state.coverVariantReviewTab = reviewTab;
+    const candidates = coverVariantCandidates(reviewTab);
+    const reviewCounts = {
+      pending: coverVariantCandidates("pending").length,
+      approved: coverVariantCandidates("approved").length,
+      rejected: coverVariantCandidates("rejected").length
+    };
     const itemFor = candidate => state.db.library.find(item => String(item.id) === String(candidate.metadata?.item_id));
     const cards = candidates.map(candidate => {
       const item = itemFor(candidate);
       const seriesId = item?.seriesId || "";
       const image = candidate.metadata?.cover_url || "";
       const creator = candidate.metadata?.creator || candidate.metadata?.label || "Criador não identificado";
-      return `<article class="cover-variant-review-card"><img src="${escapeHTML(proxiedImageUrl(image))}" alt="Capa candidata" loading="lazy"><div class="cover-variant-review-copy"><strong>${escapeHTML(itemDisplayTitle(item) || candidate.title)}</strong><span>Criador: ${escapeHTML(creator)}</span><small>${escapeHTML(image)}</small><div class="staff-activity-actions">${seriesId ? `<button class="small-btn" data-bot-series="${escapeHTML(seriesId)}">Série</button>` : ""}${candidate.status === "pending" && state.profile?.plan === "admin" ? `<button class="small-btn" data-bot-review="${candidate.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-bot-review="${candidate.id}" data-status="rejected">Rejeitar</button>` : `<span class="status-pill">${escapeHTML(candidate.status)}</span>`}</div></div></article>`;
+      const decision = candidate.status === "pending"
+        ? "Aguardando revisão"
+        : `${candidate.status === "approved" ? "Aprovada" : "Rejeitada"} por @${candidate.reviewerName || "administrador"}${candidate.reviewed_at ? ` · ${formatCommentDate(candidate.reviewed_at)}` : ""}`;
+      const historyAction = candidate.status === "approved"
+        ? `<button class="small-btn danger" data-bot-transition="${candidate.id}" data-status="rejected">Mudar de ideia</button>`
+        : `<button class="small-btn" data-bot-transition="${candidate.id}" data-status="pending">Repescar</button>`;
+      return `<article class="cover-variant-review-card"><img src="${escapeHTML(proxiedImageUrl(image))}" alt="Capa candidata" loading="lazy"><div class="cover-variant-review-copy"><strong>${escapeHTML(itemDisplayTitle(item) || candidate.title)}</strong><span>Criador: ${escapeHTML(creator)}</span><small>${escapeHTML(image)}</small><small class="cover-variant-review-decision">${escapeHTML(decision)}</small><div class="staff-activity-actions">${seriesId ? `<button class="small-btn" data-bot-series="${escapeHTML(seriesId)}">Série</button>` : ""}${candidate.status === "pending" && state.profile?.plan === "admin" ? `<button class="small-btn" data-bot-review="${candidate.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-bot-review="${candidate.id}" data-status="rejected">Rejeitar</button>` : state.profile?.plan === "admin" ? historyAction : `<span class="status-pill">${escapeHTML(candidate.status)}</span>`}</div></div></article>`;
     }).join("");
-    overlay.innerHTML = `<div class="modal cover-variants-review-modal"><div class="section-head"><div><h2>Examinar capas variantes</h2><div class="section-subtitle">Revise as capas encontradas antes de disponibilizá-las no catálogo.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="modal-actions"><button class="btn btn-danger" data-run-cover-variants-bot>Executar nova busca</button></div><div class="cover-variant-review-list">${cards || '<div class="empty">Nenhuma capa candidata aguardando revisão.</div>'}</div></div>`;
+    const tabLabels = { pending: "Pendentes", approved: "Aprovadas", rejected: "Rejeitadas" };
+    const tabs = Object.entries(tabLabels).map(([key, label]) => `<button type="button" class="small-btn cover-variant-review-tab ${reviewTab === key ? "is-active" : ""}" data-cover-review-tab="${key}">${label} <span>${reviewCounts[key]}</span></button>`).join("");
+    overlay.innerHTML = `<div class="modal cover-variants-review-modal"><div class="section-head"><div><h2>Examinar capas variantes</h2><div class="section-subtitle">Revise as capas encontradas antes de disponibilizá-las no catálogo.</div></div><div class="cover-variants-review-actions"><button class="small-btn danger" data-run-cover-variants-bot>Nova busca</button><button class="small-btn" data-close>Fechar</button></div></div><div class="cover-variant-review-tabs">${tabs}</div><div class="cover-variant-review-list">${cards || `<div class="empty">Nenhuma capa ${reviewTab === "pending" ? "candidata aguardando revisão" : reviewTab === "approved" ? "aprovada" : "rejeitada"}.</div>`}</div></div>`;
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $$('[data-cover-review-tab]', overlay).forEach(button => button.onclick = () => {
+      state.coverVariantReviewTab = button.dataset.coverReviewTab || "pending";
+      overlay.remove();
+      openCoverVariantsReviewPopup();
+    });
     $('[data-remove-bot-variants]', overlay)?.addEventListener("click", event => {
       const batchButton = event.currentTarget;
       openStyledCoverConfirm(`${botVariants.length} capa(s) adicionada(s) pelo bot serão removidas desta edição.`, async () => {
@@ -7862,47 +7916,72 @@
       });
     });
     $('[data-run-cover-variants-bot]', overlay)?.addEventListener("click", event => runCoverVariantsBot(event.currentTarget, overlay));
-    $$(".cover-variant-review-card", overlay).forEach((card, index) => {
-      const candidate = candidates[index];
-      const item = itemFor(candidate);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "small-btn";
-      button.textContent = "Variantes";
-      const variants = usableCoverVariants(item);
-      button.disabled = variants.length === 0;
-      button.dataset.botVariants = item?.id || "";
-      if (variants.length) {
-        const anchor = document.createElement("span");
-        anchor.className = "cover-tooltip-anchor";
-        const tooltip = document.createElement("span");
-        tooltip.className = "cover-image-tooltip";
-        const tooltipVariants = item?.coverUrl ? [{ cover_url: item.coverUrl, label: "Capa principal" }, ...variants] : variants;
-        tooltip.innerHTML = tooltipVariants.map(variant => `<span class="cover-image-tooltip-item"><img src="${escapeHTML(proxiedImageUrl(variant.cover_url))}" alt="${escapeHTML(variant.label || "Capa variante")}"><small>${escapeHTML(variant.label || "Capa variante")}</small></span>`).join("");
-        anchor.addEventListener("mouseenter", () => requestAnimationFrame(() => {
-          const rect = button.getBoundingClientRect();
-          const tooltipWidth = Math.min(360, window.innerWidth * .72);
-          const left = Math.max(8, Math.min(rect.left, window.innerWidth - tooltipWidth - 8));
-          tooltip.style.left = `${left}px`;
-          tooltip.style.right = "auto";
-          tooltip.style.bottom = "auto";
-          const height = tooltip.getBoundingClientRect().height;
-          tooltip.style.top = `${Math.max(8, rect.top - height - 8)}px`;
-        }));
-        anchor.append(button, tooltip);
-        $(".staff-activity-actions", card)?.prepend(anchor);
-        return;
-      }
-      $(".staff-activity-actions", card)?.prepend(button);
-    });
     $$('[data-bot-series]', overlay).forEach(button => button.onclick = () => {
       const first = state.db.library.find(item => item.seriesId === button.dataset.botSeries);
       if (!first) return toast("Série não encontrada.");
       overlay.remove();
       openSeriesSelection(first, seriesEditions(first), true);
     });
-    $$('[data-bot-variants]', overlay).forEach(button => button.onclick = () => {
-      if (!button.disabled) openCoverChoice(button.dataset.botVariants);
+    const attachReviewTooltip = (button, item) => {
+      const variants = usableCoverVariants(item);
+      const tooltipVariants = item?.coverUrl ? [{ cover_url: item.coverUrl, label: "Capa padrão" }, ...variants] : variants;
+      if (!tooltipVariants.length) return;
+      const anchor = document.createElement("span");
+      anchor.className = "cover-tooltip-anchor";
+      const tooltip = document.createElement("span");
+      tooltip.className = "cover-image-tooltip";
+      tooltip.innerHTML = tooltipVariants.map(variant => `<span class="cover-image-tooltip-item"><img src="${escapeHTML(proxiedImageUrl(variant.cover_url))}" alt="${escapeHTML(variant.label || "Capa variante")}"><small>${escapeHTML(variant.label || "Capa variante")}</small></span>`).join("");
+      const positionTooltip = event => requestAnimationFrame(() => {
+        const tooltipWidth = Math.min(360, window.innerWidth * .72);
+        const rect = tooltip.getBoundingClientRect();
+        const gap = 14;
+        const preferredLeft = event.clientX + gap;
+        const preferredTop = event.clientY + gap;
+        const left = preferredLeft + tooltipWidth > window.innerWidth - 8
+          ? Math.max(8, event.clientX - tooltipWidth - gap)
+          : Math.max(8, preferredLeft);
+        const top = preferredTop + rect.height > window.innerHeight - 8
+          ? Math.max(8, event.clientY - rect.height - gap)
+          : Math.max(8, preferredTop);
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+        tooltip.style.right = "auto";
+        tooltip.style.bottom = "auto";
+      });
+      anchor.addEventListener("mouseenter", positionTooltip);
+      anchor.addEventListener("mousemove", positionTooltip);
+      button.parentElement?.insertBefore(anchor, button);
+      anchor.append(button, tooltip);
+    };
+    $$('[data-bot-review]', overlay).forEach(button => {
+      const candidate = candidates.find(entry => Number(entry.id) === Number(button.dataset.botReview));
+      attachReviewTooltip(button, itemFor(candidate || {}));
+    });
+    $$('[data-bot-transition]', overlay).forEach(button => button.onclick = () => {
+      const actionId = Number(button.dataset.botTransition);
+      const nextStatus = button.dataset.status;
+      const candidate = candidates.find(entry => Number(entry.id) === actionId);
+      const movingFromApproved = candidate?.status === "approved" && nextStatus === "rejected";
+      const message = movingFromApproved
+        ? "Esta capa será retirada das variantes aprovadas e enviada para Rejeitadas."
+        : "Esta capa voltará para Pendentes e poderá ser revisada novamente.";
+      openStyledCoverConfirm(message, async () => {
+        button.disabled = true;
+        const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "change_review_status", action_id: actionId, status: nextStatus } });
+        if (result.error) {
+          button.disabled = false;
+          return toast(result.error.message || "Não foi possível alterar a decisão.");
+        }
+        state.coverVariantReviewTab = nextStatus;
+        overlay.remove();
+        await loadCoverCatalog();
+        await loadStaffActivities();
+        openCoverVariantsReviewPopup();
+        toast(movingFromApproved ? "Capa enviada para Rejeitadas." : "Capa repescada para Pendentes.");
+      }, {
+        title: movingFromApproved ? "Mudar de ideia?" : "Repescar capa?",
+        confirmLabel: movingFromApproved ? "Enviar para rejeitadas" : "Repescar"
+      });
     });
     $$('[data-bot-review]', overlay).forEach(button => button.onclick = async () => {
       button.disabled = true;
@@ -7915,46 +7994,18 @@
         ? await sb.functions.invoke("cover-variants-bot", { body: { action: "approve_variant", action_id: actionId, primary_cover_url: candidateItem?.coverUrl || "" } })
         : await sb.rpc("review_bot_action", { p_action_id: actionId, p_status: button.dataset.status });
       if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível revisar a capa."); }
-      if (button.dataset.status === "approved" && !result.data?.duplicate && candidateItem?.id) {
-        const approvedVariant = {
-          item_id: candidateItem.id,
-          variant_key: candidate?.metadata?.variant_key || `bot-${actionId}`,
-          label: candidate?.metadata?.label || candidate?.metadata?.creator || "Capa variante",
-          cover_url: candidate?.metadata?.cover_url || "",
-          source_url: candidate?.metadata?.source_url || ""
-        };
-        const approvedVariants = [...(state.coverVariants.get(String(candidateItem.id)) || []), approvedVariant];
-        state.coverVariants.set(String(candidateItem.id), approvedVariants);
-        $$('[data-bot-variants]', overlay).forEach(variantButton => {
-          if (String(variantButton.dataset.botVariants) !== String(candidateItem.id)) return;
-          variantButton.disabled = false;
-          if (variantButton.closest(".cover-tooltip-anchor")) return;
-          const anchor = document.createElement("span");
-          anchor.className = "cover-tooltip-anchor";
-          const tooltip = document.createElement("span");
-          tooltip.className = "cover-image-tooltip";
-          const tooltipVariants = candidateItem.coverUrl ? [{ cover_url: candidateItem.coverUrl, label: "Capa principal" }, ...approvedVariants] : approvedVariants;
-          tooltip.innerHTML = tooltipVariants.map(variant => `<span class="cover-image-tooltip-item"><img src="${escapeHTML(proxiedImageUrl(variant.cover_url))}" alt="${escapeHTML(variant.label || "Capa variante")}"><small>${escapeHTML(variant.label || "Capa variante")}</small></span>`).join("");
-          anchor.addEventListener("mouseenter", () => requestAnimationFrame(() => {
-            const rect = variantButton.getBoundingClientRect();
-            const tooltipWidth = Math.min(360, window.innerWidth * .72);
-            const left = Math.max(8, Math.min(rect.left, window.innerWidth - tooltipWidth - 8));
-            tooltip.style.left = `${left}px`;
-            tooltip.style.right = "auto";
-            tooltip.style.bottom = "auto";
-            const height = tooltip.getBoundingClientRect().height;
-            tooltip.style.top = `${Math.max(8, rect.top - height - 8)}px`;
-          }));
-          variantButton.parentElement?.insertBefore(anchor, variantButton);
-          anchor.append(variantButton, tooltip);
-        });
-      }
       state.staffActivities = state.staffActivities.filter(activity => Number(activity.id) !== actionId);
       button.closest(".cover-variant-review-card")?.remove();
       const reviewList = $(".cover-variant-review-list", overlay);
       if (reviewList && !reviewList.querySelector(".cover-variant-review-card")) reviewList.innerHTML = '<div class="empty">Nenhuma capa candidata aguardando revisão.</div>';
-      if (button.dataset.status === "approved") void loadCoverCatalog();
-      void loadStaffActivities();
+      if (button.dataset.status === "approved") {
+        await loadCoverCatalog();
+        await loadStaffActivities();
+        overlay.remove();
+        openCoverVariantsReviewPopup();
+      } else {
+        void loadStaffActivities();
+      }
       if (result.data?.duplicate) toast("Essa capa já existe nesta edição e foi descartada.");
     });
   }
@@ -8426,7 +8477,7 @@
     }, { once: true }));
     $$('[data-like-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(el.dataset.likeItem); }));
     $$('[data-share-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); shareComic(el.dataset.shareItem); }));
-    $$('[data-publisher]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openEntityPage("publisher", el.dataset.publisher); }));
+    $$('[data-publisher]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); el.closest(".modal-backdrop")?.remove(); openEntityPage("publisher", el.dataset.publisher); }));
     if (state.section === "entity" && state.entityFilter?.kind === "publisher") {
       const actions = $(".publisher-page-actions");
       if (actions && !$("[data-save-publisher]", actions)) {
@@ -8441,7 +8492,9 @@
       }
     }
     $$('[data-entity-kind]').forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
       event.stopPropagation();
+      el.closest(".modal-backdrop")?.remove();
       openEntityPage(el.dataset.entityKind, el.dataset.entityValue);
     }));
     $$('[data-entity-kind][role="link"]').forEach(el => el.addEventListener("keydown", event => {
@@ -9133,7 +9186,20 @@
       if (!item || download?.status === "downloading" || download?.status === "waiting") return;
       isCompleted ? deleteDownload(item.id) : startDownload(item);
     }));
-   $$('[data-open]', overlay).forEach(el => el.addEventListener("click", () => {
+    $$('[data-entity-kind]', overlay).forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      overlay.remove();
+      openEntityPage(el.dataset.entityKind, el.dataset.entityValue);
+    }));
+    $$('[data-publisher]', overlay).forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      overlay.remove();
+      openEntityPage("publisher", el.dataset.publisher);
+    }));
+    $$('[data-open]', overlay).forEach(el => el.addEventListener("click", event => {
+      if (event.target.closest("button, a")) return;
       overlay.remove();
       openReader(state.db.library.find(x => x.id === el.dataset.open));
     }));
