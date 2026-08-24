@@ -4,7 +4,7 @@
   // --- Inicialização de Bibliotecas ---
   // --- Fim da Inicialização ---
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
-  const DEFAULT_AVATAR_URL = "https://i.pinimg.com/736x/be/17/10/be1710edaace144c17bdaf6deb2d2cc8.jpg";
+  const DEFAULT_AVATAR_URL = "assets/bancadigitalicon.png?v=1";
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
@@ -306,6 +306,65 @@
 
   let activeReaderCleanup = null;
   let handlingRoute = false;
+  const readerFilePrefetches = new Map();
+
+  function waitForPrefetchedBuffer(value, timeoutMs = 15000) {
+    if (!value) return Promise.resolve(null);
+    return Promise.race([
+      Promise.resolve(value),
+      new Promise(resolve => window.setTimeout(() => resolve(null), timeoutMs))
+    ]).catch(() => null);
+  }
+
+  async function fetchCbzBuffer(url, signal, onProgress = () => {}) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const target = new URL(proxiedFileUrl(url));
+        if (attempt) target.searchParams.set("retry", String(Date.now()));
+        const response = await fetch(target, {
+          method: "GET", mode: "cors", credentials: "omit",
+          cache: "no-store", priority: "high", signal
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const total = Number(response.headers.get("content-length")) || 0;
+        if (!response.body?.getReader) return await response.arrayBuffer();
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          chunks.push(part.value);
+          received += part.value.byteLength;
+          onProgress(received, total);
+        }
+        const bytes = new Uint8Array(received);
+        let offset = 0;
+        chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
+        return bytes.buffer;
+      } catch (error) {
+        lastError = error;
+        if (signal?.aborted || attempt) throw error;
+        await new Promise(resolve => window.setTimeout(resolve, 350));
+      }
+    }
+    throw lastError || new Error("Não foi possível baixar o CBZ.");
+  }
+
+  function prefetchReaderFile(item) {
+    if (!item || item.local) return null;
+    const url = item.fileUrl || item.telegramUrl || "";
+    const format = String(item.format || extension(url)).toLowerCase();
+    if (!/^https?:\/\//i.test(url) || !["pdf", "cbz", "cbr"].includes(format)) return null;
+    if (readerFilePrefetches.has(url)) return readerFilePrefetches.get(url);
+    const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(url);
+    const promise = isMega ? fetchFileArrayBuffer(url) : fetchCbzBuffer(url);
+    readerFilePrefetches.set(url, promise);
+    promise.catch(() => { if (readerFilePrefetches.get(url) === promise) readerFilePrefetches.delete(url); });
+    window.setTimeout(() => { if (readerFilePrefetches.get(url) === promise) readerFilePrefetches.delete(url); }, 120000);
+    return promise;
+  }
 
   const sectionRoutes = {
     home: "",
@@ -1050,7 +1109,6 @@
   function blogAuthorMarkup(post) {
     const author = post.author || {};
     const username = author.username || "usuário";
-    const avatar = author.avatar_url || "https://i.pinimg.com/736x/be/17/10/be1710edaace144c17bdaf6deb2d2cc8.jpg";
     return `<a href="${escapeHTML(publicProfileHref(username))}" class="blog-author-card">${avatarMarkup(author, "blog-author-avatar")}<span><span class="eyebrow">Publicado por</span><span class="blog-author-name">@${escapeHTML(username)}</span>${author.title ? `<span class="blog-author-title" style="color:${escapeHTML(safeTitleColor(author.title_color))}">${escapeHTML(author.title)}</span>` : ""}</span></a>`;
   }
 
@@ -1220,7 +1278,7 @@
     const staff = ["moderator", "admin"].includes(profile?.plan);
     const avatarClass = staff ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
     const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
-    return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(profile?.avatar_url || DEFAULT_AVATAR_URL)}" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
+    return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(profile?.avatar_url || DEFAULT_AVATAR_URL)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
   function syncTopAvatar() {
@@ -2742,6 +2800,8 @@
       return;
     }
 
+    const prefetchedBuffer = readerFilePrefetches.get(resolvedUrl) || null;
+    readerFilePrefetches.delete(resolvedUrl);
     const itemFormat = String(item.format || "").toLowerCase();
     const fileFormat = extension(item.file?.name || item.name || "");
     const format = /^(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/.test(itemFormat)
@@ -2893,11 +2953,11 @@
 
 
     if (format === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
-      renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress);
+      renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
     } else if (format === "cbz" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbz")) {
-      renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress);
+      renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
     } else if (format === "cbr" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbr")) {
-      renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress);
+      renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
       body.innerHTML = `<img class="reader-image" src="${escapeHTML(resolvedUrl)}" alt="">`;
       controls.innerHTML = `<span class="reader-page">Imagem</span>`;
@@ -2930,8 +2990,8 @@
     return /^.+\.[a-z0-9]{1,8}$/i.test(filename) ? filename.split(".").pop().toLowerCase() : "";
   }
 
-  async function renderPDFReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}) {
-    body.innerHTML = `<div class="empty" style="margin:auto">Carregando PDF…</div>`;
+  async function renderPDFReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
+    body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Carregando PDF…</div><progress class="reader-progress"></progress></div>`;
     try {
       const pdfjs = await (window.pdfjsReady || Promise.resolve(window.pdfjsLib));
       // PDF.js 4.x via module pode não expor global em alguns navegadores.
@@ -2941,9 +3001,11 @@
 
       // Fetch the PDF data manually to have better control over errors.
       // This helps distinguish between "file not found" and "invalid file".
-      body.innerHTML = `<div class="empty" style="margin:auto">Baixando PDFâ€¦</div>`;
+      body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Baixando PDF…</div><progress class="reader-progress"></progress></div>`;
       let pdfData;
-      if (item.local && item.file) {
+      if (prefetchedBuffer) {
+        pdfData = await prefetchedBuffer;
+      } else if (item.local && item.file) {
         pdfData = await item.file.arrayBuffer();
       } else {
         const response = await fetch(proxiedFileUrl(url), {
@@ -3211,6 +3273,10 @@
     let progressDetail;
     let progressSpinner;
     const showCbzProgress = (message, value = null, detail = "") => {
+      if (/de 0(?:\.0+)? MB/.test(detail)) {
+        value = null;
+        detail = "";
+      }
       if (!progressRoot || !progressRoot.isConnected) {
         progressRoot = document.createElement("div");
         progressRoot.className = "reader-loading";
@@ -3229,21 +3295,22 @@
       }
       progressLabel.textContent = message;
       if (value === null) {
-        progressBar.hidden = true;
-        progressDetail.hidden = true;
-        progressSpinner.hidden = false;
-      } else {
         progressBar.hidden = false;
+        progressBar.removeAttribute("value");
+        progressDetail.hidden = !detail;
+        progressDetail.textContent = detail;
+      } else {
         progressBar.value = value;
         progressDetail.hidden = false;
         progressDetail.textContent = detail;
-        progressSpinner.hidden = true;
       }
+      progressSpinner.hidden = true;
     };
     showCbzProgress("Baixando páginas do CBZ…");
     try {
-      if (!window.JSZip) throw new Error("JSZip não carregou.");
-      let buffer = prefetchedBuffer;
+      const JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
+      if (!JSZipLib) throw new Error("JSZip não carregou.");
+      let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
       if (buffer) showCbzProgress("Arquivo CBZ baixado. Preparando p\u00e1ginas...", 100, "Download conclu\u00eddo");
       if (!buffer) {
       const response = await fetch(proxiedFileUrl(url), {
@@ -3256,7 +3323,7 @@
       });
       if (!response.ok) throw new Error("HTTP " + response.status);
       const contentLength = Number(response.headers.get("content-length")) || 0;
-      if (response.body && contentLength) {
+      if (response.body) {
         const reader = response.body.getReader();
         const chunks = [];
         let received = 0;
@@ -3275,7 +3342,7 @@
         buffer = await response.arrayBuffer();
       }
       }
-      const zip = await JSZip.loadAsync(buffer);
+      const zip = await JSZipLib.loadAsync(buffer);
       const names = Object.keys(zip.files)
         .filter(n => !zip.files[n].dir && /\.(jpg|jpeg|png|webp|gif)$/i.test(n))
         .sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
@@ -3485,14 +3552,14 @@
     body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px">${escapeHTML(message)}</div>`;
     console.log("[CBR]", message);
   };
-  async function renderCBRReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}) {
+  async function renderCBRReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
     let objectUrl = null;
     let archive = null;
     let objectUrls = null; // For continuous scroll
 
     function showCbrProgress(message, value = null, detail = "") {
       const progress = value === null
-        ? `<div class="reader-loading"><div class="reader-loading-label">${escapeHTML(message)}</div><div class="reader-spinner"></div></div>`
+        ? `<div class="reader-loading"><div class="reader-loading-label">${escapeHTML(message)}</div><progress class="reader-progress"></progress></div>`
         : `<div class="reader-loading"><div class="reader-loading-label">${escapeHTML(message)}</div><progress class="reader-progress" max="100" value="${Math.max(0, Math.min(100, value))}"></progress><div class="reader-loading-detail">${escapeHTML(detail)}</div></div>`;
       body.innerHTML = progress;
     }
@@ -3560,18 +3627,6 @@
 
       const isMegaSource = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
       let response = null;
-      if (!isMegaSource) {
-        response = await fetch(downloadUrl, {
-          method: "GET",
-          mode: "cors",
-          credentials: "omit",
-          cache: "default",
-          priority: "high"
-        });
-        console.log("[CBR] HTTP:", response.status);
-        console.log("[CBR] Content-Type:", response.headers.get("content-type") || "desconhecido");
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      }
 
       // =========================================================
       // 2. LER ARQUIVO
@@ -3583,8 +3638,22 @@
       const formatCbrBytes = bytes => bytes >= 1024 * 1024
         ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
         : `${Math.round(bytes / 1024)} KB`;
-      let buffer;
-      if (isMegaSource) {
+      let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
+      if (!buffer && !isMegaSource) {
+        response = await fetch(downloadUrl, {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit",
+          cache: "default",
+          priority: "high"
+        });
+        console.log("[CBR] HTTP:", response.status);
+        console.log("[CBR] Content-Type:", response.headers.get("content-type") || "desconhecido");
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      }
+      if (buffer) {
+        showCbrProgress("Arquivo CBR baixado. Preparando pÃ¡ginasâ€¦", 100, "Download concluÃ­do");
+      } else if (isMegaSource) {
         buffer = await fetchFileArrayBuffer(url, (received, total) => {
           const value = total ? (received / total) * 100 : null;
           showCbrProgress("Lendo arquivo CBR…", value, total ? `${formatCbrBytes(received)} de ${formatCbrBytes(total)}` : formatCbrBytes(received));
@@ -4523,7 +4592,9 @@
   async function cbzCover(url, signal, maxWidth = 480) {
     const response = await fetch(proxiedFileUrl(url), { mode: "cors", credentials: "omit", cache: "no-store", signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const zip = await JSZip.loadAsync(await response.arrayBuffer());
+    const JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
+    if (!JSZipLib) throw new Error("JSZip não carregou.");
+    const zip = await JSZipLib.loadAsync(await response.arrayBuffer());
     const name = Object.keys(zip.files)
       .filter(n => !zip.files[n].dir && /\.(jpg|jpeg|png|webp|gif)$/i.test(n))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))[0];
@@ -6782,11 +6853,17 @@
       el.dataset.seriesCoverChoiceBound = "true";
       el.addEventListener("click", event => { event.stopPropagation(); openSeriesCoverChoice(el.dataset.seriesCoverChoice); });
     });
+    $$('[data-read-item]').forEach(el => el.addEventListener("pointerdown", () => {
+      prefetchReaderFile(state.db.library.find(x => x.id === el.dataset.readItem));
+    }, { once: true }));
     $$('[data-read-item]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       const item = state.db.library.find(x => x.id === el.dataset.readItem);
       if (item) openReader(item);
     }));
+    $$('[data-open][data-open-direct="true"]').forEach(el => el.addEventListener("pointerdown", () => {
+      prefetchReaderFile(state.db.library.find(x => x.id === el.dataset.open));
+    }, { once: true }));
     $$('[data-like-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(el.dataset.likeItem); }));
     $$('[data-share-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); shareComic(el.dataset.shareItem); }));
     $$('[data-publisher]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openEntityPage("publisher", el.dataset.publisher); }));

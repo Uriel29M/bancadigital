@@ -94,14 +94,19 @@ Deno.serve(async request => {
       return responseBody("O link do MediaFire expirou ou retornou uma página em vez do arquivo. Use a URL permanente /file/... .", 502);
     }
 
+    // Materializa o arquivo antes de responder. Repassar o stream do MediaFire
+    // diretamente pode causar ERR_HTTP2_PROTOCOL_ERROR no navegador.
+    const data = await upstream.response.arrayBuffer();
+    if (data.byteLength > MAX_FILE_BYTES) return responseBody("Arquivo excede o limite permitido.", 413);
+
     const headers = new Headers(corsHeaders);
     headers.set("Content-Type", upstream.response.headers.get("content-type") || "application/octet-stream");
     const contentDisposition = upstream.response.headers.get("content-disposition");
     if (contentDisposition) headers.set("Content-Disposition", contentDisposition);
-    if (length) headers.set("Content-Length", String(length));
+    headers.set("Content-Length", String(data.byteLength));
     headers.set("Cache-Control", "public, max-age=300");
 
-    return new Response(upstream.response.body, { status: 200, headers });
+    return new Response(data, { status: 200, headers });
   } catch (error) {
     console.error("mediafire-proxy", error);
     return responseBody(error instanceof Error ? error.message : "Falha ao acessar o MediaFire.", 502);

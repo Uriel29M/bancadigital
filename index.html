@@ -34,7 +34,7 @@
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜<span class="staff-activity-badge" hidden></span></button>
         <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
-        <button class="avatar" data-action="open-auth" title="Entrar ou abrir minha estante"><img class="top-avatar-img" src="https://i.pinimg.com/736x/be/17/10/be1710edaace144c17bdaf6deb2d2cc8.jpg" alt="Perfil"></button>
+        <button class="avatar" data-action="open-auth" title="Entrar ou abrir minha estante"><img class="top-avatar-img" src="assets/bancadigitalicon.png?v=1" alt="Perfil"></button>
       </div>
     </header>
 
@@ -78,12 +78,38 @@
       throw error;
     });
   </script>
-  <!-- JSZip para CBZ -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- JSZip para CBZ: tenta CDNs alternativos sem bloquear o restante da página. -->
+  <script>
+    window.jszipReady = new Promise((resolve, reject) => {
+      const sources = [
+        "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+        "https://unpkg.com/jszip@3.10.1/dist/jszip.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+      ];
+      const load = index => {
+        if (window.JSZip) return resolve(window.JSZip);
+        if (index >= sources.length) return reject(new Error("JSZip indisponível"));
+        const script = document.createElement("script");
+        script.src = sources[index];
+        script.async = true;
+        let settled = false;
+        const next = () => {
+          if (settled) return;
+          settled = true;
+          load(index + 1);
+        };
+        script.onload = () => window.JSZip ? (settled = true, resolve(window.JSZip)) : next();
+        script.onerror = next;
+        window.setTimeout(next, 8000);
+        document.head.appendChild(script);
+      };
+      load(0);
+    });
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/data.js?v=2.2.7.38"></script>
-  <script src="js/app.js?v=2.2.7.228"></script>
+  <script src="js/app.js?v=2.2.7.235"></script>
 </body>
 </html>
 
