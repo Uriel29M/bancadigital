@@ -29,6 +29,7 @@ alter table public.profiles add column if not exists is_banned boolean not null 
 alter table public.profiles add column if not exists silenced_until timestamptz;
 alter table public.profiles add column if not exists likes_public boolean not null default true;
 alter table public.profiles add column if not exists wall_description text not null default '';
+alter table public.profiles add column if not exists profile_banner_url text;
 alter table public.profiles drop constraint if exists profiles_wall_description_length_check;
 alter table public.profiles add constraint profiles_wall_description_length_check check (char_length(wall_description) <= 500);
 alter table public.profiles add column if not exists allow_mentions boolean not null default true;

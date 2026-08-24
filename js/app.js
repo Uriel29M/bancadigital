@@ -2189,7 +2189,7 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, shelf_sort_orders, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, shelf_sort_orders, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
       profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
@@ -3364,6 +3364,17 @@
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div>${["admin", "moderator", "premium"].includes(state.profile?.plan) ? `<div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label></div>` : ""}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     const profileForm = $("#profile-form", overlay);
+    const bannerField = document.createElement("div");
+    bannerField.className = "field full profile-banner-field";
+    bannerField.innerHTML = `<label>Imagem de fundo da estante</label><input name="profileBannerUrl" type="url" value="${escapeHTML(state.profile?.profile_banner_url || "")}" placeholder="https://.../banner.jpg"><small class="format-hint">Opcional. Sem link, será usada a imagem padrão da estante.</small>`;
+    $(".form-grid", profileForm).appendChild(bannerField);
+    profileForm.addEventListener("submit", async event => {
+      const bannerUrl = String(new FormData(event.currentTarget).get("profileBannerUrl") || "").trim();
+      if (bannerUrl && !/^https?:\/\//i.test(bannerUrl)) return toast("Informe um link http(s) válido para o banner.");
+      const bannerUpdate = await sb.from("profiles").update({ profile_banner_url: bannerUrl || null }).eq("id", state.session.user.id);
+      if (bannerUpdate.error) return toast(bannerUpdate.error.message);
+      state.profile = { ...state.profile, profile_banner_url: bannerUrl || null };
+    });
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $("[name=shelfLikedPublic]", overlay)?.closest("label")?.remove();
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
@@ -6972,6 +6983,27 @@
     return `<div class="profile-xp-progress ${compact ? "is-compact" : ""}"><div class="profile-xp-head"><strong>Nível ${level}</strong><span>${xp.toLocaleString("pt-BR")} / ${nextFloor.toLocaleString("pt-BR")} XP para o nível ${level + 1}</span></div><div class="profile-xp-track"><span style="width:${progress.toFixed(2)}%"></span></div>${compact ? "" : `<small>${Math.max(0, nextFloor - xp).toLocaleString("pt-BR")} XP restantes · 🔥 ${Number(profile?.daily_streak || 0)} dia(s) de sequência</small>`}</div>`;
   }
 
+  function profileBannerUrl(profile) {
+    const value = String(profile?.profile_banner_url || "").trim();
+    return /^https?:\/\//i.test(value) ? value : "/assets/estantepb.jpg";
+  }
+
+  function ensureProfileBanner(profile) {
+    const content = $(".content");
+    const header = $(".content .profile-header");
+    if (!content || !header) return null;
+    let banner = $(".profile-banner", content);
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.className = "profile-banner";
+      header.before(banner);
+      banner.appendChild(header);
+    }
+    const url = profileBannerUrl(profile).replace(/["\\)]/g, "");
+    banner.style.setProperty("--profile-banner-image", `url("${url}")`);
+    return banner;
+  }
+
   function renderShelfPage() {
     if (!state.session) return renderLoginPage();
     const snapshot = ensureShelfSnapshot();
@@ -8251,6 +8283,8 @@
       });
     }
     $(".content")?.classList.toggle("shelf-page", state.section === "shelf");
+    if (state.section === "shelf" && state.profile) ensureProfileBanner(state.profile);
+    if (state.section === "public-profile" && state.publicProfile?.profile) ensureProfileBanner(state.publicProfile.profile);
     if (state.session?.offline && $(".content") && !$(".offline-account-notice")) {
       $(".content").insertAdjacentHTML("afterbegin", `<div class="notice offline-account-notice"><b>Perfil de @${escapeHTML(state.profile?.username || "usuário")}</b> · modo offline. Apenas seus Downloads ficam disponíveis sem internet.</div>`);
     }
@@ -8296,6 +8330,11 @@
     }
     if (state.section === "shelf" && state.profile && !$(".profile-xp-progress")) {
       $(".content .profile-header")?.insertAdjacentHTML("afterend", profileXpProgressMarkup(state.profile));
+    }
+    if (state.section === "shelf" && state.profile) {
+      const shelfBanner = $(".profile-banner");
+      const shelfXp = $(".profile-xp-progress", $(".content"));
+      if (shelfBanner && shelfXp && !shelfBanner.contains(shelfXp)) shelfBanner.appendChild(shelfXp);
     }
     if (state.section === "shelf" && state.session) {
       const profileInfo = $(".content .profile-header > div:nth-child(2)");
