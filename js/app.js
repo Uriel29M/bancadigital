@@ -7266,16 +7266,20 @@
     });
     const publisherMarkup = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR")).map(([publisher, imprints]) => `
       <section class="section search-publisher">
-        <div class="section-head"><div><h2 class="section-title">${escapeHTML(publisher)}</h2><div class="section-subtitle">Editora</div></div></div>
+        <div class="search-group-summary"><div><h2 class="section-title">${escapeHTML(publisher)}</h2><div class="section-subtitle">Editora</div></div><button type="button" class="small-btn search-collapse-btn" data-search-collapse>Recolher</button></div>
+        <div data-search-collapse-content>
         ${[...imprints.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR")).map(([imprint, initials]) => `
           <section class="search-imprint">
-            <div class="section-head"><div><h3 class="section-title">${escapeHTML(imprint)}</h3><div class="section-subtitle">Selo</div></div></div>
+            <div class="search-group-summary"><div><h3 class="section-title">${escapeHTML(imprint)}</h3><div class="section-subtitle">Selo</div></div><button type="button" class="small-btn search-collapse-btn" data-search-collapse>Recolher</button></div>
+            <div data-search-collapse-content>
             ${initialOrder.filter(initial => initials.has(initial)).map(initial => `
               <section class="search-initial">
-                <h4 class="search-initial-title">${initial}</h4>
-                <div class="results-grid">${initials.get(initial).sort((a, b) => (a.seriesTitle || a.title).localeCompare(b.seriesTitle || b.title, "pt-BR")).map(item => item.seriesId ? seriesCard(item) : card(item)).join("")}</div>
+                <div class="search-initial-head"><h4 class="search-initial-title">${initial}</h4><button type="button" class="small-btn search-collapse-btn" data-search-collapse>Recolher</button></div>
+                <div data-search-collapse-content><div class="results-grid">${initials.get(initial).sort((a, b) => (a.seriesTitle || a.title).localeCompare(b.seriesTitle || b.title, "pt-BR")).map(item => item.seriesId ? seriesCard(item) : card(item)).join("")}</div></div>
               </section>`).join("")}
+            </div>
           </section>`).join("")}
+        </div>
       </section>`).join("");
     return `
       <div class="content">
@@ -9162,6 +9166,20 @@
     }));
     $("#search-input")?.addEventListener("keydown", e => {
       if (e.key === "Enter") { state.search = e.target.value; render(); $("#search-input")?.focus(); }
+    });
+    $$('[data-search-collapse]').forEach(button => {
+      const content = button.closest(".search-group-summary, .search-initial-head")?.nextElementSibling;
+      if (!content || button.dataset.searchCollapseBound) return;
+      button.dataset.searchCollapseBound = "true";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const collapsed = content.hidden;
+        content.hidden = !collapsed;
+        button.textContent = collapsed ? "Recolher" : "Expandir";
+        button.setAttribute("aria-expanded", collapsed ? "true" : "false");
+      });
+      button.setAttribute("aria-expanded", "true");
     });
     $("#auth-form")?.addEventListener("submit", async event => {
       event.preventDefault();

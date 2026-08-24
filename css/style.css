@@ -982,10 +982,14 @@ main { min-height: calc(100vh - 150px); }
 .collection-filter input { flex: 1; min-width: 160px; }
 .collection-results-meta { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
 .search-publisher { margin-top: 28px; }
+.search-group-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; }
+.search-group-summary > div { min-width: 0; }
+.search-collapse-btn { flex: 0 0 auto; white-space: nowrap; }
 .search-imprint { margin: 0 0 28px 18px; }
-.search-imprint > .section-head { margin-bottom: 14px; }
+.search-imprint > .search-group-summary { margin-bottom: 14px; }
 .search-initial { margin: 0 0 24px 18px; }
-.search-initial-title { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+.search-initial-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.search-initial-title { margin: 0; color: var(--muted); font-size: 15px; }
 .empty {
   padding: 45px; text-align: center; color: var(--muted);
   border: 1px dashed var(--line); border-radius: 12px;
