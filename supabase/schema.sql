@@ -420,10 +420,10 @@ create table if not exists public.comic_download_counts (
 
 create table if not exists public.homepage_settings (
   id boolean primary key default true check (id),
-  section_order jsonb not null default '["continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb,
+  section_order jsonb not null default '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb,
   updated_at timestamptz not null default now()
 );
-alter table public.homepage_settings add column if not exists section_order jsonb not null default '["continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb;
+alter table public.homepage_settings add column if not exists section_order jsonb not null default '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb;
 insert into public.homepage_settings (id) values (true) on conflict (id) do nothing;
 create index if not exists comic_download_counts_downloads_idx on public.comic_download_counts(downloads desc);
 
@@ -797,7 +797,7 @@ create or replace function public.update_homepage_section_order(p_order jsonb)
 returns void language plpgsql security definer set search_path = public
 as $$
 declare
-  v_required jsonb := '["continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb;
+  v_required jsonb := '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb;
 begin
   if not public.is_admin() then raise exception 'Apenas administradores podem reorganizar a página inicial'; end if;
   if jsonb_typeof(p_order) <> 'array' or jsonb_array_length(p_order) <> jsonb_array_length(v_required) then

@@ -271,6 +271,7 @@
     homeHeroId: null,
     homeRandomIds: [],
     homeRandomPublisher: null,
+    homeRandomCharacter: null,
     achievements: [],
     followerCount: 0,
     followingCount: 0,
@@ -867,7 +868,10 @@
     } else {
       const previousSection = state.section;
       state.section = section;
-      if (section === "home" && previousSection !== "home") state.homeRandomPublisher = null;
+      if (section === "home" && previousSection !== "home") {
+        state.homeRandomPublisher = null;
+        state.homeRandomCharacter = null;
+      }
       state.collectionId = params.get("colecao") || null;
       state.rankingCategory = section === "ranking" ? params.get("categoria") || null : null;
       const factionRouteValue = section === "factions" ? params.get("faccao") || null : null;
@@ -928,7 +932,7 @@
   }
 
   const HOME_SECTION_ORDER = [
-    "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
+    "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
     "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"
   ];
 
@@ -3515,6 +3519,19 @@
       if (options.localObjectUrl) URL.revokeObjectURL(options.localObjectUrl);
     };
     activeReaderCleanup = cleanupReader;
+    // Preserve the temporary Blob URL when the reader is re-opened for a
+    // layout change. This is essential for files opened from offline storage.
+    overlay._reopenReader = (nextOptions = {}) => {
+      const localObjectUrl = options.localObjectUrl;
+      options.localObjectUrl = null;
+      activeReaderCleanup?.();
+      openReader(item, {
+        ...nextOptions,
+        localObjectUrl,
+        routeSync: true,
+        grayscale: readerGrayscale
+      });
+    };
     closeReaderButton.onclick = () => {
       cleanupReader();
       setSection(state.session?.offline ? "downloads" : "home");
@@ -3618,8 +3635,7 @@
 
         // If in double-page mode, re-render to apply the change
         if (state.readingMode === "double-page") {
-          overlay.remove();
-          openReader(item, { skipCover });
+          overlay._reopenReader?.({ skipCover });
         }
       };
     }
@@ -3911,9 +3927,7 @@
         modeSelect.disabled = false;
         modeSelect.addEventListener('change', (e) => {
           setReadingMode(e.target.value);
-          // Re-open the reader with the new mode
-          overlay.remove(); // Close current reader
-          openReader(item, { skipCover }); // Open again with new mode, using the passed item
+          overlay._reopenReader?.({ skipCover });
         });
       }
     } catch (err) {
@@ -4290,10 +4304,7 @@
         modeSelect.disabled = false;
         modeSelect.addEventListener('change', (e) => {
           setReadingMode(e.target.value);
-      overlay._cbzDownloadController?.abort();
-      readerReadyObserver?.disconnect();
-      overlay.remove();
-          openReader(item, { skipCover });
+          overlay._reopenReader?.({ skipCover });
         });
       }
     } catch (err) {
@@ -4980,8 +4991,7 @@
         modeSelect.disabled = false;
         modeSelect.addEventListener('change', (e) => {
           setReadingMode(e.target.value);
-          overlay.remove();
-          openReader(item, { skipCover });
+          overlay._reopenReader?.({ skipCover });
         });
       }
 
@@ -5837,6 +5847,78 @@
       </section>`;
   }
 
+  function recommendationHash(value = "") {
+    let hash = 2166136261;
+    for (const character of String(value)) {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+  }
+
+  function recommendationPeriodKeys(now = new Date()) {
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const date = new Date(year, now.getMonth(), now.getDate());
+    const firstDay = new Date(year, 0, 1);
+    const week = Math.ceil((((date - firstDay) / 86400000) + firstDay.getDay() + 1) / 7);
+    return { day: `${year}-${month}-${day}`, week: `${year}-semana-${week}`, month: `${year}-${month}` };
+  }
+
+  function globalRecommendation(items, periodKey, groupSeries = false) {
+    const groups = new Map();
+    items.filter(item => !item.local && (groupSeries ? item.seriesId : item.id)).forEach(item => {
+      const key = groupSeries ? item.seriesId : item.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    return [...groups.entries()].map(([key, entries]) => {
+      const popularity = entries.reduce((total, item) => total + Math.log1p(Number(item.clicks) || 0), 0);
+      const featured = entries.some(item => item.featured) ? 0.35 : 0;
+      return { item: entries[0], score: popularity * 0.08 + featured + recommendationHash(`${periodKey}:${key}`), key };
+    }).sort((a, b) => b.score - a.score || String(a.key).localeCompare(String(b.key), "pt-BR"))[0]?.item || null;
+  }
+
+  function globalRecommendationCard(item, label, description, accent, isSeries = false) {
+    if (!item) return "";
+    const series = isSeries ? seriesDefinitionFor(item) : null;
+    const title = isSeries ? (series.name || item.seriesTitle || item.title) : itemDisplayTitle(item);
+    const editions = isSeries ? seriesEditions(item).length : 0;
+    const meta = isSeries ? `${editions || 1} ${editions === 1 ? "edição" : "edições"}` : [item.issue ? `Edição ${item.issue}` : "Edição única", item.year].filter(Boolean).join(" · ");
+    const action = isSeries ? `data-view-series="${escapeHTML(item.seriesId)}"` : `data-open="${escapeHTML(item.id)}" data-open-direct="true"`;
+    const cover = isSeries ? seriesCoverFor(item) : coverFor(item, "card");
+    return `<article class="global-recommendation-card global-recommendation-${accent}" ${action} tabindex="0"><div class="global-recommendation-glow"></div><div class="global-recommendation-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="global-recommendation-copy"><div class="global-recommendation-label"><span>${escapeHTML(label)}</span><i></i></div><h3>${escapeHTML(title || "Recomendação da banca")}</h3><p>${escapeHTML(description)}</p><div class="global-recommendation-meta">${escapeHTML(meta)}</div><span class="global-recommendation-cta">${isSeries ? "Explorar série" : "Ler edição"} <b>→</b></span></div></article>`;
+  }
+
+  function globalRecommendationsSection(lib) {
+    const periods = recommendationPeriodKeys();
+    const day = globalRecommendation(lib, periods.day);
+    const week = globalRecommendation(lib, periods.week);
+    const month = globalRecommendation(lib, periods.month, true);
+    if (!day && !week && !month) return "";
+    return `<section class="section global-recommendations-section"><div class="global-recommendations-heading"><div><div class="eyebrow">Curadoria global</div><h2 class="section-title">Escolhas da banca</h2><div class="section-subtitle">Uma seleção renovada para descobrir algo especial em cada visita.</div></div><span class="global-recommendations-mark">✦</span></div><div class="global-recommendations-grid">${globalRecommendationCard(day, "Recomendação do dia", "Uma edição para abrir agora e deixar a leitura acontecer.", "day")}${globalRecommendationCard(week, "Recomendação da semana", "A edição que merece um espaço na sua agenda desta semana.", "week")}${globalRecommendationCard(month, "Série do mês", "Uma série para acompanhar com calma, edição por edição.", "month", true)}</div></section>`;
+  }
+
+  function characterBannerSection(lib) {
+    const groups = new Map();
+    lib.filter(item => String(item.character || "").trim() && !item.local).forEach(item => {
+      const character = String(item.character).trim();
+      if (!groups.has(character)) groups.set(character, []);
+      groups.get(character).push(item);
+    });
+    const characters = [...groups.keys()];
+    if (!characters.length) return "";
+    if (!state.homeRandomCharacter || !groups.has(state.homeRandomCharacter)) {
+      state.homeRandomCharacter = weightedRandom(characters);
+    }
+    const character = state.homeRandomCharacter;
+    const editions = groups.get(character) || [];
+    const representative = editions.slice().sort((a, b) => Number(b.clicks) - Number(a.clicks))[0] || editions[0];
+    const adminHeading = state.profile?.plan === "admin" ? `<div class="section-head character-banner-admin-heading"><div><h2 class="section-title">Personagem em destaque</h2><div class="section-subtitle">Banner editorial da página inicial.</div></div><div data-home-section-controls-slot></div></div>` : "";
+    return `<section class="section character-banner-home-section">${adminHeading}<div class="character-banner-section" data-entity-kind="character" data-entity-value="${escapeHTML(character)}" role="link" tabindex="0" aria-label="Ver todas as edições de ${escapeHTML(character)}"><div class="character-banner-bg" style="background-image:url('${escapeHTML(coverFor(representative, "hero"))}')"></div><div class="character-banner-overlay"></div><div class="character-banner-content"><div class="eyebrow">Personagem em destaque</div><h2>${escapeHTML(character)}</h2><p>${editions.length} ${editions.length === 1 ? "edição disponível" : "edições disponíveis"} para explorar.</p><span class="character-banner-cta">Ver todas as edições <b>→</b></span></div><div class="character-banner-spark">✦</div></div></section>`;
+  }
+
   function renderHome() {
     const lib = state.db.library;
     let heroItem = lib.find(item => item.id === state.homeHeroId);
@@ -5849,7 +5931,7 @@
       const aCount = state.comicMonthlyReadCountsLoaded ? monthlyReadCount(a) : Number(a.clicks) || 0;
       const bCount = state.comicMonthlyReadCountsLoaded ? monthlyReadCount(b) : Number(b.clicks) || 0;
       return bCount - aCount || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR");
-    }).slice(0, 8));
+    }).slice(0, 10));
     const recentlyAdded = lib
       .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
       .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
@@ -5899,9 +5981,9 @@
       .sort((a, b) => Number(b.downloadCount) - Number(a.downloadCount) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
       .slice(0, 20));
     const mostDownloadedRail = mostDownloaded.length ? rail("Mais baixados", mostDownloaded, "As edições mais baixadas neste catálogo.", "", true) : "";
-    const mostReadCoverItems = uniqueCatalogItems([...lib]
+    const mostReadCoverItems = [...lib]
       .sort((a, b) => Number(b.clicks) - Number(a.clicks) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
-      .slice(0, 21));
+      .slice(0, 10);
     const mostReadCoverGrid = mostReadCoverItems.length ? `<section class="section most-read-cover-section">${state.profile?.plan === "admin" ? '<div class="section-head"><h2 class="section-title">Mais lidos</h2></div>' : ""}<div class="most-read-cover-grid">${mostReadCoverItems.map(item => `<button type="button" class="most-read-cover" data-open="${escapeHTML(item.id)}" data-open-direct="true" aria-label="Abrir ${escapeHTML(itemDisplayTitle(item))}" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></button>`).join("")}</div></section>` : "";
 
     const seriesEntries = new Map();
@@ -5929,6 +6011,8 @@
 
     const featuredCollectionsRail = state.featuredComicCollections?.length ? `<section class="section featured-collections-rail"><div class="section-head"><div><h2 class="section-title">Coleções de quadrinhos em destaque</h2><div class="section-subtitle">Coleções públicas escolhidas pela equipe.</div></div></div><div class="public-collections-grid">${state.featuredComicCollections.map(collection => publicCollectionCard(collection)).join("")}</div></section>` : "";
     const homeSections = {
+      recommendations: globalRecommendationsSection(lib),
+      "character-banner": characterBannerSection(lib),
       continue: rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false),
       recent: rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false),
       "new-series": recentlyAddedSeriesRail,
@@ -5968,7 +6052,10 @@
 
   function decorateHomepageSection(key, markup, index, total) {
     if (!markup || state.profile?.plan !== "admin") return markup;
-    const controls = `<div class="homepage-section-order-controls"><button type="button" class="small-btn" data-home-section-move="up" data-home-section-key="${key}" ${index === 0 ? "disabled" : ""} title="Mover seção para cima" aria-label="Mover seção para cima">↑</button><button type="button" class="small-btn" data-home-section-move="down" data-home-section-key="${key}" ${index === total - 1 ? "disabled" : ""} title="Mover seção para baixo" aria-label="Mover seção para baixo">↓</button></div>`;
+    const movableKeys = state.homeVisibleSectionKeys;
+    const movableIndex = movableKeys.indexOf(key);
+    const controls = `<div class="homepage-section-order-controls"><button type="button" class="small-btn" data-home-section-move="up" data-home-section-key="${escapeHTML(key)}" ${movableIndex <= 0 ? "disabled" : ""} title="Mover seção para cima" aria-label="Mover seção para cima">↑</button><button type="button" class="small-btn" data-home-section-move="down" data-home-section-key="${escapeHTML(key)}" ${movableIndex < 0 || movableIndex === movableKeys.length - 1 ? "disabled" : ""} title="Mover seção para baixo" aria-label="Mover seção para baixo">↓</button></div>`;
+    if (markup.includes("data-home-section-controls-slot")) return markup.replace('<div data-home-section-controls-slot></div>', controls);
     const headStart = markup.indexOf('<div class="section-head">');
     if (headStart >= 0) {
       let depth = 0;
@@ -5994,18 +6081,23 @@
   async function moveHomepageSection(key, direction) {
     if (!sb || state.profile?.plan !== "admin") return;
     const order = normalizeHomeSectionOrder(state.homeSectionOrder);
-    const visibleIndex = state.homeVisibleSectionKeys.indexOf(key);
+    const movableKeys = state.homeVisibleSectionKeys;
+    const visibleIndex = movableKeys.indexOf(key);
     const visibleTarget = visibleIndex + direction;
-    if (visibleIndex < 0 || visibleTarget < 0 || visibleTarget >= state.homeVisibleSectionKeys.length) return;
-    const targetKey = state.homeVisibleSectionKeys[visibleTarget];
+    if (visibleIndex < 0 || visibleTarget < 0 || visibleTarget >= movableKeys.length) return;
+    const targetKey = movableKeys[visibleTarget];
     const index = order.indexOf(key);
     const target = order.indexOf(targetKey);
     if (index < 0 || target < 0) return;
     [order[index], order[target]] = [order[target], order[index]];
-    const result = await sb.rpc("update_homepage_section_order", { p_order: order });
-    if (result.error) return toast(result.error.message || "Não foi possível reorganizar as seções.");
+    const persistedOrder = order;
     state.homeSectionOrder = order;
     render();
+    const result = await sb.rpc("update_homepage_section_order", { p_order: persistedOrder });
+    if (result.error) {
+      console.error("Não foi possível persistir a ordem da home:", result.error);
+      return toast(result.error.message || "A ordem foi aplicada nesta sessão, mas não pôde ser salva.");
+    }
   }
 
   function renderCollectionsPreview() {
@@ -6046,7 +6138,11 @@
     const wikiText = filter.kind === "year" ? `Todos os quadrinhos publicados em ${filter.value}.` : `${filter.value} aparece em ${items.length} edição(ões) do catálogo da Banca Digital.`;
     const hideWiki = ["Série Mensal", "Recentes", "Vários autores"].some(value => value.toLowerCase() === String(filter.value || "").trim().toLowerCase());
     const wikiMarkup = filter.kind === "year" || hideWiki ? "" : `<section class="entity-wiki"><div class="eyebrow">Wiki rápida</div><p>${escapeHTML(wikiText)}</p><a class="small-btn" href="${escapeHTML(wikiSearch)}" target="_blank" rel="noopener">Pesquisar na Wikipédia</a></section>`;
-    if (filter.kind !== "publisher") return `<div class="content"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · ${escapeHTML(title)}</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões)</div></div><button class="small-btn" data-section="home">Voltar ao início</button></div>${wikiMarkup}<section class="section"><div class="results-grid">${uniqueCatalogItems(items).map(item => card(item)).join("") || `<div class="empty">Nenhuma edição encontrada.</div>`}</div></section></div>`;
+    if (filter.kind !== "publisher") {
+      const entityCards = uniqueCatalogItems(items).map(item => filter.kind === "character" && item.seriesId ? seriesCard(item) : card(item)).join("");
+      const countLabel = filter.kind === "character" ? `${items.filter(item => item.seriesId).length} série(s) · ${items.length} edição(ões)` : `${items.length} edição(ões)`;
+      return `<div class="content"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · ${escapeHTML(title)}</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${countLabel}</div></div><button class="small-btn" data-section="home">Voltar ao início</button></div>${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || `<div class="empty">Nenhuma edição encontrada.</div>`}</div></section></div>`;
+    }
     const setting = state.publisherSettings.get(publisherKey(filter.value));
     const canManage = ["moderator", "admin"].includes(state.profile?.plan);
     const grouped = new Map();
@@ -8346,6 +8442,11 @@
     }
     $$('[data-entity-kind]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
+      openEntityPage(el.dataset.entityKind, el.dataset.entityValue);
+    }));
+    $$('[data-entity-kind][role="link"]').forEach(el => el.addEventListener("keydown", event => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
       openEntityPage(el.dataset.entityKind, el.dataset.entityValue);
     }));
     $$('[data-ranking-period]').forEach(el => el.addEventListener("click", () => {
