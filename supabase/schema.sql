@@ -403,6 +403,30 @@ create table if not exists public.comic_read_counts (
 );
 create index if not exists comic_read_counts_clicks_idx on public.comic_read_counts(clicks desc);
 
+create table if not exists public.comic_monthly_read_counts (
+  item_id text not null,
+  month_start date not null,
+  clicks bigint not null default 0 check (clicks >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (item_id, month_start)
+);
+create index if not exists comic_monthly_read_counts_idx on public.comic_monthly_read_counts(month_start, clicks desc);
+
+create table if not exists public.comic_download_counts (
+  item_id text primary key,
+  downloads bigint not null default 0 check (downloads >= 0),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.homepage_settings (
+  id boolean primary key default true check (id),
+  section_order jsonb not null default '["continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.homepage_settings add column if not exists section_order jsonb not null default '["continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb;
+insert into public.homepage_settings (id) values (true) on conflict (id) do nothing;
+create index if not exists comic_download_counts_downloads_idx on public.comic_download_counts(downloads desc);
+
 create table if not exists public.shelf_collection_likes (
   owner_id uuid not null references public.profiles(id) on delete cascade,
   collection_id text not null,
@@ -769,6 +793,24 @@ create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public
 as $$ select exists (select 1 from public.profiles where id = auth.uid() and plan = 'admin') $$;
 
+create or replace function public.update_homepage_section_order(p_order jsonb)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_required jsonb := '["continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"]'::jsonb;
+begin
+  if not public.is_admin() then raise exception 'Apenas administradores podem reorganizar a página inicial'; end if;
+  if jsonb_typeof(p_order) <> 'array' or jsonb_array_length(p_order) <> jsonb_array_length(v_required) then
+    raise exception 'A ordem da página inicial é inválida';
+  end if;
+  if not (p_order @> v_required) or (select count(*) from jsonb_array_elements_text(p_order)) <> (select count(distinct value) from jsonb_array_elements_text(p_order)) then
+    raise exception 'A ordem da página inicial é inválida';
+  end if;
+  update public.homepage_settings set section_order = p_order, updated_at = now() where id = true;
+end;
+$$;
+grant execute on function public.update_homepage_section_order(jsonb) to authenticated;
+
 create or replace function public.is_moderator()
 returns boolean language sql stable security definer set search_path = public
 as $$ select exists (select 1 from public.profiles where id = auth.uid() and plan in ('moderator', 'admin')) $$;
@@ -829,6 +871,7 @@ grant execute on function public.get_login_email(text) to anon, authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.publisher_settings enable row level security;
+alter table public.homepage_settings enable row level security;
 alter table public.blog_posts enable row level security;
 alter table public.blog_likes enable row level security;
 alter table public.blog_comments enable row level security;
@@ -847,6 +890,8 @@ alter table public.user_series_cover_choices enable row level security;
 alter table public.comic_likes enable row level security;
 alter table public.reading_progress enable row level security;
 alter table public.comic_read_counts enable row level security;
+alter table public.comic_monthly_read_counts enable row level security;
+alter table public.comic_download_counts enable row level security;
 alter table public.shelf_collections enable row level security;
 alter table public.shelf_collection_likes enable row level security;
 alter table public.comments enable row level security;
@@ -860,6 +905,7 @@ alter table public.profile_xp_events enable row level security;
 drop policy if exists "profiles are public" on public.profiles;
 drop policy if exists "publisher settings are public" on public.publisher_settings;
 drop policy if exists "moderators manage publisher settings" on public.publisher_settings;
+drop policy if exists "homepage settings are public" on public.homepage_settings;
 drop policy if exists "published blogs are public" on public.blog_posts;
 drop policy if exists "authors manage own blogs" on public.blog_posts;
 drop policy if exists "moderators manage blogs" on public.blog_posts;
@@ -901,6 +947,8 @@ drop policy if exists "users manage own comic likes" on public.comic_likes;
 drop policy if exists "reading progress is public" on public.reading_progress;
 drop policy if exists "users manage own reading progress" on public.reading_progress;
 drop policy if exists "comic read counts are public" on public.comic_read_counts;
+drop policy if exists "comic monthly read counts are public" on public.comic_monthly_read_counts;
+drop policy if exists "comic download counts are public" on public.comic_download_counts;
 drop policy if exists "public collections are visible" on public.shelf_collections;
 drop policy if exists "owners manage collections" on public.shelf_collections;
 drop policy if exists "moderators feature collections" on public.shelf_collections;
@@ -925,6 +973,7 @@ drop policy if exists "admins award achievements" on public.user_achievements;
 create policy "profiles are public" on public.profiles for select using (not profile_hidden or auth.uid() = id or public.is_moderator());
 create policy "publisher settings are public" on public.publisher_settings for select using (true);
 create policy "moderators manage publisher settings" on public.publisher_settings for all using (public.is_moderator()) with check (public.is_moderator());
+create policy "homepage settings are public" on public.homepage_settings for select using (true);
 create policy "published blogs are public" on public.blog_posts for select using (status = 'published' or auth.uid() = author_id or public.is_moderator());
 create policy "authors manage own blogs" on public.blog_posts for all using (auth.uid() = author_id) with check (auth.uid() = author_id and is_featured = false);
 create policy "moderators manage blogs" on public.blog_posts for all using (public.is_moderator()) with check (public.is_moderator());
@@ -984,6 +1033,8 @@ create policy "users manage own comic likes" on public.comic_likes for all using
 create policy "reading progress is public" on public.reading_progress for select using (true);
 create policy "users manage own reading progress" on public.reading_progress for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "comic read counts are public" on public.comic_read_counts for select using (true);
+create policy "comic monthly read counts are public" on public.comic_monthly_read_counts for select using (true);
+create policy "comic download counts are public" on public.comic_download_counts for select using (true);
 
 create or replace function public.increment_comic_read(p_item_id text)
 returns bigint
@@ -993,6 +1044,7 @@ set search_path = public
 as $$
 declare
   v_clicks bigint;
+  v_month_start date := date_trunc('month', now())::date;
 begin
   if p_item_id is null or length(trim(p_item_id)) = 0 or length(p_item_id) > 200 then
     raise exception 'Invalid comic item id';
@@ -1005,10 +1057,41 @@ begin
         updated_at = now()
   returning clicks into v_clicks;
 
+  insert into public.comic_monthly_read_counts (item_id, month_start, clicks, updated_at)
+  values (p_item_id, v_month_start, 1, now())
+  on conflict (item_id, month_start) do update
+    set clicks = public.comic_monthly_read_counts.clicks + 1,
+        updated_at = now();
+
   return v_clicks;
 end;
 $$;
 grant execute on function public.increment_comic_read(text) to anon, authenticated;
+
+create or replace function public.increment_comic_download(p_item_id text)
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_downloads bigint;
+begin
+  if p_item_id is null or length(trim(p_item_id)) = 0 or length(p_item_id) > 200 then
+    raise exception 'Invalid comic item id';
+  end if;
+
+  insert into public.comic_download_counts (item_id, downloads, updated_at)
+  values (p_item_id, 1, now())
+  on conflict (item_id) do update
+    set downloads = public.comic_download_counts.downloads + 1,
+        updated_at = now()
+  returning downloads into v_downloads;
+
+  return v_downloads;
+end;
+$$;
+grant execute on function public.increment_comic_download(text) to anon, authenticated;
 create policy "public collections are visible" on public.shelf_collections for select using (is_public or auth.uid() = owner_id);
 create policy "owners manage collections" on public.shelf_collections for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 create policy "moderators feature collections" on public.shelf_collections for update using (public.is_moderator()) with check (public.is_moderator());

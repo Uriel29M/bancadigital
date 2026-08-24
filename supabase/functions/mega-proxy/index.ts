@@ -4,10 +4,11 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, range",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Expose-Headers": "Content-Range, Content-Length, Content-Type, Content-Disposition",
+  "Access-Control-Expose-Headers": "Content-Range, Content-Length, Content-Type, Content-Disposition, Accept-Ranges",
 };
 
 const MAX_FILE_BYTES = 512 * 1024 * 1024;
+const MAX_BUFFERED_RANGE_BYTES = 32 * 1024 * 1024;
 
 function errorResponse(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
@@ -95,19 +96,34 @@ async function downloadMegaBlock(file: any, start: number, end: number): Promise
   throw lastError instanceof Error ? lastError : new Error("Falha ao baixar um bloco do Mega.");
 }
 
-function chunkedMegaStream(file: any, size: number): ReadableStream<Uint8Array> {
+async function downloadMegaRange(file: any, start: number, end: number): Promise<Uint8Array> {
+  const total = end - start + 1;
+  const result = new Uint8Array(total);
+  let position = start;
+  let offset = 0;
+  while (position <= end) {
+    const chunkEnd = Math.min(end, position + 1 * 1024 * 1024 - 1);
+    const chunk = await downloadMegaBlock(file, position, chunkEnd);
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+    position += chunk.byteLength;
+  }
+  return result;
+}
+
+function chunkedMegaRangeStream(file: any, start: number, end: number): ReadableStream<Uint8Array> {
   const chunkSize = 1 * 1024 * 1024;
-  let position = 0;
+  let position = start;
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      if (position >= size) {
+      if (position > end) {
         controller.close();
         return;
       }
-      const start = position;
-      const end = Math.min(size - 1, start + chunkSize - 1);
+      const chunkStart = position;
+      const chunkEnd = Math.min(end, chunkStart + chunkSize - 1);
       try {
-        const chunk = await downloadMegaBlock(file, start, end);
+        const chunk = await downloadMegaBlock(file, chunkStart, chunkEnd);
         position += chunk.byteLength;
         controller.enqueue(chunk);
       } catch (error) {
@@ -115,9 +131,13 @@ function chunkedMegaStream(file: any, size: number): ReadableStream<Uint8Array> 
       }
     },
     cancel() {
-      position = size;
+      position = end + 1;
     },
   });
+}
+
+function chunkedMegaStream(file: any, size: number): ReadableStream<Uint8Array> {
+  return chunkedMegaRangeStream(file, 0, size - 1);
 }
 
 Deno.serve(async request => {
@@ -140,6 +160,7 @@ Deno.serve(async request => {
     const range = request.headers.get("range")?.match(/^bytes=(\d+)-(\d*)$/i);
     let responseStatus = 200;
     let stream: ReadableStream<Uint8Array>;
+    let body: Uint8Array | null = null;
     let responseLength = size;
     let contentRange = "";
     if (range) {
@@ -150,26 +171,23 @@ Deno.serve(async request => {
       responseStatus = 206;
       responseLength = end - start + 1;
       contentRange = `bytes ${start}-${end}/${size}`;
-      stream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          try {
-            controller.enqueue(await downloadMegaBlock(file, start, end));
-            controller.close();
-          } catch (error) {
-            controller.error(error);
-          }
-        },
-      });
+      if (responseLength <= MAX_BUFFERED_RANGE_BYTES) {
+        body = await downloadMegaRange(file, start, end);
+      } else {
+        stream = chunkedMegaRangeStream(file, start, end);
+      }
     } else {
       stream = chunkedMegaStream(file, size);
     }
     const headers = new Headers(corsHeaders);
     headers.set("Content-Type", "application/octet-stream");
+    headers.set("Accept-Ranges", "bytes");
     headers.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name || "arquivo-mega")}`);
     headers.set("Content-Length", String(responseLength));
     if (contentRange) headers.set("Content-Range", contentRange);
+    headers.set("Vary", "Range");
     headers.set("Cache-Control", "public, max-age=300");
-    return new Response(requestedMethod === "HEAD" ? null : stream, { status: responseStatus, headers });
+    return new Response(requestedMethod === "HEAD" ? null : (body || stream), { status: responseStatus, headers });
   } catch (error) {
     console.error("mega-proxy", error);
     return errorResponse(error instanceof Error ? error.message : "Falha ao acessar o Mega.", 502);

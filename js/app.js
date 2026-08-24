@@ -263,9 +263,14 @@
     comicLikeIds: new Set(),
     comicLikeAddedAt: new Map(),
     comicLikeCounts: new Map(),
+    comicMonthlyReadCounts: new Map(),
+    comicMonthlyReadCountsLoaded: false,
+    homeSectionOrder: null,
+    homeVisibleSectionKeys: [],
     achievementChecks: new Set(),
     homeHeroId: null,
     homeRandomIds: [],
+    homeRandomPublisher: null,
     achievements: [],
     followerCount: 0,
     followingCount: 0,
@@ -517,6 +522,7 @@
         if (coverUrl && window.caches) delete current.snapshot.coverUrl;
         current.preparing = false;
         current.status = "completed"; current.progress = 100; current.completedAt = new Date().toISOString(); state.downloads.set(id, current);
+        await recordComicDownload(item);
         updateDownloadButtons(id);
         refreshSeriesDownloadButton(item.seriesId);
       }
@@ -859,7 +865,9 @@
       render();
       openReader(item, { routeSync: true });
     } else {
+      const previousSection = state.section;
       state.section = section;
+      if (section === "home" && previousSection !== "home") state.homeRandomPublisher = null;
       state.collectionId = params.get("colecao") || null;
       state.rankingCategory = section === "ranking" ? params.get("categoria") || null : null;
       const factionRouteValue = section === "factions" ? params.get("faccao") || null : null;
@@ -895,10 +903,71 @@
     });
   }
 
+  async function loadComicDownloadCounts() {
+    if (!sb || navigator.onLine === false) return;
+    const result = await sb.from("comic_download_counts").select("item_id, downloads");
+    if (result.error) {
+      console.warn("Não foi possível carregar as quantidades de download:", result.error.message);
+      return;
+    }
+    const counts = new Map((result.data || []).map(row => [String(row.item_id), Number(row.downloads) || 0]));
+    state.db.library.forEach(item => { item.downloadCount = counts.get(String(item.id)) || 0; });
+  }
+
+  async function loadComicMonthlyReadCounts() {
+    if (!sb || navigator.onLine === false) return;
+    const now = new Date();
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const result = await sb.from("comic_monthly_read_counts").select("item_id, clicks").eq("month_start", monthStart);
+    if (result.error) {
+      console.warn("Não foi possível carregar as leituras do mês:", result.error.message);
+      return;
+    }
+    state.comicMonthlyReadCounts = new Map((result.data || []).map(row => [String(row.item_id), Number(row.clicks) || 0]));
+    state.comicMonthlyReadCountsLoaded = true;
+  }
+
+  const HOME_SECTION_ORDER = [
+    "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
+    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"
+  ];
+
+  function normalizeHomeSectionOrder(value) {
+    const saved = Array.isArray(value) ? value.filter(key => HOME_SECTION_ORDER.includes(key)) : [];
+    const unique = [...new Set(saved)];
+    return [...unique, ...HOME_SECTION_ORDER.filter(key => !unique.includes(key))];
+  }
+
+  async function loadHomepageSettings() {
+    if (!sb || navigator.onLine === false) return;
+    const result = await sb.from("homepage_settings").select("section_order").eq("id", true).maybeSingle();
+    if (result.error) {
+      console.warn("Não foi possível carregar a ordem da página inicial:", result.error.message);
+      return;
+    }
+    state.homeSectionOrder = normalizeHomeSectionOrder(result.data?.section_order);
+  }
+
+  async function recordComicDownload(item) {
+    if (!item || item.local || !item.id) return;
+    if (!sb) {
+      item.downloadCount = (Number(item.downloadCount) || 0) + 1;
+      save();
+      return;
+    }
+    const result = await sb.rpc("increment_comic_download", { p_item_id: String(item.id) });
+    if (result.error) {
+      console.warn("Não foi possível registrar o download:", result.error.message);
+      return;
+    }
+    item.downloadCount = Number(result.data) || 0;
+  }
+
   async function recordComicRead(item) {
     if (!item || item.local || !item.id) return;
     if (!sb) {
       item.clicks = (Number(item.clicks) || 0) + 1;
+      state.comicMonthlyReadCounts.set(String(item.id), (state.comicMonthlyReadCounts.get(String(item.id)) || 0) + 1);
       save();
       return;
     }
@@ -908,6 +977,8 @@
       return;
     }
     item.clicks = Number(result.data) || 0;
+    const itemKey = String(item.id);
+    state.comicMonthlyReadCounts.set(itemKey, (state.comicMonthlyReadCounts.get(itemKey) || 0) + 1);
     if (state.session?.user?.id) await sb.rpc("grant_profile_xp", { p_event_type: "read", p_event_key: `read:${item.id}` });
     $$('[data-open]').filter(element => element.dataset.open === item.id).forEach(cardElement => {
       const stats = $(".card-stats", cardElement);
@@ -2879,6 +2950,26 @@
     return uniqueCatalogItems(ranked.map(entry => entry.item)).slice(0, 6);
   }
 
+  function readArtistSeriesRecommendation(lib) {
+    const completedReads = [...(state.readingProgress || new Map()).entries()]
+      .filter(([, progress]) => progress?.completed)
+      .sort(([, a], [, b]) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
+      .map(([itemId]) => lib.find(item => String(item.id) === String(itemId)))
+      .filter(Boolean);
+    const artistValues = value => String(value || "").toLowerCase()
+      .split(/\s*(?:\/|&|\be\b)\s*/i)
+      .map(part => seriesKey(part))
+      .filter(Boolean);
+    for (const readItem of completedReads) {
+      const artists = new Set(artistValues(readItem.author));
+      if (!artists.size) continue;
+      const matches = lib.filter(item => item.seriesId && item.seriesId !== readItem.seriesId && artistValues(item.author).some(artist => artists.has(artist)));
+      const seriesItems = uniqueCatalogItems(matches).slice(0, 20);
+      if (seriesItems.length) return { readItem, seriesItems };
+    }
+    return null;
+  }
+
   function openItem(item) {
     if (!item) return;
     if (!item.seriesId) return openReader(item);
@@ -3858,7 +3949,11 @@
   }
 
   async function showCBZProgressivePreview(item, url, body, controls, skipCover, resumePage) {
-    if (item.local || !/^https?:\/\//i.test(url) || !window.zipJsReady) return false;
+    // A resposta sem fim do mega-proxy pode ser interrompida pelo HTTP/3
+    // depois de retornar 200. O leitor por Range do zip.js não consegue
+    // recuperar esse erro; o download por faixas abaixo consegue.
+    const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
+    if (item.local || isMega || !/^https?:\/\//i.test(url) || !window.zipJsReady) return false;
     try {
       const zipjs = await window.zipJsReady;
       if (!zipjs?.ZipReader || !zipjs?.HttpReader || !zipjs?.BlobWriter) return false;
@@ -3882,7 +3977,8 @@
   }
 
   async function renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
-    if (item.local || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
+    const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
+    if (item.local || isMega || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
     let reader;
     try {
       const zipjs = await window.zipJsReady;
@@ -3972,34 +4068,15 @@
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
       if (buffer) showCbzProgress("Arquivo CBZ carregado. Preparando p\u00e1ginas...", 100, "Abertura conclu\u00edda");
       if (!buffer) {
-      const response = await fetch(proxiedFileUrl(url), {
-        method: "GET",
-        mode: "cors",
-        credentials: "omit",
-        cache: "default",
-        priority: "high",
-        signal: downloadController.signal
-      });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const contentLength = Number(response.headers.get("content-length")) || 0;
-      if (response.body) {
-        const reader = response.body.getReader();
-        const chunks = [];
-        let received = 0;
-        while (true) {
-          const part = await reader.read();
-          if (part.done) break;
-          chunks.push(part.value);
-          received += part.value.byteLength;
-          showCbzProgress("Abrindo arquivo CBZ…", Math.min(99, Math.round(received / contentLength * 100)), `${(received / 1048576).toFixed(1)} MB de ${(contentLength / 1048576).toFixed(1)} MB`);
-        }
-        const bytes = new Uint8Array(received);
-        let offset = 0;
-        chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
-        buffer = bytes.buffer;
-      } else {
-        buffer = await response.arrayBuffer();
-      }
+        // fetchFileArrayBuffer usa faixas independentes para Mega/servidores
+        // que derrubam streams longos, evitando ERR_QUIC_PROTOCOL_ERROR.
+        buffer = await fetchFileArrayBuffer(url, (received, total) => {
+          const value = total ? Math.min(99, Math.round(received / total * 100)) : null;
+          const detail = total
+            ? `${(received / 1048576).toFixed(1)} MB de ${(total / 1048576).toFixed(1)} MB`
+            : `${(received / 1048576).toFixed(1)} MB processados`;
+          showCbzProgress("Abrindo arquivo CBZ…", value, detail);
+        }, undefined, downloadController.signal);
       }
       const zip = await JSZipLib.loadAsync(buffer);
       const names = Object.keys(zip.files)
@@ -5263,10 +5340,10 @@
     return bytes.buffer;
   }
 
-  async function fetchFileArrayBuffer(url, onProgress = () => {}, onComplete = () => {}) {
+  async function fetchFileArrayBuffer(url, onProgress = () => {}, onComplete = () => {}, signal = null) {
     const source = String(url || "");
     if (/^blob:/i.test(source)) {
-      const response = await fetch(source);
+      const response = await fetch(source, signal ? { signal } : {});
       if (!response.ok) throw new Error("HTTP " + response.status);
       const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
       onComplete();
@@ -5286,7 +5363,8 @@
           mode: "cors",
           credentials: "omit",
           cache: "no-store",
-          priority: "high"
+          priority: "high",
+          ...(signal ? { signal } : {})
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
@@ -5313,7 +5391,8 @@
               mode: "cors",
               credentials: "omit",
               cache: "no-store",
-              priority: "high"
+              priority: "high",
+              ...(signal ? { signal } : {})
             });
             if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status}`);
             break;
@@ -5384,7 +5463,8 @@
               mode: "cors",
               credentials: "omit",
               cache: "no-store",
-              priority: "high"
+              priority: "high",
+              ...(signal ? { signal } : {})
             });
             if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status}`);
             break;
@@ -5741,11 +5821,11 @@
     return availableTotal > 1 ? `${issue}/${availableTotal}` : issue;
   }
 
-  function rail(title, items, subtitle = "", actionText = "", directOpen = false, deduplicate = true) {
+  function rail(title, items, subtitle = "", actionText = "", directOpen = false, deduplicate = true, sectionClass = "") {
     if (!items.length) return "";
     const railItems = deduplicate ? uniqueCatalogItems(items) : items;
     return `
-      <section class="section">
+      <section class="section ${escapeHTML(sectionClass)}">
         <div class="section-head">
           <div>
             <h2 class="section-title">${escapeHTML(title)}</h2>
@@ -5764,7 +5844,12 @@
       heroItem = weightedRandom(lib.filter(x => x.featured)) || lib[0];
       state.homeHeroId = heroItem?.id || null;
     }
-    const mostClicked = uniqueCatalogItems([...lib].sort((a,b) => (b.clicks||0) - (a.clicks||0)).slice(0, 8));
+    const monthlyReadCount = item => state.comicMonthlyReadCounts.get(String(item.id)) || 0;
+    const mostClicked = uniqueCatalogItems([...lib].sort((a, b) => {
+      const aCount = state.comicMonthlyReadCountsLoaded ? monthlyReadCount(a) : Number(a.clicks) || 0;
+      const bCount = state.comicMonthlyReadCountsLoaded ? monthlyReadCount(b) : Number(b.clicks) || 0;
+      return bCount - aCount || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR");
+    }).slice(0, 8));
     const recentlyAdded = lib
       .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
       .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
@@ -5797,6 +5882,27 @@
     }
     const personalized = personalizedRecommendations(lib);
     const personalizedRail = state.session && personalized.length ? `<section class="section personalized-recommendations"><div class="section-head"><div><h2 class="section-title">Dicas para você</h2><div class="section-subtitle">Sugestões baseadas nos quadrinhos que você salvou e curtiu.</div></div></div><div class="rail-viewport"><div class="rail">${personalized.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div></section>` : "";
+    const readArtistRecommendation = readArtistSeriesRecommendation(lib);
+    const readArtistRail = readArtistRecommendation ? `<section class="section read-artist-recommendations"><div class="section-head"><div><h2 class="section-title">Do mesmo artista de ${escapeHTML(itemDisplayTitle(readArtistRecommendation.readItem))}</h2><div class="section-subtitle">Outras séries do mesmo artista para você conhecer.</div></div></div><div class="rail-viewport"><div class="rail">${readArtistRecommendation.seriesItems.map(item => seriesCard(item)).join("")}</div></div></section>` : "";
+    const publisherGroups = new Map();
+    lib.filter(item => String(item.publisher || "").trim()).forEach(item => {
+      const publisher = String(item.publisher).trim();
+      if (!publisherGroups.has(publisher)) publisherGroups.set(publisher, []);
+      publisherGroups.get(publisher).push(item);
+    });
+    const publisherChoices = [...publisherGroups.keys()];
+    if (!publisherGroups.has(state.homeRandomPublisher)) state.homeRandomPublisher = weightedRandom(publisherChoices) || null;
+    const randomPublisherItems = state.homeRandomPublisher ? publisherGroups.get(state.homeRandomPublisher) || [] : [];
+    const randomPublisherRail = randomPublisherItems.length ? rail(state.homeRandomPublisher, randomPublisherItems, "Uma editora escolhida aleatoriamente.", "", true, true, "best-series-section") : "";
+    const mostDownloaded = uniqueCatalogItems([...lib]
+      .filter(item => Number(item.downloadCount) > 0)
+      .sort((a, b) => Number(b.downloadCount) - Number(a.downloadCount) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
+      .slice(0, 20));
+    const mostDownloadedRail = mostDownloaded.length ? rail("Mais baixados", mostDownloaded, "As edições mais baixadas neste catálogo.", "", true) : "";
+    const mostReadCoverItems = uniqueCatalogItems([...lib]
+      .sort((a, b) => Number(b.clicks) - Number(a.clicks) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
+      .slice(0, 21));
+    const mostReadCoverGrid = mostReadCoverItems.length ? `<section class="section most-read-cover-section">${state.profile?.plan === "admin" ? '<div class="section-head"><h2 class="section-title">Mais lidos</h2></div>' : ""}<div class="most-read-cover-grid">${mostReadCoverItems.map(item => `<button type="button" class="most-read-cover" data-open="${escapeHTML(item.id)}" data-open-direct="true" aria-label="Abrir ${escapeHTML(itemDisplayTitle(item))}" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></button>`).join("")}</div></section>` : "";
 
     const seriesEntries = new Map();
     lib.filter(item => item.seriesId).forEach(item => {
@@ -5822,6 +5928,26 @@
     const publisherPinnedRail = pinnedPublishers.length ? `<section class="section publisher-pinned-section"><div class="section-head"><div><h2 class="section-title">Editoras fixadas</h2><div class="section-subtitle">Acesso rápido às editoras em destaque.</div></div></div><div class="publisher-carousel">${pinnedPublishers.map(([name, publisherItems]) => { const setting = state.publisherSettings.get(publisherKey(name)); const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0]; const cover = setting?.cover_url || coverFor(representative); return `<button class="publisher-card is-pinned" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`; }).join("")}</div></section>` : "";
 
     const featuredCollectionsRail = state.featuredComicCollections?.length ? `<section class="section featured-collections-rail"><div class="section-head"><div><h2 class="section-title">Coleções de quadrinhos em destaque</h2><div class="section-subtitle">Coleções públicas escolhidas pela equipe.</div></div></div><div class="public-collections-grid">${state.featuredComicCollections.map(collection => publicCollectionCard(collection)).join("")}</div></section>` : "";
+    const homeSections = {
+      continue: rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false),
+      recent: rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false),
+      "new-series": recentlyAddedSeriesRail,
+      monthly: rail("Mais lidos do mês", mostClicked, "As edições que mais receberam cliques neste mês.", "Ver catálogo", true),
+      "pinned-publishers": publisherPinnedRail,
+      "best-series": bestSeriesRail,
+      "featured-collections": featuredCollectionsRail,
+      random: rail("Escolha aleatória", randoms, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true, true, "random-choice-section"),
+      tips: personalizedRail,
+      artist: readArtistRail,
+      "random-publisher": randomPublisherRail,
+      downloads: mostDownloadedRail,
+      "most-read-covers": mostReadCoverGrid
+    };
+    const visibleHomeKeys = normalizeHomeSectionOrder(state.homeSectionOrder).filter(key => homeSections[key]);
+    state.homeVisibleSectionKeys = visibleHomeKeys;
+    const orderedSections = visibleHomeKeys
+      .map((key, index, visible) => decorateHomepageSection(key, homeSections[key], index, visible.length))
+      .join("");
     return `
       <section class="hero">
         <div class="hero-bg" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" style="background-image:url('${escapeHTML(coverFor(heroItem, "hero"))}')"></div>
@@ -5836,16 +5962,50 @@
         </div>
       </section>
       <div class="content">
-        ${rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false)}
-        ${rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false)}
-        ${recentlyAddedSeriesRail}
-        ${rail("Mais lidos", mostClicked, "As edições que mais receberam cliques.", "Ver catálogo", true)}
-        ${publisherPinnedRail}
-        ${bestSeriesRail}
-        ${featuredCollectionsRail}
-        ${rail("Escolha aleatória", randoms, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true)}
-        ${personalizedRail}
+        ${orderedSections}
       </div>`;
+  }
+
+  function decorateHomepageSection(key, markup, index, total) {
+    if (!markup || state.profile?.plan !== "admin") return markup;
+    const controls = `<div class="homepage-section-order-controls"><button type="button" class="small-btn" data-home-section-move="up" data-home-section-key="${key}" ${index === 0 ? "disabled" : ""} title="Mover seção para cima" aria-label="Mover seção para cima">↑</button><button type="button" class="small-btn" data-home-section-move="down" data-home-section-key="${key}" ${index === total - 1 ? "disabled" : ""} title="Mover seção para baixo" aria-label="Mover seção para baixo">↓</button></div>`;
+    const headStart = markup.indexOf('<div class="section-head">');
+    if (headStart >= 0) {
+      let depth = 0;
+      let cursor = headStart;
+      while (cursor < markup.length) {
+        const nextOpen = markup.indexOf("<div", cursor);
+        const nextClose = markup.indexOf("</div>", cursor);
+        if (nextClose < 0) break;
+        if (nextOpen >= 0 && nextOpen < nextClose) {
+          depth += 1;
+          cursor = nextOpen + 4;
+        } else {
+          depth -= 1;
+          if (depth === 0) return `${markup.slice(0, nextClose)}${controls}${markup.slice(nextClose)}`;
+          cursor = nextClose + 6;
+        }
+      }
+    }
+    const sectionOpen = markup.match(/^\s*<section\b[^>]*>/)?.[0];
+    return sectionOpen ? markup.replace(sectionOpen, `${sectionOpen}<div class="homepage-section-admin">${controls}</div>`) : markup;
+  }
+
+  async function moveHomepageSection(key, direction) {
+    if (!sb || state.profile?.plan !== "admin") return;
+    const order = normalizeHomeSectionOrder(state.homeSectionOrder);
+    const visibleIndex = state.homeVisibleSectionKeys.indexOf(key);
+    const visibleTarget = visibleIndex + direction;
+    if (visibleIndex < 0 || visibleTarget < 0 || visibleTarget >= state.homeVisibleSectionKeys.length) return;
+    const targetKey = state.homeVisibleSectionKeys[visibleTarget];
+    const index = order.indexOf(key);
+    const target = order.indexOf(targetKey);
+    if (index < 0 || target < 0) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    const result = await sb.rpc("update_homepage_section_order", { p_order: order });
+    if (result.error) return toast(result.error.message || "Não foi possível reorganizar as seções.");
+    state.homeSectionOrder = order;
+    render();
   }
 
   function renderCollectionsPreview() {
@@ -7829,6 +7989,7 @@
     }
     main.innerHTML = markup;
     bind();
+    $$('[data-home-section-move]', main).forEach(button => button.addEventListener("click", () => moveHomepageSection(button.dataset.homeSectionKey, button.dataset.homeSectionMove === "up" ? -1 : 1)));
     hydrateHomeCovers();
     prepareLazyImages(main);
     decorateFactionNames(main);
@@ -9406,6 +9567,15 @@
   loadComicReadCounts()
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de leitura indisponÃ­veis:", error));
+  loadComicDownloadCounts()
+    .then(() => { if (state.section !== "reader") render(); })
+    .catch(error => console.warn("Contadores de download indisponíveis:", error));
+  loadComicMonthlyReadCounts()
+    .then(() => { if (state.section !== "reader") render(); })
+    .catch(error => console.warn("Leituras mensais indisponíveis:", error));
+  loadHomepageSettings()
+    .then(() => { if (state.section === "home") render(); })
+    .catch(error => console.warn("Ordem da página inicial indisponível:", error));
   sb?.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") {
       state.session = session;
