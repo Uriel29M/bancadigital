@@ -319,6 +319,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .downloads-completed > .section-head { gap: 4px; }
 .downloads-completed > .section-head > div:first-child { margin-right: auto; }
 .downloads-total-count { color: var(--muted); font-size: 11px; }
+.downloads-title-mobile { display: none; }
 .downloads-pending-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 .downloads-pending-actions [data-resume-all-downloads]:disabled { opacity: .35; cursor: not-allowed; }
 .download-confirm-modal { width: min(420px, calc(100vw - 32px)); }
@@ -1254,6 +1255,18 @@ main { min-height: calc(100vh - 150px); }
 @media (max-width: 700px) {
   .chat-message { max-width: 88%; padding: 8px 10px; touch-action: pan-y; }
   .chat-reply-action { display: none; }
+  .chat-compose textarea {
+    height: 64px;
+    min-height: 64px;
+    max-height: 64px;
+    line-height: 1.35;
+    overflow-y: auto;
+  }
+  .chat-compose > button {
+    height: 64px;
+    min-height: 64px;
+    align-self: stretch;
+  }
 }
 .notification-list { display: grid; gap: 8px; max-width: 860px; }
 .notification-item { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
@@ -1793,6 +1806,12 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
   .rail { grid-auto-columns: calc((100% - 75px) / 6); }
 }
 @media (max-width: 600px) {
+  .downloads-total-count,
+  .downloads-series-head > span { display: none; }
+  .downloads-completed .shelf-sort-control > span,
+  .downloads-series-sort > span { display: none; }
+  .downloads-title-mobile { display: inline; }
+  .downloads-title-full { display: none; }
   .profile-banner { min-height: 154px; padding: 16px; border-radius: 12px; }
   .profile-banner .profile-xp-progress { padding: 11px 12px; }
   #modal-root .modal:has(#profile-form) {
