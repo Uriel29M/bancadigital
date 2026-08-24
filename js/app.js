@@ -2198,6 +2198,19 @@
       render();
       return;
     }
+    const viewerId = state.session?.user?.id;
+    const blockRows = viewerId && viewerId !== profile.data.id
+      ? await Promise.all([
+        sb.from("profile_blocks").select("blocker_id, blocked_id").eq("blocker_id", viewerId).eq("blocked_id", profile.data.id).maybeSingle(),
+        sb.from("profile_blocks").select("blocker_id, blocked_id").eq("blocker_id", profile.data.id).eq("blocked_id", viewerId).maybeSingle()
+      ])
+      : [];
+    const block = blockRows.find(result => !result.error && result.data)?.data || null;
+    if (block) {
+      state.publicProfile = { profile: profile.data, username, collectionId, blocked: true, blockedByMe: block.blocker_id === viewerId };
+      render();
+      return;
+    }
     const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id);
     const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false });
     const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", profile.data.id);
@@ -2398,7 +2411,7 @@
     const existingOverlay = $("#modal-root .cover-choice-modal")?.closest(".modal-backdrop");
     if (existingOverlay) return;
     if (!state.session) return openAuthPage();
-    if (!["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A escolha de capas variantes é exclusiva para usuários Premium, moderadores e administradores.");
+    if (!["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A escolha de capas variantes é exclusiva para usuários Lenda, moderadores e administradores.");
     const item = state.db.library.find(entry => entry.id === itemId);
     if (!item) return;
     const isAdmin = state.profile?.plan === "admin";
@@ -2548,7 +2561,7 @@
 
   async function setCoverStyle(itemId, style) {
     if (!state.session) return openAuthPage();
-    if (style === "gold" && !["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A capa dourada é exclusiva para usuários Premium, moderadores e administradores.");
+    if (style === "gold" && !["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A capa dourada é exclusiva para usuários Lenda, moderadores e administradores.");
     const item = state.db.library.find(entry => entry.id === itemId) || state.db.library.find(entry => entry.seriesId === itemId);
     if (!item) return;
     const nextStyle = ["normal", "grayscale", "gold"].includes(style) ? style : "normal";
@@ -6221,6 +6234,13 @@
   }
 
   function openAccountPlanAdmin() {
+    setTimeout(() => {
+      const select = $("#account-plan-form select[name=plan]");
+      if (select) {
+        $("option[value=free]", select).textContent = "Comum";
+        $("option[value=premium]", select).textContent = "Lenda";
+      }
+    }, 0);
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Alterar tipo de conta</h2><div class="section-subtitle">Defina o nível de acesso da conta.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="account-plan-form"><div class="form-grid"><div class="field full"><label>@ do usuário</label><input name="username" required placeholder="usuario"></div><div class="field full"><label>Novo tipo de conta</label><select name="plan"><option value="free">Free</option><option value="premium">Premium</option><option value="moderator">Moderador</option></select></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar alteração</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
@@ -6445,7 +6465,7 @@
   }
 
   function chatRoomLabel(room) {
-    return room.access === "premium" ? "Premium" : room.access === "staff" ? "Staff" : "Público";
+    return room.access === "premium" ? "Lenda" : room.access === "staff" ? "Staff" : "Público";
   }
 
   async function loadChatSenderVisuals(senderIds) {
@@ -7029,7 +7049,7 @@
     if (!historySection) return;
     const planSection = document.createElement("section");
     planSection.className = "moderation-section";
-    planSection.innerHTML = `<h3>Tipo de conta</h3><form id="moderation-plan-form"><div class="moderation-plan-row"><select name="plan"><option value="free" ${target.plan === "free" ? "selected" : ""}>Free</option><option value="premium" ${target.plan === "premium" ? "selected" : ""}>Premium</option></select><button class="small-btn" type="submit">Salvar tipo</button></div></form>`;
+    planSection.innerHTML = `<h3>Tipo de conta</h3><form id="moderation-plan-form"><div class="moderation-plan-row"><select name="plan"><option value="free" ${target.plan === "free" ? "selected" : ""}>Comum</option><option value="premium" ${target.plan === "premium" ? "selected" : ""}>Lenda</option></select><button class="small-btn" type="submit">Salvar tipo</button></div></form>`;
     historySection.before(planSection);
     $("#moderation-plan-form", planSection).onsubmit = async event => {
       event.preventDefault();
@@ -7081,6 +7101,31 @@
     await loadPublicProfile(state.publicProfile.profile.username);
   }
 
+  function openProfileBlockConfirm(profile, blocked) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal profile-block-confirm-modal"><div class="section-head"><div><div class="eyebrow">Privacidade</div><h2>${blocked ? "Desbloquear usuário?" : "Bloquear usuário?"}</h2><div class="section-subtitle">${blocked ? "Este usuário poderá voltar a ver seu perfil e interagir com você." : "Este usuário não poderá enviar mensagens, comentar no seu mural ou acessar seu perfil, histórico e coleções."}</div></div><button type="button" class="small-btn" data-close>Cancelar</button></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-confirm-block>${blocked ? "Desbloquear" : "Bloquear"}</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-close]', overlay).forEach(button => button.onclick = () => finish(false));
+      $("[data-confirm-block]", overlay).onclick = () => finish(true);
+    });
+  }
+
+  async function toggleProfileBlock(profile) {
+    if (!state.session || !sb) return openAuthPage();
+    if (!profile?.id || profile.id === state.session.user.id) return;
+    const blocked = Boolean(state.publicProfile?.blockedByMe);
+    if (!await openProfileBlockConfirm(profile, blocked)) return;
+    const query = sb.from("profile_blocks");
+    const result = blocked
+      ? await query.delete().eq("blocker_id", state.session.user.id).eq("blocked_id", profile.id)
+      : await query.insert({ blocker_id: state.session.user.id, blocked_id: profile.id });
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar o bloqueio.");
+    await loadPublicProfile(profile.username);
+  }
+
   async function toggleProfileFollow(profile) {
     if (!state.session) return openAuthPage();
     if (!profile?.id || profile.id === state.session.user.id) return;
@@ -7102,6 +7147,7 @@
     if (!publicState || publicState.loading) return '<div class="content"><div class="empty">Carregando perfil...</div></div>';
     if (publicState.error) return `<div class="content"><div class="empty">${escapeHTML(publicState.error)}</div></div>`;
     const profile = publicState.profile;
+    if (publicState.blocked) return `<div class="content public-profile-page"><section class="section blocked-profile-notice"><div class="eyebrow">Privacidade</div><h1 class="section-title">Perfil indisponível</h1><p>${publicState.blockedByMe ? "Você bloqueou este usuário. Ele não pode enviar mensagens, comentar no seu mural ou acessar seu histórico, coleções e foto." : "Este perfil não está disponível para você."}</p><div class="profile-actions"><button class="small-btn" data-section="home">Voltar ao início</button>${publicState.blockedByMe ? `<button class="small-btn" data-unblock-profile>Desbloquear</button>` : ""}</div></section></div>`;
     const savedVisible = !["admin", "moderator", "premium"].includes(profile.plan) || profile.shelf_saved_public !== false;
     const seriesVisible = !["admin", "moderator", "premium"].includes(profile.plan) || profile.shelf_series_public !== false;
     const readVisible = !["admin", "moderator", "premium"].includes(profile.plan) || profile.shelf_read_public !== false;
@@ -7124,6 +7170,7 @@
     if (publicState.collectionId && !selectedCategory && !selectedBlogCollection) return `<div class="content"><div class="empty">Esta coleção não existe ou é privada.</div><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a></div>`;
     const canModerate = ["moderator", "admin"].includes(state.profile?.plan) && !["moderator", "admin"].includes(profile.plan);
     const canFollow = Boolean(state.session?.user?.id && state.session.user.id !== profile.id);
+    const canBlock = canFollow;
     return `<div class="content public-profile-page">
       <div class="profile-header">
         ${avatarMarkup(profile)}
@@ -7133,7 +7180,7 @@
           ${trophyRoom(publicState.achievements)}
         </div>
       </div>
-      <div class="section-head"><div><h1 class="section-title">Estante de @${escapeHTML(profile.username)}</h1><div class="section-subtitle">${publicState.followerCount || 0} seguidores · ${publicState.followingCount || 0} seguindo · Coleções públicas do perfil</div></div><div class="profile-actions">${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}</div></div>
+      <div class="section-head"><div><h1 class="section-title">Estante de @${escapeHTML(profile.username)}</h1><div class="section-subtitle">${publicState.followerCount || 0} seguidores · ${publicState.followingCount || 0} seguindo · Coleções públicas do perfil</div></div><div class="profile-actions">${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}</div></div>
       ${savedVisible ? shelfCollectionMarkup("Salvos", savedItems, "public-saved", publicState.readingProgress, publicState.favoriteIds) : '<div class="notice">A coleção Salvos está oculta neste perfil.</div>'}
       ${seriesVisible ? shelfCollectionMarkup("Séries salvas", savedSeries, "public-series-saved", publicState.readingProgress, publicState.favoriteIds, "", null, true) : '<div class="notice">A coleção Séries salvas está oculta neste perfil.</div>'}
       ${readVisible ? shelfCollectionMarkup("Lidos", readItems, "public-read", publicState.readingProgress, publicState.favoriteIds) : '<div class="notice">A coleção Lidos está oculta neste perfil.</div>'}
@@ -7351,7 +7398,7 @@
   }
 
   function renderRankingCategoryPage(members) {
-    const labels = { staff: "Moderadores", premium: "Premium", free: "Free" };
+    const labels = { staff: "Moderadores", premium: "Lenda", free: "Comum" };
     const plan = labels[state.rankingCategory] ? state.rankingCategory : "free";
     const group = rankingCategoryMembers(members, plan);
     return `<div class="content ranking-page ranking-category-page"><div class="section-head"><div><div class="eyebrow">Diretório da comunidade</div><h1 class="section-title">Usuários ${labels[plan]}</h1><div class="section-subtitle">Todos os usuários desta categoria, ordenados por nível.</div></div><button class="small-btn" data-ranking-back>Voltar ao ranking</button></div><section class="section ranking-directory"><div class="ranking-member-list ranking-member-list-full">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section></div>`;
@@ -7365,8 +7412,8 @@
     const topMembers = eligibleMembers.slice(0, 3);
     const groups = [
       ["staff", "Moderadores"],
-      ["premium", "Premium"],
-      ["free", "Free"]
+      ["premium", "Lenda"],
+      ["free", "Comum"]
     ];
     return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${state.profile ? `<div class="ranking-self"><strong>Nível ${state.profile.level || 1}</strong><span>${Number(state.profile.xp || 0).toLocaleString("pt-BR")} XP · Check-in: 🔥 ${state.profile.daily_streak || 0} dia(s)</span></div>` : ""}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Free</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Premium</strong><p>Todos os benefícios Free, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Premium, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div><div class="ranking-faction-tabs"><button class="small-btn ${!state.rankingFaction ? "is-active" : ""}" data-ranking-faction="">Todas as facções</button>${state.factions.map(faction => `<button class="small-btn ${state.rankingFaction === faction.id ? "is-active" : ""}" data-ranking-faction="${escapeHTML(faction.id)}" style="--faction-filter-color:${escapeHTML(faction.color)}"><span class="faction-dot" style="--faction-color:${escapeHTML(faction.color)}"></span>${escapeHTML(faction.name)}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Free ou Premium nesta seleção.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = plan === "staff" ? members.filter(member => ["moderator", "admin"].includes(member.plan)) : members.filter(member => member.plan === plan && (!state.rankingFaction || member.faction_id === state.rankingFaction)); const sectionFactionId = state.profile?.faction_id; const sectionColor = state.factions.find(faction => faction.id === sectionFactionId)?.color || "#ffffff"; return `<section class="ranking-group ranking-group-abafac linhafac" style="--ranking-section-color:${escapeHTML(sectionColor)}"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
   }
@@ -8130,6 +8177,7 @@
     else if (state.section === "local-box") markup = renderLocalBoxPage();
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
+    markup = markup.replace(/\bFree\b/gi, "Comum").replace(/\bPremium\b/gi, "Lenda");
     if (main.innerHTML === markup) {
       syncActiveNav();
       return;
@@ -8212,7 +8260,7 @@
       $(".ranking-benefit-card.is-moderator", benefits)?.remove();
       if (rankingPage && benefits) rankingPage.appendChild(benefits);
       if (rankingPage && !state.rankingCategory) {
-        const categoryByLabel = { Moderadores: "staff", Premium: "premium", Free: "free" };
+        const categoryByLabel = { Moderadores: "staff", Lenda: "premium", Comum: "free" };
         $$(".ranking-group", rankingPage).forEach(groupElement => {
           const list = $(".ranking-member-list", groupElement);
           if (!list) return;
@@ -8946,6 +8994,8 @@
       setTimeout(() => attachPlanControl($(".moderation-modal")?.closest(".modal-backdrop"), target), 0);
     });
     $('[data-follow-profile]')?.addEventListener("click", () => toggleProfileFollow(state.publicProfile?.profile));
+    $('[data-block-profile]')?.addEventListener("click", () => toggleProfileBlock(state.publicProfile?.profile));
+    $('[data-unblock-profile]')?.addEventListener("click", () => toggleProfileBlock(state.publicProfile?.profile));
     $("[data-collection-filter-form]")?.addEventListener("submit", event => { event.preventDefault(); const form = new FormData(event.currentTarget); state.collectionFilter = { field: String(form.get("field") || "all"), query: String(form.get("query") || "") }; render(); });
     $("[data-clear-collection-filter]")?.addEventListener("click", () => { state.collectionFilter = { field: "all", query: "" }; render(); });
     $$("[data-open]").forEach(el => el.addEventListener("click", () => {
@@ -9250,6 +9300,7 @@
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal cover-variants-admin-modal"><div class="section-head"><div><h2>Capas variantes oficiais</h2><div class="section-subtitle">Cadastre capas hospedadas oficialmente pela DC para usuários Premium.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="cover-variant-admin-form"><div class="field full"><label>Edição</label><select name="itemId" required>${items.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(itemDisplayTitle(item))}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</option>`).join("")}</select></div><div class="form-grid"><div class="field"><label>Chave da variante</label><input name="variantKey" required pattern="[A-Za-z0-9_-]{1,80}" placeholder="ex.: variant-a"></div><div class="field"><label>Nome da variante</label><input name="label" required maxlength="80" placeholder="Capa variante A"></div></div><div class="field full"><label>URL oficial da capa</label><input name="coverUrl" type="url" required pattern="https://static\\.dc\\.com/.*" placeholder="https://static.dc.com/2025-01/...jpg"><small class="format-hint">A URL precisa começar com https://static.dc.com/.</small></div><div class="field full"><label>URL da página fonte (opcional)</label><input name="sourceUrl" type="url" placeholder="https://www.dc.com/comics/..."></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar variante</button></div></form><div class="section-subtitle cover-variants-admin-list"></div></div>`;
+    overlay.innerHTML = overlay.innerHTML.replace(/\bFree\b/g, "Comum").replace(/\bPremium\b/g, "Lenda");
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     const itemSelect = $("select[name=itemId]", overlay);
