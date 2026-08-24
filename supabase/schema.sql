@@ -33,6 +33,7 @@ alter table public.profiles drop constraint if exists profiles_wall_description_
 alter table public.profiles add constraint profiles_wall_description_length_check check (char_length(wall_description) <= 500);
 alter table public.profiles add column if not exists allow_mentions boolean not null default true;
 alter table public.profiles add column if not exists allow_messages boolean not null default true;
+alter table public.profiles add column if not exists shelf_sort_orders jsonb not null default '{}'::jsonb;
 alter table public.profiles add column if not exists notifications_enabled boolean not null default true;
 alter table public.profiles add column if not exists shelf_blogs_public boolean not null default true;
 alter table public.profiles add column if not exists profile_wall_public boolean not null default true;
@@ -250,6 +251,7 @@ alter table public.shelf_collections add column if not exists blog_ids jsonb not
 alter table public.shelf_collections add column if not exists is_featured boolean not null default false;
 alter table public.shelf_collections add column if not exists cover_styles jsonb not null default '{}'::jsonb;
 alter table public.shelf_collections add column if not exists cover_choices jsonb not null default '{}'::jsonb;
+alter table public.shelf_collections add column if not exists sort_order text not null default 'added_desc';
 alter table public.shelf_collections drop constraint if exists shelf_collections_type_check;
 alter table public.shelf_collections add constraint shelf_collections_type_check check (collection_type in ('comic', 'blog'));
 

@@ -4,7 +4,7 @@
   // --- Inicialização de Bibliotecas ---
   // --- Fim da Inicialização ---
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
-  const DEFAULT_AVATAR_URL = "assets/bancadigitaliconbranco.png?v=1";
+  const DEFAULT_AVATAR_URL = "assets/semfoto.jpg?v=1";
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
@@ -233,11 +233,20 @@
     authReady: false,
     profile: null,
     favoriteIds: new Set(),
+    favoriteAddedAt: new Map(),
+    collectionSortOrders: {},
     coverVariants: new Map(),
     coverChoices: new Map(),
     coverStyles: new Map(),
     seriesCoverChoices: new Map(),
+    offlineCoverData: new Map(),
     readingProgress: new Map(),
+    recentlyOpenedIds: (() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("bancaDigitalRecentlyOpened") || "[]");
+        return Array.isArray(stored) ? stored.map(String).slice(0, 20) : [];
+      } catch { return []; }
+    })(),
     shelfSnapshot: null,
     shelfExpanded: { saved: false, read: false },
     shelfCategories: [],
@@ -252,6 +261,7 @@
     savedBlogPosts: [],
     collectionFilter: { field: "all", query: "" },
     comicLikeIds: new Set(),
+    comicLikeAddedAt: new Map(),
     comicLikeCounts: new Map(),
     achievementChecks: new Set(),
     homeHeroId: null,
@@ -262,6 +272,9 @@
     chatContact: null,
     messageUnreadCount: 0,
     chatRoomUnreadCounts: {},
+    downloads: new Map(),
+    downloadsSortOrder: localStorage.getItem("bancaDigitalDownloadsSort") || "added_desc",
+    downloadsSeriesSortOrders: (() => { try { return JSON.parse(localStorage.getItem("bancaDigitalDownloadsSeriesSort") || "{}"); } catch { return {}; } })(),
     notifications: [],
     notificationUnreadCount: 0,
     notificationChannel: null,
@@ -304,6 +317,267 @@
     ,factionByUser: new Map()
     ,factionChoiceOpen: false
   };
+
+  const DOWNLOADS_KEY = "bancaDigitalDownloads:";
+  const DOWNLOADS_MANIFEST_KEY = "bancaDigitalDownloadsManifest";
+  const OFFLINE_ACCOUNT_KEY = "bancaDigitalOfflineAccount";
+  function saveOfflineAccount(profile = state.profile) {
+    if (!state.session?.user?.id) return;
+    try {
+      const previous = readOfflineAccount();
+      const currentDownloads = [...(state.downloads?.values?.() || [])];
+      const username = profile?.username || previous?.username || state.offlineUsername || state.session.user.user_metadata?.username || state.session.user.user_metadata?.user_name || "";
+      const savedProfile = profile?.username ? profile : (previous?.profile?.username ? previous.profile : profile || previous?.profile || null);
+      localStorage.setItem(OFFLINE_ACCOUNT_KEY, JSON.stringify({ user: state.session.user, username, profile: savedProfile, downloads: previous?.downloads?.length ? previous.downloads : currentDownloads, savedAt: Date.now() }));
+    } catch {}
+  }
+  function readOfflineAccount() {
+    try {
+      const value = JSON.parse(localStorage.getItem(OFFLINE_ACCOUNT_KEY) || "null");
+      return value?.user?.id ? value : null;
+    } catch { return null; }
+  }
+  function offlineProfileFor(user, profile = null, savedUsername = "") {
+    if (profile?.username) return profile;
+    const metadata = user?.user_metadata || {};
+    return {
+      ...(profile || {}),
+      id: profile?.id || user?.id,
+      username: savedUsername || metadata.username || metadata.user_name || metadata.preferred_username || "usuario"
+    };
+  }
+  function loadDownloads() {
+    const userId = state.session?.user?.id;
+    if (!userId) { state.downloads = new Map(); return; }
+    try {
+      const stored = localStorage.getItem(`${DOWNLOADS_KEY}${userId}`);
+      let manifest = {};
+      try { manifest = JSON.parse(localStorage.getItem(DOWNLOADS_MANIFEST_KEY) || "{}"); } catch {}
+      const primaryRows = stored ? JSON.parse(stored) : [];
+      const rows = Array.isArray(primaryRows) && primaryRows.length
+        ? primaryRows
+        : (manifest[userId] || readOfflineAccount()?.downloads || []);
+      const recoveredRows = Array.isArray(rows) ? rows.map(row => {
+        if (row?.preparing) return { ...row, status: "paused", preparing: false, pausedAt: new Date().toISOString() };
+        if (row?.status === "downloading" && Number(row.progress) >= 100) return { ...row, status: "completed", completedAt: row.completedAt || new Date().toISOString(), progress: 100 };
+        if (row?.status !== "downloading") return row;
+        return { ...row, status: "paused", pausedAt: new Date().toISOString() };
+      }) : [];
+      state.downloads = new Map(recoveredRows.map(row => [String(row.id), row]));
+      if (recoveredRows.some((row, index) => row?.status === "paused" && rows[index]?.status === "downloading")) persistDownloads();
+      validateDownloadedFiles();
+    } catch { state.downloads = new Map(); }
+  }
+
+  async function validateDownloadedFiles() {
+    if (!window.caches || !state.downloads.size) return;
+    try {
+      const cache = await caches.open(READER_FILE_CACHE);
+      let changed = false;
+      for (const entry of state.downloads.values()) {
+        if (!entry.url) continue;
+        const cached = await cache.match(downloadCacheKey(entry.url));
+        if (cached && entry.status !== "completed") {
+          entry.status = "completed";
+          entry.preparing = false;
+          entry.progress = 100;
+          entry.completedAt = entry.completedAt || new Date().toISOString();
+          state.downloads.set(String(entry.id), entry);
+          changed = true;
+          continue;
+        }
+        if (cached || entry.status !== "completed") continue;
+        entry.status = "paused";
+        entry.pausedAt = new Date().toISOString();
+        entry.progress = 0;
+        state.downloads.set(String(entry.id), entry);
+        changed = true;
+      }
+      if (changed) {
+        persistDownloads();
+        if (state.section === "downloads") render();
+      }
+    } catch (error) {
+      console.warn("NÃ£o foi possÃ­vel validar os arquivos offline:", error);
+    }
+  }
+  function persistDownloads() {
+    if (!state.session?.user?.id) return;
+    try {
+      const rows = [...state.downloads.values()];
+      localStorage.setItem(`${DOWNLOADS_KEY}${state.session.user.id}`, JSON.stringify(rows));
+      let manifest = {};
+      try { manifest = JSON.parse(localStorage.getItem(DOWNLOADS_MANIFEST_KEY) || "{}"); } catch {}
+      manifest[state.session.user.id] = rows;
+      localStorage.setItem(DOWNLOADS_MANIFEST_KEY, JSON.stringify(manifest));
+      const account = readOfflineAccount();
+      if (account) localStorage.setItem(OFFLINE_ACCOUNT_KEY, JSON.stringify({ ...account, downloads: rows, savedAt: Date.now() }));
+    } catch {}
+  }
+  function downloadSource(item) { return item?.fileUrl || (!/^https?:\/\/(?:www\.)?t(?:elegram)?\.me\//i.test(item?.telegramUrl || "") ? item?.telegramUrl : "") || ""; }
+  function downloadCacheKey(url) { const proxy = proxiedFileUrl(url); return `${proxy}${proxy.includes("?") ? "&" : "?"}v=240`; }
+  async function downloadCoverDataUrl(item) {
+    const selectedChoice = state.coverChoices?.get?.(item?.id) || state.coverChoices?.get?.(String(item?.id));
+    const source = selectedChoice?.cover_url || coverFor(item);
+    if (!source || /^data:/i.test(source)) return source || "";
+    // O proxy remoto pode ainda não ter sido publicado com suporte à DC.
+    // Mantém a URL da variante como fallback sem gerar uma requisição 400.
+    try {
+      const fetchSource = imageProxyFetchUrl(source);
+      const response = await fetch(fetchSource, { mode: "cors", credentials: "omit", cache: "force-cache" });
+      if (!response.ok) return "";
+      const blob = await response.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      if (dataUrl) state.offlineCoverData.set(String(item?.id), dataUrl);
+      if (dataUrl && window.caches && item?.id) {
+        try {
+          const cache = await caches.open(OFFLINE_COVER_CACHE);
+          await cache.put(offlineCoverCacheKey(item.id), new Response(blob, { headers: { "Content-Type": blob.type || "image/jpeg" } }));
+        } catch (error) { console.warn("NÃ£o foi possÃ­vel salvar a capa offline:", error); }
+      }
+      return dataUrl;
+    } catch { return ""; }
+  }
+  function downloaded(itemId) { return state.downloads.get(String(itemId)); }
+  function updateDownloadButtons(itemId) {
+    const entry = downloaded(itemId);
+    const status = entry?.status || "idle";
+    $$('[data-download]').filter(button => String(button.dataset.download) === String(itemId)).forEach(button => {
+      button.classList.toggle("is-downloaded", status === "completed");
+      button.classList.toggle("is-downloading", status === "downloading" || status === "waiting");
+      button.textContent = status === "completed" ? "✓" : status === "downloading" ? "…" : status === "waiting" ? "…" : "↓";
+      button.title = status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : status === "waiting" ? "Aguardando na fila" : "Permitir leitura offline";
+    });
+  }
+  async function openDownloaded(item) {
+    const entry = downloaded(item.id);
+    if (!entry || entry.status !== "completed") return;
+    try {
+      const buffer = await fetchFileArrayBuffer(entry.url);
+      const objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
+      openReader({ ...item, fileUrl: objectUrl, local: true }, { localObjectUrl: objectUrl });
+    } catch { toast("Este download não está disponível offline. Baixe novamente quando estiver conectado."); }
+  }
+  const MAX_CONCURRENT_DOWNLOADS = 3;
+  let pumpingDownloadQueue = false;
+  function activeDownloadCount() { return [...state.downloads.values()].filter(entry => entry.status === "downloading").length; }
+  function pumpDownloadQueue() {
+    if (pumpingDownloadQueue || navigator.onLine === false || state.session?.offline) return;
+    pumpingDownloadQueue = true;
+    try {
+      while (activeDownloadCount() < MAX_CONCURRENT_DOWNLOADS) {
+        const next = [...state.downloads.values()].filter(entry => entry.status === "waiting").sort((a, b) => new Date(a.startedAt || 0) - new Date(b.startedAt || 0))[0];
+        if (!next) break;
+        const item = state.db.library.find(entry => String(entry.id) === String(next.id)) || next.snapshot;
+        if (!item) { state.downloads.delete(String(next.id)); continue; }
+        startDownload(item);
+      }
+    } finally { pumpingDownloadQueue = false; }
+  }
+
+  async function startDownload(item) {
+    if (!state.session) return openAuthPage();
+    const url = downloadSource(item);
+    if (!url) return toast("Este quadrinho não possui um arquivo direto para baixar.");
+    const id = String(item.id);
+    const previous = downloaded(id);
+    if (previous?.status === "downloading") return;
+    const shouldWait = activeDownloadCount() >= MAX_CONCURRENT_DOWNLOADS;
+    const startedAt = previous?.startedAt || new Date().toISOString();
+    state.downloads.set(id, { id, url, status: shouldWait ? "waiting" : "downloading", progress: Number(previous?.progress) || 0, title: itemDisplayTitle(item), snapshot: { ...(previous?.snapshot || item), file: undefined, local: undefined }, startedAt });
+    persistDownloads(); updateDownloadButtons(id); render();
+    if (shouldWait) return;
+    const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("NÃ£o foi possÃ­vel preparar a capa offline:", error); return ""; });
+    try {
+      await fetchFileArrayBuffer(url, (received, total) => {
+        const current = state.downloads.get(id); if (!current) return;
+        current.progress = total ? Math.min(100, received / total * 100) : 0; current.received = received; current.total = total;
+        state.downloads.set(id, current); if (total && received >= total) persistDownloads(); if (state.section === "downloads") renderDownloadsProgress();
+      }, () => {
+        const ready = state.downloads.get(id);
+        if (!ready) return;
+        ready.status = "downloading";
+        ready.preparing = true;
+        ready.progress = 100;
+        ready.completedAt = ready.completedAt || new Date().toISOString();
+        state.downloads.set(id, ready);
+        persistDownloads();
+      });
+      const current = state.downloads.get(id);
+      if (current) {
+        current.preparing = true;
+        state.suppressDownloadReadyToast = true;
+        current.status = "downloading"; current.progress = 100; state.downloads.set(id, current);
+        persistDownloads(); updateDownloadButtons(id); render(); toast("Quadrinho disponível para leitura offline.");
+        // A capa é auxiliar: o download fica concluído assim que o arquivo foi
+        // confirmado no Cache Storage. Ela continua sendo preparada em paralelo.
+        const coverUrl = "";
+        const selectedCoverUrl = (state.coverChoices?.get?.(item.id) || state.coverChoices?.get?.(String(item.id)))?.cover_url || "";
+        current.snapshot = { ...(current.snapshot || item), ...(coverUrl ? { coverUrl } : selectedCoverUrl ? { coverUrl: selectedCoverUrl } : {}), ...(selectedCoverUrl ? { selectedCoverUrl } : {}) };
+        if (coverUrl && window.caches) delete current.snapshot.coverUrl;
+        current.preparing = false;
+        current.status = "completed"; current.progress = 100; current.completedAt = new Date().toISOString(); state.downloads.set(id, current);
+        updateDownloadButtons(id);
+      }
+      persistDownloads(); render(); toast("Quadrinho disponível para leitura offline.");
+    } catch (error) { state.downloads.delete(id); persistDownloads(); render(); toast("Não foi possível concluir o download."); console.warn("Download falhou", error); }
+      pumpDownloadQueue();
+  }
+  async function deleteDownload(itemId) {
+    const entry = downloaded(itemId); state.downloads.delete(String(itemId)); updateDownloadButtons(itemId); persistDownloads();
+    if (entry?.url && window.caches) { try { const cache = await caches.open(READER_FILE_CACHE); await cache.delete(downloadCacheKey(entry.url)); } catch {} }
+    render(); toast("Download excluído deste navegador.");
+  }
+
+  const downloadCoverHydrations = new Map();
+  function updateDownloadCoverImage(itemId) {
+    const item = state.db.library.find(entry => String(entry.id) === String(itemId)) || downloaded(itemId)?.snapshot;
+    if (!item) return;
+    const cover = coverFor(item, "card");
+    $$('[data-open-download-cover]').filter(element => String(element.dataset.openDownloadCover) === String(itemId)).forEach(element => {
+      element.style.backgroundImage = `url("${cover}")`;
+    });
+  }
+  function hydrateDownloadedCover(entry, item) {
+    if (!entry || entry.status !== "completed" || !item || navigator.onLine === false || state.session?.offline) return;
+    if ([item.coverUrl, item.selectedCoverUrl, item.cover].some(value => /^data:/i.test(String(value || "")))) return;
+    const id = String(entry.id);
+    if (downloadCoverHydrations.has(id)) return;
+    const task = downloadCoverDataUrl(item).then(coverUrl => {
+      if (!coverUrl) return;
+      const latest = state.downloads.get(id);
+      if (!latest || latest.status !== "completed") return;
+      latest.snapshot = { ...(latest.snapshot || item), coverUrl };
+      if (window.caches) delete latest.snapshot.coverUrl;
+      state.downloads.set(id, latest);
+      persistDownloads();
+      updateDownloadCoverImage(id);
+    }).catch(() => {}).finally(() => downloadCoverHydrations.delete(id));
+    downloadCoverHydrations.set(id, task);
+  }
+  let offlineCoverHydrationRunning = false;
+  async function hydrateOfflineCoverData(items) {
+    if (offlineCoverHydrationRunning || !window.caches || !items?.length) return;
+    offlineCoverHydrationRunning = true;
+    try {
+      const cache = await caches.open(OFFLINE_COVER_CACHE);
+      let changed = false;
+      for (const { entry, item } of items) {
+        if (entry.status !== "completed" || !item?.id || state.offlineCoverData.has(String(item.id))) continue;
+        const response = await cache.match(offlineCoverCacheKey(item.id));
+        if (!response) continue;
+        const dataUrl = await blobToDataUrl(await response.blob());
+        if (dataUrl) { state.offlineCoverData.set(String(item.id), dataUrl); changed = true; }
+      }
+      if (changed) {
+        for (const { item } of items) updateDownloadCoverImage(item.id);
+      }
+    } catch (error) {
+      console.warn("NÃ£o foi possÃ­vel carregar as capas offline:", error);
+    } finally {
+      offlineCoverHydrationRunning = false;
+    }
+  }
 
   let activeReaderCleanup = null;
   let handlingRoute = false;
@@ -383,6 +657,7 @@
 
   function prefetchReaderFile(item) {
     if (!item || item.local) return null;
+    if (navigator.onLine === false || state.session?.offline) return null;
     const url = item.fileUrl || item.telegramUrl || "";
     const format = String(item.format || extension(url)).toLowerCase();
     if (!/^https?:\/\//i.test(url) || !["pdf", "cbz", "cbr"].includes(format)) return null;
@@ -403,6 +678,7 @@
     collections: "colecoes",
     search: "pesquisar",
     shelf: "estante",
+    downloads: "downloads",
     "local-box": "caixa",
     login: "entrar",
     signup: "cadastro",
@@ -419,7 +695,30 @@
     return `${url.pathname}${url.search}`;
   }
 
+  function activateOfflineMode() {
+    if (navigator.onLine !== false) return false;
+    if (state.session?.offline) return true;
+    const savedAccount = readOfflineAccount();
+    const user = savedAccount?.user || state.session?.user;
+    if (!user) return false;
+    state.session = { user, offline: true };
+    state.profile = offlineProfileFor(user, savedAccount?.profile || state.profile, savedAccount?.username || "");
+    state.authReady = true;
+    if (state.presenceInterval) clearInterval(state.presenceInterval);
+    state.presenceInterval = null;
+    state.notificationChannel?.unsubscribe?.();
+    state.notificationChannel = null;
+    sb?.removeAllChannels?.();
+    sb?.auth?.stopAutoRefresh?.();
+    loadDownloads();
+    syncTopAvatar();
+    render();
+    return true;
+  }
+
   function navigate(params, replace = false) {
+    const offlineNavigation = navigator.onLine === false && activateOfflineMode();
+    if (offlineNavigation) params = { pagina: "downloads" };
     const url = routeUrl(params);
     if (replace) window.history.replaceState({}, "", url);
     else window.history.pushState({}, "", url);
@@ -429,6 +728,9 @@
   function setSectionRoute(section, replace = false) {
     const route = sectionRoutes[section];
     if (route === undefined) return setSection(section);
+    const params = new URLSearchParams(window.location.search);
+    const currentPage = params.get("pagina") || "";
+    if (state.section === section && currentPage === (route || "")) return;
     navigate(route ? { pagina: route } : {}, replace);
   }
 
@@ -473,7 +775,7 @@
     : null;
 
   async function loadComicReadCounts() {
-    if (!sb) return;
+    if (!sb || navigator.onLine === false) return;
     const result = await sb.from("comic_read_counts").select("item_id, clicks");
     if (result.error) {
       console.warn("NÃ£o foi possÃ­vel carregar as quantidades de leitura:", result.error.message);
@@ -506,7 +808,7 @@
   }
 
   async function startPresence() {
-    if (!sb || !state.session?.user?.id) return;
+    if (!sb || !state.session?.user?.id || state.session?.offline || navigator.onLine === false) return;
     if (state.presenceInterval) clearInterval(state.presenceInterval);
     const heartbeat = async () => {
       try {
@@ -534,6 +836,7 @@
   }
 
   async function loadRankingData(silent = false) {
+    if (state.session?.offline || navigator.onLine === false) return;
     if (!sb || state.rankingLoading) return;
     state.rankingLoading = true;
     if (!silent) render();
@@ -1410,20 +1713,66 @@
   }
 
   async function loadAccount() {
+    const offlineAccount = readOfflineAccount();
     if (!sb) {
+      if (offlineAccount?.user) {
+        state.session = { user: offlineAccount.user, offline: true };
+        state.profile = offlineProfileFor(offlineAccount.user, offlineAccount.profile, offlineAccount.username);
+        loadDownloads();
+        syncTopAvatar();
+      }
       state.authReady = true;
       render();
       return;
     }
-    const { data: { session } } = await sb.auth.getSession();
-    state.session = session;
+    let remoteSession = null;
+    try {
+      const sessionResult = await sb.auth.getSession();
+      remoteSession = sessionResult?.data?.session || null;
+    } catch (error) {
+      // Sem rede, o cliente Auth pode rejeitar em vez de devolver uma sessão nula.
+      console.warn("Sessão online indisponível; usando a sessão local.", error);
+    }
+    // Mantém a conta visível após recarregar sem internet. O funcionamento
+    // offline continua restrito aos arquivos da área Downloads.
+    const browserOffline = navigator.onLine === false;
+    const offlineFallback = offlineAccount?.user ? { user: offlineAccount.user, offline: true } : null;
+    const session = browserOffline ? offlineFallback : (remoteSession || offlineFallback);
+    state.session = session?.user ? session : null;
+    if (remoteSession?.user) {
+      // Persiste a identidade assim que a sessão é reconhecida. A senha e os
+      // tokens continuam sob responsabilidade do Supabase Auth.
+      saveOfflineAccount(null);
+    }
+    if (state.session?.offline) {
+      state.profile = offlineProfileFor(state.session.user, offlineAccount?.profile, offlineAccount?.username);
+      loadDownloads();
+      state.authReady = true;
+      syncTopAvatar();
+      render();
+      return;
+    }
+    if (!remoteSession && !navigator.onLine) {
+      if (!state.session?.offline) {
+        state.profile = null;
+        state.authReady = true;
+        render();
+        return;
+      }
+      state.profile = offlineProfileFor(state.session.user, offlineAccount?.profile, offlineAccount?.username);
+      loadDownloads();
+      state.authReady = true;
+      syncTopAvatar();
+      render();
+      return;
+    }
     await loadCoverCatalog();
     await loadCoverChoices(session?.user?.id);
     await loadCoverStyles(session?.user?.id);
     await loadSeriesCoverChoices(session?.user?.id);
     const publisherSettings = await sb.from("publisher_settings").select("publisher_key, publisher_name, cover_url, is_pinned");
     state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
-    const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured").eq("is_public", true).limit(50);
+    const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
     const publicCollections = publicCollectionsResult.data || [];
     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
     const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", collectionOwnerIds) : { data: [] };
@@ -1442,12 +1791,17 @@
     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
     state.featuredBlogCollections = publicCollectionView.filter(collection => collection.collection_type === "blog" && collection.is_featured).slice(0, 8);
-    const comicLikes = await sb.from("comic_likes").select("item_id, user_id");
+    const comicLikes = await sb.from("comic_likes").select("item_id, user_id, created_at");
     state.comicLikeIds = new Set((comicLikes.data || []).filter(row => row.user_id === session?.user?.id).map(row => row.item_id));
+    state.comicLikeAddedAt = new Map((comicLikes.data || []).filter(row => row.user_id === session?.user?.id).map(row => [row.item_id, row.created_at]));
     state.comicLikeCounts = (comicLikes.data || []).reduce((counts, row) => counts.set(row.item_id, (counts.get(row.item_id) || 0) + 1), new Map());
     if (session?.user) {
       const profile = await sb.from("profiles").select("*").eq("id", session.user.id).single();
       state.profile = profile.data;
+      loadDownloads();
+      saveOfflineAccount(state.profile);
+      state.collectionSortOrders = profile.data?.shelf_sort_orders || {};
+      try { state.collectionSortOrders = { ...JSON.parse(localStorage.getItem(`bancaDigitalShelfSort:${session.user.id}`) || "{}"), ...state.collectionSortOrders }; } catch {}
       const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name").eq("user_id", session.user.id).order("created_at", { ascending: false });
       state.savedPublishers = savedPublishersResult.data || [];
       state.savedPublisherKeys = new Set(state.savedPublishers.map(publisher => publisher.publisher_key));
@@ -1463,8 +1817,8 @@
         render();
         return toast("Sua conta está banida.");
       }
-      const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", session.user.id).order("created_at", { ascending: true });
-      state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
+      const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, sort_order").eq("owner_id", session.user.id).order("created_at", { ascending: true });
+      state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, sortOrder: collection.sort_order || "added_desc", itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
       const savedCollectionsResult = savedCollectionIds.length
@@ -1483,8 +1837,9 @@
       const savedBlogIds = [...state.blogSaveIds];
       const savedBlogs = savedBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", savedBlogIds).eq("status", "published") : { data: [] };
       state.savedBlogPosts = savedBlogs.data || [];
-      const favorites = await sb.from("favorites").select("item_id").eq("user_id", session.user.id);
+      const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", session.user.id);
       state.favoriteIds = new Set((favorites.data || []).map(row => row.item_id));
+      state.favoriteAddedAt = new Map((favorites.data || []).map(row => [row.item_id, row.created_at]));
       const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", session.user.id);
       state.readingProgress = new Map((progress.data || []).map(row => [row.item_id, row]));
       state.shelfSnapshot = { saved: new Set(state.favoriteIds), read: new Set([...state.readingProgress.entries()].filter(([, row]) => row.completed).map(([id]) => id)) };
@@ -1509,7 +1864,7 @@
   }
 
   async function loadNotifications() {
-    if (!sb || !state.session?.user?.id) {
+    if (!sb || !state.session?.user?.id || state.session?.offline || navigator.onLine === false) {
       state.notificationChannel?.unsubscribe?.();
       state.notificationChannel = null;
       state.notifications = [];
@@ -1520,6 +1875,11 @@
     }
     const result = await sb.from("notifications").select("id, actor_id, type, title, body, href, metadata, read_at, created_at").eq("user_id", state.session.user.id).order("created_at", { ascending: false }).limit(100);
     if (result.error) {
+      if (/fetch|network|disconnected|offline/i.test(String(result.error.message || ""))) {
+        state.session = { ...state.session, offline: true };
+        state.notificationChannel?.unsubscribe?.();
+        state.notificationChannel = null;
+      }
       state.notifications = [];
       state.notificationUnreadCount = 0;
       state.messageUnreadCount = 0;
@@ -1579,7 +1939,7 @@
   async function loadStaffActivities() {
     state.staffActivities = [];
     state.staffPendingCount = 0;
-    if (!sb || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || state.session?.offline || navigator.onLine === false || !["moderator", "admin"].includes(state.profile?.plan)) return;
     const [moderation, bots] = await Promise.all([
       sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
       sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(100)
@@ -1605,7 +1965,7 @@
   }
 
   async function markChatNotificationsRead(contactId) {
-    if (!sb || !state.session?.user?.id || !contactId) return;
+    if (!sb || state.session?.offline || navigator.onLine === false || !state.session?.user?.id || !contactId) return;
     const result = await sb.from("notifications")
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", state.session.user.id)
@@ -1616,7 +1976,7 @@
   }
 
   async function markChatMentionsRead(roomId = null) {
-    if (!sb || !state.session?.user?.id) return;
+    if (!sb || state.session?.offline || navigator.onLine === false || !state.session?.user?.id) return;
     let query = sb.from("notifications")
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", state.session.user.id)
@@ -1627,6 +1987,11 @@
   }
 
   async function loadPublicProfile(username, collectionId = null) {
+    if (navigator.onLine === false || state.session?.offline) {
+      activateOfflineMode();
+      setSection("downloads");
+      return;
+    }
     state.publicProfile = { loading: true, username, collectionId };
     state.publicShelfTab = "collections";
     state.collectionFilter = { field: "all", query: "" };
@@ -1637,7 +2002,7 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, shelf_sort_orders, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
       profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
@@ -1646,10 +2011,10 @@
       render();
       return;
     }
-    const favorites = await sb.from("favorites").select("item_id").eq("user_id", profile.data.id);
+    const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id);
     const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false });
     const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", profile.data.id);
-    const comicLikes = await sb.from("comic_likes").select("item_id").eq("user_id", profile.data.id);
+    const comicLikes = await sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id);
     const activityResults = await Promise.all([
       sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id),
       sb.from("blog_likes").select("blog_id, created_at").eq("user_id", profile.data.id),
@@ -1664,7 +2029,7 @@
       sb.from("publisher_saves").select("publisher_name, created_at").eq("user_id", profile.data.id),
       sb.from("reading_progress").select("item_id, updated_at").eq("user_id", profile.data.id).eq("completed", true)
     ]);
-    let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+    let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
     if (collections.error) {
       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
     }
@@ -1709,12 +2074,14 @@
     state.publicProfile = {
       profile: profile.data,
       collectionId,
-      collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
+      collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], sortOrder: collection.sort_order || "added_desc", coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
       blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
       authoredBlogPosts: authoredBlogs.data || [],
       savedBlogPosts: savedBlogs.data || [],
       collectionBlogPosts: collectionBlogs.data || [],
       favoriteIds: new Set((favorites.data || []).map(row => row.item_id)),
+      favoriteAddedAt: new Map((favorites.data || []).map(row => [row.item_id, row.created_at])),
+      comicLikeAddedAt: new Map((comicLikes.data || []).map(row => [row.item_id, row.created_at])),
       savedPublishers: savedPublishersResult.data || [],
       comicLikeIds: new Set((comicLikes.data || []).map(row => row.item_id)),
       readingProgress: new Map((progress.data || []).map(row => [row.item_id, row])),
@@ -1742,8 +2109,9 @@
     state.notificationChannel?.unsubscribe?.();
     state.notificationChannel = null;
     clearLocalBox();
+    try { localStorage.removeItem(OFFLINE_ACCOUNT_KEY); } catch {}
     state.localBoxVisible = false;
-    state.session = null; state.profile = null; state.favoriteIds = new Set(); state.readingProgress = new Map(); state.shelfSnapshot = null; state.shelfCategories = []; state.comicLikeIds = new Set(); state.achievements = []; state.achievementChecks = new Set(); state.savedPublisherKeys = new Set(); state.savedPublishers = [];
+    state.session = null; state.profile = null; state.downloads = new Map(); state.favoriteIds = new Set(); state.favoriteAddedAt = new Map(); state.readingProgress = new Map(); state.shelfSnapshot = null; state.shelfCategories = []; state.comicLikeIds = new Set(); state.comicLikeAddedAt = new Map(); state.achievements = []; state.achievementChecks = new Set(); state.savedPublisherKeys = new Set(); state.savedPublishers = [];
     state.notifications = [];
     state.notificationUnreadCount = 0;
     state.section = "home"; render(); toast("Você saiu da conta.");
@@ -1790,9 +2158,11 @@
     if (state.favoriteIds.has(itemId)) {
       await sb.from("favorites").delete().eq("user_id", state.session.user.id).eq("item_id", itemId);
       state.favoriteIds.delete(itemId);
+      state.favoriteAddedAt.delete(itemId);
     } else {
       await sb.from("favorites").insert({ user_id: state.session.user.id, item_id: itemId });
       state.favoriteIds.add(itemId);
+      state.favoriteAddedAt.set(itemId, new Date().toISOString());
       rememberShelfItem("saved", itemId);
       awardAchievement("first_favorite");
     }
@@ -1807,8 +2177,8 @@
       ? await sb.from("favorites").delete().eq("user_id", state.session.user.id).eq("item_id", seriesId)
       : await sb.from("favorites").insert({ user_id: state.session.user.id, item_id: seriesId });
     if (result.error) return toast("Não foi possível atualizar as séries salvas.");
-    if (saved) state.favoriteIds.delete(seriesId);
-    else { state.favoriteIds.add(seriesId); rememberShelfItem("saved", seriesId); awardAchievement("first_favorite"); }
+    if (saved) { state.favoriteIds.delete(seriesId); state.favoriteAddedAt.delete(seriesId); }
+    else { state.favoriteIds.add(seriesId); state.favoriteAddedAt.set(seriesId, new Date().toISOString()); rememberShelfItem("saved", seriesId); awardAchievement("first_favorite"); }
     render();
   }
 
@@ -2041,9 +2411,12 @@
     if (result.error) return toast("Não foi possível atualizar a curtida.");
     if (liked) {
       state.comicLikeIds.delete(itemId);
+      state.comicLikeAddedAt?.delete(itemId);
       state.comicLikeCounts.set(itemId, Math.max(0, (state.comicLikeCounts.get(itemId) || 1) - 1));
     } else {
       state.comicLikeIds.add(itemId);
+      state.comicLikeAddedAt ||= new Map();
+      state.comicLikeAddedAt.set(itemId, new Date().toISOString());
       state.comicLikeCounts.set(itemId, (state.comicLikeCounts.get(itemId) || 0) + 1);
       awardProfileXp("like", `like:${itemId}`);
     }
@@ -2193,7 +2566,9 @@
     updateCompletionCards(item, row.completed);
     if (row.completed && isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
     const result = sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
+    const nextCompleted = row.completed;
     result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
+    return nextCompleted;
   }
 
   const coverMemoryCache = new Map();
@@ -2275,6 +2650,10 @@
   }
 
   function toast(message) {
+    if (state.suppressDownloadReadyToast && String(message).includes("Quadrinho")) {
+      state.suppressDownloadReadyToast = false;
+      return;
+    }
     const el = document.createElement("div");
     el.className = "toast";
     el.textContent = message;
@@ -2411,7 +2790,7 @@
   }
 
   async function attachComments(item, overlay) {
-    if (!sb) return;
+    if (!sb || state.session?.offline || navigator.onLine === false) return;
     const panel = document.createElement("details");
     panel.className = "reader-comments";
     panel.innerHTML = `<div class="section-head"><h3>Comentários</h3></div><div class="comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form"><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}`;
@@ -2491,7 +2870,7 @@
   }
 
   async function attachComments(item, overlay) {
-    if (!sb) return;
+    if (!sb || state.session?.offline || navigator.onLine === false) return;
     const panel = document.createElement("details");
     panel.className = "reader-comments";
     panel.innerHTML = `<summary>Comentários</summary><div class="comments-content"><div class="comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form"><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
@@ -2562,6 +2941,7 @@
   }
 
   async function loadCommentThread(item) {
+    if (!sb || state.session?.offline || navigator.onLine === false) return { comments: [], likedIds: new Set(), counts: new Map() };
     let result = await sb.from("comments").select("id, parent_id, body, created_at, profiles(username, avatar_url, title, plan, faction_id)").eq("item_id", item.id).order("created_at", { ascending: false });
     if (result.error && /parent_id|schema cache|column/i.test(result.error.message || "")) {
       const legacyResult = await sb.from("comments").select("id, body, created_at, profiles(username, avatar_url, title, plan, faction_id)").eq("item_id", item.id).order("created_at", { ascending: false });
@@ -2576,6 +2956,7 @@
   }
 
   async function loadCommentThread(item) {
+    if (!sb || state.session?.offline || navigator.onLine === false) return { comments: [], likedIds: new Set(), counts: new Map() };
     let result = await sb.from("comments").select("id, parent_id, user_id, body, created_at").eq("item_id", item.id).order("created_at", { ascending: false });
     if (result.error && /parent_id|schema cache|column/i.test(result.error.message || "")) {
       const legacyResult = await sb.from("comments").select("id, user_id, body, created_at").eq("item_id", item.id).order("created_at", { ascending: false });
@@ -2807,6 +3188,17 @@
   function openReader(item, options = {}) {
     if (!item) return;
 
+    if (!item.local && navigator.onLine === false) {
+      activateOfflineMode();
+      if (downloaded(item.id)?.status === "completed") return openDownloaded(item);
+      toast("Este quadrinho não está disponível offline. Abra a área de Downloads para ver os quadrinhos baixados.");
+      setSection("downloads");
+      return;
+    }
+
+    state.recentlyOpenedIds = [String(item.id), ...state.recentlyOpenedIds.filter(id => String(id) !== String(item.id))].slice(0, 20);
+    try { localStorage.setItem("bancaDigitalRecentlyOpened", JSON.stringify(state.recentlyOpenedIds)); } catch {}
+
     prioritizeReaderLoading();
 
     if (!item.local && !options.routeSync) {
@@ -2867,11 +3259,11 @@
         <button class="small-btn" data-toggle-grayscale>${readerGrayscale ? 'Cor normal' : 'Preto e branco'}</button>
         <button class="small-btn" data-reader-zoom>Zoom</button>
         ${state.session && !item.local ? `<button class="small-btn" data-toggle-read>${savedProgress?.completed ? 'Desmarcar como lida' : 'Marcar como lida'}</button>` : ''}
-        ${item.character ? `<button class="small-btn" data-browse-character>Ver personagem</button>` : ''}
-        ${item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
+        ${!state.session?.offline && item.character ? `<button class="small-btn" data-browse-character>Ver personagem</button>` : ''}
+        ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
         ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
         ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
-        <button class="small-btn" data-open-external>Abrir arquivo</button>
+        ${!state.session?.offline ? `<button class="small-btn" data-open-external>Abrir arquivo</button>` : ''}
       </div>
       <div class="reader-body" id="reader-body"></div>
       <div class="reader-bottom-controls">
@@ -2894,17 +3286,19 @@
     activeReaderCleanup = cleanupReader;
     closeReaderButton.onclick = () => {
       cleanupReader();
-      setSection("home");
+      setSection(state.session?.offline ? "downloads" : "home");
     };
     $("[data-like-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(item.id); });
     $("[data-share-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); shareComic(item.id); });
     $("[data-comment-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); openCommentsPopup(item); });
-    $("[data-open-external]", overlay).onclick = () => window.open(resolvedUrl, "_blank", "noopener");
+    $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
       if (state.session?.user?.id) saveSkipCoverPreference(nextSkipCover);
+      const localObjectUrl = options.localObjectUrl;
+      options.localObjectUrl = null;
       cleanupReader();
-      openReader(item, { skipCover: nextSkipCover, localObjectUrl: options.localObjectUrl, routeSync: true, grayscale: readerGrayscale });
+      openReader(item, { skipCover: nextSkipCover, localObjectUrl, routeSync: true, grayscale: readerGrayscale });
     });
 
     $("[data-toggle-grayscale]", overlay)?.addEventListener("click", event => {
@@ -2917,7 +3311,21 @@
 
     const body = $("#reader-body", overlay);
     const controls = $("#reader-controls", overlay);
-    $("[data-toggle-read]", overlay)?.addEventListener("click", event => {
+    const toggleReadButton = $("[data-toggle-read]", overlay);
+    if (toggleReadButton) toggleReadButton.disabled = true;
+    const markReaderReady = () => { if (toggleReadButton) toggleReadButton.disabled = false; };
+    let readerReadyObserver = null;
+    if (toggleReadButton && "MutationObserver" in window) {
+      readerReadyObserver = new MutationObserver(() => {
+        if (body.querySelector("canvas, img, .image-continuous-scroll-container, .pdf-continuous-scroll-container, .reader-double-page")) {
+          markReaderReady();
+          readerReadyObserver.disconnect();
+          readerReadyObserver = null;
+        }
+      });
+      readerReadyObserver.observe(body, { childList: true, subtree: true });
+    }
+    toggleReadButton?.addEventListener("click", event => {
       const completed = toggleReadingCompleted(item, progressFor(item)?.total_pages || 1);
       event.currentTarget.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
     });
@@ -2987,11 +3395,11 @@
 
 
     if (format === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
-      renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
+      void renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, (...args) => { markReaderReady(); saveReadingProgress(...args); }, prefetchedBuffer).then(markReaderReady).catch(() => {});
     } else if (format === "cbz" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbz")) {
-      renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
+      void renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, (...args) => { markReaderReady(); saveReadingProgress(...args); }, prefetchedBuffer).then(markReaderReady).catch(() => {});
     } else if (format === "cbr" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbr")) {
-      renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, saveReadingProgress, prefetchedBuffer);
+      void renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, (...args) => { markReaderReady(); saveReadingProgress(...args); }, prefetchedBuffer).then(markReaderReady).catch(() => {});
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
       body.innerHTML = `<img class="reader-image" src="${escapeHTML(resolvedUrl)}" alt="" fetchpriority="high">`;
       const readerImage = $(".reader-image", body);
@@ -3000,6 +3408,7 @@
         readerImage.fetchPriority = "high";
       }
       controls.innerHTML = `<span class="reader-page">Imagem</span>`;
+      markReaderReady();
       saveReadingProgress(item, 1, 1);
     } else if (item.seriesUrl && !item.fileUrl && !item.telegramUrl) {
       body.innerHTML = `
@@ -3074,7 +3483,8 @@
       const currentReadingMode = state.readingMode;
 
       if (currentReadingMode === 'single-page') {
-        let page = Math.max(1, Math.min(resumePage, pdf.numPages));
+        const firstPage = skipCover && pdf.numPages > 1 ? 2 : 1;
+        let page = Math.max(firstPage, Math.min(resumePage, pdf.numPages));
         const canvas = document.createElement("canvas");
         canvas.className = "reader-canvas";
         body.replaceChildren(canvas);
@@ -3099,7 +3509,7 @@
 
           await p.render({ canvasContext: ctx, viewport }).promise;
           controls.innerHTML = `
-            <button data-prev ${page <= 1 ? "disabled" : ""}>‹</button>
+            <button data-prev ${page <= firstPage ? "disabled" : ""}>‹</button>
             <span class="reader-page">${page} / ${pdf.numPages}</span>
             <button data-next ${page >= pdf.numPages ? "disabled" : ""}>›</button>
           `;
@@ -3461,7 +3871,8 @@
       const currentReadingMode = state.readingMode;
 
       if (currentReadingMode === 'single-page') {
-        let page = Math.max(0, Math.min(resumePage - 1, names.length - 1));
+        const firstIndex = skipCover && names.length > 1 ? 1 : 0;
+        let page = Math.max(firstIndex, Math.min(resumePage - 1, names.length - 1));
         const pageCache = createArchivePageCache(names, name => zip.files[name].async("blob"));
         const img = document.createElement("img");
         img.className = "reader-image";
@@ -3479,7 +3890,7 @@
           img.dataset.url = objectUrl;
           img.src = objectUrl;
           controls.innerHTML = `
-            <button data-prev ${page === 0 ? "disabled" : ""}>‹</button>
+            <button data-prev ${page <= firstIndex ? "disabled" : ""}>‹</button>
             <span class="reader-page">${page + 1} / ${names.length}</span>
             <button data-next ${page === names.length - 1 ? "disabled" : ""}>›</button>
           `;
@@ -3662,8 +4073,9 @@
         modeSelect.disabled = false;
         modeSelect.addEventListener('change', (e) => {
           setReadingMode(e.target.value);
-          overlay._cbzDownloadController?.abort();
-          overlay.remove();
+      overlay._cbzDownloadController?.abort();
+      readerReadyObserver?.disconnect();
+      overlay.remove();
           openReader(item, { skipCover });
         });
       }
@@ -3699,7 +4111,8 @@
 
   async function probeArchiveSignature(url) {
     try {
-      const response = await fetch(proxiedFileUrl(url), {
+      const source = String(url || "");
+      const response = await fetch(/^blob:/i.test(source) ? source : proxiedFileUrl(source), /^blob:/i.test(source) ? {} : {
         headers: { Range: "bytes=0-7" },
         mode: "cors",
         credentials: "omit",
@@ -4140,7 +4553,8 @@
       const currentReadingMode = state.readingMode;
 
       if (currentReadingMode === 'single-page') {
-        let page = Math.max(0, Math.min(resumePage - 1, imageFiles.length - 1));
+        const firstIndex = skipCover && imageFiles.length > 1 ? 1 : 0;
+        let page = Math.max(firstIndex, Math.min(resumePage - 1, imageFiles.length - 1));
         const pageCache = createArchivePageCache(imageFiles, file => withTimeout(file.extract(), 120000, "A pÃ¡gina demorou mais de 120 segundos para ser extraÃ­da."));
         const img = document.createElement("img");
         img.className = "reader-image";
@@ -4160,7 +4574,7 @@
           objectUrl = URL.createObjectURL(blob);
           img.src = objectUrl;
           controls.innerHTML = `
-            <button data-prev ${page === 0 ? "disabled" : ""}>‹</button>
+            <button data-prev ${page <= firstIndex ? "disabled" : ""}>‹</button>
             <span class="reader-page">${page + 1} / ${imageFiles.length}</span>
             <button data-next ${page === imageFiles.length - 1 ? "disabled" : ""}>›</button>
           `;
@@ -4515,8 +4929,16 @@
   function coverFor(item, variant = "card", coverChoices = null) {
     // A capa local aparece imediatamente; a capa real substitui-a quando terminar de carregar.
     if (!item) return instantCover({ title: "HQ" });
+    const localCover = [item.coverUrl, item.selectedCoverUrl, item.cover].find(value => /^data:/i.test(String(value || "")));
+    if (localCover) return localCover;
+    const cachedCover = state.offlineCoverData?.get?.(String(item.id));
+    if (cachedCover) return cachedCover;
+    if (state.session?.offline) return instantCover(item);
+    // Antes de a sessão e as preferências serem carregadas, não mostre a capa
+    // padrão: ela seria substituída depois pela variante escolhida.
+    if (!state.authReady) return instantCover(item);
     const activeChoices = coverChoices || (state.section === "public-profile" ? state.publicProfile?.coverChoices : state.coverChoices);
-    const selectedCover = activeChoices?.get?.(item.id)?.cover_url;
+    const selectedCover = (activeChoices?.get?.(item.id) || activeChoices?.get?.(String(item.id)))?.cover_url;
     if (selectedCover) return proxiedImageUrl(selectedCover);
     if (variant === "hero" && item.featuredCoverUrl) return proxiedImageUrl(item.featuredCoverUrl);
     if (item.coverUrl) return proxiedImageUrl(item.coverUrl);
@@ -4593,8 +5015,22 @@
   }
 
   const READER_FILE_CACHE = "banca-reader-files-v2";
-  const MAX_READER_CACHE_BYTES = 300 * 1024 * 1024;
-  const MAX_READER_CACHE_FILES = 4;
+  const OFFLINE_COVER_CACHE = "banca-reader-covers-v1";
+  // Os downloads precisam continuar disponíveis mesmo quando o usuário baixa
+  // mais de quatro edições. O limite real continua sendo o armazenamento
+  // permitido pelo navegador; este valor evita que o app faça uma evicção
+  // prematura dos quadrinhos mais antigos.
+  const MAX_READER_CACHE_BYTES = 2 * 1024 * 1024 * 1024;
+  const MAX_READER_CACHE_FILES = 100;
+  function offlineCoverCacheKey(itemId) { return `${location.origin}/__banca_offline_cover__/${encodeURIComponent(String(itemId))}`; }
+  function blobToDataUrl(blob) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(blob);
+    });
+  }
 
   async function readReaderFileCache(proxyUrl, onProgress) {
     if (!window.caches) return null;
@@ -4620,7 +5056,7 @@
   }
 
   async function writeReaderFileCache(proxyUrl, buffer) {
-    if (!window.caches || !buffer?.byteLength) return;
+    if (!window.caches || !buffer?.byteLength || /^blob:/i.test(String(proxyUrl || ""))) return false;
     try {
       const cache = await window.caches.open(READER_FILE_CACHE);
       const keys = await cache.keys();
@@ -4651,9 +5087,11 @@
           "X-Reader-Used": String(Date.now())
         }
       }));
+      return true;
     } catch (error) {
       console.warn("Não foi possível salvar o arquivo no cache do leitor:", error);
     }
+      return false;
   }
 
   async function readResponseBuffer(response, onProgress) {
@@ -4678,19 +5116,27 @@
       error.readerTransfer = { chunks, received, total };
       throw error;
     }
+    onProgress(received, total || received);
     const bytes = new Uint8Array(received);
     let offset = 0;
     chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
     return bytes.buffer;
   }
 
-  async function fetchFileArrayBuffer(url, onProgress = () => {}) {
+  async function fetchFileArrayBuffer(url, onProgress = () => {}, onComplete = () => {}) {
     const source = String(url || "");
+    if (/^blob:/i.test(source)) {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
+      onComplete();
+      return buffer;
+    }
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(source);
     const proxyUrl = proxiedFileUrl(source);
     const cacheKey = `${proxyUrl}${proxyUrl.includes("?") ? "&" : "?"}v=240`;
     const cached = await readReaderFileCache(cacheKey, onProgress);
-    if (cached) return cached;
+    if (cached) { onComplete(); return cached; }
 
     if (!isMega) {
       // Tenta uma única transferência; usa faixas apenas se o servidor falhar.
@@ -4705,7 +5151,8 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
         if (!buffer.byteLength) throw new Error("Arquivo vazio.");
-        await writeReaderFileCache(cacheKey, buffer);
+        if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("NÃ£o foi possÃ­vel salvar o arquivo offline.");
+        onComplete();
         return buffer;
       } catch (error) {
         console.warn("Download contínuo falhou; tentando por faixas:", error);
@@ -4751,7 +5198,9 @@
       let offset = 0;
       chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
       if (total && received !== total) throw new Error(`Download incompleto: ${received} de ${total} bytes.`);
-      await writeReaderFileCache(cacheKey, bytes.buffer);
+      onProgress(received, total || received);
+      if (!await writeReaderFileCache(cacheKey, bytes.buffer)) throw new Error("NÃ£o foi possÃ­vel salvar o arquivo offline.");
+      onComplete();
       return bytes.buffer;
     }
 
@@ -4836,7 +5285,9 @@
       partial?.received || 0,
       partial?.total || 0
     );
-    await writeReaderFileCache(cacheKey, buffer);
+    onProgress(buffer.byteLength, buffer.byteLength);
+    if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("NÃ£o foi possÃ­vel salvar o arquivo offline.");
+    onComplete();
     return buffer;
   }
 
@@ -4853,6 +5304,16 @@
     if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:i\.imgur\.com|(?:www\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com)\//i.test(source)) return source;
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
+    proxy.searchParams.set("v", "2");
+    return proxy.toString();
+  }
+
+  function imageProxyFetchUrl(url) {
+    const source = String(url || "").trim();
+    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:(?:i\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com|(?:www\.)?dcuguide\.com|multiversohq\.com|www\.midtowncomics\.com|(?:i\.)?ibb\.co)\//i.test(source)) return proxiedImageUrl(source);
+    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
+    proxy.searchParams.set("url", source);
+    proxy.searchParams.set("v", "2");
     return proxy.toString();
   }
 
@@ -5042,7 +5503,7 @@
   }
 
   function hydrateHomeCovers() {
-    if (readerIsOpen) return;
+    if (readerIsOpen || state.session?.offline) return;
     const elements = $$('[data-cover-id]');
     if (!elements.length) return;
     const load = element => {
@@ -5102,6 +5563,7 @@
           <button class="card-favorite ${favoriteIds.has(item.id) ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="Salvar na estante">★</button>
         </div>
         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
+        ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
         <div class="card-body">
           <div class="card-title">${escapeHTML(displayTitle)}</div>
           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${entityButton("character", item.character)}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
@@ -5139,8 +5601,9 @@
     return availableTotal > 1 ? `${issue}/${availableTotal}` : issue;
   }
 
-  function rail(title, items, subtitle = "", actionText = "", directOpen = false) {
+  function rail(title, items, subtitle = "", actionText = "", directOpen = false, deduplicate = true) {
     if (!items.length) return "";
+    const railItems = deduplicate ? uniqueCatalogItems(items) : items;
     return `
       <section class="section">
         <div class="section-head">
@@ -5150,7 +5613,7 @@
           </div>
           ${actionText ? `<button class="link-btn" data-section="search">${escapeHTML(actionText)} →</button>` : ""}
         </div>
-        <div class="rail-viewport"><div class="rail">${uniqueCatalogItems(items).map(item => card(item, state.readingProgress, state.favoriteIds, directOpen)).join("")}</div></div>
+        <div class="rail-viewport"><div class="rail">${railItems.map(item => card(item, state.readingProgress, state.favoriteIds, directOpen)).join("")}</div></div>
       </section>`;
   }
 
@@ -5162,6 +5625,16 @@
       state.homeHeroId = heroItem?.id || null;
     }
     const mostClicked = uniqueCatalogItems([...lib].sort((a,b) => (b.clicks||0) - (a.clicks||0)).slice(0, 8));
+    const progressRecentIds = [...state.readingProgress.entries()]
+      .filter(([, progress]) => progress?.updated_at)
+      .sort(([, a], [, b]) => new Date(b.updated_at) - new Date(a.updated_at))
+      .map(([itemId]) => String(itemId));
+    const recentIds = state.session
+      ? [...new Set([...state.recentlyOpenedIds, ...progressRecentIds])]
+        .filter(itemId => !state.readingProgress.get(itemId)?.completed)
+        .slice(0, 6)
+      : [];
+    const recentlyOpened = recentIds.map(itemId => lib.find(item => String(item.id) === itemId)).filter(Boolean);
     const heroTitle = heroItem ? itemDisplayTitle(heroItem) : "Sua banca digital";
     const heroMeta = heroItem ? [heroItem.issue, heroItem.type ? formatType(heroItem.type) : "", heroItem.year].map(value => String(value || "").trim()).filter(Boolean).join(" · ") : "";
     let randoms = state.homeRandomIds.map(id => lib.find(item => item.id === id)).filter(Boolean).slice(0, 6);
@@ -5208,6 +5681,7 @@
         </div>
       </section>
       <div class="content">
+        ${rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false)}
         ${rail("Mais lidos", mostClicked, "As edições que mais receberam cliques.", "Ver catálogo", true)}
         ${publisherPinnedRail}
         ${bestSeriesRail}
@@ -5342,19 +5816,76 @@
 
   const SHELF_PREVIEW_LIMIT = 6;
 
+  const SHELF_SORT_OPTIONS = [
+    ["added_desc", "Último adicionado primeiro"], ["added_asc", "Primeiro adicionado primeiro"],
+    ["title_asc", "Ordem alfabética crescente"], ["title_desc", "Ordem alfabética decrescente"],
+    ["likes_desc", "Mais curtidos primeiro"], ["likes_asc", "Menos curtidos primeiro"],
+    ["reads_desc", "Mais lidos primeiro"], ["reads_asc", "Menos lidos primeiro"],
+    ["year_desc", "Ano: mais recente"], ["year_asc", "Ano: mais antigo"]
+  ];
+
+  function sortShelfItems(items, sortOrder = "added_desc", addedAtMap = null, progressMap = state.readingProgress) {
+    const source = items.map((item, index) => ({ item, index }));
+    const mapValue = (map, id) => map?.get?.(id) || map?.get?.(String(id)) || "";
+    const titleValue = item => itemDisplayTitle(item).toLocaleLowerCase("pt-BR");
+    const timestampValue = (item, index) => {
+      const raw = mapValue(addedAtMap, item.id) || mapValue(progressMap, item.id)?.updated_at;
+      const parsed = raw ? new Date(raw).getTime() : NaN;
+      return Number.isFinite(parsed) ? parsed : index;
+    };
+    return source.sort((a, b) => {
+      if (sortOrder === "title_asc" || sortOrder === "title_desc") {
+        const result = titleValue(a.item).localeCompare(titleValue(b.item), "pt-BR", { sensitivity: "base" });
+        return sortOrder === "title_desc" ? -result : result;
+      }
+      if (sortOrder === "likes_asc" || sortOrder === "likes_desc") {
+        const result = (state.comicLikeCounts.get(a.item.id) || 0) - (state.comicLikeCounts.get(b.item.id) || 0);
+        return sortOrder === "likes_desc" ? -result : result;
+      }
+      if (sortOrder === "reads_asc" || sortOrder === "reads_desc") {
+        const result = (Number(a.item.clicks) || 0) - (Number(b.item.clicks) || 0);
+        return sortOrder === "reads_desc" ? -result : result;
+      }
+      if (sortOrder === "year_asc" || sortOrder === "year_desc") {
+        const result = (Number(a.item.year) || 0) - (Number(b.item.year) || 0) || titleValue(a.item).localeCompare(titleValue(b.item), "pt-BR");
+        return sortOrder === "year_desc" ? -result : result;
+      }
+      const hasTimestamps = source.some(entry => mapValue(addedAtMap, entry.item.id) || mapValue(progressMap, entry.item.id)?.updated_at);
+      if (!hasTimestamps) return sortOrder === "added_asc" ? a.index - b.index : b.index - a.index;
+      const result = timestampValue(a.item, a.index) - timestampValue(b.item, b.index);
+      return sortOrder === "added_asc" ? result : -result;
+    }).map(entry => entry.item);
+  }
+
+  function shelfSortSelectMarkup(key, selected) {
+    if (state.section !== "shelf" || !state.session) return "";
+    return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
+  }
+
   function shelfCollectionMarkup(title, items, key, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, actions = "", coverChoices = null, renderSeriesCards = false) {
     const expanded = Boolean(state.shelfExpanded[key]);
     const fixedCollection = ["saved", "series-saved", "read", "completed", "liked", "public-saved", "public-series-saved", "public-read", "public-completed", "public-liked"].includes(key)
       || key.startsWith("category:")
       || key.startsWith("public-category:");
-    const visibleItems = fixedCollection || expanded ? items : items.slice(0, SHELF_PREVIEW_LIMIT);
+    const publicState = state.section === "public-profile" ? state.publicProfile : null;
+    const sortOrders = publicState?.profile?.shelf_sort_orders || state.collectionSortOrders || {};
+    const sortCategoryId = key.startsWith("public-category:") ? key.slice("public-category:".length) : "";
+    const publicCategorySortOrder = sortCategoryId ? publicState?.collections?.find(category => category.id === sortCategoryId)?.sortOrder : "";
+    const sortOrder = sortOrders[key] || sortOrders[key.replace(/^public-/, "")] || publicCategorySortOrder || "added_desc";
+    const addedAtMap = key === "saved" || key === "series-saved" || key === "public-saved" || key === "public-series-saved"
+      ? (publicState?.favoriteAddedAt || state.favoriteAddedAt)
+      : key === "liked" || key === "public-liked"
+        ? (publicState?.comicLikeAddedAt || state.comicLikeAddedAt)
+        : null;
+    const orderedItems = sortShelfItems(items, sortOrder, addedAtMap, progressMap);
+    const visibleItems = fixedCollection || expanded ? orderedItems : orderedItems.slice(0, SHELF_PREVIEW_LIMIT);
     const likedCollection = key === "read" && state.section === "shelf" ? shelfCollectionMarkup("Curtidas", shelfItemsByIds([...state.comicLikeIds]), "liked") : "";
     const directOpen = state.section === "shelf" || (state.section === "public-profile" && state.publicProfile?.collectionId);
     const publicCategoryId = key.startsWith("public-category:") ? key.slice("public-category:".length) : "";
     const publicCategory = publicCategoryId ? state.publicProfile?.collections?.find(category => category.id === publicCategoryId) : null;
-    const featureAction = publicCategory && ["moderator", "admin"].includes(state.profile?.plan)
+    const featureAction = shelfSortSelectMarkup(key, sortOrder) + (publicCategory && ["moderator", "admin"].includes(state.profile?.plan)
       ? `<button class="small-btn" data-collection-feature="${escapeHTML(publicCategory.id)}" data-collection-featured="${publicCategory.is_featured ? "true" : "false"}">${publicCategory.is_featured ? "Remover destaque" : "Destacar"}</button>`
-      : "";
+      : "");
     return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>${likedCollection}`;
   }
 
@@ -5365,10 +5896,14 @@
   }
 
   function shelfItemsByIds(ids, unique = false) {
-    const allowed = new Set(ids);
-    const items = state.db.library.filter(item => allowed.has(item.id));
-    const savedSeries = [...allowed].filter(isSeriesId).map(seriesId => state.db.library.find(item => item.seriesId === seriesId)).filter(Boolean);
-    items.push(...savedSeries);
+    const items = [];
+    const seen = new Set();
+    ids.forEach(rawId => {
+      const id = String(rawId);
+      const item = state.db.library.find(entry => String(entry.id) === id);
+      const seriesItem = item || (isSeriesId(id) ? state.db.library.find(entry => String(entry.seriesId) === id) : null);
+      if (seriesItem && !seen.has(seriesItem.id)) { seen.add(seriesItem.id); items.push(seriesItem); }
+    });
     return unique ? uniqueCatalogItems(items) : items;
   }
 
@@ -5524,7 +6059,44 @@
   function chatMessageMarkup(message, profile = {}, senderVisual = null) {
     const username = cleanUsername(profile.username || "usuário");
     const title = String(profile.title || "").trim();
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}"><a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a><div>${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><small>${escapeHTML(formatCommentDate(message.created_at))}</small></div>`;
+    const reply = message.metadata?.reply_to;
+    const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}"><button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button><a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${replyMarkup}<div>${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><small>${escapeHTML(formatCommentDate(message.created_at))}</small></div>`;
+  }
+
+  function setupChatReplyUI({ messagesRoot, compose, input, getMessage }) {
+    if (!messagesRoot || !compose || !input) {
+      const noReply = () => null;
+      noReply.clear = () => {};
+      return noReply;
+    }
+    let selectedMessage = null;
+    let preview = $(".chat-reply-preview", compose);
+    if (!preview) {
+      preview = document.createElement("div");
+      preview.className = "chat-reply-preview";
+      preview.hidden = true;
+      preview.innerHTML = `<span></span><button type="button" aria-label="Cancelar resposta">×</button>`;
+      compose.insertBefore(preview, compose.firstChild);
+    }
+    const update = () => {
+      preview.hidden = !selectedMessage;
+      if (selectedMessage) {
+        $("span", preview).innerHTML = `<b>Respondendo a @${escapeHTML(cleanUsername(selectedMessage.profile?.username || "usuario"))}</b> ${escapeHTML(String(selectedMessage.body || "").slice(0, 160))}`;
+        input.focus();
+      }
+    };
+    const choose = id => { const message = getMessage(id); if (message) { selectedMessage = message; update(); } };
+    $("button", preview).onclick = () => { selectedMessage = null; update(); input.focus(); };
+    messagesRoot.addEventListener("click", event => { const button = event.target.closest("[data-chat-reply]"); if (button) choose(button.dataset.chatReply); });
+    let touchStartX = 0;
+    let touchMessage = null;
+    messagesRoot.addEventListener("touchstart", event => { const message = event.target.closest(".chat-message[data-chat-message-id]"); if (!message || event.touches.length !== 1) return; touchMessage = message; touchStartX = event.touches[0].clientX; message.classList.add("is-swiping"); }, { passive: true });
+    messagesRoot.addEventListener("touchmove", event => { if (!touchMessage || event.touches.length !== 1) return; const distance = Math.max(0, Math.min(92, event.touches[0].clientX - touchStartX)); touchMessage.style.setProperty("--chat-swipe-x", `${distance}px`); }, { passive: true });
+    messagesRoot.addEventListener("touchend", () => { if (!touchMessage) return; const message = touchMessage; const distance = parseFloat(getComputedStyle(message).getPropertyValue("--chat-swipe-x")) || 0; message.classList.remove("is-swiping"); message.style.removeProperty("--chat-swipe-x"); if (distance >= 64) choose(message.dataset.chatMessageId); touchMessage = null; }, { passive: true });
+    const getReply = () => selectedMessage ? { id: selectedMessage.id, body: selectedMessage.body, username: selectedMessage.profile?.username || "usuario" } : null;
+    getReply.clear = () => { selectedMessage = null; update(); };
+    return getReply;
   }
 
   async function openChatRoom(room) {
@@ -5554,6 +6126,7 @@
     });
     const messagesRoot = $("[data-chat-messages]", overlay);
     const chatInput = $("#chat-room-compose textarea", overlay);
+    let chatMessagesById = new Map();
     const resizeChatInput = () => {
       if (!chatInput) return;
       chatInput.style.height = "auto";
@@ -5563,24 +6136,27 @@
       const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at, profiles!chat_messages_sender_id_fkey(username, avatar_url, title, title_color, plan, faction_id)").eq("room_id", room.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: true }).limit(200);
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
+      chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
       messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
     };
     await renderMessages();
     channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).subscribe();
     const chatCompose = $("#chat-room-compose", overlay);
+    const getReply = setupChatReplyUI({ messagesRoot, compose: chatCompose, input: chatInput, getMessage: id => chatMessagesById.get(String(id)) });
     if (chatCompose) chatCompose.onsubmit = async event => {
       event.preventDefault();
       const composeForm = event.currentTarget;
       const form = new FormData(composeForm);
       const prepared = prepareChatMessage(String(form.get("body") || "").trim());
       const body = prepared.body;
+      const reply = getReply();
       const button = $("button[type=submit]", composeForm);
       if (!body || button.disabled) return;
       button.disabled = true;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: prepared.metadata, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
       if (result.error) { console.error("[chat room] erro ao enviar mensagem", result.error); toast(result.error.message || "Não foi possível enviar a mensagem."); }
-      else { awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); await renderMessages(); }
+      else { awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); getReply.clear(); await renderMessages(); }
       button.disabled = false;
     };
     chatInput?.addEventListener("keydown", event => {
@@ -5684,6 +6260,7 @@
       return;
     }
     const messagesRoot = $("[data-chat-messages]", overlay);
+    let chatMessagesById = new Map();
     const renderMessages = async () => {
       const now = new Date().toISOString();
       const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at").or(`and(sender_id.eq.${state.session.user.id},recipient_id.eq.${contact.id}),and(sender_id.eq.${contact.id},recipient_id.eq.${state.session.user.id})`).gt("expires_at", now).order("created_at", { ascending: true }).limit(200);
@@ -5692,17 +6269,22 @@
       const profilesResult = senderIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", senderIds) : { data: [] };
       const profilesById = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
       const senderVisuals = await loadChatSenderVisuals(senderIds);
+      chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: profilesById.get(message.sender_id) || {} }]));
       messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, profilesById.get(message.sender_id) || (message.sender_id === state.session.user.id ? state.profile : {}), senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
     };
     await renderMessages();
     channel = sb.channel(`chat-${state.session.user.id}-${contact.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `recipient_id=eq.${state.session.user.id}` }, payload => { if (payload.new?.sender_id === contact.id) renderMessages(); }).subscribe();
-    $("#chat-compose", overlay).onsubmit = async event => {
+    const chatCompose = $("#chat-compose", overlay);
+    const chatInput = $("#chat-compose textarea", overlay);
+    const getReply = setupChatReplyUI({ messagesRoot, compose: chatCompose, input: chatInput, getMessage: id => chatMessagesById.get(String(id)) });
+    chatCompose.onsubmit = async event => {
       event.preventDefault();
       const composeForm = event.currentTarget;
       const form = new FormData(event.currentTarget);
       const prepared = prepareChatMessage(String(form.get("body") || "").trim());
       const body = prepared.body;
+      const reply = getReply();
       if (!body) return;
       const submitButton = $("button[type=submit]", event.currentTarget);
       if (!submitButton || submitButton.disabled) return;
@@ -5711,7 +6293,7 @@
       messagesRoot.insertAdjacentHTML("beforeend", `<div class="chat-message is-mine chat-message-pending" data-chat-pending="${optimisticId}"><div>${escapeHTML(body)}</div><small>Enviando…</small></div>`);
       event.currentTarget.reset();
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: prepared.metadata, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
       if (result.error) {
         $(`[data-chat-pending="${optimisticId}"]`, messagesRoot)?.remove();
         submitButton.disabled = false;
@@ -5719,6 +6301,7 @@
         return toast(result.error.message || "Não foi possível enviar a mensagem.");
       }
       await renderMessages();
+      getReply.clear();
       awardProfileXp("chat", `chat:${Date.now()}`);
       submitButton.disabled = false;
     };
@@ -5731,8 +6314,11 @@
 
   async function saveShelfCategories(categories) {
     if (sb && state.session) {
-      const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], collection_type: "comic", blog_ids: [], is_featured: category.is_featured === true }));
-      const result = rows.length ? await sb.from("shelf_collections").upsert(rows, { onConflict: "id" }) : { error: null };
+      const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], sort_order: category.sortOrder || state.collectionSortOrders?.[`category:${category.id}`] || "added_desc", collection_type: "comic", blog_ids: [], is_featured: category.is_featured === true }));
+      let result = rows.length ? await sb.from("shelf_collections").upsert(rows, { onConflict: "id" }) : { error: null };
+      if (result.error && /sort_order|schema cache|column/i.test(result.error.message || "")) {
+        result = rows.length ? await sb.from("shelf_collections").upsert(rows.map(({ sort_order, ...row }) => row), { onConflict: "id" }) : { error: null };
+      }
       if (result.error) return toast("Não foi possível salvar a organização da estante.");
       const ids = rows.map(row => row.id);
       const existing = await sb.from("shelf_collections").select("id").eq("owner_id", state.session.user.id).eq("collection_type", "comic");
@@ -5741,6 +6327,22 @@
     }
     render();
     toast("Estante atualizada.");
+  }
+
+  async function saveShelfSortOrder(key, order) {
+    if (!state.session || !SHELF_SORT_OPTIONS.some(([value]) => value === order)) return;
+    state.collectionSortOrders = { ...(state.collectionSortOrders || {}), [key]: order };
+    const result = await sb?.from("profiles").update({ shelf_sort_orders: state.collectionSortOrders }).eq("id", state.session.user.id);
+    if (key.startsWith("category:")) {
+      const collectionId = key.slice("category:".length);
+      const category = state.shelfCategories.find(item => item.id === collectionId);
+      if (category) category.sortOrder = order;
+      await sb?.from("shelf_collections").update({ sort_order: order }).eq("id", collectionId).eq("owner_id", state.session.user.id);
+    }
+    if (result?.error) {
+      try { localStorage.setItem(`bancaDigitalShelfSort:${state.session.user.id}`, JSON.stringify(state.collectionSortOrders)); } catch {}
+    }
+    render();
   }
 
   async function copyCollectionLink(categoryId, username = state.profile?.username) {
@@ -5823,7 +6425,7 @@
     $("#shelf-category-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
-      const category = { id: existing?.id || `shelf-${Date.now()}`, name: String(form.get("name") || "").trim(), coverUrl: String(form.get("coverUrl") || "").trim(), isPublic: form.get("isPublic") === "on", itemIds: form.getAll("itemIds") };
+      const category = { id: existing?.id || `shelf-${Date.now()}`, name: String(form.get("name") || "").trim(), coverUrl: String(form.get("coverUrl") || "").trim(), isPublic: form.get("isPublic") === "on", itemIds: form.getAll("itemIds"), sortOrder: existing?.sortOrder || state.collectionSortOrders?.[`category:${existing?.id}`] || "added_desc" };
       if (!category.name) return;
       const categories = existing ? state.shelfCategories.map(item => item.id === category.id ? category : item) : [...state.shelfCategories, category];
       state.shelfCategories = categories;
@@ -5921,7 +6523,9 @@
     const profile = publicState.profile;
     const allItems = publicCollectionItems(category, publicState);
     const filter = state.collectionFilter || { field: "all", query: "" };
-    const items = filterCollectionItems(allItems, filter.field, filter.query);
+    const filteredItems = filterCollectionItems(allItems, filter.field, filter.query);
+    const sortOrder = publicState.profile?.shelf_sort_orders?.[`category:${category.id}`] || category.sortOrder || "added_desc";
+    const items = sortShelfItems(filteredItems, sortOrder, null, publicState.readingProgress);
     const isLiked = publicState.collectionLikes?.has(category.id);
     const likes = publicState.collectionLikeCounts?.get(category.id) || 0;
     const cover = category.coverUrl ? `style="background-image:url('${escapeHTML(category.coverUrl)}')"` : "";
@@ -6211,6 +6815,78 @@
     if (type === "profile_wall_comment") return "💬";
     if (type === "profile_wall_reply") return "↩";
     return ({ achievement: "🏆", moderation: "⚖", plan: "★", message: "✉", chat_mention: "@", follow: "♥", collection_like: "♥", comment_reply: "↩", comment_like: "♥", mention: "@", announcement: "!" }[type] || "•");
+  }
+
+  function sortDownloadRows(rows, sortOrder = "added_desc") {
+    return rows.map((row, index) => ({ row, index })).sort((a, b) => {
+      const itemA = a.row.item;
+      const itemB = b.row.item;
+      if (sortOrder === "title_asc" || sortOrder === "title_desc") {
+        const result = itemDisplayTitle(itemA).localeCompare(itemDisplayTitle(itemB), "pt-BR", { sensitivity: "base" });
+        return sortOrder === "title_desc" ? -result : result;
+      }
+      if (sortOrder === "likes_asc" || sortOrder === "likes_desc") {
+        const result = (state.comicLikeCounts.get(itemA.id) || 0) - (state.comicLikeCounts.get(itemB.id) || 0);
+        return sortOrder === "likes_desc" ? -result : result;
+      }
+      if (sortOrder === "reads_asc" || sortOrder === "reads_desc") {
+        const result = (Number(itemA.clicks) || 0) - (Number(itemB.clicks) || 0);
+        return sortOrder === "reads_desc" ? -result : result;
+      }
+      if (sortOrder === "year_asc" || sortOrder === "year_desc") {
+        const result = (Number(itemA.year) || 0) - (Number(itemB.year) || 0) || itemDisplayTitle(itemA).localeCompare(itemDisplayTitle(itemB), "pt-BR");
+        return sortOrder === "year_desc" ? -result : result;
+      }
+      const dateA = new Date(a.row.entry.completedAt || a.row.entry.startedAt || 0).getTime() || 0;
+      const dateB = new Date(b.row.entry.completedAt || b.row.entry.startedAt || 0).getTime() || 0;
+      const result = dateA - dateB || a.index - b.index;
+      return sortOrder === "added_asc" ? result : -result;
+    }).map(entry => entry.row);
+  }
+
+  function renderDownloadsPage() {
+    if (!state.session) return renderLoginPage();
+    const entries = [...state.downloads.values()].sort((a, b) => {
+      const aPending = a.status !== "completed";
+      const bPending = b.status !== "completed";
+      if (aPending && bPending) return new Date(a.startedAt || 0) - new Date(b.startedAt || 0);
+      if (aPending !== bPending) return aPending ? -1 : 1;
+      return new Date(b.completedAt || b.startedAt || 0) - new Date(a.completedAt || a.startedAt || 0);
+    });
+    const items = entries.map(entry => {
+      const catalogItem = state.db.library.find(item => String(item.id) === String(entry.id));
+      const item = catalogItem && entry.snapshot ? { ...catalogItem, ...entry.snapshot } : catalogItem || entry.snapshot || { id: entry.id, title: entry.title || "Quadrinho", type: "comic", format: extension(entry.url), fileUrl: entry.url };
+      return { entry, item };
+    }).filter(row => row.item);
+    hydrateOfflineCoverData(items);
+    const pendingItems = items.filter(({ entry }) => entry.status !== "completed");
+    const completedItems = items.filter(({ entry }) => entry.status === "completed");
+    if (navigator.onLine !== false && !state.session?.offline) completedItems.forEach(({ entry, item }) => hydrateDownloadedCover(entry, item));
+    const completedSortOrder = state.downloadsSortOrder || "added_desc";
+    const orderedCompletedItems = sortDownloadRows(completedItems, completedSortOrder);
+    const completedGroups = new Map();
+    orderedCompletedItems.forEach(row => {
+      const key = row.item.seriesId || "__downloads-oneshots";
+      if (!completedGroups.has(key)) completedGroups.set(key, []);
+      completedGroups.get(key).push(row);
+    });
+    completedGroups.forEach((group, seriesId) => {
+      const ordered = sortDownloadRows(group, state.downloadsSeriesSortOrders?.[seriesId] || completedSortOrder);
+      group.splice(0, group.length, ...ordered);
+      group.sort = () => group;
+    });
+    const dateLabel = value => {
+      const date = new Date(value || 0);
+      return Number.isNaN(date.getTime()) ? "Data desconhecida" : date.toLocaleDateString("pt-BR");
+    };
+    const pendingMarkup = pendingItems.length ? `<section class="downloads-pending"><div class="section-head"><div><h2 class="section-title">Baixando</h2><div class="section-subtitle">Downloads em andamento ou interrompidos</div></div></div><div class="downloads-list" data-downloads-list>${pendingItems.map(({ entry, item }) => { const downloading = entry.status === "downloading"; const progress = entry.progress ? ` · ${Math.round(entry.progress)}%` : ""; return `<article class="download-item" data-download-row="${escapeHTML(item.id)}"><div class="download-cover" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></div><div class="download-info"><h3>${escapeHTML(itemDisplayTitle(item))}</h3><span class="section-subtitle">${downloading ? `Baixando${progress}` : `Baixamento interrompido${progress}`}</span><progress max="100" value="${Number(entry.progress || 0).toFixed(1)}"></progress><div class="download-actions"><button class="small-btn" data-open-download="${escapeHTML(item.id)}" ${downloading ? "disabled" : ""}>${downloading ? `Baixando…` : `Retomar download`}</button><button class="small-btn danger" data-delete-download="${escapeHTML(item.id)}">Excluir</button></div></div></article>`; }).join("")}</div></section>` : "";
+    const completedMarkup = completedGroups.size ? `<section class="downloads-completed"><div class="section-head"><div><h2 class="section-title">Disponíveis offline</h2><div class="section-subtitle">Organizados por série</div></div></div>${[...completedGroups.entries()].map(([seriesId, group]) => { const seriesName = seriesId === "__downloads-oneshots" ? "Quadrinhos avulsos" : (group[0].item.seriesTitle || group[0].item.title || "Série"); return `<section class="downloads-series"><div class="downloads-series-head"><h3>${escapeHTML(seriesName)}</h3><span>${group.length} ${group.length === 1 ? "edição" : "edições"}</span></div><div class="downloads-carousel">${group.sort((a, b) => new Date(b.entry.completedAt || b.entry.startedAt || 0) - new Date(a.entry.completedAt || a.entry.startedAt || 0)).map(({ entry, item }) => `<article class="download-card" data-download-row="${escapeHTML(item.id)}"><div class="download-card-cover download-cover-clickable" data-open-download-cover="${escapeHTML(item.id)}" role="button" tabindex="0" aria-label="Ler ${escapeHTML(itemDisplayTitle(item))}" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></div><div class="download-card-body"><h4>${escapeHTML(itemDisplayTitle(item))}</h4><span>${escapeHTML(item.issue ? `Edição ${item.issue}` : `Edição única`)} · ${escapeHTML(dateLabel(entry.completedAt || entry.startedAt))}</span><div class="download-card-actions"><button class="small-btn" data-open-download="${escapeHTML(item.id)}">Ler</button><button class="small-btn danger" data-delete-download="${escapeHTML(item.id)}">Excluir</button></div></div></article>`).join("")}</div></section>`; }).join("")}</section>` : "";
+    return `<div class="content downloads-page"><div class="section-head"><div><div class="eyebrow">Neste navegador</div><h1 class="section-title">Downloads</h1><div class="section-subtitle">Leia seus quadrinhos offline e abra mais rápido. Nada é salvo como arquivo no computador.</div></div></div>${pendingMarkup}${completedMarkup || (!pendingMarkup ? `<div class="empty">Você ainda não baixou nenhum quadrinho.</div>` : "")}</div>`;
+    return `<div class="content downloads-page"><div class="section-head"><div><div class="eyebrow">Neste navegador</div><h1 class="section-title">Downloads</h1><div class="section-subtitle">Leia seus quadrinhos offline e abra mais rápido. Nada é salvo como arquivo no computador.</div></div></div><div class="downloads-list" data-downloads-list>${items.map(({ entry, item }) => { const completed = entry.status === "completed"; const downloading = entry.status === "downloading"; const progress = entry.progress ? ` · ${Math.round(entry.progress)}%` : ""; return `<article class="download-item" data-download-row="${escapeHTML(item.id)}"><div class="download-cover download-cover-clickable" data-open-download-cover="${escapeHTML(item.id)}" role="button" tabindex="${completed ? "0" : "-1"}" aria-label="Ler ${escapeHTML(itemDisplayTitle(item))}" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></div><div class="download-info"><h3>${escapeHTML(itemDisplayTitle(item))}</h3><span class="section-subtitle">${completed ? "Disponível offline" : downloading ? `Baixando${progress}` : `Baixamento interrompido${progress}`}</span>${!completed ? `<progress max="100" value="${Number(entry.progress || 0).toFixed(1)}"></progress>` : ""}<div class="download-actions"><button class="small-btn" data-open-download="${escapeHTML(item.id)}" ${downloading ? "disabled" : ""}>${completed ? "Ler offline" : downloading ? "Baixando…" : "Retomar download"}</button><button class="small-btn danger" data-delete-download="${escapeHTML(item.id)}">Excluir</button></div></div></article>`; }).join("") || '<div class="empty">Você ainda não baixou nenhum quadrinho.</div>'}</div></div>`;
+  }
+  function renderDownloadsProgress() {
+    if (state.section !== "downloads") return;
+    [...state.downloads.values()].forEach(entry => { const row = $(`[data-download-row="${CSS.escape(String(entry.id))}"]`); if (!row) return; const progress = $("progress", row); const subtitle = $(".section-subtitle", row); if (progress) progress.value = Number(entry.progress || 0); if (subtitle) subtitle.textContent = `Baixando · ${Math.round(entry.progress || 0)}%`; });
   }
 
   function rankingMemberMarkup(member, showRank = false) {
@@ -6946,6 +7622,7 @@
 
   function render() {
     const isBlogTheme = state.section === "blog";
+    document.querySelector(".topbar")?.classList.toggle("is-offline", Boolean(state.session?.offline));
     document.body.classList.toggle("blogs-theme", isBlogTheme);
     const brandLogo = document.querySelector(".brand-logo");
     const brandName = document.querySelector(".brand > span:last-child");
@@ -6984,6 +7661,7 @@
     else if (state.section === "login") markup = renderLoginPage();
     else if (state.section === "signup") markup = renderSignupPage();
     else if (state.section === "shelf") markup = renderShelfPage();
+    else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
@@ -7059,6 +7737,9 @@
       });
     }
     $(".content")?.classList.toggle("shelf-page", state.section === "shelf");
+    if (state.session?.offline && $(".content") && !$(".offline-account-notice")) {
+      $(".content").insertAdjacentHTML("afterbegin", `<div class="notice offline-account-notice"><b>Perfil de @${escapeHTML(state.profile?.username || "usuário")}</b> · modo offline. Apenas seus Downloads ficam disponíveis sem internet.</div>`);
+    }
     if (state.section === "ranking") {
       const rankingPage = $(".ranking-page");
       const benefits = $(".ranking-benefits", rankingPage);
@@ -7203,6 +7884,15 @@
         badge.hidden = !state.messageUnreadCount;
       }
     });
+    $$('.downloads-header-btn').forEach(button => {
+      button.style.display = state.session ? "" : "none";
+      const downloads = [...state.downloads.values()];
+      const hasDownloading = downloads.some(download => download.status === "downloading");
+      const hasCompleted = downloads.some(download => download.status === "completed");
+      button.classList.toggle("is-downloading", hasDownloading);
+      button.classList.toggle("is-downloaded", !hasDownloading && hasCompleted);
+      if (button.firstChild) button.firstChild.nodeValue = hasDownloading ? "…" : "↓";
+    });
     $$('.notification-bell').forEach(button => {
       button.style.display = state.session ? "" : "none";
       const badge = $(".notification-badge", button);
@@ -7218,7 +7908,63 @@
       if (badge) badge.hidden = true;
     });
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
+    const downloadsSortHead = $(".downloads-completed .section-head");
+    if (downloadsSortHead && !$("[data-download-sort]", downloadsSortHead)) {
+      downloadsSortHead.insertAdjacentHTML("beforeend", `<label class="shelf-sort-control"><span>Ordenar</span><select data-download-sort>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${escapeHTML(value)}" ${state.downloadsSortOrder === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`);
+    }
+    $("[data-download-sort]")?.addEventListener("change", event => {
+      state.downloadsSortOrder = event.currentTarget.value;
+      try { localStorage.setItem("bancaDigitalDownloadsSort", state.downloadsSortOrder); } catch {}
+      render();
+    });
+    $$('.downloads-series-head').forEach(head => {
+      if ($('[data-download-series-sort]', head)) return;
+      const series = head.closest('.downloads-series');
+      const firstCard = $('[data-download-row]', series);
+      const seriesId = firstCard?.dataset.downloadRow ? (state.downloads?.get(firstCard.dataset.downloadRow)?.snapshot?.seriesId || state.db.library.find(item => String(item.id) === String(firstCard.dataset.downloadRow))?.seriesId || '__downloads-oneshots') : '__downloads-oneshots';
+      const selected = state.downloadsSeriesSortOrders?.[seriesId] || state.downloadsSortOrder || 'added_desc';
+      head.insertAdjacentHTML('beforeend', `<label class="downloads-series-sort"><span>Ordenar</span><select data-download-series-sort="${escapeHTML(seriesId)}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${escapeHTML(value)}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>`);
+    });
+    $$('[data-download-series-sort]').forEach(select => select.addEventListener('change', event => {
+      const seriesId = event.currentTarget.dataset.downloadSeriesSort;
+      state.downloadsSeriesSortOrders = { ...(state.downloadsSeriesSortOrders || {}), [seriesId]: event.currentTarget.value };
+      try { localStorage.setItem('bancaDigitalDownloadsSeriesSort', JSON.stringify(state.downloadsSeriesSortOrders)); } catch {}
+      render();
+    }));
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
+    $$('[data-download]').forEach(el => {
+      const entry = downloaded(el.dataset.download);
+      if (entry?.status === "waiting") { el.classList.add("is-downloading"); el.textContent = "…"; el.title = "Aguardando na fila"; }
+      el.addEventListener("click", event => { event.stopPropagation(); const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.download)); const download = item && downloaded(item.id); if (!item || download?.status === "downloading" || download?.status === "waiting") return; download?.status === "completed" ? deleteDownload(item.id) : startDownload(item); });
+    });
+    $$('[data-download-row]').forEach(row => {
+      const entry = downloaded(row.dataset.downloadRow);
+      if (!entry?.preparing && entry?.status !== "waiting") return;
+      const subtitle = $('.section-subtitle', row);
+      const progress = $('progress', row);
+      const button = $('[data-open-download]', row);
+      if (entry.status === "waiting") {
+        if (subtitle) subtitle.textContent = 'Aguardando na fila…';
+        if (progress) progress.hidden = true;
+        if (button) { button.disabled = true; button.textContent = 'Aguardando…'; }
+      } else {
+        if (subtitle) subtitle.textContent = 'Preparando leitura offline…';
+        if (progress) progress.hidden = true;
+        if (button) { button.disabled = true; button.textContent = 'Preparando…'; }
+      }
+    });
+    $$('[data-open-download]').forEach(el => el.addEventListener("click", () => { const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownload)) || downloaded(el.dataset.openDownload)?.snapshot; const entry = downloaded(el.dataset.openDownload); if (!item || !entry || entry.status === "waiting" || entry.preparing) return; entry.status === "completed" ? openDownloaded(item) : startDownload(item); }));
+    $$('.downloads-completed [data-open-download]').forEach(el => {
+      const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownload)) || downloaded(el.dataset.openDownload)?.snapshot;
+      const replacement = el.cloneNode(true);
+      replacement.removeAttribute('data-open-download');
+      replacement.dataset.viewSeries = item?.seriesId || '';
+      replacement.textContent = 'Série';
+      replacement.disabled = Boolean(state.session?.offline || !item?.seriesId);
+      el.replaceWith(replacement);
+    });
+    $$('[data-open-download-cover]').forEach(el => { const open = () => { const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownloadCover)) || downloaded(el.dataset.openDownloadCover)?.snapshot; const entry = downloaded(el.dataset.openDownloadCover); if (item && entry?.status === "completed") openDownloaded(item); }; el.addEventListener("click", open); el.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }); });
+    $$('[data-delete-download]').forEach(el => el.addEventListener("click", () => deleteDownload(el.dataset.deleteDownload)));
     $$('[data-series-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleSeriesFavorite(el.dataset.seriesFavorite); }));
     $$('[data-cover-choice]').forEach(el => {
       if (el.dataset.coverChoiceBound) return;
@@ -7682,6 +8428,7 @@
     }
     $$('[data-collection-feature]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleShelfCollectionFeatured(el.dataset.collectionFeature, el.dataset.collectionFeatured === "true"); }));
     $('[data-shelf-new-category]')?.addEventListener("click", () => openShelfCategoryForm());
+    $$('[data-shelf-sort]').forEach(select => select.addEventListener("change", event => saveShelfSortOrder(event.currentTarget.dataset.shelfSort, event.currentTarget.value)));
     $$('[data-shelf-edit-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openShelfCategoryForm(el.dataset.shelfEditCategory); }));
     $$('[data-shelf-delete-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteShelfCategory(el.dataset.shelfDeleteCategory); }));
     if (state.section === "shelf") $$('[data-copy-collection]', $(".blog-shelf-panel-mount") || document).forEach(el => { delete el.dataset.copyUsername; });
@@ -7763,7 +8510,10 @@
       const open = card.classList.toggle("is-about-open");
       button.textContent = open ? "Fechar" : "Sobre";
     }); });
-    $$("[data-section]").forEach(el => el.addEventListener("click", () => {
+    $$("[data-section]").forEach(el => {
+      if (el.dataset.sectionBound) return;
+      el.dataset.sectionBound = "true";
+      el.addEventListener("click", () => {
       const s = el.dataset.section;
       if (s === "factions") {
         const canOpenOwnFaction = state.session && state.profile?.faction_id && !["moderator", "admin"].includes(state.profile?.plan);
@@ -7772,8 +8522,12 @@
           : navigate({ pagina: "ranking", secao: "faccoes" });
       }
       setSection(s === "comics" ? "comic" : s);
-    }));
-    $$("[data-action]").forEach(el => el.addEventListener("click", () => {
+      });
+    });
+    $$("[data-action]").forEach(el => {
+      if (el.dataset.actionBound) return;
+      el.dataset.actionBound = "true";
+      el.addEventListener("click", () => {
       const a = el.dataset.action;
       if (a === "home") setSection("home");
       if (a === "random") openReader(weightedRandom(state.db.library));
@@ -7782,13 +8536,15 @@
       if (a === "open-admin") { if (canManage) openAdmin(); }
       if (a === "open-auth") state.session ? setSection("shelf") : openAuthPage();
       if (a === "messages") openChat();
+      if (a === "downloads") setSection("downloads");
       if (a === "notifications-popup") openNotificationsPopup();
       if (a === "staff-activity") { if (["moderator", "admin"].includes(state.profile?.plan)) openNotificationsPopup("staff"); }
       if (a === "logout") signOut();
       if (a === "profile") openProfileSettings();
       if (a === "submit") { if (isAdmin) openSubmission(); else toast("O envio de quadrinhos é exclusivo para administradores."); }
       if (a === "open-local-box") { state.localBoxVisible = true; setSection("local-box"); }
-    }));
+      });
+    });
     $$("[data-collection]").forEach(el => el.addEventListener("click", () => openCollection(el.dataset.collection)));
     const openSeriesById = seriesId => {
       const first = state.db.library.find(item => item.seriesId === seriesId);
@@ -7826,6 +8582,7 @@
       if (!sb) { message.textContent = "A autenticação ainda não foi configurada."; return; }
       if (!identifier.includes("@") && !/^[a-z0-9_]{3,24}$/.test(username)) { message.textContent = "Use de 3 a 24 caracteres: letras, números ou _."; return; }
       const mode = event.submitter?.dataset.authMode || event.currentTarget.dataset.authMode || "login";
+      state.offlineUsername = !identifier.includes("@") ? username : "";
       const providedEmail = String(form.get("email") || "").trim().toLowerCase();
       if (mode === "signup" && providedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(providedEmail)) { message.textContent = "Informe um email válido ou deixe o campo em branco."; return; }
       const signupUsername = identifier.includes("@")
@@ -7876,7 +8633,7 @@
       const result = await sb.auth.updateUser({ password });
       if (result.error) { message.textContent = result.error.message; return; }
       await sb.auth.signOut({ scope: "global" });
-      state.session = null; state.profile = null; state.favoriteIds = new Set();
+      state.session = null; state.profile = null; state.downloads = new Map(); state.favoriteIds = new Set();
       toast("Senha alterada. Entre novamente com a nova senha.");
       setSection("login");
     });
@@ -7910,8 +8667,17 @@
       if (event.target === overlay) overlay.remove();
     });
     $("[data-close]", overlay).onclick = () => overlay.remove();
-    $('[data-back-cover-variants]', overlay)?.addEventListener("click", () => { overlay.remove(); openCoverVariantsReviewPopup(); });
-    $$('[data-open]', overlay).forEach(el => el.addEventListener("click", () => {
+   $('[data-back-cover-variants]', overlay)?.addEventListener("click", () => { overlay.remove(); openCoverVariantsReviewPopup(); });
+    $$('[data-download]', overlay).forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.download));
+      const download = item && downloaded(item.id);
+      const isCompleted = download?.status === "completed" || el.classList.contains("is-downloaded") || /Excluir download offline/i.test(el.title || "");
+      if (!item || download?.status === "downloading" || download?.status === "waiting") return;
+      isCompleted ? deleteDownload(item.id) : startDownload(item);
+    }));
+   $$('[data-open]', overlay).forEach(el => el.addEventListener("click", () => {
       overlay.remove();
       openReader(state.db.library.find(x => x.id === el.dataset.open));
     }));
@@ -8429,7 +9195,14 @@
     state.section = "public-profile";
     state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection };
   }
-  if (initialPublicUsername) render();
+  const bootOfflineAccount = readOfflineAccount();
+  if (!initialPublicUsername && navigator.onLine === false && bootOfflineAccount?.user) {
+    state.session = { user: bootOfflineAccount.user, offline: true };
+    state.profile = offlineProfileFor(bootOfflineAccount.user, bootOfflineAccount.profile, bootOfflineAccount.username);
+    loadDownloads();
+    state.section = "downloads";
+    render();
+  } else if (initialPublicUsername) render();
   else applyRoute();
   syncTopAvatar();
   const warmLibarchive = () => loadLibarchiveModule().catch(error => console.warn("Biblioteca CBR indisponível:", error));
@@ -8446,10 +9219,36 @@
       render();
     }
   });
+  let reconnecting = false;
+  window.addEventListener("online", async () => {
+    if (!state.session?.offline || reconnecting) return;
+    reconnecting = true;
+    try {
+      if (!sb) {
+        state.session = { ...state.session, offline: false };
+        render();
+        return;
+      }
+      const refreshed = await sb.auth.refreshSession();
+      if (!refreshed.error && refreshed.data?.session) {
+        sb.auth.startAutoRefresh?.();
+        await loadAccount();
+        pumpDownloadQueue();
+      }
+    } catch (error) {
+      console.warn("Não foi possível retomar a sessão online:", error);
+    } finally {
+      reconnecting = false;
+    }
+  });
+  window.addEventListener("offline", () => {
+    if (state.session) navigate({ pagina: "downloads" }, true);
+  });
   loadAccount()
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection);
+      pumpDownloadQueue();
     })
     .catch(error => console.warn("Supabase indisponível:", error))
     .finally(() => {
