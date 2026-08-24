@@ -2848,6 +2848,37 @@
     });
   }
 
+  function personalizedRecommendations(lib) {
+    if (!state.session) return [];
+    const saved = state.favoriteIds || new Set();
+    const liked = state.comicLikeIds || new Set();
+    const seeds = lib.filter(item => saved.has(item.id) || liked.has(item.id) || (item.seriesId && saved.has(item.seriesId)));
+    if (!seeds.length) return [];
+
+    const values = value => String(value || "").toLowerCase().split(/\s*(?:\/|&|,|\be\b)\s*/i).map(part => seriesKey(part)).filter(Boolean);
+    const tags = value => (Array.isArray(value) ? value : String(value || "").split(",")).map(part => seriesKey(part)).filter(Boolean);
+    const fields = ["publisher", "imprint", "author", "character"];
+    const preferences = new Map(fields.map(field => [field, new Set()]));
+    const preferredTags = new Set();
+    seeds.forEach(seed => {
+      fields.forEach(field => values(seed[field]).forEach(value => preferences.get(field).add(value)));
+      tags(seed.tags).forEach(tag => preferredTags.add(tag));
+    });
+
+    const seedIds = new Set(seeds.map(item => item.id));
+    const seedSeries = new Set(seeds.map(item => item.seriesId).filter(Boolean));
+    const candidates = lib.filter(item => !seedIds.has(item.id) && !(item.seriesId && seedSeries.has(item.seriesId)) && !item.local);
+    const ranked = candidates.map(item => {
+      let score = Math.log1p(Number(item.clicks) || 0) * .25 + (item.featured ? 1 : 0);
+      fields.forEach(field => { if (values(item[field]).some(value => preferences.get(field).has(value))) score += field === "publisher" ? 4 : 3; });
+      if (tags(item.tags).some(tag => preferredTags.has(tag))) score += 2;
+      score += (state.comicLikeCounts.get(item.id) || 0) * .35;
+      return { item, score };
+    }).sort((a, b) => b.score - a.score || itemDisplayTitle(a.item).localeCompare(itemDisplayTitle(b.item), "pt-BR"));
+
+    return uniqueCatalogItems(ranked.map(entry => entry.item)).slice(0, 6);
+  }
+
   function openItem(item) {
     if (!item) return;
     if (!item.seriesId) return openReader(item);
@@ -5734,6 +5765,19 @@
       state.homeHeroId = heroItem?.id || null;
     }
     const mostClicked = uniqueCatalogItems([...lib].sort((a,b) => (b.clicks||0) - (a.clicks||0)).slice(0, 8));
+    const recentlyAdded = lib
+      .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
+      .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
+      .slice(0, 20)
+      .map(entry => entry.item);
+    const recentlyAddedSeries = lib
+      .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
+      .filter(entry => entry.item.seriesId)
+      .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
+      .filter((entry, index, entries) => entries.findIndex(candidate => candidate.item.seriesId === entry.item.seriesId) === index)
+      .slice(0, 20)
+      .map(entry => entry.item);
+    const recentlyAddedSeriesRail = recentlyAddedSeries.length ? `<section class="section recently-added-series"><div class="section-head"><div><h2 class="section-title">Séries novas</h2><div class="section-subtitle">As séries adicionadas mais recentemente ao catálogo.</div></div></div><div class="rail-viewport"><div class="rail">${recentlyAddedSeries.map(item => seriesCard(item)).join("")}</div></div></section>` : "";
     const progressRecentIds = [...state.readingProgress.entries()]
       .filter(([, progress]) => progress?.updated_at)
       .sort(([, a], [, b]) => new Date(b.updated_at) - new Date(a.updated_at))
@@ -5751,6 +5795,8 @@
       randoms = uniqueCatalogItems([...lib].sort(() => Math.random() - .5).slice(0, 6));
       state.homeRandomIds = randoms.map(item => item.id);
     }
+    const personalized = personalizedRecommendations(lib);
+    const personalizedRail = state.session && personalized.length ? `<section class="section personalized-recommendations"><div class="section-head"><div><h2 class="section-title">Dicas para você</h2><div class="section-subtitle">Sugestões baseadas nos quadrinhos que você salvou e curtiu.</div></div></div><div class="rail-viewport"><div class="rail">${personalized.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div></section>` : "";
 
     const seriesEntries = new Map();
     lib.filter(item => item.seriesId).forEach(item => {
@@ -5791,11 +5837,14 @@
       </section>
       <div class="content">
         ${rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false)}
+        ${rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false)}
+        ${recentlyAddedSeriesRail}
         ${rail("Mais lidos", mostClicked, "As edições que mais receberam cliques.", "Ver catálogo", true)}
         ${publisherPinnedRail}
         ${bestSeriesRail}
         ${featuredCollectionsRail}
         ${rail("Escolha aleatória", randoms, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true)}
+        ${personalizedRail}
       </div>`;
   }
 
@@ -8970,7 +9019,7 @@
 
   function openEditForm(id = null) {
     const x = id ? state.db.library.find(i => i.id === id) : {
-      id: "item-" + Date.now(), title:"", issue:"", type:"comic", author:"", year:new Date().getFullYear(),
+      id: "item-" + Date.now(), addedAt: new Date().toISOString(), title:"", issue:"", type:"comic", author:"", year:new Date().getFullYear(),
       description:"", cover:"", fileUrl:"", telegramUrl:"", format:"pdf", clicks:0, featured:false, randomWeight:5, tags:[], collectionIds:[]
     };
 
