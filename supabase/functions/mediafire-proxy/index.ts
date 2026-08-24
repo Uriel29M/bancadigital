@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition, Content-Range, Accept-Ranges",
 };
 
@@ -73,6 +73,8 @@ async function resolveDownload(url: URL) {
 
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  const requestedMethod = request.method;
+  if (requestedMethod === "HEAD") request = new Request(request.url, { method: "GET", headers: request.headers });
   if (request.method !== "GET") return responseBody("Método não permitido.", 405);
 
   try {
@@ -83,11 +85,15 @@ Deno.serve(async request => {
     const downloadUrl = await resolveDownload(source);
     const range = request.headers.get("range");
     const upstream = await fetchAllowed(downloadUrl, {
+      method: requestedMethod,
       headers: {
         Accept: "application/octet-stream,*/*",
         ...(range ? { Range: range } : {}),
       },
     });
+    if (requestedMethod === "HEAD" && !upstream.response.body) {
+      upstream.response = new Response(new Uint8Array(0), { status: upstream.response.status, headers: upstream.response.headers });
+    }
     if (!upstream.response.ok) return responseBody(`Download indisponível (HTTP ${upstream.response.status}).`, 502);
 
     const length = Number(upstream.response.headers.get("content-length") || 0);
@@ -111,7 +117,7 @@ Deno.serve(async request => {
 
     // Entrega o arquivo conforme chega. Assim o navegador pode começar a
     // processar a resposta enquanto o restante ainda está sendo recebido.
-    return new Response(upstream.response.body, { status: upstream.response.status, headers });
+    return new Response(requestedMethod === "HEAD" ? null : upstream.response.body, { status: upstream.response.status, headers });
   } catch (error) {
     console.error("mediafire-proxy", error);
     return responseBody(error instanceof Error ? error.message : "Falha ao acessar o MediaFire.", 502);

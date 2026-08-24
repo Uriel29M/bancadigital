@@ -3042,10 +3042,14 @@
       // This helps distinguish between "file not found" and "invalid file".
       body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Abrindo arquivo PDF…</div><progress class="reader-progress"></progress></div>`;
       let pdfData;
+      let pdfUrl = null;
       if (prefetchedBuffer) {
         pdfData = await prefetchedBuffer;
       } else if (item.local && item.file) {
         pdfData = await item.file.arrayBuffer();
+      } else if (!prefetchedBuffer && !item.local) {
+        // PDF.js busca somente os intervalos necessários do PDF.
+        pdfUrl = proxiedFileUrl(url);
       } else {
         const response = await fetch(proxiedFileUrl(url), {
           method: "GET",
@@ -3061,11 +3065,11 @@
         }
         pdfData = await response.arrayBuffer();
       }
-      if (!pdfData.byteLength) throw new Error("PDF vazio.");
+      if (pdfData && !pdfData.byteLength) throw new Error("PDF vazio.");
 
       // Pass the data as a typed array.
       body.innerHTML = `<div class="empty" style="margin:auto">Abrindo PDFâ€¦</div>`;
-      const pdf = await pdfjs.getDocument({ data: new Uint8Array(pdfData) }).promise;
+      const pdf = await pdfjs.getDocument(pdfUrl ? { url: pdfUrl } : { data: new Uint8Array(pdfData) }).promise;
 
       const currentReadingMode = state.readingMode;
 
@@ -3303,6 +3307,68 @@
     }
   }
 
+  async function showCBZProgressivePreview(item, url, body, controls, skipCover, resumePage) {
+    if (item.local || !/^https?:\/\//i.test(url) || !window.zipJsReady) return false;
+    try {
+      const zipjs = await window.zipJsReady;
+      if (!zipjs?.ZipReader || !zipjs?.HttpReader || !zipjs?.BlobWriter) return false;
+      const reader = new zipjs.ZipReader(new zipjs.HttpReader(proxiedFileUrl(url)));
+      const entries = (await reader.getEntries())
+        .filter(entry => !entry.directory && /\.(jpg|jpeg|png|webp|gif)$/i.test(entry.filename))
+        .sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true }));
+      if (!entries.length) { await reader.close(); return false; }
+      const entryIndex = Math.max(0, Math.min((resumePage || (skipCover ? 2 : 1)) - 1, entries.length - 1));
+      const blob = await entries[entryIndex].getData(new zipjs.BlobWriter());
+      const imageUrl = URL.createObjectURL(blob);
+      body.innerHTML = `<img class="reader-image" src="${imageUrl}" alt="Página ${entryIndex + 1}">`;
+      controls.innerHTML = `<span class="reader-page">${entryIndex + 1} / ${entries.length} · carregando arquivo</span>`;
+      body.querySelector("img")?.addEventListener("load", () => URL.revokeObjectURL(imageUrl), { once: true });
+      await reader.close();
+      return true;
+    } catch (error) {
+      console.warn("Prévia progressiva do CBZ indisponível:", error);
+      return false;
+    }
+  }
+
+  async function renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
+    if (item.local || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
+    let reader;
+    try {
+      const zipjs = await window.zipJsReady;
+      if (!zipjs?.ZipReader || !zipjs?.HttpReader || !zipjs?.BlobWriter) return false;
+      reader = new zipjs.ZipReader(new zipjs.HttpReader(proxiedFileUrl(url)));
+      const entries = (await reader.getEntries()).filter(entry => !entry.directory && /\.(jpg|jpeg|png|webp|gif)$/i.test(entry.filename)).sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true }));
+      if (!entries.length) throw new Error("CBZ sem imagens.");
+      const pages = getReaderPages(entries.length, skipCover).map(page => page - 1);
+      const requestedPage = Math.max(1, resumePage || 1);
+      let page = pages.includes(requestedPage - 1) ? requestedPage - 1 : pages[0];
+      const img = document.createElement("img");
+      img.className = "reader-image";
+      body.replaceChildren(img);
+      const urls = new Set();
+      const draw = async () => {
+        const blob = await entries[page].getData(new zipjs.BlobWriter());
+        const objectUrl = URL.createObjectURL(blob);
+        urls.add(objectUrl);
+        if (img.dataset.url) { URL.revokeObjectURL(img.dataset.url); urls.delete(img.dataset.url); }
+        img.dataset.url = objectUrl;
+        img.src = objectUrl;
+        controls.innerHTML = `<button data-prev ${page <= pages[0] ? "disabled" : ""}>‹</button><span class="reader-page">${page + 1} / ${entries.length}</span><button data-next ${page >= pages[pages.length - 1] ? "disabled" : ""}>›</button>`;
+        $("[data-prev]", controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position > 0) { page = pages[position - 1]; await draw(); } });
+        $("[data-next]", controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position < pages.length - 1) { page = pages[position + 1]; await draw(); } });
+        onPageChange(item, page + 1, entries.length);
+      };
+      await draw();
+      $("[data-close-reader]", overlay).addEventListener("click", async () => { for (const objectUrl of urls) URL.revokeObjectURL(objectUrl); await reader.close(); }, { once: true });
+      return true;
+    } catch (error) {
+      try { await reader?.close(); } catch {}
+      console.warn("CBZ por Range indisponível; usando fallback:", error);
+      return false;
+    }
+  }
+
   async function renderCBZReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
     const downloadController = new AbortController();
     overlay._cbzDownloadController = downloadController;
@@ -3311,11 +3377,13 @@
     let progressBar;
     let progressDetail;
     let progressSpinner;
+    let progressivePreview = false;
     const showCbzProgress = (message, value = null, detail = "") => {
       if (/de 0(?:\.0+)? MB/.test(detail)) {
         value = null;
         detail = "";
       }
+      if (progressivePreview && progressRoot && !progressRoot.isConnected) return;
       if (!progressRoot || !progressRoot.isConnected) {
         progressRoot = document.createElement("div");
         progressRoot.className = "reader-loading";
@@ -3347,6 +3415,8 @@
     };
     showCbzProgress("Abrindo arquivo CBZ…");
     try {
+      progressivePreview = await showCBZProgressivePreview(item, url, body, controls, skipCover, resumePage);
+      if (await renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange)) return;
       const JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
       if (!JSZipLib) throw new Error("JSZip não carregou.");
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
@@ -3399,9 +3469,11 @@
 
         async function draw() {
           const currentThird = Math.floor(page / pageCache.thirdSize);
-          await pageCache.prefetchThird(currentThird);
-          void pageCache.prefetchThird(currentThird + 1).catch(() => {});
           const blob = await pageCache.get(page);
+          // Exibe a página atual primeiro; o restante do terço é pré-carregado
+          // em segundo plano para a navegação seguinte.
+          void pageCache.prefetchThird(currentThird).catch(() => {});
+          void pageCache.prefetchThird(currentThird + 1).catch(() => {});
           if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
           const objectUrl = URL.createObjectURL(blob);
           img.dataset.url = objectUrl;
@@ -3490,33 +3562,60 @@
         const objectUrls = [];
         const pageElements = [];
  
-        // Eagerly load all pages to prevent layout shift and simplify logic
-        let extractedPages = 0;
-        const pageData = await Promise.all(names.map(async (name) => {
+        // Extrai páginas somente quando se aproximam da viewport.
+        const pageStates = new Map();
+        // Pages are extracted on demand below.
+        // Legacy eager-extraction block removed.
+        /*
           const blob = await zip.files[name].async("blob");
           const url = URL.createObjectURL(blob);
           objectUrls.push(url);
           extractedPages += 1;
           showCbzProgress("Extraindo páginas do CBZ…", Math.round(extractedPages / names.length * 100), `${extractedPages} de ${names.length} páginas`);
           return { src: url };
-        }));
+        */
  
         body.replaceChildren(pageContainer); // Clear status message
  
-        pageData.forEach((data, index) => {
-          if (skipCover && index === 0) return;
-          const pageNum = index + 1;
+        const loadPage = async pageWrapper => {
+          const index = Number(pageWrapper.dataset.pageNum) - 1;
+          const state = pageStates.get(index);
+          if (!state || state.url || state.loading) return state?.loading;
+          state.loading = (async () => {
+            const blob = await zip.files[names[index]].async("blob");
+            state.url = URL.createObjectURL(blob);
+            state.img.src = state.url;
+            objectUrls.push(state.url);
+          })().catch(error => console.error("[CBZ] Falha ao extrair página", index + 1, error)).finally(() => { state.loading = null; });
+          return state.loading;
+        };
+        const releasePage = pageWrapper => {
+          const state = pageStates.get(Number(pageWrapper.dataset.pageNum) - 1);
+          if (!state?.url) return;
+          URL.revokeObjectURL(state.url);
+          objectUrls.splice(objectUrls.indexOf(state.url), 1);
+          state.url = null;
+          state.img.removeAttribute("src");
+        };
+
+        getReaderPages(names.length, skipCover).forEach(pageNum => {
+          const index = pageNum - 1;
           const pageWrapper = document.createElement("div");
           pageWrapper.className = "image-page-wrapper";
           pageWrapper.dataset.pageNum = pageNum;
           const img = document.createElement("img");
           img.className = "reader-image";
           img.alt = `Página ${pageNum}`;
-          img.src = data.src;
           pageWrapper.appendChild(img);
           pageContainer.appendChild(pageWrapper);
           pageElements.push(pageWrapper);
+          pageStates.set(index, { img, url: null, loading: null });
         });
+
+        const observer = new IntersectionObserver(entries => {
+          entries.forEach(entry => entry.isIntersecting ? loadPage(entry.target) : releasePage(entry.target));
+        }, { root: pageContainer, rootMargin: "150% 0px" });
+        pageElements.forEach(page => observer.observe(page));
  
         let currentPageIndex = 0;
         const updateControls = () => {
@@ -3547,10 +3646,12 @@
         };
 
         pageContainer.addEventListener('scroll', updateControls, { passive: true });
+        loadPage(pageElements[0]);
         updateControls();
         pageElements.find(el => Number(el.dataset.pageNum) === resumePage)?.scrollIntoView({ block: 'start' });
 
         $("[data-close-reader]", overlay).addEventListener('click', () => {
+          observer.disconnect();
           pageContainer.removeEventListener('scroll', updateControls);
           for (const url of objectUrls) URL.revokeObjectURL(url);
         }, { once: true });
@@ -3595,6 +3696,32 @@
     body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px">${escapeHTML(message)}</div>`;
     console.log("[CBR]", message);
   };
+
+  async function probeArchiveSignature(url) {
+    try {
+      const response = await fetch(proxiedFileUrl(url), {
+        headers: { Range: "bytes=0-7" },
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        priority: "high"
+      });
+      if (!response.ok && response.status !== 206) return null;
+      const reader = response.body?.getReader();
+      if (!reader) return new Uint8Array(await response.arrayBuffer()).slice(0, 8);
+      const first = await reader.read();
+      await reader.cancel().catch(() => {});
+      return first.value ? first.value.slice(0, 8) : null;
+    } catch (error) {
+      console.warn("Não foi possível identificar o contêiner do arquivo:", error);
+      return null;
+    }
+  }
+
+  function isZipSignature(bytes) {
+    return bytes?.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  }
+
   async function renderCBRReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
     let objectUrl = null;
     let archive = null;
@@ -3674,6 +3801,13 @@
     }
 
     try {
+      // Alguns arquivos cadastrados como CBR são ZIP/CBZ renomeados.
+      // Detecta isso com os primeiros bytes antes de baixar o arquivo completo.
+      const signature = await probeArchiveSignature(url);
+      if (isZipSignature(signature)) {
+        console.info("[CBR] Contêiner ZIP detectado; usando leitor CBZ por Range.");
+        return renderCBZReader(item, url, body, controls, overlay, skipCover, resumePage, onPageChange, null);
+      }
       const libarchivePromise = loadLibarchiveModule();
 
       // =========================================================
@@ -4017,9 +4151,10 @@
         async function draw() {
           controls.innerHTML = `<span class="reader-page">Extraindo página ${page + 1}…</span>`;
           const currentThird = Math.floor(page / pageCache.thirdSize);
-          await pageCache.prefetchThird(currentThird);
-          void pageCache.prefetchThird(currentThird + 1).catch(() => {});
           const extracted = await pageCache.get(page);
+          // Não bloqueia a primeira página esperando dezenas de extrações.
+          void pageCache.prefetchThird(currentThird).catch(() => {});
+          void pageCache.prefetchThird(currentThird + 1).catch(() => {});
           const blob = extracted instanceof Blob ? extracted : new Blob([extracted], { type: "image/jpeg" });
           if (objectUrl) URL.revokeObjectURL(objectUrl);
           objectUrl = URL.createObjectURL(blob);
@@ -4558,6 +4693,24 @@
     if (cached) return cached;
 
     if (!isMega) {
+      // Tenta uma única transferência; usa faixas apenas se o servidor falhar.
+      try {
+        const response = await fetch(proxyUrl, {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store",
+          priority: "high"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
+        if (!buffer.byteLength) throw new Error("Arquivo vazio.");
+        await writeReaderFileCache(cacheKey, buffer);
+        return buffer;
+      } catch (error) {
+        console.warn("Download contínuo falhou; tentando por faixas:", error);
+      }
+
       const chunkSize = 4 * 1024 * 1024;
       const chunks = [];
       let received = 0;
@@ -4604,6 +4757,7 @@
 
     // Uma única resposta evita uma chamada à Edge Function para cada bloco.
     // Se a conexão cair, usamos o modo por faixas abaixo como fallback.
+    if (false) {
     let continuousError = null;
     try {
       const response = await fetch(proxyUrl, {
@@ -4623,6 +4777,7 @@
       console.warn("Download contínuo do Mega falhou; tentando por blocos:", error);
     }
 
+    }
     const downloadByRanges = async (startAt = 0, prefixChunks = [], prefixReceived = 0, totalHint = 0) => {
       const chunkSize = 4 * 1024 * 1024;
       const chunks = [...prefixChunks];

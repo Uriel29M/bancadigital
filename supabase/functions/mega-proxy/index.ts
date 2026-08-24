@@ -3,7 +3,7 @@ import { File } from "npm:megajs";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, range",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Expose-Headers": "Content-Range, Content-Length, Content-Type, Content-Disposition",
 };
 
@@ -122,6 +122,8 @@ function chunkedMegaStream(file: any, size: number): ReadableStream<Uint8Array> 
 
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  const requestedMethod = request.method;
+  if (requestedMethod === "HEAD") request = new Request(request.url, { method: "GET", headers: request.headers });
   if (request.method !== "GET") return errorResponse("Método não permitido.", 405);
 
   try {
@@ -167,7 +169,7 @@ Deno.serve(async request => {
     headers.set("Content-Length", String(responseLength));
     if (contentRange) headers.set("Content-Range", contentRange);
     headers.set("Cache-Control", "public, max-age=300");
-    return new Response(stream, { status: responseStatus, headers });
+    return new Response(requestedMethod === "HEAD" ? null : stream, { status: responseStatus, headers });
   } catch (error) {
     console.error("mega-proxy", error);
     return errorResponse(error instanceof Error ? error.message : "Falha ao acessar o Mega.", 502);
