@@ -6566,6 +6566,8 @@
       body.classList.remove("is-expanded");
       body.classList.add("is-line-limited");
       button.hidden = true;
+      button.textContent = "Expandir";
+      button.setAttribute("aria-expanded", "false");
       requestAnimationFrame(() => {
         body.classList.remove("is-line-limited");
         const lineTops = new Set();
@@ -6581,6 +6583,8 @@
         const canExpand = lineTops.size > 10;
         body.classList.add("is-line-limited");
         button.hidden = !canExpand;
+        button.textContent = "Expandir";
+        button.setAttribute("aria-expanded", "false");
       });
     });
   }
