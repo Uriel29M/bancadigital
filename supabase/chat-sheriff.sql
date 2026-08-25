@@ -32,12 +32,6 @@ as $$
     where sheriff.room_id = p_room_id
       and room.id in ('geral', 'decenautas', 'marvetes', 'leitores-colecionadores')
       and sheriff.user_id = auth.uid()
-    union all
-    select true
-    from public.chat_rooms faction_room
-    join public.profiles member on member.id = auth.uid() and member.faction_id = faction_room.faction_id
-    join public.faction_roles role on role.user_id = member.id and role.faction_id = faction_room.faction_id and role.role in ('leader', 'curator')
-    where faction_room.id = p_room_id and faction_room.access = 'faction'
   )
 $$;
 
@@ -129,49 +123,5 @@ revoke execute on function public.set_chat_room_sheriff(text, text) from public,
 grant execute on function public.is_chat_room_sheriff(text) to authenticated;
 grant execute on function public.get_chat_room_sheriff(text) to authenticated;
 grant execute on function public.set_chat_room_sheriff(text, text) to authenticated;
-
-notify pgrst, 'reload schema';
-
--- Garante que as salas das facções usem o acesso restrito correto.
--- Esta parte é necessária em projetos que ainda receberam a versão antiga
--- do schema, onde essas salas ficaram como public.
-alter table public.chat_rooms
-  drop constraint if exists chat_rooms_access_check;
-
-alter table public.chat_rooms
-  add constraint chat_rooms_access_check
-  check (access in ('public', 'premium', 'staff', 'faction'));
-
-update public.chat_rooms
-set access = 'faction'
-where id like 'faccao-%'
-  and faction_id is not null;
-
-create or replace function public.is_chat_room_sheriff(p_room_id text)
-returns boolean
-language sql stable security definer set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.chat_room_sheriffs sheriff
-    join public.chat_rooms room on room.id = sheriff.room_id
-    where sheriff.room_id = p_room_id
-      and room.id in ('geral', 'decenautas', 'marvetes', 'leitores-colecionadores')
-      and sheriff.user_id = auth.uid()
-  )
-  or exists (
-    select 1
-    from public.chat_rooms faction_room
-    join public.profiles member
-      on member.id = auth.uid()
-     and member.faction_id = faction_room.faction_id
-    join public.faction_roles role
-      on role.user_id = member.id
-     and role.faction_id = faction_room.faction_id
-     and role.role in ('leader', 'curator')
-    where faction_room.id = p_room_id
-      and faction_room.access = 'faction'
-  )
-$$;
 
 notify pgrst, 'reload schema';
