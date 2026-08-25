@@ -883,7 +883,7 @@ window.DEFAULT_LIBRARY = [
     title: "A Morte do Superman Especial de 30º Aniversário",
     issue: "1",
     format: "cbr",
-    fileUrl: "https://www.mediafire.com/file/sl0hi9zzv3yyo1u/MrtSprMn30anvrs_%25282022%2529.%2528ZF-SQ%2529.cbr/file",
+    fileUrl: """,
     telegramUrl: "",
     clicks: 0,
     featured: true,

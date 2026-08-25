@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" href="assets/bancadigitaliconbranco.png?v=1">
-  <link rel="apple-touch-icon" href="assets/bancadigitaliconbranco.png?v=1">
+  <link rel="icon" type="image/png" href="assets/barracabrancaicon.png?v=1">
+  <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <link rel="modulepreload" href="libarchive/libarchive.js">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-  <link rel="stylesheet" href="css/style.css?v=2.2.10.13">
+  <link rel="stylesheet" href="css/style.css?v=2.2.10.17">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=68", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=74", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponÃ­vel:", error));
       });
     }
@@ -23,7 +23,7 @@
   <div id="app">
     <header class="topbar">
       <a class="brand" href="#" data-action="home">
-        <span class="brand-mark"><img class="brand-logo" src="assets/bancadigitaliconbranco.png?v=1" alt="Banca Digital"></span>
+        <span class="brand-mark"><img class="brand-logo" src="assets/barracabrancaicon.png?v=1" alt="Banca Digital"></span>
         <span>Banca<span class="brand-accent">Digital</span></span>
       </a>
 
@@ -124,7 +124,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/data.js?v=2.2.7.38"></script>
-  <script src="js/app.js?v=2.2.10.15"></script>
+  <script src="js/app.js?v=2.2.10.20"></script>
 </body>
 </html>
 

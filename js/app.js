@@ -287,6 +287,7 @@
     notificationChannel: null,
     staffActivities: [],
     staffPendingCount: 0,
+    fileReports: [],
     coverVariantReviewTab: "pending",
     localBoxFiles: [],
     localBoxVisible: false,
@@ -2165,21 +2166,26 @@
     state.staffActivities = [];
     state.staffPendingCount = 0;
     if (!sb || state.session?.offline || navigator.onLine === false || !["moderator", "admin"].includes(state.profile?.plan)) return;
-    const [moderation, bots] = await Promise.all([
+    const [moderation, bots, reports] = await Promise.all([
       sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
-      sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000)
+      sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
+      sb.from("file_reports").select("id, item_id, reporter_id, item_snapshot, reason, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000)
     ]);
     const rows = moderation.data || [];
     const botReviewerIds = (bots.data || []).map(row => row.reviewed_by).filter(Boolean);
-    const ids = [...new Set([...rows.flatMap(row => [row.actor_id, row.target_id]), ...botReviewerIds].filter(Boolean))];
+    const reportReviewerIds = (reports.data || []).map(row => row.reviewed_by).filter(Boolean);
+    const reportReporterIds = (reports.data || []).map(row => row.reporter_id).filter(Boolean);
+    const ids = [...new Set([...rows.flatMap(row => [row.actor_id, row.target_id]), ...botReviewerIds, ...reportReviewerIds, ...reportReporterIds].filter(Boolean))];
     const profiles = ids.length ? await sb.from("profiles").select("id, username").in("id", ids) : { data: [] };
     const names = new Map((profiles.data || []).map(profile => [profile.id, profile.username]));
     state.staffActivities = [
       ...rows.map(row => ({ ...row, kind: "moderation", actorName: names.get(row.actor_id) || "monitor", targetName: names.get(row.target_id) || "usuário" })),
-      ...(bots.data || []).map(row => ({ ...row, kind: "bot", reviewerName: names.get(row.reviewed_by) || "Administrador" }))
+      ...(bots.data || []).map(row => ({ ...row, kind: "bot", reviewerName: names.get(row.reviewed_by) || "Administrador" })),
+      ...(reports.data || []).map(row => ({ ...row, kind: "file_report", reporterName: names.get(row.reporter_id) || "usuÃ¡rio", reviewerName: names.get(row.reviewed_by) || "" }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     // Candidatas de capas têm contador próprio na tela "Examinar capas variantes".
-    state.staffPendingCount = 0;
+    state.fileReports = reports.data || [];
+    state.staffPendingCount = state.fileReports.filter(report => report.status === "pending").length;
   }
 
   function isNotificationFromOpenChat(notification) {
@@ -3431,7 +3437,6 @@
       state.profile = { ...state.profile, profile_banner_url: bannerUrl || null };
     });
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
-    $("[name=shelfLikedPublic]", overlay)?.closest("label")?.remove();
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
     if (!["admin", "moderator", "premium"].includes(state.profile?.plan)) $(".form-grid", overlay)?.insertAdjacentHTML("beforeend", `<div class="field full"><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas no perfil público</label></div>`);
     const shelfVisibilityField = $$(".field.full", overlay).find(field => field.textContent.includes("Visibilidade"));
@@ -3463,7 +3468,6 @@
     profileSectionsPrivacy.className = "field full profile-privacy-settings";
     profileSectionsPrivacy.innerHTML = `<label>Seções do perfil público</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> Mostrar Mural</label><label class="checkbox-inline"><input name="savedPublicCollectionsPublic" type="checkbox" ${state.profile?.shelf_saved_public_collections !== false ? "checked" : ""}> Mostrar Públicas salvas</label><label class="checkbox-inline"><input name="activityPublic" type="checkbox" ${state.profile?.profile_activity_public !== false ? "checked" : ""}> Mostrar Histórico</label>`;
     $(".form-grid", profileForm).appendChild(profileSectionsPrivacy);
-    $("[name=shelfLikedPublic]", overlay)?.closest("label")?.remove();
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
     const originalProfileSubmit = async () => {};
     const shelfBlogsCheckbox = $("[name=shelfBlogsPublic]", overlay);
@@ -3747,6 +3751,11 @@
       if (readerImage) {
         readerImage.loading = "eager";
         readerImage.fetchPriority = "high";
+        readerImage.addEventListener("error", () => {
+          body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px"><h3>Não foi possível abrir esta imagem.</h3><p>O arquivo não abriu. Relate o problema aos moderadores do site para que ele seja verificado.</p><button class="btn btn-primary" data-report-file>Relatar arquivo</button></div>`;
+          controls.innerHTML = `<span class="reader-page">Imagem</span>`;
+          $("[data-report-file]", body).onclick = () => reportFileFailure(item, "A imagem não abriu no leitor.");
+        }, { once: true });
       }
       controls.innerHTML = `<span class="reader-page">Imagem</span>`;
       markReaderReady();
@@ -3762,13 +3771,14 @@
       controls.innerHTML = `<span class="reader-page">LINK EXTERNO</span>`;
     } else {
       const title = "Formato não suportado no leitor";
-      const message = `O formato "${escapeHTML(format.toUpperCase())}" não pode ser lido diretamente no navegador. Use o botão "Abrir arquivo" para abri-lo em uma nova aba.`;
+      const message = `O formato "${escapeHTML(format.toUpperCase())}" não pôde ser aberto pelo leitor. Relate o problema aos moderadores do site para que o arquivo seja verificado.`;
       body.innerHTML = `
         <div class="empty" style="margin:auto;max-width:650px">
           <h3>${escapeHTML(title)}</h3>
-          <p>${escapeHTML(message)}</p>
+          <p>${escapeHTML(message)}</p><button class="btn btn-primary" data-report-file>Relatar arquivo</button>
         </div>`;
       controls.innerHTML = `<span class="reader-page">${escapeHTML(format.toUpperCase())}</span>`;
+      $("[data-report-file]", body).onclick = () => reportFileFailure(item, message);
     }
   }
 
@@ -4047,12 +4057,10 @@
         <div class="empty" style="margin:auto;max-width:650px">
           <h3>${escapeHTML(title)}</h3>
           <p>${escapeHTML(message)}</p>
-          <button class="btn btn-primary" data-open-anyway>Abrir PDF</button>
+          <button class="btn btn-primary" data-report-file>Relatar arquivo</button>
         </div>`;
       controls.innerHTML = `<span class="reader-page">PDF</span>`;
-      $("[data-open-anyway]", body).onclick = () => {
-        window.open(url, "_blank", "noopener");
-      };
+      $("[data-report-file]", body).onclick = () => reportFileFailure(item, `${title} ${message}`);
     }
   }
 
@@ -4433,12 +4441,10 @@
         <div class="empty" style="margin:auto;max-width:650px">
           <h3>Não foi possível abrir o CBZ.</h3>
           <p>O servidor precisa permitir downloads CORS. Você também pode abrir o arquivo diretamente.</p>
-          <button class="btn btn-primary" data-open-anyway>Abrir arquivo</button>
+          <button class="btn btn-primary" data-report-file>Relatar arquivo</button>
         </div>`;
       controls.innerHTML = `<span class="reader-page">CBZ</span>`;
-      $("[data-open-anyway]", body).onclick = () => {
-        window.open(url, "_blank", "noopener");
-      };
+      $("[data-report-file]", body).onclick = () => reportFileFailure(item, "O arquivo não abriu no leitor CBZ.");
     }
   }
 
@@ -4526,17 +4532,15 @@
         <h3>${escapeHTML(title)}</h3>
         <p>${escapeHTML(message)}</p>
 
-        <button class="btn btn-primary" data-open-anyway>
-          Abrir arquivo
+        <button class="btn btn-primary" data-report-file>
+          Relatar arquivo
         </button>
       </div>
     `;
 
       controls.innerHTML = `<span class="reader-page">CBR</span>`;
 
-      $("[data-open-anyway]", body).onclick = () => {
-        window.open(url, "_blank", "noopener");
-      };
+      $("[data-report-file]", body).onclick = () => reportFileFailure(item, "O arquivo não abriu no leitor CBR.");
     }
 
     function timeoutPromise(ms, message) {
@@ -6159,7 +6163,7 @@
           <div class="eyebrow">Destaque da banca</div>
           <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
           ${heroMeta ? `<div class="hero-meta">${escapeHTML(heroMeta)}</div>` : ""}
-          <p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p><button class="hero-more" type="button" data-hero-more>Ler mais</button>
+          <div class="hero-description-row"><p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p><button class="hero-more" type="button" data-hero-more>Ler mais</button></div>
           ${heroItem ? `<button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button>` : ""}
           <button class="btn btn-secondary" data-action="random">🎲 Surpreenda-me</button>
         </div>
@@ -8229,10 +8233,31 @@
 
   function renderStaffActivities() {
     if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
-    const items = state.staffActivities.filter(item => item.kind !== "bot").map(item => item.kind === "bot"
+    const items = state.staffActivities.filter(item => !["bot", "file_report"].includes(item.kind)).map(item => item.kind === "bot"
       ? ""
       : `<article class="staff-activity-item"><header><span>⚖ ${escapeHTML(item.actorName)}</span><span>${escapeHTML(formatCommentDate(item.created_at))}</span></header><strong>${escapeHTML(item.action)}</strong><p>Alvo: @${escapeHTML(item.targetName)}</p>${item.duration_until ? `<small>Até ${escapeHTML(formatCommentDate(item.duration_until))}</small>` : ""}</article>`).join("");
     return `<div class="staff-activity-list">${items || '<div class="empty">Nenhuma ação interna registrada.</div>'}</div>`;
+  }
+
+  function renderFileReports() {
+    if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
+    const reports = state.fileReports || [];
+    return `<div class="staff-activity-list">${reports.map(report => {
+      const snapshot = report.item_snapshot || {};
+      const item = state.db.library.find(entry => String(entry.id) === String(report.item_id));
+      const title = itemDisplayTitle(item || snapshot) || "Edição sem título";
+      const status = report.status === "pending" ? "Pendente" : report.status === "resolved" ? "Resolvido" : "Ignorado";
+      return `<article class="staff-activity-item file-report-item"><header><span>⚠ Relato de @${escapeHTML(report.reporterName || "usuário")}</span><span>${escapeHTML(formatCommentDate(report.created_at))}</span></header><strong>${escapeHTML(title)}</strong><p>${escapeHTML(report.reason || "O arquivo não abriu.")}</p><small>Status: ${status}</small><div class="staff-activity-actions">${item ? `<button class="small-btn" data-report-open="${escapeHTML(item.id)}">Ver edição</button>` : ""}${report.status === "pending" ? `<button class="small-btn" data-report-status="resolved" data-report-id="${report.id}">Marcar resolvido</button><button class="small-btn danger" data-report-status="ignored" data-report-id="${report.id}">Ignorar</button>` : ""}</div></article>`;
+    }).join("") || '<div class="empty">Nenhum relato de arquivo aguardando atenção.</div>'}</div>`;
+  }
+
+  function reportFileFailure(item, reason = "O arquivo não abriu no leitor.") {
+    if (!state.session?.user?.id || state.session?.offline || !sb) return toast("Entre na sua conta para relatar este arquivo aos moderadores.");
+    const snapshot = { id: item.id, title: item.title, seriesTitle: item.seriesTitle, seriesId: item.seriesId, issue: item.issue, format: item.format, fileUrl: item.fileUrl || item.telegramUrl || "" };
+    sb.from("file_reports").insert({ item_id: String(item.id), reporter_id: state.session.user.id, item_snapshot: snapshot, reason }).then(result => {
+      if (result.error && !/duplicate|unique/i.test(result.error.message || "")) return toast("Não foi possível enviar o relato agora.");
+      toast(result.error ? "Este arquivo já foi relatado aos moderadores." : "Relato enviado aos moderadores.");
+    });
   }
 
   function coverVariantCandidates(status = "pending") {
@@ -8454,8 +8479,25 @@
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    if (staff && tab === "file-reports") {
+      openFileReportsPopup(overlay);
+      return;
+    }
     overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
+    if (staff) {
+      const tabs = $(".notification-tabs", overlay);
+      if (tabs && !$("[data-notification-tab=file-reports]", tabs)) {
+        const reportTab = document.createElement("button");
+        reportTab.className = "small-btn notification-tab";
+        reportTab.dataset.notificationTab = "file-reports";
+        reportTab.textContent = `⚠ Arquivos com problema${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}`;
+        reportTab.onclick = () => openFileReportsPopup(overlay);
+        tabs.appendChild(reportTab);
+        const coverTab = $("[data-open-cover-variants]", tabs);
+        if (coverTab) tabs.appendChild(coverTab);
+      }
+    }
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $$('[data-close]', overlay).forEach(button => button.onclick = event => {
       event.preventDefault();
@@ -8525,7 +8567,7 @@
     const footerTitle = document.querySelector(".footer > div:first-child > strong");
     const footerDescription = document.querySelector(".footer > div:first-child > span");
     if (brandLogo) {
-      brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitaliconbranco.png?v=1";
+      brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/barracabrancaicon.png?v=1";
       brandLogo.alt = isBlogTheme ? "Bobojaco" : "Banca Digital";
     }
     if (brandName) brandName.innerHTML = isBlogTheme ? 'Bobo<span class="brand-accent">jaco</span>' : 'Banca<span class="brand-accent">Digital</span>';
@@ -8539,9 +8581,9 @@
       ? "Bobojaco: um espaço para publicar, descobrir e conversar sobre histórias."
       : "Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.";
     const favicon = document.querySelector('link[rel="icon"]');
-    if (favicon) favicon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitaliconbranco.png?v=1";
+    if (favicon) favicon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/barracabrancaicon.png?v=1";
     const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-    if (appleIcon) appleIcon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/bancadigitaliconbranco.png?v=1";
+    if (appleIcon) appleIcon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/barracabrancaicon.png?v=1";
     const main = $("#main");
     let markup = "";
     if (state.section === "home") markup = renderHome();
@@ -8572,6 +8614,29 @@
     hydrateHomeCovers();
     prepareLazyImages(main);
     decorateFactionNames(main);
+  }
+
+  function openFileReportsPopup(previousOverlay = null) {
+    previousOverlay?.remove();
+    closeNotificationsPopups();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>⚠ Relatos de arquivos</h2><div class="section-subtitle">Edições que usuários relataram como impossíveis de abrir</div></div><button class="small-btn" data-close>Fechar</button></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">⚠ Arquivos com problema${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${["moderator", "admin"].includes(state.profile?.plan) ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>${renderFileReports()}</div>`;
+    $("#modal-root").appendChild(overlay);
+    $("[data-close]", overlay).onclick = () => overlay.remove();
+    $("[data-notification-tab]", overlay).onclick = () => { overlay.remove(); openNotificationsPopup("staff"); };
+    $("[data-open-cover-variants]", overlay)?.addEventListener("click", () => openCoverVariantsReviewPopup());
+    $$('[data-report-status]', overlay).forEach(button => button.onclick = async () => {
+      button.disabled = true;
+      const result = await sb.from("file_reports").update({ status: button.dataset.reportStatus, reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString() }).eq("id", button.dataset.reportId);
+      if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível atualizar o relato."); }
+      await loadStaffActivities();
+      openFileReportsPopup();
+    });
+    $$('[data-report-open]', overlay).forEach(button => button.onclick = () => {
+      const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.reportOpen));
+      if (item) { overlay.remove(); openSeriesSelection(item, seriesEditions(item), true); }
+    });
   }
 
   function syncActiveNav() {
@@ -8627,11 +8692,45 @@
     const heroDescription = $(".hero-description");
     const heroMore = $("[data-hero-more]");
     if (heroDescription && heroMore) {
-      if (heroDescription.scrollHeight > heroDescription.clientHeight + 1) heroMore.classList.add("is-visible");
+      const fullText = heroDescription.textContent.trim();
+      const ellipsis = document.createElement("span");
+      ellipsis.className = "hero-description-ellipsis";
+      ellipsis.textContent = "...";
+      const ellipsisGap = document.createTextNode(" ");
+      heroDescription.append(ellipsis, ellipsisGap, heroMore);
+      const renderCollapsed = () => {
+        heroDescription.classList.remove("is-expanded");
+        heroMore.textContent = "Ler mais";
+        heroMore.classList.remove("is-visible");
+        ellipsis.hidden = true;
+        heroDescription.replaceChildren(document.createTextNode(fullText), ellipsis, ellipsisGap, heroMore);
+        const needsCollapse = heroDescription.scrollHeight > heroDescription.clientHeight + 1 || fullText.length > 220;
+        if (!needsCollapse) return;
+        heroMore.classList.add("is-visible");
+        let low = 0;
+        let high = fullText.length;
+        while (low < high) {
+          const middle = Math.ceil((low + high) / 2);
+          heroDescription.replaceChildren(document.createTextNode(fullText.slice(0, middle).trimEnd()), ellipsis, ellipsisGap, heroMore);
+          if (heroDescription.scrollHeight <= heroDescription.clientHeight + 1) low = middle;
+          else high = middle - 1;
+        }
+        heroDescription.replaceChildren(document.createTextNode(fullText.slice(0, low).trimEnd()), ellipsis, ellipsisGap, heroMore);
+        ellipsis.hidden = false;
+        heroMore.classList.add("is-visible");
+      };
+      renderCollapsed();
       heroMore.addEventListener("click", () => {
-        const expanded = heroDescription.classList.toggle("is-expanded");
+        const expanded = !heroDescription.classList.contains("is-expanded");
+        heroDescription.classList.toggle("is-expanded", expanded);
         heroDescription.closest(".hero")?.classList.toggle("is-expanded", expanded);
         heroMore.textContent = expanded ? "Mostrar menos" : "Ler mais";
+        if (expanded) {
+          heroDescription.replaceChildren(document.createTextNode(fullText), heroMore);
+          heroMore.classList.add("is-visible");
+        } else {
+          renderCollapsed();
+        }
       });
     }
     $(".content")?.classList.toggle("shelf-page", state.section === "shelf");
