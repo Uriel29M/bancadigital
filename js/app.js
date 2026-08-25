@@ -802,6 +802,28 @@
     entity: "entidade"
   };
 
+  // Identifica as entradas criadas pela SPA para que o voltar do navegador e
+  // o botão físico do celular possam retornar à rota anterior sem criar uma
+  // nova rota artificial.
+  const ROUTE_HISTORY_KEY = "bancaDigitalRoute";
+  const ROUTE_HISTORY_INDEX_KEY = "bancaDigitalRouteIndex";
+  const OFFLINE_HISTORY_GUARD_KEY = "bancaDigitalOfflineGuard";
+
+  function currentRouteHistoryIndex() {
+    const index = Number(window.history.state?.[ROUTE_HISTORY_INDEX_KEY]);
+    return Number.isInteger(index) && index >= 0 ? index : 0;
+  }
+
+  function armOfflineHistoryGuard() {
+    if (navigator.onLine !== false || !state.session?.offline) return;
+    if (window.history.state?.[OFFLINE_HISTORY_GUARD_KEY]) return;
+    window.history.pushState({
+      [ROUTE_HISTORY_KEY]: true,
+      [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1,
+      [OFFLINE_HISTORY_GUARD_KEY]: true,
+    }, "", routeUrl({ pagina: "downloads" }));
+  }
+
   function routeUrl(params = {}) {
     const url = new URL(window.location.href);
     url.search = "";
@@ -837,8 +859,14 @@
     const offlineNavigation = navigator.onLine === false && activateOfflineMode();
     if (offlineNavigation) params = { pagina: "downloads" };
     const url = routeUrl(params);
-    if (replace) window.history.replaceState({}, "", url);
-    else window.history.pushState({}, "", url);
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (currentUrl === url) return applyRoute();
+    const historyState = {
+      [ROUTE_HISTORY_KEY]: true,
+      [ROUTE_HISTORY_INDEX_KEY]: replace ? currentRouteHistoryIndex() : currentRouteHistoryIndex() + 1,
+    };
+    if (replace) window.history.replaceState(historyState, "", url);
+    else window.history.pushState(historyState, "", url);
     applyRoute();
   }
 
@@ -1053,7 +1081,10 @@
         if (routeFaction.page_key && String(routeFaction.page_key) !== String(routeFactionKey)) {
           const params = new URLSearchParams(window.location.search);
           params.set("faccao", String(routeFaction.page_key));
-          window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+          window.history.replaceState({
+            [ROUTE_HISTORY_KEY]: true,
+            [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex(),
+          }, "", `${window.location.pathname}?${params.toString()}`);
         }
       }
     }
@@ -3033,11 +3064,20 @@
     const previousHost = $("#reader-series-prev", overlay);
     const nextHost = $("#reader-series-next", overlay);
     if (editions.length < 2 || (!previousHost && !nextHost)) return;
-    const current = editions.findIndex(x => x.id === item.id);
-    const firstEdition = editions[0];
-    const previousEdition = editions[current - 1];
-    const nextEdition = editions[current + 1];
-    const lastEdition = editions[editions.length - 1];
+    const offlineReader = navigator.onLine === false || state.session?.offline;
+    const navigationEditions = offlineReader
+      ? editions.filter(edition => edition.id === item.id || downloaded(edition.id)?.status === "completed")
+      : editions;
+    if (offlineReader && navigationEditions.length < 2) {
+      if (previousHost) previousHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">‹ Anterior</button>';
+      if (nextHost) nextHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">Próxima ›</button>';
+      return;
+    }
+    const current = navigationEditions.findIndex(x => x.id === item.id);
+    const firstEdition = navigationEditions[0];
+    const previousEdition = navigationEditions[current - 1];
+    const nextEdition = navigationEditions[current + 1];
+    const lastEdition = navigationEditions[navigationEditions.length - 1];
     const editionButtonLabel = edition => edition?.issue ? `#${escapeHTML(String(edition.issue))}` : "Edição";
     const createNavigation = (host, html) => {
       if (!host || host.querySelector("[data-series-nav]")) return;
@@ -3046,13 +3086,20 @@
       nav.className = "series-reader-nav";
       nav.innerHTML = html;
       host.appendChild(nav);
-      $$('[data-series-target]', nav).forEach(button => button.addEventListener("click", () => {
-      const target = editions[Number(button.dataset.seriesTarget)];
-      if (!target || target.id === item.id) return;
-      overlay._seriesObserver?.disconnect();
-      overlay.remove();
-      openReader(target);
-      }));
+      $$('[data-series-target]', nav).forEach(button => {
+        const target = navigationEditions[Number(button.dataset.seriesTarget)];
+        if (offlineReader && (!target || (target.id !== item.id && downloaded(target.id)?.status !== "completed"))) {
+          button.disabled = true;
+          button.title = "Esta edição não está disponível offline";
+          return;
+        }
+        button.addEventListener("click", () => {
+          if (!target || target.id === item.id) return;
+          overlay._seriesObserver?.disconnect();
+          overlay.remove();
+          openReader(target);
+        });
+      });
     };
     if (current > 0) createNavigation(previousHost, `${current > 1 ? `<button title="Primeira edição${firstEdition?.issue ? ` — ${String(firstEdition.issue)}` : ""}" data-series-target="0">« ${editionButtonLabel(firstEdition)}</button>` : ""}<button title="Edição anterior${previousEdition?.issue ? ` — ${String(previousEdition.issue)}` : ""}" data-series-target="${current - 1}">‹ ${editionButtonLabel(previousEdition)}</button>`);
     if (current < editions.length - 1) createNavigation(nextHost, `<button title="Próxima edição${nextEdition?.issue ? ` — ${String(nextEdition.issue)}` : ""}" data-series-target="${current + 1}">${editionButtonLabel(nextEdition)} ›</button>${current < editions.length - 2 ? `<button title="Última edição${lastEdition?.issue ? ` — ${String(lastEdition.issue)}` : ""}" data-series-target="${editions.length - 1}">${editionButtonLabel(lastEdition)} »</button>` : ""}`);
@@ -3585,7 +3632,11 @@
     };
     closeReaderButton.onclick = () => {
       cleanupReader();
-      setSection(state.session?.offline ? "downloads" : "home");
+      // A rota do leitor já foi adicionada ao histórico ao abrir o gibi.
+      // Voltar de fato uma entrada evita que o botão Voltar gere um novo
+      // histórico e depois reabra o leitor ao ser pressionado novamente.
+      if (currentRouteHistoryIndex() > 0) window.history.back();
+      else navigate({ pagina: state.session?.offline ? "downloads" : "" }, true);
     };
     $("[data-like-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(item.id); });
     $("[data-share-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); shareComic(item.id); });
@@ -4064,6 +4115,22 @@
     }
   }
 
+  async function zipJsArchiveFromBuffer(buffer) {
+    if (!window.zipJsReady) return null;
+    const zipjs = await window.zipJsReady;
+    if (!zipjs?.ZipReader || !zipjs?.Uint8ArrayReader || !zipjs?.BlobWriter) return null;
+    const reader = new zipjs.ZipReader(new zipjs.Uint8ArrayReader(new Uint8Array(buffer)));
+    const entries = await reader.getEntries();
+    const files = {};
+    entries.forEach(entry => {
+      files[entry.filename] = {
+        dir: Boolean(entry.directory),
+        async: () => entry.getData(new zipjs.BlobWriter()),
+      };
+    });
+    return { files, close: () => reader.close() };
+  }
+
   async function renderCBZReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
     const downloadController = new AbortController();
     overlay._cbzDownloadController = downloadController;
@@ -4110,9 +4177,14 @@
     };
     showCbzProgress("Abrindo arquivo CBZ…");
     try {
+      let JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
+      if (!JSZipLib) JSZipLib = { loadAsync: async archiveBuffer => {
+        const archive = await zipJsArchiveFromBuffer(archiveBuffer);
+        if (!archive) throw new Error("Nenhum leitor ZIP está disponível.");
+        return archive;
+      } };
       progressivePreview = await showCBZProgressivePreview(item, url, body, controls, skipCover, resumePage);
       if (await renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange)) return;
-      const JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
       if (!JSZipLib) throw new Error("JSZip não carregou.");
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
       if (buffer) showCbzProgress("Arquivo CBZ carregado. Preparando p\u00e1ginas...", 100, "Abertura conclu\u00edda");
@@ -10069,7 +10141,37 @@
     return `<article class="series-card" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
   }
 
-  window.addEventListener("popstate", applyRoute);
+  function handlePopState() {
+    if (navigator.onLine === false && readerIsOpen) {
+      // Mantém o leitor aberto durante uma queda de conexão, inclusive para
+      // o botão físico e o gesto de voltar dos celulares.
+      const readerUrl = state.readerItemId
+        ? routeUrl({ ler: state.readerItemId })
+        : routeUrl({ pagina: "downloads" });
+      window.history.pushState({
+        [ROUTE_HISTORY_KEY]: true,
+        [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1,
+        [OFFLINE_HISTORY_GUARD_KEY]: true,
+      }, "", readerUrl);
+      return;
+    }
+    // Sem internet, o usuário precisa permanecer na área que funciona
+    // offline. Recolocamos a rota de Downloads na entrada atual do histórico
+    // para absorver o voltar do navegador, o botão físico e o gesto mobile.
+    if (navigator.onLine === false && state.session?.offline) {
+      const downloadsUrl = routeUrl({ pagina: "downloads" });
+      window.history.pushState({
+        [ROUTE_HISTORY_KEY]: true,
+        [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1,
+        [OFFLINE_HISTORY_GUARD_KEY]: true,
+      }, "", downloadsUrl);
+      applyRoute();
+      return;
+    }
+    applyRoute();
+  }
+
+  window.addEventListener("popstate", handlePopState);
   window.BancaDigital = { state, openReader, openAdmin };
   const appRoot = document.getElementById("app");
   const modalRoot = document.getElementById("modal-root");
@@ -10125,6 +10227,13 @@
   }
   syncModalInteractionState();
   const pathParts = window.location.pathname.split("/").filter(Boolean);
+  if (!window.history.state?.[ROUTE_HISTORY_KEY]) {
+    window.history.replaceState({
+      ...(window.history.state || {}),
+      [ROUTE_HISTORY_KEY]: true,
+      [ROUTE_HISTORY_INDEX_KEY]: 0,
+    }, "", window.location.href);
+  }
   const routeParts = pathParts[0]?.toLowerCase() === "banca-digital-quadrinhos-v3" ? pathParts.slice(1) : pathParts;
   const queryProfile = new URLSearchParams(window.location.search).get("perfil");
   const queryPublicCollection = new URLSearchParams(window.location.search).get("lista");
@@ -10143,6 +10252,7 @@
     state.profile = offlineProfileFor(bootOfflineAccount.user, bootOfflineAccount.profile, bootOfflineAccount.username);
     loadDownloads();
     state.section = "downloads";
+    armOfflineHistoryGuard();
     render();
   } else if (initialPublicUsername) render();
   else applyRoute();
@@ -10195,7 +10305,15 @@
     }
   });
   window.addEventListener("offline", () => {
-    if (state.session) navigate({ pagina: "downloads" }, true);
+    if (state.session) {
+      if (readerIsOpen) {
+        // Atualiza o estado offline sem trocar a rota enquanto o leitor está aberto.
+        activateOfflineMode();
+        return;
+      }
+      navigate({ pagina: "downloads" }, true);
+      armOfflineHistoryGuard();
+    }
   });
   loadAccount()
     .then(async () => {
