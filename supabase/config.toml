@@ -8,7 +8,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.github-catalog]
-verify_jwt = true
+verify_jwt = false
 
 [functions.cover-variants-bot]
 verify_jwt = false

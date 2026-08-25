@@ -223,8 +223,10 @@ create index if not exists chat_messages_expires_idx on public.chat_messages(exp
 create table if not exists public.chat_rooms (
   id text primary key,
   name text not null unique,
-  access text not null default 'public' check (access in ('public', 'premium', 'staff'))
+  access text not null default 'public' check (access in ('public', 'premium', 'staff', 'faction'))
 );
+alter table public.chat_rooms drop constraint if exists chat_rooms_access_check;
+alter table public.chat_rooms add constraint chat_rooms_access_check check (access in ('public', 'premium', 'staff', 'faction'));
 
 insert into public.chat_rooms (id, name, access) values
   ('geral', 'Chat Geral', 'public'),
@@ -242,6 +244,66 @@ alter table public.chat_messages add constraint chat_messages_destination_check 
   (room_id is null and recipient_id is not null) or (room_id is not null and recipient_id is null)
 );
 create index if not exists chat_messages_room_created_idx on public.chat_messages(room_id, created_at desc);
+
+create table if not exists public.chat_room_sheriffs (
+  room_id text primary key references public.chat_rooms(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  assigned_by uuid references public.profiles(id) on delete set null,
+  assigned_at timestamptz not null default now()
+);
+create unique index if not exists chat_room_sheriffs_user_room_idx on public.chat_room_sheriffs(room_id, user_id);
+alter table public.chat_room_sheriffs enable row level security;
+
+create or replace function public.is_chat_room_sheriff(p_room_id text)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from public.chat_room_sheriffs sheriff join public.chat_rooms room on room.id = sheriff.room_id where sheriff.room_id = p_room_id and room.id in ('geral', 'decenautas', 'marvetes', 'leitores-colecionadores') and sheriff.user_id = auth.uid())
+$$;
+
+create or replace function public.get_chat_room_sheriff(p_room_id text)
+returns table(user_id uuid, username text, avatar_url text)
+language sql stable security definer set search_path = public
+as $$
+  select sheriff.user_id, profile.username, profile.avatar_url
+  from public.chat_room_sheriffs sheriff
+  join public.profiles profile on profile.id = sheriff.user_id
+  join public.chat_rooms room on room.id = sheriff.room_id
+  where sheriff.room_id = p_room_id and room.id in ('geral', 'decenautas', 'marvetes', 'leitores-colecionadores') and auth.uid() is not null
+$$;
+
+create or replace function public.set_chat_room_sheriff(p_room_id text, p_username text)
+returns table(user_id uuid, username text, avatar_url text)
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user public.profiles%rowtype;
+  v_previous_user public.profiles%rowtype;
+  v_room_name text;
+begin
+  if not public.is_moderator() then raise exception 'Apenas moderadores e administradores podem trocar o xerife'; end if;
+  if not exists (select 1 from public.chat_rooms where id = p_room_id and id in ('geral', 'decenautas', 'marvetes', 'leitores-colecionadores')) then raise exception 'Apenas as salas públicas principais podem ter xerife'; end if;
+  select room.name into v_room_name from public.chat_rooms room where room.id = p_room_id;
+  if nullif(trim(p_username), '') is null then
+    select profile.* into v_previous_user from public.chat_room_sheriffs sheriff join public.profiles profile on profile.id = sheriff.user_id where sheriff.room_id = p_room_id;
+    delete from public.chat_room_sheriffs where room_id = p_room_id;
+    if v_previous_user.id is not null then
+      perform public.create_notification(v_previous_user.id, 'chat_sheriff_removed', 'Cargo de xerife removido', 'Você não é mais o xerife de ' || coalesce(v_room_name, 'uma sala pública') || '.', auth.uid(), null, jsonb_build_object('room_id', p_room_id));
+    end if;
+    return;
+  end if;
+  select profile.* into v_user from public.profiles profile where lower(profile.username) = lower(trim(p_username));
+  if not found then raise exception 'Usuário não encontrado'; end if;
+  insert into public.chat_room_sheriffs(room_id, user_id, assigned_by)
+  values (p_room_id, v_user.id, auth.uid())
+  on conflict (room_id) do update set user_id = excluded.user_id, assigned_by = excluded.assigned_by, assigned_at = now();
+  perform public.create_notification(v_user.id, 'chat_sheriff', 'Você foi nomeado xerife', 'Você agora é o xerife de ' || coalesce(v_room_name, 'uma sala pública') || '. Você pode destacar e excluir mensagens nessa sala.', auth.uid(), null, jsonb_build_object('room_id', p_room_id));
+  return query select v_user.id as user_id, v_user.username as username, v_user.avatar_url as avatar_url;
+end;
+$$;
+
+grant execute on function public.get_chat_room_sheriff(text) to authenticated;
+grant execute on function public.set_chat_room_sheriff(text, text) to authenticated;
+notify pgrst, 'reload schema';
 
 -- As fixações guardam uma cópia da mensagem para continuarem visíveis mesmo
 -- depois que a mensagem original expirar e for removida.
@@ -274,7 +336,7 @@ declare
   v_pin public.chat_pins;
   v_expires_at timestamptz;
 begin
-  if not public.is_moderator() then raise exception 'Apenas moderadores podem fixar mensagens'; end if;
+  if not (public.is_moderator() or public.is_chat_room_sheriff(p_room_id)) then raise exception 'Apenas moderadores, administradores ou o xerife podem fixar mensagens'; end if;
   if p_duration not in ('24h', '7d', '1m', 'forever') then raise exception 'Duração da fixação inválida'; end if;
   perform pg_advisory_xact_lock(hashtext(p_room_id));
   select * into v_message from public.chat_messages where id = p_message_id and room_id = p_room_id;
@@ -313,7 +375,7 @@ create or replace function public.unpin_chat_message(p_room_id text, p_message_i
 returns boolean language plpgsql security definer set search_path = public
 as $$
 begin
-  if not public.is_moderator() then raise exception 'Apenas moderadores podem desfixar mensagens'; end if;
+  if not (public.is_moderator() or public.is_chat_room_sheriff(p_room_id)) then raise exception 'Apenas moderadores, administradores ou o xerife podem desfixar mensagens'; end if;
   delete from public.chat_pins where room_id = p_room_id and message_id = p_message_id;
   return found;
 end;
@@ -1041,6 +1103,7 @@ alter table public.profile_blocks enable row level security;
 alter table public.notifications enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.chat_pins enable row level security;
+alter table public.chat_room_sheriffs enable row level security;
 alter table public.chat_rooms enable row level security;
 alter table public.favorites enable row level security;
 alter table public.publisher_saves enable row level security;
@@ -1183,7 +1246,7 @@ create policy "users send chat messages" on public.chat_messages for insert with
   )
 );
 
-create policy "participants delete chat messages" on public.chat_messages for delete using (auth.uid() = sender_id or auth.uid() = recipient_id or public.is_moderator());
+create policy "participants delete chat messages" on public.chat_messages for delete using (auth.uid() = sender_id or auth.uid() = recipient_id or public.is_moderator() or public.is_chat_room_sheriff(room_id));
 create policy "active chat pins are visible to members" on public.chat_pins for select using (
   (expires_at is null or expires_at > now()) and public.can_access_chat_room(room_id)
 );
@@ -2308,13 +2371,13 @@ begin
 end;
 $$;
 
--- Salas públicas de cada facção. A política de envio é adicionada abaixo.
+-- Salas de cada facção. A política de envio é adicionada abaixo.
 insert into public.chat_rooms (id, name, access) values
-  ('faccao-aurora-rubra', 'Maravilhas', 'public'),
-  ('faccao-vigilia-cobalto', 'Legado', 'public'),
-  ('faccao-forja-dourada', 'Ruptura', 'public'),
-  ('faccao-nevoa-violeta', 'Horizonte', 'public')
-on conflict (id) do update set name = excluded.name;
+  ('faccao-aurora-rubra', 'Maravilhas', 'faction'),
+  ('faccao-vigilia-cobalto', 'Legado', 'faction'),
+  ('faccao-forja-dourada', 'Ruptura', 'faction'),
+  ('faccao-nevoa-violeta', 'Horizonte', 'faction')
+on conflict (id) do update set name = excluded.name, access = excluded.access;
 
 alter table public.chat_rooms add column if not exists faction_id text references public.factions(id) on delete cascade;
 update public.chat_rooms set faction_id = replace(id, 'faccao-', '') where id like 'faccao-%';
@@ -2341,6 +2404,36 @@ as $$
     left join public.profiles profile on profile.id = auth.uid()
     where room.id = p_room_id and profile.id = auth.uid() and (
       (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+    )
+  )
+$$;
+
+create or replace function public.can_access_chat_room(p_room_id text)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.chat_rooms room
+    left join public.profiles profile on profile.id = auth.uid()
+    where room.id = p_room_id and (
+      (room.access = 'public' and room.faction_id is null)
+      or (room.access = 'faction' and (profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+    )
+  )
+$$;
+
+create or replace function public.can_send_chat_room(p_room_id text)
+returns boolean language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1 from public.chat_rooms room
+    left join public.profiles profile on profile.id = auth.uid()
+    where room.id = p_room_id and profile.id = auth.uid() and (
+      (room.access = 'public' and room.faction_id is null)
+      or (room.access = 'faction' and (profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
       or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
       or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
     )

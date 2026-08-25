@@ -355,6 +355,12 @@
       username: savedUsername || metadata.username || metadata.user_name || metadata.preferred_username || "usuario"
     };
   }
+  function normalizedPlan(profile = state.profile) {
+    return String(profile?.plan || "").trim().toLowerCase();
+  }
+  function isAdminProfile(profile = state.profile) {
+    return normalizedPlan(profile) === "admin";
+  }
   function loadDownloads() {
     const userId = state.session?.user?.id;
     if (!userId) { state.downloads = new Map(); return; }
@@ -1838,6 +1844,10 @@
     const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
     const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (profile?.avatar_url || DEFAULT_AVATAR_URL);
     return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(avatarUrl)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
+  }
+
+  function sheriffAvatarMarkup(profile, className = "chat-message-avatar") {
+    return `<span class="sheriff-avatar-wrap" title="Xerife desta sala"><span class="sheriff-six-point-star" aria-hidden="true">✡</span>${avatarMarkup(profile, `${className} sheriff-avatar-photo`)}</span>`;
   }
 
   function syncTopAvatar() {
@@ -6712,11 +6722,13 @@
     { id: "marvetes", name: "Marvetes", access: "public" },
     { id: "leitores-colecionadores", name: "Leitores e Colecionadores", access: "premium" },
     { id: "staff", name: "Chat da Staff", access: "staff" },
-    { id: "faccao-aurora-rubra", name: "Maravilhas", access: "public", factionId: "aurora-rubra" },
-    { id: "faccao-vigilia-cobalto", name: "Legado", access: "public", factionId: "vigilia-cobalto" },
-    { id: "faccao-forja-dourada", name: "Ruptura", access: "public", factionId: "forja-dourada" },
-    { id: "faccao-nevoa-violeta", name: "Horizonte", access: "public", factionId: "nevoa-violeta" }
+    { id: "faccao-aurora-rubra", name: "Maravilhas", access: "faction", factionId: "aurora-rubra" },
+    { id: "faccao-vigilia-cobalto", name: "Legado", access: "faction", factionId: "vigilia-cobalto" },
+    { id: "faccao-forja-dourada", name: "Ruptura", access: "faction", factionId: "forja-dourada" },
+    { id: "faccao-nevoa-violeta", name: "Horizonte", access: "faction", factionId: "nevoa-violeta" }
   ];
+  const SHERIFF_ROOM_IDS = new Set(["geral", "decenautas", "marvetes", "leitores-colecionadores"]);
+  const isSheriffRoom = room => Boolean(room && SHERIFF_ROOM_IDS.has(room.id) && !room.factionId);
 
   function canOpenChatRoom(room) {
     if (room.factionId) return ["moderator", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
@@ -6726,6 +6738,7 @@
   }
 
   function chatRoomLabel(room) {
+    if (room.factionId) return "Exclusivo";
     return room.access === "premium" ? "Lenda" : room.access === "staff" ? "Staff" : "Público";
   }
 
@@ -6815,12 +6828,14 @@
     const title = String(profile.title || "").trim();
     const reply = message.metadata?.reply_to;
     const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
-    const canModerateChat = ["moderator", "admin"].includes(state.profile?.plan);
+    const canModerateChat = options.canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
+    const isSheriff = options.sheriffId && String(options.sheriffId) === String(message.sender_id);
+    const messageAvatar = isSheriff ? sheriffAvatarMarkup({ ...profile, username }, "chat-message-avatar") : avatarMarkup({ ...profile, username }, "chat-message-avatar");
     const moderationButton = canModerateChat ? `<button type="button" class="chat-delete-action" data-chat-delete="${escapeHTML(message.id || "")}" aria-label="Excluir mensagem" title="Excluir mensagem"><span class="chat-delete-glyph">×</span></button>` : "";
     const expandButton = `<button type="button" class="chat-expand-message-action" data-chat-message-expand aria-expanded="false" hidden>Expandir</button>`;
     const replyButton = `<button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button>`;
     const pinButton = canModerateChat && options.allowPin ? `<button type="button" class="chat-pin-action" data-chat-pin="${escapeHTML(message.id || "")}" aria-label="Fixar mensagem" title="Fixar mensagem">📌</button>` : "";
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
   }
 
   function updateChatMessageExpansionUI(messagesRoot) {
@@ -6911,8 +6926,9 @@
     $$(".chat-scroll-controls, .chat-scroll-control, .chat-scroll-edge, [data-chat-scroll-controls], [data-chat-scroll-first], [data-chat-scroll-latest]", root).forEach(element => element.remove());
   }
 
-  function setupChatModerationUI({ messagesRoot, getMessage, renderMessages, roomId = null, pinsRoot = null }) {
-    if (!messagesRoot || !["moderator", "admin"].includes(state.profile?.plan)) return;
+  function setupChatModerationUI({ messagesRoot, getMessage, renderMessages, roomId = null, pinsRoot = null, canModerate = null }) {
+    const canModerateChat = canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
+    if (!messagesRoot || !canModerateChat) return;
     messagesRoot.addEventListener("click", async event => {
       const pinButton = event.target.closest?.("[data-chat-pin]");
       if (pinButton && roomId) {
@@ -6923,7 +6939,7 @@
         if (duration) {
           const result = await sb.rpc("pin_chat_message", { p_room_id: roomId, p_message_id: Number(pinButton.dataset.chatPin), p_duration: duration });
           if (result.error) toast(result.error.message || "Não foi possível fixar a mensagem.");
-          else await renderChatPins(pinsRoot, roomId);
+          else await renderChatPins(pinsRoot, roomId, canModerateChat);
         }
         pinButton.disabled = false;
         return;
@@ -6967,7 +6983,7 @@
         button.disabled = false;
         return toast(result.error.message || "Não foi possível desfixar a mensagem.");
       }
-      await renderChatPins(pinsRoot, roomId);
+      await renderChatPins(pinsRoot, roomId, canModerateChat);
     });
   }
 
@@ -7005,8 +7021,8 @@
     return "Expira em até 1 mês";
   }
 
-  function chatPinsMarkup(pins) {
-    const canModerateChat = ["moderator", "admin"].includes(state.profile?.plan);
+  function chatPinsMarkup(pins, canModerate = null) {
+    const canModerateChat = canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
     return `<div class="chat-pins-inner">${pins.map((pin, index) => `<article class="chat-pin-slide${index === 0 ? " is-active" : ""}" data-chat-pin-slide="${index}"><div class="chat-pin-heading"><span>📌 Mensagem fixada</span><small>${escapeHTML(chatPinDurationLabel(pin))}</small><div class="chat-pin-carousel-actions"><button type="button" class="chat-pin-carousel-button" data-chat-pin-prev aria-label="Mensagem fixada anterior" title="Anterior">‹</button><button type="button" class="chat-pin-carousel-button" data-chat-pin-toggle aria-label="Pausar carrossel" title="Pausar carrossel">⏸</button><button type="button" class="chat-pin-carousel-button" data-chat-pin-next aria-label="Próxima mensagem fixada" title="Próxima">›</button></div></div><div class="chat-pin-body"><div class="chat-pin-copy">${chatBodyMarkup(pin.body, pin.metadata)}</div></div><div class="chat-pin-footer"><span>— @${escapeHTML(cleanUsername(pin.sender_username || "usuario"))}</span><div class="chat-pin-actions"><button type="button" class="small-btn chat-expand-action" data-chat-pin-expand aria-expanded="false" hidden>Expandir</button>${canModerateChat ? `<button type="button" class="small-btn chat-unpin-action" data-chat-unpin="${escapeHTML(String(pin.message_id))}">Desfixar</button>` : ""}</div></div></article>`).join("")}<div class="chat-pin-dots" role="tablist" aria-label="Mensagens fixadas">${pins.map((pin, index) => `<button type="button" class="chat-pin-dot${index === 0 ? " is-active" : ""}" data-chat-pin-index="${index}" role="tab" aria-label="Mensagem fixada ${index + 1}" aria-selected="${index === 0 ? "true" : "false"}"></button>`).join("")}</div></div>`;
   }
 
@@ -7079,18 +7095,50 @@
     root._chatPinCleanup = () => { window.clearInterval(timer); root._chatPinPause = null; };
   }
 
-  async function renderChatPins(root, roomId) {
+  async function renderChatPins(root, roomId, canModerate = null) {
     if (!root || !roomId || !sb) return;
     const result = await sb.from("chat_pins").select("id, message_id, body, metadata, sender_username, expires_at, pinned_at").eq("room_id", roomId).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order("pinned_at", { ascending: true });
     if (result.error) return;
     const pins = result.data || [];
     root.hidden = !pins.length;
-    root.innerHTML = pins.length ? chatPinsMarkup(pins) : "";
+    root.innerHTML = pins.length ? chatPinsMarkup(pins, canModerate) : "";
     setupChatPinsCarousel(root);
     updateChatPinExpansionUI(root);
   }
 
+  async function openChatSheriffManager(room) {
+    if (!isSheriffRoom(room) || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    const currentResult = await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id });
+    const current = currentResult.data?.[0] || null;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal chat-sheriff-modal"><div class="section-head"><div><div class="eyebrow">Moderação da sala</div><h2>Xerife · ${escapeHTML(room.name)}</h2><div class="section-subtitle">O xerife pode fixar e excluir mensagens desta sala pública.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="notice">${current ? `Xerife atual: <b>@${escapeHTML(current.username)}</b>` : "Nenhum xerife definido."}</div><form data-sheriff-form><label class="field"><span>Usuário do novo xerife</span><input name="username" required placeholder="Nome de usuário" value="${escapeHTML(current?.username || "")}"></label><div class="modal-actions"><button type="button" class="small-btn" data-clear-sheriff>Remover xerife</button><button type="submit" class="btn btn-danger">Salvar xerife</button></div></form></div>`;
+    $("#modal-root").appendChild(overlay);
+    const close = () => overlay.remove();
+    $("[data-close]", overlay).onclick = close;
+    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
+    $("[data-clear-sheriff]", overlay).onclick = async () => {
+      const result = await sb.rpc("set_chat_room_sheriff", { p_room_id: room.id, p_username: "" });
+      if (result.error) return toast(result.error.message || "Não foi possível remover o xerife.");
+      close();
+      toast("Xerife removido da sala.");
+    };
+    $("[data-sheriff-form]", overlay).onsubmit = async event => {
+      event.preventDefault();
+      const username = String(new FormData(event.currentTarget).get("username") || "").trim();
+      if (!username) return;
+      const result = await sb.rpc("set_chat_room_sheriff", { p_room_id: room.id, p_username: username });
+      if (result.error) return toast(result.error.message || "Não foi possível definir o xerife.");
+      close();
+      toast(`@${result.data?.[0]?.username || username} agora é o xerife da sala.`);
+    };
+    $("[name=username]", overlay).focus();
+  }
+
   async function openChatRoom(room) {
+    const sheriffResult = isSheriffRoom(room) && sb ? await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id }) : { data: [] };
+    const sheriff = sheriffResult.data?.[0] || null;
+    const chatCanModerate = ["moderator", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id);
     removeLegacyChatScrollControls();
     await markChatMentionsRead(room?.id);
     await loadNotifications();
@@ -7100,6 +7148,15 @@
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal chat-modal chat-conversation-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
     $("#modal-root").appendChild(overlay);
+    if (isSheriffRoom(room) && ["moderator", "admin"].includes(state.profile?.plan)) {
+      const sheriffButton = document.createElement("button");
+      sheriffButton.className = "small-btn";
+      sheriffButton.type = "button";
+      sheriffButton.textContent = "🤠 Xerife";
+      sheriffButton.title = sheriff ? `Xerife atual: @${sheriff.username}` : "Definir xerife";
+      sheriffButton.onclick = () => openChatSheriffManager(room);
+      $(".chat-modal-actions", overlay)?.prepend(sheriffButton);
+    }
     if (room.factionId && ["moderator", "admin"].includes(state.profile?.plan)) $("#chat-room-compose", overlay)?.remove();
     const pinsRoot = $("[data-chat-pins]", overlay);
     let closed = false;
@@ -7131,17 +7188,17 @@
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
-      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true, canModerate: chatCanModerate, sheriffId: sheriff?.user_id })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
       updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
-      await renderChatPins(pinsRoot, room.id);
+      await renderChatPins(pinsRoot, room.id, chatCanModerate);
     };
     await renderMessages();
-    channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).on("postgres_changes", { event: "*", schema: "public", table: "chat_pins", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id || payload.old?.room_id === room.id) renderChatPins(pinsRoot, room.id); }).subscribe();
+    channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).on("postgres_changes", { event: "*", schema: "public", table: "chat_pins", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id || payload.old?.room_id === room.id) renderChatPins(pinsRoot, room.id, chatCanModerate); }).subscribe();
     const chatCompose = $("#chat-room-compose", overlay);
     const getReply = setupChatReplyUI({ messagesRoot, compose: chatCompose, input: chatInput, getMessage: id => chatMessagesById.get(String(id)) });
     setupChatMessageExpansionUI(messagesRoot);
-    setupChatModerationUI({ messagesRoot, getMessage: id => chatMessagesById.get(String(id)), renderMessages, roomId: room.id, pinsRoot });
+    setupChatModerationUI({ messagesRoot, getMessage: id => chatMessagesById.get(String(id)), renderMessages, roomId: room.id, pinsRoot, canModerate: chatCanModerate });
     if (chatCompose) chatCompose.onsubmit = async event => {
       event.preventDefault();
       const composeForm = event.currentTarget;
@@ -8683,6 +8740,12 @@
     $$('.notifications-popup-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
   }
 
+  function chatRoomFromNotification(notification) {
+    if (!notification || !["chat_sheriff", "chat_sheriff_removed"].includes(notification.type)) return null;
+    const roomId = notification.metadata?.room_id;
+    return roomId ? CHAT_ROOMS.find(entry => entry.id === roomId) || null : null;
+  }
+
   function openNotificationsPopup(tab = "notifications") {
     if (!state.session) return openAuthPage();
     closeNotificationsPopups();
@@ -8729,11 +8792,22 @@
     $$('[data-notification-open]', overlay).forEach(button => button.onclick = async event => {
       if (event.target.closest("[data-notification-profile]")) return;
       const notification = state.notifications.find(item => String(item.id) === String(button.dataset.notificationOpen));
+      const notificationRoom = chatRoomFromNotification(notification);
+      if (notificationRoom) {
+        overlay.remove();
+        await openChatRoom(notificationRoom);
+        await markNotificationRead(notification?.id);
+        return;
+      }
       await markNotificationRead(notification?.id);
       overlay.remove();
       if (notification?.type === "message" && notification.actor?.id) {
         await openChat(notification.actor);
       } else if (notification?.type === "chat_mention" && notification.metadata?.room_id) {
+        const room = CHAT_ROOMS.find(entry => entry.id === notification.metadata.room_id);
+        if (room) await openChatRoom(room);
+        else openNotificationsPopup();
+      } else if ((notification?.type === "chat_sheriff" || notification?.type === "chat_sheriff_removed") && notification.metadata?.room_id) {
         const room = CHAT_ROOMS.find(entry => entry.id === notification.metadata.room_id);
         if (room) await openChatRoom(room);
         else openNotificationsPopup();
@@ -9146,8 +9220,8 @@
       const heading = state.entityFilter?.kind === "publisher" ? $(".publisher-page .section-head") : $(".content > .section-head");
       heading?.after(form);
     }
-    const canManage = state.profile?.plan === "admin";
-    const isAdmin = state.profile?.plan === "admin";
+    const canManage = isAdminProfile();
+    const isAdmin = isAdminProfile();
     syncTopAvatar();
     $$('[data-action="open-admin"]').forEach(button => { button.style.display = canManage ? "" : "none"; });
     $$('[data-action="submit"]').forEach(button => { button.style.display = isAdmin ? "" : "none"; });
@@ -9401,7 +9475,17 @@
       });
     }
     $$('[data-follow-list]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openFollowList(el.dataset.followList, el.dataset.followProfileId); }));
-    $$('[data-notification-open]').forEach(el => el.addEventListener("click", () => markNotificationRead(el.dataset.notificationOpen)));
+    $$('[data-notification-open]').forEach(el => el.addEventListener("click", async event => {
+      if (el.closest(".notifications-popup-modal") || event.target.closest("[data-notification-profile]")) return;
+      const notification = state.notifications.find(item => String(item.id) === String(el.dataset.notificationOpen));
+      const notificationRoom = chatRoomFromNotification(notification);
+      if (notificationRoom) {
+        await openChatRoom(notificationRoom);
+        await markNotificationRead(notification?.id);
+        return;
+      }
+      await markNotificationRead(notification?.id);
+    }));
     $('[data-mark-all-notifications]')?.addEventListener("click", markAllNotificationsRead);
     if (state.section === "public-profile" && state.publicProfile?.profile && state.publicProfile.profile.allow_messages !== false && state.session?.user?.id !== state.publicProfile.profile.id && !$("[data-open-chat]")) {
       const actions = $(".public-profile-page > .section-head .profile-actions");
@@ -9825,7 +9909,7 @@
       if (a === "random") openReader(weightedRandom(state.db.library));
       if (a === "focus-search") { setSection("search"); setTimeout(() => $("#search-input")?.focus(), 30); }
       if (a === "do-search") { state.search = $("#search-input")?.value || ""; navigate({ pagina: "pesquisar", q: state.search }); }
-      if (a === "open-admin") { if (canManage) openAdmin(); }
+      if (a === "open-admin") { if (isAdminProfile()) openAdmin(); }
       if (a === "open-auth") state.session ? setSection("shelf") : openAuthPage();
       if (a === "messages") openChat();
       if (a === "downloads") setSection("downloads");
@@ -9833,7 +9917,7 @@
       if (a === "staff-activity") { if (["moderator", "admin"].includes(state.profile?.plan)) openNotificationsPopup("staff"); }
       if (a === "logout") signOut();
       if (a === "profile") openProfileSettings();
-      if (a === "submit") { if (isAdmin) openSubmission(); else toast("O envio de quadrinhos é exclusivo para administradores."); }
+      if (a === "submit") { if (isAdminProfile()) openSubmission(); else toast("O envio de quadrinhos é exclusivo para administradores."); }
       if (a === "open-local-box") { state.localBoxVisible = true; setSection("local-box"); }
       });
     });
@@ -10398,7 +10482,45 @@
         <div class="admin-collection-list">${state.db.collections.map(c => `<div><b>${escapeHTML(c.title)}</b><span>${c.issueIds.length} edições</span><button class="small-btn danger" data-delete-collection="${escapeHTML(c.id)}">Excluir</button></div>`).join("") || "Nenhuma coleção criada."}</div>
       </div>`;
     $("#modal-root").appendChild(overlay);
+    const filterBar = document.createElement("div");
+    filterBar.className = "admin-catalog-filters";
+    filterBar.style.cssText = "display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 15px";
+    filterBar.innerHTML = '<label class="field"><span>Editora</span><select data-admin-publisher><option value="">Todas as editoras</option></select></label><label class="field"><span>Selo</span><select data-admin-imprint><option value="">Todos os selos</option></select></label><label class="field"><span>Personagem</span><select data-admin-character><option value="">Todos os personagens</option></select></label><label class="field"><span>Série</span><select data-admin-series><option value="">Todas as séries</option></select></label>';
+    const adminTable = $(".admin-table", overlay);
+    adminTable?.before(filterBar);
+    const publisherFilter = $("[data-admin-publisher]", filterBar);
+    const imprintFilter = $("[data-admin-imprint]", filterBar);
+    const characterFilter = $("[data-admin-character]", filterBar);
+    const seriesFilter = $("[data-admin-series]", filterBar);
+    const catalogRows = $$('tbody tr', adminTable);
+    const distinctValues = items => [...new Set(items.map(item => String(item || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const setFilterOptions = (select, emptyLabel, values, currentValue = "") => {
+      select.innerHTML = `<option value="">${emptyLabel}</option>${values.map(value => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join("")}`;
+      select.value = values.includes(currentValue) ? currentValue : "";
+    };
+    const refreshCatalogFilters = () => {
+      const publisher = publisherFilter.value;
+      const publisherItems = state.db.library.filter(item => !publisher || String(item.publisher || "").trim() === publisher);
+      setFilterOptions(imprintFilter, "Todos os selos", distinctValues(publisherItems.map(item => item.imprint)), imprintFilter.value);
+      const imprint = imprintFilter.value;
+      const imprintItems = publisherItems.filter(item => !imprint || String(item.imprint || "").trim() === imprint);
+      setFilterOptions(characterFilter, "Todos os personagens", distinctValues(imprintItems.map(item => item.character)), characterFilter.value);
+      const character = characterFilter.value;
+      const characterItems = imprintItems.filter(item => !character || String(item.character || "").trim() === character);
+      setFilterOptions(seriesFilter, "Todas as séries", distinctValues(characterItems.map(item => item.seriesTitle || item.title)), seriesFilter.value);
+      const series = seriesFilter.value;
+      catalogRows.forEach(row => {
+        row.hidden = !((!publisher || row.cells[1]?.textContent.trim() === publisher) && (!imprint || row.cells[2]?.textContent.trim() === imprint) && (!character || row.cells[3]?.textContent.trim() === character) && (!series || row.cells[0]?.querySelector("b")?.textContent.trim() === series));
+      });
+    };
+    setFilterOptions(publisherFilter, "Todas as editoras", distinctValues(state.db.library.map(item => item.publisher)));
+    publisherFilter.addEventListener("change", () => { imprintFilter.value = ""; characterFilter.value = ""; seriesFilter.value = ""; refreshCatalogFilters(); });
+    imprintFilter.addEventListener("change", () => { characterFilter.value = ""; seriesFilter.value = ""; refreshCatalogFilters(); });
+    characterFilter.addEventListener("change", () => { seriesFilter.value = ""; refreshCatalogFilters(); });
+    seriesFilter.addEventListener("change", refreshCatalogFilters);
+    refreshCatalogFilters();
     const closeAdmin = event => { event?.preventDefault(); event?.stopPropagation(); overlay.remove(); hydrateHomeCovers(); };
+    overlay.addEventListener("click", event => { if (event.target === overlay) closeAdmin(event); });
     const notificationButton = document.createElement("button");
     notificationButton.className = "small-btn";
     notificationButton.textContent = "Enviar notificação";
@@ -10434,6 +10556,7 @@
         </div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar edição</button></div></form>
       </div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     const source = $("[name=sourceUrl]", overlay), preview = $("[data-format-preview]", overlay), volume = $("[name=volume]", overlay), oneShot = $("[name=oneShot]", overlay);
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
@@ -10551,6 +10674,11 @@
     applyRoute();
   }
 
+  document.addEventListener("click", event => {
+    const target = event.target;
+    const overlay = target instanceof Element ? target.closest(".modal-backdrop") : null;
+    if (overlay && target === overlay && $("#submission-form", overlay)) overlay.remove();
+  });
   window.addEventListener("popstate", handlePopState);
   window.BancaDigital = { state, openReader, openAdmin };
   const appRoot = document.getElementById("app");

@@ -62,16 +62,20 @@ http://localhost:8000
 
 ## Antes de publicar
 
-O painel administrativo publica alterações de edições e coleções no arquivo `js/data.js` do GitHub através da Edge Function `github-catalog`. O token do GitHub fica somente nos secrets do Supabase.
+O painel administrativo publica alterações de edições e coleções no arquivo do selo ativo (`js/data/dc-comics/recentes.js` por padrão) do GitHub através da Edge Function `github-catalog`. O arquivo `js/data.js` funciona como registro das fontes; novos selos devem ser adicionados como novos scripts em `index.html`. O token do GitHub fica somente nos secrets do Supabase.
 
 Crie um fine-grained token no GitHub com acesso `Contents: Read and write` somente neste repositório e configure:
 
 ```text
-supabase secrets set GITHUB_TOKEN=SEU_TOKEN GITHUB_REPOSITORY=Uriel29M/banca-digital-quadrinhos-v3 GITHUB_BRANCH=main GITHUB_CATALOG_PATH=js/data.js
-supabase functions deploy github-catalog
+supabase secrets set GITHUB_TOKEN=SEU_TOKEN GITHUB_REPOSITORY=Uriel29M/banca-digital-quadrinhos-v3 GITHUB_BRANCH=main GITHUB_CATALOG_PATH=js/data/dc-comics/recentes.js
+supabase functions deploy github-catalog --no-verify-jwt
 ```
 
 Não coloque o token em `js/supabase.js` nem no código do navegador. O usuário precisa estar autenticado com um perfil cujo plano seja `admin`.
+
+### Xerifes dos chats
+
+Depois de atualizar o código, execute novamente `supabase/schema.sql` no projeto Supabase. O recurso fica limitado a Chat Geral, Decenautas, Marvetes e Leitores e Colecionadores; chats de facção, Staff e conversas privadas não possuem xerife. As funções protegidas permitem ao xerife fixar, desfixar e excluir mensagens somente na sala em que ele foi designado.
 
 O formulário público de envio continua sendo uma fila local de análise; ele não publica automaticamente conteúdo enviado por leitores.
 
