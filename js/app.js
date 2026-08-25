@@ -3734,18 +3734,58 @@
         body.setPointerCapture?.(event.pointerId);
       }
     };
-    const finishReaderSwipe = event => {
-      if (!readerSwipe || event.pointerId !== readerSwipe.pointerId) return;
+    const finishReaderSwipeAt = (clientX, clientY) => {
+      if (!readerSwipe) return;
       const swipe = readerSwipe;
       readerSwipe = null;
-      const distance = event.clientX - swipe.x;
-      const verticalDistance = Math.abs(event.clientY - swipe.y);
+      const distance = clientX - swipe.x;
+      const verticalDistance = Math.abs(clientY - swipe.y);
       if (Math.abs(distance) < 45 || Math.abs(distance) <= verticalDistance) return;
-      event.preventDefault();
       suppressReaderClick = true;
       window.setTimeout(() => { suppressReaderClick = false; }, 500);
-      body.releasePointerCapture?.(event.pointerId);
       overlay._readerNavigate?.(distance < 0 ? 1 : -1);
+    };
+    const finishReaderSwipe = event => {
+      if (!readerSwipe || event.pointerId !== readerSwipe.pointerId) return;
+      event.preventDefault();
+      body.releasePointerCapture?.(event.pointerId);
+      finishReaderSwipeAt(event.clientX, event.clientY);
+    };
+    const onReaderTouchStart = event => {
+      if (!["single-page", "double-page"].includes(state.readingMode) || event.touches.length !== 1) return;
+      if (event.target.closest("button, a, select, textarea, input")) return;
+      const touch = event.touches[0];
+      readerSwipe = { pointerId: null, x: touch.clientX, y: touch.clientY };
+    };
+    const onReaderTouchMove = event => {
+      if (!readerSwipe || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - readerSwipe.x;
+      const dy = touch.clientY - readerSwipe.y;
+      if (Math.abs(dx) > Math.abs(dy)) event.preventDefault();
+    };
+    const onReaderTouchEnd = event => {
+      if (!readerSwipe) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      event.preventDefault();
+      finishReaderSwipeAt(touch.clientX, touch.clientY);
+    };
+    const onReaderMouseDown = event => {
+      if (event.button !== 0 || !["single-page", "double-page"].includes(state.readingMode)) return;
+      if (event.target.closest("button, a, select, textarea, input")) return;
+      readerSwipe = { pointerId: null, x: event.clientX, y: event.clientY };
+    };
+    const onReaderMouseMove = event => {
+      if (!readerSwipe) return;
+      const dx = event.clientX - readerSwipe.x;
+      const dy = event.clientY - readerSwipe.y;
+      if (Math.abs(dx) > Math.abs(dy)) event.preventDefault();
+    };
+    const onReaderMouseUp = event => {
+      if (!readerSwipe) return;
+      event.preventDefault();
+      finishReaderSwipeAt(event.clientX, event.clientY);
     };
     const cancelReaderSwipe = () => { readerSwipe = null; };
     const preventReaderDrag = event => event.preventDefault();
@@ -3754,12 +3794,24 @@
     body.addEventListener("pointerup", finishReaderSwipe);
     body.addEventListener("pointercancel", cancelReaderSwipe);
     body.addEventListener("dragstart", preventReaderDrag);
+    body.addEventListener("touchstart", onReaderTouchStart, { passive: true });
+    body.addEventListener("touchmove", onReaderTouchMove, { passive: false });
+    body.addEventListener("touchend", onReaderTouchEnd, { passive: false });
+    body.addEventListener("mousedown", onReaderMouseDown);
+    document.addEventListener("mousemove", onReaderMouseMove, { passive: false });
+    document.addEventListener("mouseup", onReaderMouseUp, { passive: false });
     removeReaderSwipeListeners = () => {
       body.removeEventListener("pointerdown", onReaderPointerDown);
       body.removeEventListener("pointermove", onReaderPointerMove);
       body.removeEventListener("pointerup", finishReaderSwipe);
       body.removeEventListener("pointercancel", cancelReaderSwipe);
       body.removeEventListener("dragstart", preventReaderDrag);
+      body.removeEventListener("touchstart", onReaderTouchStart);
+      body.removeEventListener("touchmove", onReaderTouchMove);
+      body.removeEventListener("touchend", onReaderTouchEnd);
+      body.removeEventListener("mousedown", onReaderMouseDown);
+      document.removeEventListener("mousemove", onReaderMouseMove);
+      document.removeEventListener("mouseup", onReaderMouseUp);
     };
     body.addEventListener("click", event => {
       if (suppressReaderClick) {
