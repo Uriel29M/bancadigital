@@ -1,11 +1,11 @@
-const CACHE_VERSION = "banca-digital-shell-v67";
+const CACHE_VERSION = "banca-digital-shell-v68";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=2.2.10.12",
-  "./js/app.js?v=2.2.10.12",
+  "./css/style.css?v=2.2.10.13",
+  "./js/app.js?v=2.2.10.15",
   "./js/data.js?v=2.2.7.38",
   "./js/supabase.js",
   "./assets/bancadigitaliconbranco.png?v=1",

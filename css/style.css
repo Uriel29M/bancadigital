@@ -1953,7 +1953,36 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
   .series-modal .card-title { font-size: 12px; }
   .moderation-grid, .moderation-button-grid, .moderation-title-fields { grid-template-columns: 1fr; }
   .moderation-modal { width: min(100%, calc(100vw - 24px)); }
-  .topbar { padding: 10px 14px 8px; gap: 10px; }
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    grid-template-areas: "brand actions" "nav nav";
+    align-items: center;
+    padding: 10px 14px 8px;
+    gap: clamp(4px, 1.6vw, 10px);
+  }
+  .topbar > .brand { grid-area: brand; min-width: 0; }
+  .topbar > .top-actions { grid-area: actions; margin-left: 0; }
+  .topbar > .main-nav { grid-area: nav; }
+  .top-actions {
+    min-width: 0;
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: clamp(2px, 1vw, 6px);
+    justify-content: flex-end;
+  }
+  .top-actions > .icon-btn,
+  .top-actions > .reader-btn,
+  .top-actions > .avatar {
+    width: clamp(24px, 7vw, 34px);
+    min-width: 0;
+    height: clamp(24px, 7vw, 34px);
+    flex: 0 1 clamp(24px, 7vw, 34px);
+  }
+  .top-actions > .icon-btn,
+  .top-actions > .reader-btn { font-size: clamp(17px, 5.5vw, 22px); }
+  .downloads-header-btn { min-width: 0; font-size: clamp(18px, 6vw, 24px); }
+  .messages-header-btn { min-width: 0; }
   .global-recommendations-section { padding: 20px 14px; border-radius: 16px; }
   .global-recommendations-heading { margin-bottom: 16px; }
   .global-recommendations-mark { font-size: 30px; }

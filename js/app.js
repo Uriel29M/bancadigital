@@ -802,6 +802,10 @@
     entity: "entidade"
   };
 
+  function canAccessFactions() {
+    return Boolean(state.profile?.faction_id);
+  }
+
   // Identifica as entradas criadas pela SPA para que o voltar do navegador e
   // o botão físico do celular possam retornar à rota anterior sem criar uma
   // nova rota artificial.
@@ -2075,6 +2079,10 @@
     await loadStaffActivities();
     state.authReady = true;
     syncTopAvatar();
+    if (state.section === "factions" && !canAccessFactions()) {
+      navigate({}, true);
+      return;
+    }
     render();
     if (state.session && state.profile && !["moderator", "admin"].includes(state.profile.plan) && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
     if (state.section === "ranking") loadRankingData();
@@ -8509,6 +8517,8 @@
   function render() {
     const isBlogTheme = state.section === "blog";
     document.querySelector(".topbar")?.classList.toggle("is-offline", Boolean(state.session?.offline));
+    const factionsNav = document.querySelector('.nav-link[data-section="factions"]');
+    if (factionsNav) factionsNav.style.display = canAccessFactions() ? "" : "none";
     document.body.classList.toggle("blogs-theme", isBlogTheme);
     const brandLogo = document.querySelector(".brand-logo");
     const brandName = document.querySelector(".brand > span:last-child");
@@ -9430,10 +9440,8 @@
       el.addEventListener("click", () => {
       const s = el.dataset.section;
       if (s === "factions") {
-        const canOpenOwnFaction = state.session && state.profile?.faction_id && !["moderator", "admin"].includes(state.profile?.plan);
-        return canOpenOwnFaction
-          ? navigate({ pagina: "faccoes", faccao: factionRouteKey(state.profile.faction_id) })
-          : navigate({ pagina: "ranking", secao: "faccoes" });
+        if (!canAccessFactions()) return navigate({}, true);
+        return navigate({ pagina: "faccoes", faccao: factionRouteKey(state.profile.faction_id) });
       }
       setSection(s === "comics" ? "comic" : s);
       });
