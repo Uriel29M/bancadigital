@@ -6494,9 +6494,35 @@
 
   function chatBodyMarkup(body, metadata = {}, senderVisual = null) {
     const mentionMarkup = text => escapeHTML(String(text || "")).replace(/@([A-Za-z0-9_]{3,24})/g, (match, mentionedUsername) => `<a class="comment-mention" href="${escapeHTML(publicProfileHref(mentionedUsername))}" target="_blank" rel="noopener">${match}</a>`);
+    const cleanChatUrl = rawUrl => String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
+    const isChatImageUrl = rawUrl => {
+      let parsed;
+      try { parsed = new URL(cleanChatUrl(rawUrl)); } catch { return false; }
+      if (!/^https?:$/.test(parsed.protocol)) return false;
+      const host = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.toLowerCase();
+      const hasImageExtension = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:$|\/)/i.test(pathname)
+        || /(?:format|fm|type)=(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:&|$)/i.test(parsed.search);
+      // Pinterest e Instagram normalmente enviam uma página, não um arquivo.
+      // Os CDNs de mídia, quando o usuário cola a URL real, podem ser exibidos.
+      const knownImageHost = host === "i.pinimg.com"
+        || host.endsWith(".pinimg.com")
+        || host.endsWith(".fbcdn.net")
+        || host.endsWith(".cdninstagram.com")
+        || host === "images.unsplash.com"
+        || host === "images.pexels.com";
+      return hasImageExtension || knownImageHost;
+    };
+    const chatUrlMarkup = (rawUrl, label = null) => {
+      const cleanUrl = cleanChatUrl(rawUrl);
+      if (isChatImageUrl(cleanUrl)) {
+        return `<a class="chat-image-link" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener noreferrer" data-chat-image-link><img src="${escapeHTML(cleanUrl)}" alt="Imagem enviada no chat" loading="lazy" decoding="async"><span class="chat-image-fallback">Imagem indisponível · abrir link</span></a>`;
+      }
+      return `<a class="chat-link" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener noreferrer">${escapeHTML(label || cleanUrl)}</a>`;
+    };
     const sharedPreviews = Array.isArray(metadata?.comic_previews) ? metadata.comic_previews : [];
     const comicPreview = rawUrl => {
-      const cleanUrl = String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
+      const cleanUrl = cleanChatUrl(rawUrl);
       let parsed;
       try { parsed = new URL(cleanUrl, window.location.href); } catch { return null; }
       if (parsed.origin !== window.location.origin) return null;
@@ -6521,23 +6547,74 @@
       return `<a class="chat-comic-preview" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener"><div class="chat-comic-preview-cover" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(previewCover)}')"></div><span class="chat-comic-preview-copy"><b>${escapeHTML(title)}</b><small>${escapeHTML(year.replace(/^ · /, ""))}</small></span></a>`;
     };
     const source = String(body || "");
-    const urlPattern = /https?:\/\/[^\s<]+/gi;
+    const urlPattern = /!?\[([^\]\r\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<\])]+)/gi;
     let output = "";
     let cursor = 0;
     for (const match of source.matchAll(urlPattern)) {
       output += mentionMarkup(source.slice(cursor, match.index));
-      output += comicPreview(match[0]) || mentionMarkup(match[0]);
+      const rawUrl = match[2] || match[3] || match[0];
+      const markdownLabel = match[2] ? match[1] : null;
+      output += comicPreview(rawUrl) || chatUrlMarkup(rawUrl, markdownLabel);
       cursor = match.index + match[0].length;
     }
     return output + mentionMarkup(source.slice(cursor));
   }
 
-  function chatMessageMarkup(message, profile = {}, senderVisual = null) {
+  function chatMessageMarkup(message, profile = {}, senderVisual = null, options = {}) {
     const username = cleanUsername(profile.username || "usuário");
     const title = String(profile.title || "").trim();
     const reply = message.metadata?.reply_to;
     const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}"><button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button><a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${replyMarkup}<div>${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><small>${escapeHTML(formatCommentDate(message.created_at))}</small></div>`;
+    const canModerateChat = ["moderator", "admin"].includes(state.profile?.plan);
+    const moderationButton = canModerateChat ? `<button type="button" class="chat-delete-action" data-chat-delete="${escapeHTML(message.id || "")}" aria-label="Excluir mensagem" title="Excluir mensagem"><span class="chat-delete-glyph">×</span></button>` : "";
+    const expandButton = `<button type="button" class="chat-expand-message-action" data-chat-message-expand aria-expanded="false" hidden>Expandir</button>`;
+    const replyButton = `<button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button>`;
+    const pinButton = canModerateChat && options.allowPin ? `<button type="button" class="chat-pin-action" data-chat-pin="${escapeHTML(message.id || "")}" aria-label="Fixar mensagem" title="Fixar mensagem">📌</button>` : "";
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${avatarMarkup({ ...profile, username }, "chat-message-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
+  }
+
+  function updateChatMessageExpansionUI(messagesRoot) {
+    if (!messagesRoot) return;
+    $$('[data-chat-message-id]', messagesRoot).forEach(message => {
+      const body = $(".chat-message-body", message);
+      const button = $("[data-chat-message-expand]", message);
+      if (!body || !button) return;
+      body.classList.remove("is-expanded");
+      body.classList.add("is-line-limited");
+      button.hidden = true;
+      requestAnimationFrame(() => {
+        body.classList.remove("is-line-limited");
+        const lineTops = new Set();
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+          acceptNode: node => node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+        });
+        let node;
+        while ((node = walker.nextNode())) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          [...range.getClientRects()].forEach(rect => lineTops.add(Math.round(rect.top)));
+        }
+        const canExpand = lineTops.size > 10;
+        body.classList.add("is-line-limited");
+        button.hidden = !canExpand;
+      });
+    });
+  }
+
+  function setupChatMessageExpansionUI(messagesRoot) {
+    if (!messagesRoot || messagesRoot.dataset.messageExpansionBound) return;
+    messagesRoot.dataset.messageExpansionBound = "true";
+    messagesRoot.addEventListener("click", event => {
+      const button = event.target.closest?.("[data-chat-message-expand]");
+      if (!button) return;
+      const body = $(".chat-message-body", button.closest(".chat-message"));
+      if (!body) return;
+      const expanded = body.classList.toggle("is-expanded");
+      body.classList.toggle("is-line-limited", !expanded);
+      button.textContent = expanded ? "Recolher" : "Expandir";
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    });
+    updateChatMessageExpansionUI(messagesRoot);
   }
 
   function setupChatReplyUI({ messagesRoot, compose, input, getMessage }) {
@@ -6565,6 +6642,12 @@
     const choose = id => { const message = getMessage(id); if (message) { selectedMessage = message; update(); } };
     $("button", preview).onclick = () => { selectedMessage = null; update(); input.focus(); };
     messagesRoot.addEventListener("click", event => { const button = event.target.closest("[data-chat-reply]"); if (button) choose(button.dataset.chatReply); });
+    messagesRoot.addEventListener("error", event => {
+      const image = event.target.closest?.("[data-chat-image-link] img");
+      if (!image) return;
+      image.hidden = true;
+      image.parentElement.classList.add("is-broken");
+    }, true);
     let touchStartX = 0;
     let touchMessage = null;
     messagesRoot.addEventListener("touchstart", event => { const message = event.target.closest(".chat-message[data-chat-message-id]"); if (!message || event.touches.length !== 1) return; touchMessage = message; touchStartX = event.touches[0].clientX; message.classList.add("is-swiping"); }, { passive: true });
@@ -6575,16 +6658,228 @@
     return getReply;
   }
 
+  function removeLegacyChatScrollControls(root = document) {
+    $$(".chat-scroll-controls, .chat-scroll-control, .chat-scroll-edge, [data-chat-scroll-controls], [data-chat-scroll-first], [data-chat-scroll-latest]", root).forEach(element => element.remove());
+  }
+
+  function setupChatModerationUI({ messagesRoot, getMessage, renderMessages, roomId = null, pinsRoot = null }) {
+    if (!messagesRoot || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    messagesRoot.addEventListener("click", async event => {
+      const pinButton = event.target.closest?.("[data-chat-pin]");
+      if (pinButton && roomId) {
+        event.preventDefault();
+        event.stopPropagation();
+        pinButton.disabled = true;
+        const duration = await askChatPinDuration();
+        if (duration) {
+          const result = await sb.rpc("pin_chat_message", { p_room_id: roomId, p_message_id: Number(pinButton.dataset.chatPin), p_duration: duration });
+          if (result.error) toast(result.error.message || "Não foi possível fixar a mensagem.");
+          else await renderChatPins(pinsRoot, roomId);
+        }
+        pinButton.disabled = false;
+        return;
+      }
+      const button = event.target.closest?.("[data-chat-delete]");
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const message = getMessage(button.dataset.chatDelete);
+      if (!message) return;
+      button.disabled = true;
+      const confirmed = await askChatDeleteConfirmation();
+      if (!confirmed) {
+        button.disabled = false;
+        return;
+      }
+      const result = await sb.from("chat_messages").delete().eq("id", message.id);
+      if (result.error) {
+        button.disabled = false;
+        return toast(result.error.message || "Não foi possível excluir a mensagem.");
+      }
+      await renderMessages();
+    });
+    if (pinsRoot && roomId) pinsRoot.addEventListener("click", async event => {
+      const expandButton = event.target.closest?.("[data-chat-pin-expand]");
+      if (expandButton) {
+        const slide = expandButton.closest("[data-chat-pin-slide]");
+        const expanded = slide?.classList.toggle("is-expanded");
+        if (expanded) pinsRoot._chatPinPause?.();
+        expandButton.textContent = expanded ? "Recolher" : "Expandir";
+        expandButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+        return;
+      }
+      const button = event.target.closest?.("[data-chat-unpin]");
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      button.disabled = true;
+      const result = await sb.rpc("unpin_chat_message", { p_room_id: roomId, p_message_id: Number(button.dataset.chatUnpin) });
+      if (result.error) {
+        button.disabled = false;
+        return toast(result.error.message || "Não foi possível desfixar a mensagem.");
+      }
+      await renderChatPins(pinsRoot, roomId);
+    });
+  }
+
+  function askChatDeleteConfirmation() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal chat-delete-confirm-modal"><div class="section-head"><div><div class="eyebrow">Moderação</div><h2>Excluir mensagem?</h2><div class="section-subtitle">Esta mensagem será removida do chat e essa ação não pode ser desfeita.</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-chat-delete-cancel>Cancelar</button><button type="button" class="btn btn-danger" data-chat-delete-confirm>Excluir mensagem</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $("[data-chat-delete-cancel]", overlay).onclick = () => finish(false);
+      $("[data-chat-delete-confirm]", overlay).onclick = () => finish(true);
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+    });
+  }
+
+  function askChatPinDuration() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop chat-pin-duration-backdrop";
+      overlay.innerHTML = `<div class="modal chat-pin-duration-modal"><div class="section-head"><div><div class="eyebrow">Moderação</div><h2>Fixar mensagem</h2><div class="section-subtitle">Escolha por quanto tempo ela ficará no carrossel do chat.</div></div><button type="button" class="small-btn" data-chat-pin-cancel>Cancelar</button></div><div class="chat-pin-duration-options"><button type="button" class="small-btn" data-chat-pin-duration="24h">24 horas</button><button type="button" class="small-btn" data-chat-pin-duration="7d">7 dias</button><button type="button" class="small-btn" data-chat-pin-duration="1m">1 mês</button><button type="button" class="small-btn" data-chat-pin-duration="forever">Até eu mudar</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-chat-pin-duration]', overlay).forEach(button => button.onclick = () => finish(button.dataset.chatPinDuration));
+      $("[data-chat-pin-cancel]", overlay).onclick = () => finish(null);
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+    });
+  }
+
+  function chatPinDurationLabel(pin) {
+    if (!pin.expires_at) return "Até ser desfixada";
+    const remaining = new Date(pin.expires_at).getTime() - Date.now();
+    if (remaining <= 24 * 60 * 60 * 1000) return "Expira em até 24 horas";
+    if (remaining <= 7 * 24 * 60 * 60 * 1000) return "Expira em até 7 dias";
+    return "Expira em até 1 mês";
+  }
+
+  function chatPinsMarkup(pins) {
+    const canModerateChat = ["moderator", "admin"].includes(state.profile?.plan);
+    return `<div class="chat-pins-inner">${pins.map((pin, index) => `<article class="chat-pin-slide${index === 0 ? " is-active" : ""}" data-chat-pin-slide="${index}"><div class="chat-pin-heading"><span>📌 Mensagem fixada</span><small>${escapeHTML(chatPinDurationLabel(pin))}</small><div class="chat-pin-carousel-actions"><button type="button" class="chat-pin-carousel-button" data-chat-pin-prev aria-label="Mensagem fixada anterior" title="Anterior">‹</button><button type="button" class="chat-pin-carousel-button" data-chat-pin-toggle aria-label="Pausar carrossel" title="Pausar carrossel">⏸</button><button type="button" class="chat-pin-carousel-button" data-chat-pin-next aria-label="Próxima mensagem fixada" title="Próxima">›</button></div></div><div class="chat-pin-body"><div class="chat-pin-copy">${chatBodyMarkup(pin.body, pin.metadata)}</div></div><div class="chat-pin-footer"><span>— @${escapeHTML(cleanUsername(pin.sender_username || "usuario"))}</span><div class="chat-pin-actions"><button type="button" class="small-btn chat-expand-action" data-chat-pin-expand aria-expanded="false" hidden>Expandir</button>${canModerateChat ? `<button type="button" class="small-btn chat-unpin-action" data-chat-unpin="${escapeHTML(String(pin.message_id))}">Desfixar</button>` : ""}</div></div></article>`).join("")}<div class="chat-pin-dots" role="tablist" aria-label="Mensagens fixadas">${pins.map((pin, index) => `<button type="button" class="chat-pin-dot${index === 0 ? " is-active" : ""}" data-chat-pin-index="${index}" role="tab" aria-label="Mensagem fixada ${index + 1}" aria-selected="${index === 0 ? "true" : "false"}"></button>`).join("")}</div></div>`;
+  }
+
+  function updateChatPinExpansionUI(root) {
+    $$('[data-chat-pin-slide]', root).forEach(slide => {
+      const copy = $(".chat-pin-copy", slide);
+      const button = $("[data-chat-pin-expand]", slide);
+      if (!copy || !button) return;
+      const previousSlideDisplay = slide.style.display;
+      const previousCopyDisplay = copy.style.display;
+      slide.style.display = "block";
+      copy.style.display = "block";
+      try {
+        const lineTops = new Set();
+        const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT, { acceptNode: node => node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
+        let node;
+        while ((node = walker.nextNode())) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          [...range.getClientRects()].forEach(rect => lineTops.add(Math.round(rect.top)));
+        }
+        button.hidden = lineTops.size <= 2;
+      } finally {
+        slide.style.display = previousSlideDisplay;
+        copy.style.display = previousCopyDisplay;
+      }
+    });
+  }
+
+  function setupChatPinsCarousel(root) {
+    root._chatPinCleanup?.();
+    const slides = [...root.querySelectorAll("[data-chat-pin-slide]")];
+    const dots = [...root.querySelectorAll("[data-chat-pin-index]")];
+    const previous = $$('[data-chat-pin-prev]', root);
+    const next = $$('[data-chat-pin-next]', root);
+    const toggles = $$('[data-chat-pin-toggle]', root);
+    if (slides.length < 2) {
+      $(".chat-pin-carousel-actions", root)?.setAttribute("hidden", "true");
+      return;
+    }
+    let current = 0;
+    let paused = false;
+    const show = index => {
+      current = (index + slides.length) % slides.length;
+      slides.forEach((slide, itemIndex) => {
+        slide.classList.toggle("is-active", itemIndex === current);
+        slide.classList.remove("is-expanded");
+        const expandButton = $("[data-chat-pin-expand]", slide);
+        if (expandButton) {
+          expandButton.textContent = "Expandir";
+          expandButton.setAttribute("aria-expanded", "false");
+        }
+      });
+      updateChatPinExpansionUI(root);
+      dots.forEach((dot, itemIndex) => { dot.classList.toggle("is-active", itemIndex === current); dot.setAttribute("aria-selected", itemIndex === current ? "true" : "false"); });
+    };
+    dots.forEach(dot => dot.onclick = () => show(Number(dot.dataset.chatPinIndex)));
+    previous.forEach(button => button.onclick = () => show(current - 1));
+    next.forEach(button => button.onclick = () => show(current + 1));
+    const updatePauseButton = () => {
+      toggles.forEach(toggle => {
+        toggle.textContent = paused ? "▶" : "⏸";
+        toggle.setAttribute("aria-label", paused ? "Retomar carrossel" : "Pausar carrossel");
+        toggle.title = paused ? "Retomar carrossel" : "Pausar carrossel";
+      });
+    };
+    toggles.forEach(toggle => toggle.onclick = () => { paused = !paused; updatePauseButton(); });
+    root._chatPinPause = () => { paused = true; updatePauseButton(); };
+    let touchStartX = null;
+    let lastWheelAt = 0;
+    const onTouchStart = event => {
+      if (event.target.closest?.(".chat-pin-slide.is-expanded")) {
+        touchStartX = null;
+        return;
+      }
+      touchStartX = event.touches[0]?.clientX || 0;
+    };
+    const onTouchEnd = event => {
+      if (touchStartX === null) return;
+      const distance = (event.changedTouches[0]?.clientX || 0) - touchStartX;
+      if (Math.abs(distance) >= 36) show(current + (distance < 0 ? 1 : -1));
+      touchStartX = null;
+    };
+    root.addEventListener("touchstart", onTouchStart, { passive: true });
+    root.addEventListener("touchend", onTouchEnd, { passive: true });
+    const onWheel = event => {
+      if (event.target.closest?.(".chat-pin-slide.is-expanded")) return;
+      if (Math.abs(event.deltaX) < 8 && Math.abs(event.deltaY) < 8) return;
+      const now = Date.now();
+      if (now - lastWheelAt < 350) return;
+      lastWheelAt = now;
+      event.preventDefault();
+      show(current + ((event.deltaX || event.deltaY) > 0 ? 1 : -1));
+    };
+    root.addEventListener("wheel", onWheel, { passive: false });
+    const timer = window.setInterval(() => { if (!paused) show(current + 1); }, 10000);
+    root._chatPinCleanup = () => { window.clearInterval(timer); root.removeEventListener("touchstart", onTouchStart); root.removeEventListener("touchend", onTouchEnd); root.removeEventListener("wheel", onWheel); root._chatPinPause = null; };
+  }
+
+  async function renderChatPins(root, roomId) {
+    if (!root || !roomId || !sb) return;
+    const result = await sb.from("chat_pins").select("id, message_id, body, metadata, sender_username, expires_at, pinned_at").eq("room_id", roomId).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order("pinned_at", { ascending: true });
+    if (result.error) return;
+    const pins = result.data || [];
+    root.hidden = !pins.length;
+    root.innerHTML = pins.length ? chatPinsMarkup(pins) : "";
+    setupChatPinsCarousel(root);
+    updateChatPinExpansionUI(root);
+  }
+
   async function openChatRoom(room) {
+    removeLegacyChatScrollControls();
     await markChatMentionsRead(room?.id);
     await loadNotifications();
     if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
+    overlay.innerHTML = `<div class="modal chat-modal chat-conversation-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
     $("#modal-root").appendChild(overlay);
     if (room.factionId && ["moderator", "admin"].includes(state.profile?.plan)) $("#chat-room-compose", overlay)?.remove();
+    const pinsRoot = $("[data-chat-pins]", overlay);
     let closed = false;
     let channel = null;
     const close = event => {
@@ -6593,6 +6888,7 @@
       if (closed) return;
       closed = true;
       channel?.unsubscribe();
+      pinsRoot?._chatPinCleanup?.();
       overlay.remove();
     };
     $("[data-close]", overlay).onclick = close;
@@ -6613,13 +6909,17 @@
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
-      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
+      await renderChatPins(pinsRoot, room.id);
     };
     await renderMessages();
-    channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).subscribe();
+    channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).on("postgres_changes", { event: "*", schema: "public", table: "chat_pins", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id || payload.old?.room_id === room.id) renderChatPins(pinsRoot, room.id); }).subscribe();
     const chatCompose = $("#chat-room-compose", overlay);
     const getReply = setupChatReplyUI({ messagesRoot, compose: chatCompose, input: chatInput, getMessage: id => chatMessagesById.get(String(id)) });
+    setupChatMessageExpansionUI(messagesRoot);
+    setupChatModerationUI({ messagesRoot, getMessage: id => chatMessagesById.get(String(id)), renderMessages, roomId: room.id, pinsRoot });
     if (chatCompose) chatCompose.onsubmit = async event => {
       event.preventDefault();
       const composeForm = event.currentTarget;
@@ -6643,6 +6943,7 @@
   }
 
   async function openChat(contact = null) {
+    removeLegacyChatScrollControls();
     $$('.notifications-popup-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     if (!state.session || !sb) return openAuthPage();
@@ -6662,7 +6963,7 @@
     render();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${contact ? `<button class="small-btn" type="button" data-chat-back>Voltar</button>` : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)}</b></div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`;
+    overlay.innerHTML = `<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${contact ? `<button class="small-btn" type="button" data-chat-back>Voltar</button>` : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)}</b></div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`;
     $("#modal-root").appendChild(overlay);
     let channel = null;
     let closed = false;
@@ -6681,6 +6982,12 @@
     overlay.addEventListener("click", event => {
       if (event.target === overlay) close(event);
     });
+    if (contact) {
+      const headerTitle = $(".section-head h2", overlay);
+      const selectedContact = $(".chat-contact-selected", overlay);
+      if (headerTitle) headerTitle.textContent = `@${contact.username}`;
+      if (selectedContact) selectedContact.hidden = true;
+    }
     if (!contact) {
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
       $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => { const unread = state.chatRoomUnreadCounts?.[room.id] || 0; return `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span>${unread ? `<span class="message-badge" aria-label="${unread} marcação(ões) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : ""}<small>${chatRoomLabel(room)}</small></button>`; }).join("")}</div>`);
@@ -6702,7 +7009,7 @@
         if (new Date(message.created_at) > new Date(conversation.latest.created_at)) conversation.latest = message;
         conversations.set(contactId, conversation);
       });
-      const contactIds = [...conversations.entries()].filter(([, conversation]) => conversation.hasIncoming).map(([id]) => id);
+      const contactIds = [...conversations.keys()];
       if (contactIds.length) {
         const profilesResult = await sb.from("profiles").select("id, username, avatar_url, title, title_color, allow_messages").in("id", contactIds);
         const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
@@ -6747,6 +7054,7 @@
       const senderVisuals = await loadChatSenderVisuals(senderIds);
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: profilesById.get(message.sender_id) || {} }]));
       messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, profilesById.get(message.sender_id) || (message.sender_id === state.session.user.id ? state.profile : {}), senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
     };
     await renderMessages();
@@ -6754,6 +7062,8 @@
     const chatCompose = $("#chat-compose", overlay);
     const chatInput = $("#chat-compose textarea", overlay);
     const getReply = setupChatReplyUI({ messagesRoot, compose: chatCompose, input: chatInput, getMessage: id => chatMessagesById.get(String(id)) });
+    setupChatMessageExpansionUI(messagesRoot);
+    setupChatModerationUI({ messagesRoot, getMessage: id => chatMessagesById.get(String(id)), renderMessages });
     chatCompose.onsubmit = async event => {
       event.preventDefault();
       const composeForm = event.currentTarget;
@@ -9807,11 +10117,54 @@
   window.BancaDigital = { state, openReader, openAdmin };
   const appRoot = document.getElementById("app");
   const modalRoot = document.getElementById("modal-root");
+  let modalScrollLock = null;
+  const preventBackgroundScroll = event => {
+    if (!modalRoot?.children.length) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(".modal")) return;
+    event.preventDefault();
+  };
+  document.addEventListener("wheel", preventBackgroundScroll, { passive: false });
+  document.addEventListener("touchmove", preventBackgroundScroll, { passive: false });
+  const syncModalInteractionState = () => {
+    const hasOpenModal = Boolean(modalRoot?.children.length);
+    document.body.classList.toggle("modal-open", hasOpenModal);
+    document.documentElement.classList.toggle("modal-open", hasOpenModal);
+    if (appRoot) {
+      appRoot.inert = hasOpenModal;
+    }
+    if (hasOpenModal && !modalScrollLock) {
+      const scrollY = window.scrollY;
+      modalScrollLock = {
+        scrollY,
+        position: document.body.style.position,
+        top: document.body.style.top,
+        width: document.body.style.width,
+        overflow: document.body.style.overflow,
+      };
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+      document.body.style.overflow = "hidden";
+    } else if (!hasOpenModal && modalScrollLock) {
+      const lock = modalScrollLock;
+      modalScrollLock = null;
+      document.body.style.position = lock.position;
+      document.body.style.top = lock.top;
+      document.body.style.width = lock.width;
+      document.body.style.overflow = lock.overflow;
+      window.scrollTo(0, lock.scrollY);
+    }
+  };
   if (modalRoot && "MutationObserver" in window) {
-    new MutationObserver(records => records.forEach(record => [...record.addedNodes].forEach(node => {
-      if (node.nodeType === Node.ELEMENT_NODE) prepareLazyImages(node);
-    }))).observe(modalRoot, { childList: true, subtree: true });
+    new MutationObserver(records => {
+      records.forEach(record => [...record.addedNodes].forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) prepareLazyImages(node);
+      }));
+      syncModalInteractionState();
+    }).observe(modalRoot, { childList: true, subtree: true });
   }
+  syncModalInteractionState();
   const pathParts = window.location.pathname.split("/").filter(Boolean);
   const routeParts = pathParts[0]?.toLowerCase() === "banca-digital-quadrinhos-v3" ? pathParts.slice(1) : pathParts;
   const queryProfile = new URLSearchParams(window.location.search).get("perfil");
