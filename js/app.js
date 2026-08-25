@@ -796,6 +796,7 @@
     collections: "colecoes",
     search: "pesquisar",
     shelf: "estante",
+    surprise: "surpreenda-me",
     downloads: "downloads",
     "local-box": "caixa",
     login: "entrar",
@@ -918,6 +919,10 @@
       if (section === "search") state.search = params.get("q") || "";
       if (section === "entity") state.entityFilter = { kind: params.get("tipo") || "character", value: params.get("valor") || "" };
       render();
+      if (section === "surprise" && previousSection !== "surprise" && previousSection !== "reader") {
+        const randomItem = weightedRandom(state.db.library.filter(entry => !entry.local));
+        if (randomItem) setTimeout(() => openReader(randomItem), 0);
+      }
       if (section === "blog" && !state.blogPosts.length) loadBlogPosts();
       if (section === "ranking" && state.authReady) loadRankingData();
       if (section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -6163,9 +6168,9 @@
           <div class="eyebrow">Destaque da banca</div>
           <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
           ${heroMeta ? `<div class="hero-meta">${escapeHTML(heroMeta)}</div>` : ""}
-          <div class="hero-description-row"><p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p><button class="hero-more" type="button" data-hero-more>Ler mais</button></div>
+          <div class="hero-description-row"><p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p></div>
           ${heroItem ? `<button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button>` : ""}
-          <button class="btn btn-secondary" data-action="random">🎲 Surpreenda-me</button>
+          ${heroItem ? `<button class="btn btn-secondary" data-hero-about="${escapeHTML(heroItem.id)}">Sobre</button>` : ""}
         </div>
       </section>
       <div class="content">
@@ -7364,6 +7369,20 @@
     const canCustomize = ["admin", "moderator", "premium"].includes(state.profile?.plan);
     const categories = state.shelfCategories.map(category => ({ ...category, itemIds: (category.itemIds || []).filter(id => snapshot.saved.has(id)) }));
     return `<div class="content"><div class="profile-header">${avatarMarkup(state.profile)}<div><div class="eyebrow">@${escapeHTML(state.profile?.username || "")}</div>${state.profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(state.profile.title_color)}">${escapeHTML(state.profile.title)}</div>` : ""}${trophyRoom(state.achievements)}</div><div class="profile-actions"><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button></div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div><button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button></div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${shelfCollectionMarkup("Salvos", savedItems, "saved")}${state.profile?.shelf_series_public !== false ? shelfCollectionMarkup("Séries salvas", savedSeries, "series-saved", state.readingProgress, state.favoriteIds, "", null, true) : ""}${shelfCollectionMarkup("Lidos", readItems, "read")}${state.profile?.shelf_completed_public !== false ? shelfCollectionMarkup("Concluídos", completedItems, "completed", state.readingProgress, state.favoriteIds, "", null, true) : ""}${canCustomize ? `<section class="section shelf-categories"><div class="section-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div><button class="small-btn" data-shelf-new-category>+ Nova coleção</button></div>${categories.map(category => shelfCollectionMarkup(category.name, shelfItemsByIds(category.itemIds), `category:${category.id}`, state.readingProgress, state.favoriteIds, `<span class="shelf-visibility ${category.isPublic !== false ? "is-public" : "is-private"}">${category.isPublic !== false ? "Pública" : "Privada"}</span>${category.isPublic !== false ? `<button class="small-btn" data-copy-collection="${escapeHTML(category.id)}">Compartilhar</button>` : ""}<button class="small-btn" data-shelf-edit-category="${escapeHTML(category.id)}">Editar</button><button class="small-btn danger" data-shelf-delete-category="${escapeHTML(category.id)}">Excluir</button>`)).join("") || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>` : ""}</div>`;
+  }
+
+  function renderSurprisePage() {
+    const lib = state.db.library;
+    let randomItems = state.homeRandomIds.map(id => lib.find(item => item.id === id)).filter(Boolean).slice(0, 6);
+    if (randomItems.length < 6) {
+      randomItems = uniqueCatalogItems([...lib].sort(() => Math.random() - .5).slice(0, 6));
+      state.homeRandomIds = randomItems.map(item => item.id);
+    }
+    const personalized = personalizedRecommendations(lib);
+    const tips = state.session && personalized.length
+      ? `<section class="section personalized-recommendations"><div class="section-head"><div><h2 class="section-title">Dicas para você</h2><div class="section-subtitle">Sugestões baseadas nos quadrinhos que você salvou e curtiu.</div></div></div><div class="rail-viewport"><div class="rail">${personalized.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div></section>`
+      : "";
+    return `<div class="content surprise-page"><div class="section-head"><div><div class="eyebrow">Descoberta</div><h1 class="section-title">Surpreenda-me</h1><div class="section-subtitle">Uma história aleatória será aberta automaticamente.</div></div><button class="btn btn-danger" data-action="random">Sortear outra</button></div><div class="notice">Escolha outra história sempre que quiser uma nova surpresa.</div>${globalRecommendationsSection(lib)}${rail("Escolha aleatória", randomItems, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true, true, "random-choice-section")}${tips}</div>`;
   }
 
   function renderPublicCollectionPage(publicState, category) {
@@ -8599,6 +8618,7 @@
     else if (state.section === "login") markup = renderLoginPage();
     else if (state.section === "signup") markup = renderSignupPage();
     else if (state.section === "shelf") markup = renderShelfPage();
+    else if (state.section === "surprise") markup = renderSurprisePage();
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
@@ -8687,8 +8707,28 @@
     };
   }
 
+  function openHeroDetailsPopup(item) {
+    if (!item) return;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop hero-details-backdrop";
+    const title = itemDisplayTitle(item) || item.title || "Edição em destaque";
+    const meta = [item.issue ? `Edição ${item.issue}` : "", formatType(item.type), item.year || ""].filter(Boolean).join(" · ");
+    const cover = coverFor(item, "hero");
+    overlay.innerHTML = `<div class="modal hero-details-modal"><button class="small-btn hero-details-close" data-close aria-label="Fechar">×</button><div class="hero-details-copy"><div class="eyebrow">Destaque da banca</div><h2>${escapeHTML(title)}</h2>${meta ? `<div class="hero-details-meta">${escapeHTML(meta)}</div>` : ""}<p>${escapeHTML(item.description || "Esta edição está em destaque na Banca Digital.")}</p><div class="hero-details-actions"><button class="btn btn-primary" data-hero-details-open>▶ Ler agora</button><button class="btn btn-secondary" data-close>Fechar</button></div></div><div class="hero-details-cover" style="background-image:url('${escapeHTML(cover)}')" role="img" aria-label="Capa de ${escapeHTML(title)}"></div></div>`;
+    $("#modal-root").appendChild(overlay);
+    $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $("[data-hero-details-open]", overlay).onclick = () => { overlay.remove(); openReader(item); };
+  }
+
   function bind() {
     syncActiveNav();
+    $$('[data-hero-about]').forEach(button => button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.heroAbout));
+      openHeroDetailsPopup(item);
+    }));
     const heroDescription = $(".hero-description");
     const heroMore = $("[data-hero-more]");
     if (heroDescription && heroMore) {
@@ -8720,17 +8760,10 @@
         heroMore.classList.add("is-visible");
       };
       renderCollapsed();
-      heroMore.addEventListener("click", () => {
-        const expanded = !heroDescription.classList.contains("is-expanded");
-        heroDescription.classList.toggle("is-expanded", expanded);
-        heroDescription.closest(".hero")?.classList.toggle("is-expanded", expanded);
-        heroMore.textContent = expanded ? "Mostrar menos" : "Ler mais";
-        if (expanded) {
-          heroDescription.replaceChildren(document.createTextNode(fullText), heroMore);
-          heroMore.classList.add("is-visible");
-        } else {
-          renderCollapsed();
-        }
+      heroMore.addEventListener("click", event => {
+        event.preventDefault();
+        const item = state.db.library.find(entry => String(entry.id) === String(heroMore.dataset.heroItem));
+        openHeroDetailsPopup(item);
       });
     }
     $(".content")?.classList.toggle("shelf-page", state.section === "shelf");
