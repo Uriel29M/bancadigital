@@ -285,6 +285,7 @@
     notifications: [],
     notificationUnreadCount: 0,
     notificationChannel: null,
+    publicStickerChannel: null,
     staffActivities: [],
     staffPendingCount: 0,
     fileReports: [],
@@ -306,6 +307,7 @@
     blogCommentThreads: new Map(),
     blogEditorRange: null
     ,wallComments: []
+    ,factionMandatoryReads: new Map()
     ,rankingPeriod: "week"
     ,rankingFaction: null
     ,rankingMembers: []
@@ -315,19 +317,46 @@
     ,presenceInterval: null
     ,factions: []
     ,factionStats: new Map()
+    ,factionAchievements: new Map()
     ,factionRoles: []
     ,factionRoleMembers: []
     ,factionMembers: []
     ,factionAbafacImages: []
     ,factionAbafacCatalogs: new Map()
+    ,factionCatalogs: []
+    ,factionCatalogLikeIds: new Set()
+    ,factionCatalogLikeCounts: new Map()
+    ,factionCatalogSaveIds: new Set()
     ,factionPageId: null
+    ,factionCatalogId: null
     ,factionMembersView: false
     ,factionMemberSearch: ""
+    ,factionHallCategory: "all"
     ,factionByUser: new Map()
     ,factionChoiceOpen: false
+    ,stickerAwards: []
+    ,stickerClaimKeys: new Set()
+    ,stickerSlotPreferences: new Map()
+    ,stickerRequests: []
+    ,stickerRequestProfiles: new Map()
+    ,stickerRequestOffers: new Map()
+    ,stickerAlbumView: "album"
+    ,stickerCollapsedPublishers: new Set()
   };
-
-  const DOWNLOADS_KEY = "bancaDigitalDownloads:";
+ const DOWNLOADS_KEY = "bancaDigitalDownloads:";
+  function factionMandatoryReadsMarkup(factionId) {
+    const reads = state.factionMandatoryReads.get(factionId) || [];
+    if (!reads.length) return '<div class="empty">As leituras obrigatórias deste mês ainda estão sendo sorteadas.</div>';
+    const bonusPerEdition = 25;
+    const totalBonus = reads.length * bonusPerEdition;
+    return '<p class="faction-mandatory-reads-note">Cada edição concluída automaticamente vale <strong>+' + bonusPerEdition + ' XP</strong>. Total possível neste mês: <strong>+' + totalBonus + ' XP</strong>.</p><div class="faction-mandatory-reads-grid">' + reads.map(read => {
+      const item = state.db.library.find(entry => String(entry.id) === String(read.item_id));
+      const title = item?.title || read.item_title || "Edição";
+      const cover = item?.coverUrl || item?.cover || item?.cover_url || read.cover_url;
+      const href = routeUrl({ ler: String(read.item_id) });
+      return '<a class="faction-mandatory-read-card" href="' + escapeHTML(href) + '" title="Abrir ' + escapeHTML(title) + '">' + (cover ? '<img class="faction-mandatory-read-cover" src="' + escapeHTML(cover) + '" alt="Capa de ' + escapeHTML(title) + '" loading="lazy">' : '') + '<span class="faction-mandatory-read-copy"><strong>' + escapeHTML(title) + '</strong><small>+' + bonusPerEdition + ' XP bônus</small><small>' + Number(read.completed_count || 0) + ' concluíram · ' + Number(read.reader_count || 0) + ' lendo</small></span></a>';
+    }).join('') + '</div>';
+  }
   const DOWNLOADS_MANIFEST_KEY = "bancaDigitalDownloadsManifest";
   const OFFLINE_ACCOUNT_KEY = "bancaDigitalOfflineAccount";
   function saveOfflineAccount(profile = state.profile) {
@@ -383,7 +412,6 @@
       validateDownloadedFiles();
     } catch { state.downloads = new Map(); }
   }
-
   async function validateDownloadedFiles() {
     if (!window.caches || !state.downloads.size) return;
     try {
@@ -805,6 +833,7 @@
     surprise: "surpreenda-me",
     downloads: "downloads",
     "local-box": "caixa",
+    album: "album",
     login: "entrar",
     signup: "cadastro",
     entity: "entidade"
@@ -859,6 +888,8 @@
     state.presenceInterval = null;
     state.notificationChannel?.unsubscribe?.();
     state.notificationChannel = null;
+    state.publicStickerChannel?.unsubscribe?.();
+    state.publicStickerChannel = null;
     sb?.removeAllChannels?.();
     sb?.auth?.stopAutoRefresh?.();
     loadDownloads();
@@ -919,6 +950,8 @@
       const factionRouteValue = section === "factions" ? params.get("faccao") || null : null;
       const routedFaction = factionRouteValue ? state.factions.find(faction => String(faction.page_key) === String(factionRouteValue) || faction.id === factionRouteValue) : null;
       state.factionPageId = routedFaction?.id || factionRouteValue;
+      state.factionCatalogId = section === "factions" ? params.get("catalogo") || null : null;
+      state.stickerAlbumView = section === "album" || params.get("album") === "1" ? "album" : "album";
       state.factionMembersView = section === "factions" && params.get("membros") === "1";
       state.factionMemberSearch = state.factionMembersView ? params.get("busca") || "" : "";
       if (section === "blog") state.blogOpenId = params.get("blog") || null;
@@ -1029,7 +1062,6 @@
     item.clicks = Number(result.data) || 0;
     const itemKey = String(item.id);
     state.comicMonthlyReadCounts.set(itemKey, (state.comicMonthlyReadCounts.get(itemKey) || 0) + 1);
-    if (state.session?.user?.id) await sb.rpc("grant_profile_xp", { p_event_type: "read", p_event_key: `read:${item.id}` });
     $$('[data-open]').filter(element => element.dataset.open === item.id).forEach(cardElement => {
       const stats = $(".card-stats", cardElement);
       if (stats) stats.textContent = `♥ ${item.clicks.toLocaleString("pt-BR")} leituras`;
@@ -1082,12 +1114,24 @@
   async function awardProfileXp(eventType, eventKey) {
     if (!sb || !state.session?.user?.id) return;
     await sb.rpc("grant_profile_xp", { p_event_type: eventType, p_event_key: eventKey });
-    await sb.rpc("grant_faction_xp", { p_event_type: eventType, p_event_key: eventKey });
+    if (eventType !== "blog") {
+      await sb.rpc("grant_faction_xp", { p_event_type: eventType, p_event_key: eventKey });
+      const factionId = state.profile?.faction_id;
+      if (factionId) {
+        const achievements = await sb.rpc("get_faction_achievements", { p_faction_id: factionId });
+        if (!achievements.error) {
+          state.factionAchievements.set(factionId, achievements.data || []);
+          if (state.section === "factions" && state.factionPageId === factionId) render();
+        }
+      }
+    }
   }
 
   async function loadFactions() {
     if (!sb) return;
-    const result = await sb.from("factions").select("id, page_key, name, color, emblem, description, sort_order, abafac_order, abafac_catalog_url").order("sort_order", { ascending: true });
+    // Use all public faction columns so older deployments continue to load while
+    // the mural_notice migration is being applied. Newer databases include it.
+    const result = await sb.from("factions").select("*").order("sort_order", { ascending: true });
     state.factions = result.error ? [] : (result.data || []);
     const routeFactionKey = new URLSearchParams(window.location.search).get("faccao");
     if (state.section === "factions" && routeFactionKey) {
@@ -1105,17 +1149,31 @@
       }
     }
     state.factionAbafacCatalogs = new Map();
-    await Promise.all(state.factions.filter(faction => faction.abafac_catalog_url).map(async faction => {
-      const parts = parsePublicCatalogLink(faction.abafac_catalog_url);
+    const catalogRows = await sb.from("faction_abafac_catalogs").select("id, faction_id, catalog_url, created_by, created_at").order("created_at", { ascending: true });
+    const catalogs = catalogRows.error ? state.factions.filter(faction => faction.abafac_catalog_url).map(faction => ({ id: null, faction_id: faction.id, catalog_url: faction.abafac_catalog_url })) : (catalogRows.data || []);
+    await Promise.all(catalogs.map(async catalogRow => {
+      const parts = parsePublicCatalogLink(catalogRow.catalog_url);
       if (!parts) return;
       const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
       if (owner.error || !owner.data) return;
       const collection = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, cover_styles, cover_choices").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
       if (collection.error || !collection.data) return;
-      state.factionAbafacCatalogs.set(faction.id, { ...collection.data, username: owner.data.username });
+      const key = catalogRow.id ? `catalog:${catalogRow.id}` : "catalog";
+      state.factionAbafacCatalogs.set(key, { ...collection.data, username: owner.data.username, faction_id: catalogRow.faction_id, catalog_id: catalogRow.id, catalog_url: catalogRow.catalog_url });
     }));
     const abafacImages = await sb.from("faction_abafac_images").select("id, faction_id, image_url, link_url, storage_path, created_by, created_at").order("created_at", { ascending: true });
     state.factionAbafacImages = abafacImages.error ? [] : (abafacImages.data || []);
+    const factionCatalogs = await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, sort_order, created_by, created_at, updated_at").order("updated_at", { ascending: false });
+    state.factionCatalogs = factionCatalogs.error ? [] : (factionCatalogs.data || []);
+    const catalogIds = state.factionCatalogs.map(catalog => catalog.id);
+    const [catalogLikes, catalogSaves] = await Promise.all([
+      catalogIds.length ? sb.from("faction_catalog_likes").select("catalog_id, user_id").in("catalog_id", catalogIds) : { data: [] },
+      state.session?.user?.id && catalogIds.length ? sb.from("faction_catalog_saves").select("catalog_id").eq("user_id", state.session.user.id).in("catalog_id", catalogIds) : { data: [] }
+    ]);
+    state.factionCatalogLikeIds = new Set((catalogLikes.data || []).filter(row => row.user_id === state.session?.user?.id).map(row => String(row.catalog_id)));
+    state.factionCatalogLikeCounts = new Map(catalogIds.map(id => [String(id), 0]));
+    (catalogLikes.data || []).forEach(row => state.factionCatalogLikeCounts.set(String(row.catalog_id), (state.factionCatalogLikeCounts.get(String(row.catalog_id)) || 0) + 1));
+    state.factionCatalogSaveIds = new Set((catalogSaves.data || []).map(row => String(row.catalog_id)));
     if (state.session?.user?.id && state.factions.length) {
       const factionsToRepair = ["moderator", "admin"].includes(state.profile?.plan) ? state.factions : state.factions.filter(faction => faction.id === state.profile?.faction_id);
       await Promise.all(factionsToRepair.map(faction => sb.rpc("ensure_faction_leadership", { p_faction_id: faction.id })));
@@ -1128,17 +1186,39 @@
     state.factionRoleMembers = state.factionRoles.map(role => ({ ...role, profile: roleProfileMap.get(role.user_id) || null }));
     const memberships = await sb.from("faction_memberships").select("user_id, faction_id, joined_at").order("joined_at", { ascending: false });
     const memberIds = (memberships.data || []).map(row => row.user_id).filter(Boolean);
-    const memberProfiles = memberIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id").in("id", memberIds) : { data: [] };
+    const memberProfiles = memberIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan, xp, level, last_seen_at").in("id", memberIds) : { data: [] };
     const memberProfileMap = new Map((memberProfiles.data || []).map(profile => [profile.id, profile]));
     state.factionMembers = (memberships.data || []).map(row => ({ ...row, profile: memberProfileMap.get(row.user_id) || null }));
     const season = await sb.from("faction_seasons").select("id, starts_at").order("season_key", { ascending: false }).limit(1).maybeSingle();
-    const xp = season.data?.id ? await sb.from("faction_xp_events").select("faction_id, xp").eq("season_id", season.data.id) : { data: [] };
+    const xp = season.data?.id ? await sb.from("faction_xp_events").select("user_id, faction_id, event_type, xp, created_at").eq("season_id", season.data.id).neq("event_type", "blog") : { data: [] };
     const adjustments = season.data?.id ? await sb.from("faction_xp_adjustments").select("faction_id, amount").gte("created_at", season.data.starts_at) : { data: [] };
     const stats = new Map(state.factions.map(faction => [faction.id, { members: 0, xp: 0 }]));
     (memberships.data || []).forEach(row => { if (stats.has(row.faction_id)) stats.get(row.faction_id).members += 1; });
     (xp.data || []).forEach(row => { if (stats.has(row.faction_id)) stats.get(row.faction_id).xp += Number(row.xp) || 0; });
     (adjustments.data || []).forEach(row => { if (stats.has(row.faction_id)) stats.get(row.faction_id).xp += Number(row.amount) || 0; });
+    const factionXpByUser = new Map();
+    (xp.data || []).forEach(row => factionXpByUser.set(row.user_id, (factionXpByUser.get(row.user_id) || 0) + (Number(row.xp) || 0)));
+    const factionActivityByUser = new Map();
+    (xp.data || []).forEach(row => {
+      const userKey = row.user_id;
+      const type = String(row.event_type || "");
+      if (!userKey || !type) return;
+      const activity = factionActivityByUser.get(userKey) || {};
+      activity[type] = (activity[type] || 0) + (Number(row.xp) || 0);
+      if (row.created_at && new Date(row.created_at) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) activity[`${type}:week`] = (activity[`${type}:week`] || 0) + (Number(row.xp) || 0);
+      factionActivityByUser.set(userKey, activity);
+    });
+    state.factionMembers = state.factionMembers.map(member => ({ ...member, faction_xp: factionXpByUser.get(member.user_id) || 0, faction_activity: factionActivityByUser.get(member.user_id) || {} }));
     state.factionStats = stats;
+    const achievementResults = await Promise.all(state.factions.map(faction => sb.rpc("get_faction_achievements", { p_faction_id: faction.id })));
+    state.factionAchievements = new Map(state.factions.map((faction, index) => [faction.id, achievementResults[index]?.error ? [] : (achievementResults[index]?.data || [])]));
+    const mandatoryCandidates = (state.db.library || []).filter(item => item?.type === "comic" && item?.id).map(item => ({ id: String(item.id), title: item.title || "Edição", cover_url: item.coverUrl || item.cover || item.cover_url || null }));
+    const mandatoryResults = await Promise.all(state.factions.map(async faction => {
+      if (state.session?.user?.id && mandatoryCandidates.length) await sb.rpc("ensure_faction_mandatory_reads", { p_faction_id: faction.id, p_candidates: mandatoryCandidates });
+      const result = await sb.rpc("get_faction_mandatory_reads", { p_faction_id: faction.id });
+      return [faction.id, result.error ? [] : (result.data || [])];
+    }));
+    state.factionMandatoryReads = new Map(mandatoryResults);
   }
 
   async function joinFaction(factionId) {
@@ -1269,11 +1349,10 @@
       const emblemChoices = FACTION_EMBLEM_OPTIONS.map(emblem => { const blocked = otherEmblems.has(emblem); return `<button type="button" class="faction-emblem-choice ${emblem === currentEmblem ? "is-selected" : ""}" data-emblem="${escapeHTML(emblem)}" ${blocked ? "disabled" : ""} aria-disabled="${blocked ? "true" : "false"}" aria-label="Emoji ${escapeHTML(emblem)}" title="${blocked ? "Emoji já usado por outra facção" : "Escolher este emoji"}">${escapeHTML(emblem)}</button>`; }).join("");
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop faction-modal-backdrop";
-      overlay.innerHTML = `<div class="modal faction-modal faction-identity-modal" style="--faction-color:${escapeHTML(currentColor)}"><div class="section-head"><div><div class="eyebrow">Identidade da facção</div><h2>Editar facção</h2><div class="section-subtitle">Escolha a cor, o emoji e a descrição da sua facção.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Nome da facção</span><input name="name" type="text" minlength="3" maxlength="80" value="${escapeHTML(faction?.name || "")}" required></label><div class="field"><span>Cor da facção</span><div class="faction-color-palette">${colorChoices}</div><small class="faction-identity-help">Em cada cor, o quadrado da esquerda é claro e o da direita é escuro. Quadrados apagados já pertencem a outra facção.</small><input name="color" type="hidden" value="${escapeHTML(currentColor)}"></div><div class="field"><span>Emoji da facção</span><div class="faction-emblem-palette">${emblemChoices}</div><input name="emblem" type="hidden" value="${escapeHTML(currentEmblem)}"></div><label class="field"><span>Descrição</span><textarea name="description" maxlength="500" rows="4">${escapeHTML(faction?.description || "")}</textarea></label><label class="field"><span>Catálogo público como abafac (opcional)</span><input name="catalogUrl" type="text" maxlength="500" value="${escapeHTML(faction?.abafac_catalog_url || "")}" placeholder="?perfil=usuario&lista=id"><small class="faction-identity-help">Cole o link de uma coleção pública de quadrinhos deste site. Deixe vazio para remover o catálogo.</small></label><label class="field"><span>Enviar imagem abafac</span><input name="abafacImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><small class="faction-identity-help">A imagem será adicionada como uma nova abafac. Depois ela poderá ser movida ou removida, mas uma imagem removida precisará ser enviada novamente.</small></label><label class="field"><span>Link interno da imagem (opcional)</span><input name="abafacLink" type="text" maxlength="500" placeholder="?pagina=blogs ou /index.html?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. O link será aplicado ao card inteiro.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar alterações</button></div></form></div>`;
+      overlay.innerHTML = `<div class="modal faction-modal faction-identity-modal" style="--faction-color:${escapeHTML(currentColor)}"><div class="section-head"><div><div class="eyebrow">Identidade da facção</div><h2>Editar facção</h2><div class="section-subtitle">Escolha a cor, o emoji e a descrição da sua facção.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Nome da facção</span><input name="name" type="text" minlength="3" maxlength="80" value="${escapeHTML(faction?.name || "")}" required></label><div class="field"><span>Cor da facção</span><div class="faction-color-palette">${colorChoices}</div><small class="faction-identity-help">Em cada cor, o quadrado da esquerda é claro e o da direita é escuro. Quadrados apagados já pertencem a outra facção.</small><input name="color" type="hidden" value="${escapeHTML(currentColor)}"></div><div class="field"><span>Emoji da facção</span><div class="faction-emblem-palette">${emblemChoices}</div><input name="emblem" type="hidden" value="${escapeHTML(currentEmblem)}"></div><label class="field"><span>Descrição</span><textarea name="description" maxlength="500" rows="4">${escapeHTML(faction?.description || "")}</textarea></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar alterações</button></div></form></div>`;
       const finish = value => { overlay.remove(); resolve(value); };
       const modal = $(".faction-modal", overlay);
       const form = $(".faction-identity-form", overlay);
-      form.elements.abafacLink?.closest("label")?.remove();
       $$('[data-color]', form).forEach(button => button.addEventListener("click", () => {
         const value = button.dataset.color;
         $('[name=color]', form).value = value;
@@ -1284,12 +1363,45 @@
         $('[name=emblem]', form).value = button.dataset.emblem;
         $$('[data-emblem]', form).forEach(item => item.classList.toggle("is-selected", item === button));
       }));
-      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ name: String(data.get("name") || "").trim(), color: String(data.get("color") || "").trim(), emblem: String(data.get("emblem") || "").trim(), description: String(data.get("description") || "").trim(), catalogUrl: String(data.get("catalogUrl") || "").trim(), imageFile: form.elements.abafacImage?.files?.[0] || null, imageLink: String(data.get("abafacLink") || "").trim() }); });
+      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ name: String(data.get("name") || "").trim(), color: String(data.get("color") || "").trim(), emblem: String(data.get("emblem") || "").trim(), description: String(data.get("description") || "").trim() }); });
       overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
       $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
       $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
       $("#modal-root").appendChild(overlay);
       $("[name=name]", form).focus();
+    });
+  }
+
+  function openFactionAbafacAddEditor() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal faction-abafac-add-modal"><div class="section-head"><div><div class="eyebrow">Abafac da facção</div><h2>Adicionar abafac</h2><div class="section-subtitle">Adicione um catálogo público ou uma imagem por link.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Catálogo público como abafac (opcional)</span><input name="catalogUrl" type="text" maxlength="500" placeholder="?perfil=usuario&lista=id"><small class="faction-identity-help">Cole o link de uma coleção pública de quadrinhos deste site. Deixe vazio para não adicionar catálogo.</small></label><label class="field"><span>Link da imagem abafac</span><input name="abafacImageUrl" type="url" maxlength="2000" placeholder="https://exemplo.com/imagem.jpg"><small class="faction-identity-help">Cole uma URL HTTPS direta para a imagem. Nenhum arquivo será enviado para o site.</small></label><label class="field"><span>Link interno da imagem (opcional)</span><input name="abafacLink" type="text" maxlength="500" placeholder="?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. O link será aplicado ao card inteiro.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Adicionar</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const form = $(".faction-identity-form", overlay);
+      form.insertAdjacentHTML("afterbegin", '<button type="button" class="small-btn" data-create-faction-catalog>Criar catálogo da facção</button>');
+      $("[data-create-faction-catalog]", form).onclick = () => finish({ createFactionCatalog: true });
+      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); const catalogUrl = String(data.get("catalogUrl") || "").trim(); const imageUrl = String(data.get("abafacImageUrl") || "").trim(); if (!catalogUrl && !imageUrl) return toast("Adicione um catálogo ou uma imagem por link."); finish({ catalogUrl, imageUrl, imageLink: String(data.get("abafacLink") || "").trim() }); });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
+      $("[name=catalogUrl]", form).focus();
+    });
+  }
+
+  function openFactionCatalogEditor(factionId, existing = null) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal"><div class="section-head"><div><div class="eyebrow">Catálogo da facção</div><h2>${existing ? "Editar catálogo" : "Criar catálogo da facção"}</h2><div class="section-subtitle">Escolha edições de toda a biblioteca do site. O catálogo não depende dos favoritos.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Nome do catálogo</span><input name="name" maxlength="60" required value="${escapeHTML(existing?.name || "")}"></label><label class="field"><span>Capa do catálogo (opcional)</span><input name="coverUrl" type="url" maxlength="2000" value="${escapeHTML(existing?.cover_url || "")}" placeholder="https://..."></label><div class="field"><span>Edições disponíveis na biblioteca</span><div class="faction-catalog-picker">${shelfComicPickerMarkup(state.db.library, existing?.item_ids || [])}</div></div><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar catálogo</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const form = $(".faction-identity-form", overlay);
+      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ factionId, catalogId: existing?.id || null, name: String(data.get("name") || "").trim(), coverUrl: String(data.get("coverUrl") || "").trim(), itemIds: data.getAll("itemIds").map(String) }); });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
     });
   }
 
@@ -1311,6 +1423,38 @@
       $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
       $("#modal-root").appendChild(overlay);
       $("[name=name]", form).focus();
+    });
+  }
+
+  function openFactionManifestEditor(faction) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal faction-manifest-modal" style="--faction-color:${escapeHTML(faction?.color || "#e85b68")}"><div class="section-head"><div><div class="eyebrow">Manifesto da facção</div><h2>Editar informações</h2><div class="section-subtitle">Atualize o texto que apresenta os valores, o lema e a visão da sua facção.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-manifest-form"><label class="field"><span>Texto do manifesto</span><textarea name="manifest" maxlength="500" rows="8" placeholder="Escreva o lema, os valores e a visão da facção...">${escapeHTML(faction?.description || "")}</textarea><small class="faction-identity-help">Até 500 caracteres. Esse texto também aparece no cabeçalho e nos cartões públicos da facção.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar manifesto</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const form = $(".faction-manifest-form", overlay);
+      form.addEventListener("submit", event => { event.preventDefault(); finish(String(new FormData(form).get("manifest") || "").trim()); });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
+      $("[name=manifest]", form).focus();
+    });
+  }
+
+  function openFactionMuralEditor(faction) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop faction-modal-backdrop";
+      overlay.innerHTML = `<div class="modal faction-modal faction-manifest-modal" style="--faction-color:${escapeHTML(faction?.color || "#e85b68")}"><div class="section-head"><div><div class="eyebrow">Mural de avisos</div><h2>Editar aviso</h2><div class="section-subtitle">Publique novidades, regras internas e decisões importantes da facção.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-manifest-form"><label class="field"><span>Texto do aviso</span><textarea name="notice" maxlength="1000" rows="8" placeholder="Escreva um aviso para os membros da facção...">${escapeHTML(faction?.mural_notice || "")}</textarea><small class="faction-identity-help">Até 1.000 caracteres. Deixe vazio para remover o aviso.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar aviso</button></div></form></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      const form = $(".faction-manifest-form", overlay);
+      form.addEventListener("submit", event => { event.preventDefault(); finish(String(new FormData(form).get("notice") || "").trim()); });
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
+      $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
+      $("#modal-root").appendChild(overlay);
+      $("[name=notice]", form).focus();
     });
   }
 
@@ -1846,6 +1990,57 @@
     return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(avatarUrl)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
+  function profileStickerMarkup(profile, awards = []) {
+    const selectedId = profile?.profile_sticker_award_id;
+    const award = (awards || []).find(entry => String(entry.id) === String(selectedId) && entry.album_section !== "repeated" && entry.cover_url);
+    if (!award) return "";
+    return `<span class="profile-sticker-display rarity-${escapeHTML(award.rarity || "standard")}" title="Figurinha de ${escapeHTML(award.character_name || "personagem")}"><span class="sticker-slot-art"><img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="Figurinha de ${escapeHTML(award.character_name || "personagem")}" draggable="false"><span class="sticker-rarity">${stickerRarityLabel(award.rarity)}</span></span></span>`;
+  }
+
+  function openProfileStickerPicker() {
+    if (!state.session) return openAuthPage();
+    const awards = (state.stickerAwards || []).filter(award => award.album_section !== "repeated" && award.cover_url);
+    const selectedId = state.profile?.profile_sticker_award_id;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal profile-sticker-picker"><div class="section-head"><div><div class="eyebrow">Perfil</div><h2>Escolha a figurinha do perfil</h2><div class="section-subtitle">Ela aparecerá à esquerda da sua foto e manterá o efeito de raridade.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="profile-sticker-picker-grid"><button type="button" class="profile-sticker-choice ${selectedId ? "" : "is-selected"}" data-profile-sticker-choice="">Nenhuma</button>${awards.map(award => `<button type="button" class="profile-sticker-choice rarity-${escapeHTML(award.rarity || "standard")} ${String(award.id) === String(selectedId) ? "is-selected" : ""}" data-profile-sticker-choice="${award.id}"><span class="sticker-slot-art"><img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="Figurinha de ${escapeHTML(award.character_name || "personagem")}" draggable="false"><span class="sticker-rarity">${stickerRarityLabel(award.rarity)}</span></span><strong>${escapeHTML(award.character_name || "Personagem")}</strong></button>`).join("")}</div></div>`;
+    $("#modal-root").appendChild(overlay);
+    $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => overlay.remove()));
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $$('[data-profile-sticker-choice]', overlay).forEach(button => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      const value = button.dataset.profileStickerChoice;
+      const awardId = value ? Number(value) : null;
+      const result = await sb.rpc("set_profile_sticker", { p_award_id: awardId });
+      if (result.error) {
+        toast(result.error.message || "Não foi possível atualizar a figurinha do perfil.");
+        button.disabled = false;
+        return;
+      }
+      state.profile = { ...state.profile, profile_sticker_award_id: awardId };
+      overlay.remove();
+      render();
+      toast(awardId ? "Figurinha do perfil atualizada." : "Figurinha do perfil removida.");
+    }));
+  }
+
+  function hydrateProfileStickerHeaders() {
+    const ownHeader = $(".shelf-page .profile-header") || $(".content:not(.public-profile-page) .profile-header");
+    const publicHeader = $(".public-profile-page .profile-header");
+    const addSticker = (header, profile, awards, own) => {
+      if (!header || header.querySelector(".profile-sticker-display")) return;
+      const markup = profileStickerMarkup(profile, awards);
+      if (markup) header.insertAdjacentHTML("afterbegin", markup);
+      if (own && !header.querySelector("[data-profile-sticker-choose]")) {
+        const actions = $(".profile-actions", header);
+        actions?.insertAdjacentHTML("afterbegin", `<button class="small-btn" data-profile-sticker-choose>Escolher figurinha</button>`);
+      }
+    };
+    addSticker(ownHeader, state.profile, state.stickerAwards, true);
+    addSticker(publicHeader, state.publicProfile?.profile, state.publicProfile?.stickerAwards || [], false);
+  }
+
   function sheriffAvatarMarkup(profile, className = "chat-message-avatar") {
     return `<span class="sheriff-avatar-wrap" title="Xerife desta sala"><span class="sheriff-six-point-star" aria-hidden="true">✡</span>${avatarMarkup(profile, `${className} sheriff-avatar-photo`)}</span>`;
   }
@@ -1873,12 +2068,13 @@
     return libarchiveModulePromise;
   }
 
-  function publicProfileHref(username, collectionId = "") {
+  function publicProfileHref(username, collectionId = "", album = false) {
     const url = new URL(window.location.href);
     url.search = "";
     url.hash = "";
     url.searchParams.set("perfil", cleanUsername(username));
     if (collectionId) url.searchParams.set("lista", collectionId);
+    if (album) url.searchParams.set("album", "1");
     return `${url.pathname}?${url.searchParams.toString()}`;
   }
 
@@ -2028,10 +2224,26 @@
     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
     state.featuredBlogCollections = publicCollectionView.filter(collection => collection.collection_type === "blog" && collection.is_featured).slice(0, 8);
+    const factionCatalogRows = (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").order("created_at", { ascending: false })).data || [];
+    const factionIds = [...new Set(factionCatalogRows.map(catalog => catalog.faction_id).filter(Boolean))];
+    const factionInfoRows = factionIds.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", factionIds)).data || [] : [];
+    const factionInfo = new Map(factionInfoRows.map(faction => [faction.id, faction]));
+    const factionLikeRows = (await sb.from("faction_catalog_likes").select("catalog_id")).data || [];
+    const factionLikeCounts = factionLikeRows.reduce((counts, row) => counts.set(String(row.catalog_id), (counts.get(String(row.catalog_id)) || 0) + 1), new Map());
+    const publicFactionCollections = factionCatalogRows.map(catalog => {
+      const faction = factionInfo.get(catalog.faction_id);
+      if (!faction) return null;
+      return { ...catalog, id: `faction-catalog-${catalog.id}`, catalog_id: catalog.id, faction_id: faction.id, faction_page_key: faction.page_key, faction_name: faction.name, faction_emblem: faction.emblem, username: "", collection_type: "comic", is_public: true, is_faction_catalog: true, likes: factionLikeCounts.get(String(catalog.id)) || 0 };
+    }).filter(Boolean);
+    state.popularPublicCollections = [...state.popularPublicCollections, ...publicFactionCollections]
+      .sort((a, b) => b.likes - a.likes || String(a.name).localeCompare(String(b.name), "pt-BR"))
+      .slice(0, 8);
+    state.featuredComicCollections = [...state.featuredComicCollections, ...publicFactionCollections.filter(collection => collection.is_featured)].slice(0, 8);
     const comicLikes = await sb.from("comic_likes").select("item_id, user_id, created_at");
     state.comicLikeIds = new Set((comicLikes.data || []).filter(row => row.user_id === session?.user?.id).map(row => row.item_id));
     state.comicLikeAddedAt = new Map((comicLikes.data || []).filter(row => row.user_id === session?.user?.id).map(row => [row.item_id, row.created_at]));
     state.comicLikeCounts = (comicLikes.data || []).reduce((counts, row) => counts.set(row.item_id, (counts.get(row.item_id) || 0) + 1), new Map());
+    if (!session?.user) await loadFactions();
     if (session?.user) {
       const profile = await sb.from("profiles").select("*").eq("id", session.user.id).single();
       state.profile = profile.data;
@@ -2064,7 +2276,9 @@
       const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
       const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
       const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
-      state.savedPublicCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+      const savedShelfCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+      const savedFactionCollections = publicFactionCollections.filter(collection => state.factionCatalogSaveIds.has(String(collection.catalog_id)));
+      state.savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
       state.wallComments = await loadProfileWallComments(session.user.id);
       state.blogShelfCategories = (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] }));
       const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", session.user.id).eq("status", "published").order("published_at", { ascending: false });
@@ -2079,6 +2293,21 @@
       state.favoriteAddedAt = new Map((favorites.data || []).map(row => [row.item_id, row.created_at]));
       const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", session.user.id);
       state.readingProgress = new Map((progress.data || []).map(row => [row.item_id, row]));
+      const stickerAwards = await sb.from("sticker_awards").select("id, user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, requests_blocked, gum_placed_by, album_section, awarded_at").eq("user_id", session.user.id).order("awarded_at", { ascending: false });
+      state.stickerAwards = stickerAwards.data || [];
+      const stickerClaims = await sb.from("sticker_claim_history").select("character_id, edition_fingerprint").eq("user_id", session.user.id);
+      state.stickerClaimKeys = new Set((stickerClaims.data || []).map(row => `${row.character_id}:${row.edition_fingerprint}`));
+      const stickerSlotPreferences = await sb.from("sticker_slot_preferences").select("character_id, blocked, placed_by").eq("user_id", session.user.id);
+      state.stickerSlotPreferences = new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }]));
+      const stickerRequests = await sb.from("sticker_requests").select("id, requester_id, owner_id, character_id, character_name, edition_fingerprint, request_type, offered_award_id, offered_award_id_2, status, created_at, resolved_at").or(`requester_id.eq.${session.user.id},owner_id.eq.${session.user.id}`).order("created_at", { ascending: false }).limit(100);
+      state.stickerRequests = stickerRequests.data || [];
+      const requesterIds = [...new Set(state.stickerRequests.map(request => request.requester_id).filter(id => id && id !== session.user.id))];
+      const requesterProfiles = requesterIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color").in("id", requesterIds) : { data: [] };
+      state.stickerRequestProfiles = new Map((requesterProfiles.data || []).map(profile => [profile.id, profile]));
+      const offeredIds = [...new Set(state.stickerRequests.flatMap(request => [request.offered_award_id, request.offered_award_id_2]).filter(Boolean))];
+      const offeredAwards = offeredIds.length ? await sb.from("sticker_awards").select("id, character_name, rarity, cover_url").in("id", offeredIds) : { data: [] };
+      state.stickerRequestOffers = new Map((offeredAwards.data || []).map(award => [String(award.id), award]));
+      if (state.db.library.length) setTimeout(() => maybeAwardCompletedStickers(), 0);
       state.shelfSnapshot = { saved: new Set(state.favoriteIds), read: new Set([...state.readingProgress.entries()].filter(([, row]) => row.completed).map(([id]) => id)) };
       const achievements = await sb.from("user_achievements").select("achievements(name, description, icon)").eq("user_id", session.user.id);
       state.achievements = (achievements.data || []).map(row => row.achievements).filter(Boolean);
@@ -2091,11 +2320,12 @@
       await sb.rpc("touch_profile");
       await startPresence();
     }
+    if (!session?.user) await loadFactions();
     await loadNotifications();
     await loadStaffActivities();
     state.authReady = true;
     syncTopAvatar();
-    if (state.section === "factions" && !canAccessFactions()) {
+    if (state.section === "factions" && !state.factionPageId && !canAccessFactions()) {
       navigate({}, true);
       return;
     }
@@ -2233,13 +2463,46 @@
     await query;
   }
 
-  async function loadPublicProfile(username, collectionId = null) {
+  function subscribePublicStickerUpdates(ownerId) {
+    state.publicStickerChannel?.unsubscribe?.();
+    state.publicStickerChannel = null;
+    if (!sb || !state.session?.user?.id || state.session.offline || navigator.onLine === false || !ownerId) return;
+    const channel = sb.channel(`sticker-album-${ownerId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sticker_slot_preferences", filter: `user_id=eq.${ownerId}` }, payload => {
+        const profile = state.publicProfile;
+        if (!profile?.stickerSlotPreferences) return;
+        const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+        const key = String(row?.character_id || "");
+        if (!key) return;
+        if (payload.eventType === "DELETE" || row.blocked !== true) profile.stickerSlotPreferences.delete(key);
+        else profile.stickerSlotPreferences.set(key, { blocked: true, placedBy: row.placed_by || null });
+        if (state.section === "public-profile" && String(profile.profile?.id) === String(ownerId) && profile.album) render();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sticker_awards", filter: `user_id=eq.${ownerId}` }, payload => {
+        const profile = state.publicProfile;
+        if (!profile?.stickerAwards) return;
+        const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+        const index = profile.stickerAwards.findIndex(award => String(award.id) === String(row?.id));
+        if (payload.eventType === "DELETE") {
+          if (index >= 0) profile.stickerAwards.splice(index, 1);
+        } else if (index >= 0) {
+          profile.stickerAwards[index] = { ...profile.stickerAwards[index], ...row };
+        } else if (row?.id) {
+          profile.stickerAwards.push(row);
+        }
+        if (state.section === "public-profile" && String(profile.profile?.id) === String(ownerId) && profile.album) render();
+      })
+      .subscribe();
+    state.publicStickerChannel = channel;
+  }
+
+  async function loadPublicProfile(username, collectionId = null, album = false) {
     if (navigator.onLine === false || state.session?.offline) {
       activateOfflineMode();
       setSection("downloads");
       return;
     }
-    state.publicProfile = { loading: true, username, collectionId };
+    state.publicProfile = { loading: true, username, collectionId, album };
     state.publicShelfTab = "collections";
     state.collectionFilter = { field: "all", query: "" };
     state.section = "public-profile";
@@ -2249,9 +2512,9 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, shelf_sort_orders, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
-      profile = await sb.from("profiles").select("id, username, avatar_url, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
+      profile = await sb.from("profiles").select("id, username, avatar_url, profile_sticker_award_id, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
     if (profile.error || !profile.data) {
       state.publicProfile = { error: "Perfil não encontrado.", username };
@@ -2267,13 +2530,15 @@
       : [];
     const block = blockRows.find(result => !result.error && result.data)?.data || null;
     if (block) {
-      state.publicProfile = { profile: profile.data, username, collectionId, blocked: true, blockedByMe: block.blocker_id === viewerId };
+      state.publicProfile = { profile: profile.data, username, collectionId, album, blocked: true, blockedByMe: block.blocker_id === viewerId };
       render();
       return;
     }
     const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id);
     const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false });
     const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", profile.data.id);
+    const stickerAwards = await sb.from("sticker_awards").select("id, user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, requests_blocked, gum_placed_by, album_section, awarded_at").eq("user_id", profile.data.id).order("awarded_at", { ascending: false });
+    const stickerSlotPreferences = await sb.from("sticker_slot_preferences").select("character_id, blocked, placed_by").eq("user_id", profile.data.id);
     const comicLikes = await sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id);
     const activityResults = await Promise.all([
       sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id),
@@ -2328,12 +2593,26 @@
     const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
     const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
     const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
-    const savedPublicCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+    const savedShelfCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+    const savedFactionIdsResult = await sb.from("faction_catalog_saves").select("catalog_id").eq("user_id", profile.data.id);
+    const savedFactionIds = (savedFactionIdsResult.data || []).map(row => row.catalog_id);
+    const savedFactionRows = savedFactionIds.length ? (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").in("id", savedFactionIds)).data || [] : [];
+    const savedFactionIdsByFaction = [...new Set(savedFactionRows.map(catalog => catalog.faction_id).filter(Boolean))];
+    const savedFactionInfoRows = savedFactionIdsByFaction.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", savedFactionIdsByFaction)).data || [] : [];
+    const savedFactionInfo = new Map(savedFactionInfoRows.map(faction => [faction.id, faction]));
+    const savedFactionCollections = savedFactionRows.map(catalog => {
+      const faction = savedFactionInfo.get(catalog.faction_id);
+      return faction ? { ...catalog, id: `faction-catalog-${catalog.id}`, catalog_id: catalog.id, faction_id: faction.id, faction_page_key: faction.page_key, faction_name: faction.name, faction_emblem: faction.emblem, username: "", collection_type: "comic", is_public: true, is_faction_catalog: true } : null;
+    }).filter(Boolean);
+    const savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
     const wallCommentsResult = await loadProfileWallComments(profile.data.id);
     const activity = await buildPublicProfileActivity(profile.data, activityResults.map(result => result.data || []), [...(collections.data || []), ...(savedCollectionsResult.data || [])]);
     state.publicProfile = {
       profile: profile.data,
       collectionId,
+      album,
+      stickerAwards: stickerAwards.data || [],
+      stickerSlotPreferences: new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }])),
       collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], sortOrder: collection.sort_order || "added_desc", coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
       blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
       authoredBlogPosts: authoredBlogs.data || [],
@@ -2359,6 +2638,7 @@
       ,followerCount: (followers.data || []).length
       ,followingCount: (following.data || []).length
     };
+    subscribePublicStickerUpdates(profile.data.id);
     render();
   }
 
@@ -2368,6 +2648,8 @@
     state.presenceInterval = null;
     state.notificationChannel?.unsubscribe?.();
     state.notificationChannel = null;
+    state.publicStickerChannel?.unsubscribe?.();
+    state.publicStickerChannel = null;
     clearLocalBox();
     try { localStorage.removeItem(OFFLINE_ACCOUNT_KEY); } catch {}
     state.localBoxVisible = false;
@@ -2829,6 +3111,7 @@
   async function saveReadingProgress(item, page, totalPages) {
     if (!state.session || !sb || item?.local || !item?.id || !totalPages) return;
     const current = progressFor(item);
+    const wasCompleted = Boolean(current?.completed);
     const completed = Boolean(current?.completed) || page >= Math.max(1, totalPages - 2);
     const row = { user_id: state.session.user.id, item_id: item.id, page: Math.max(1, Math.min(page, totalPages)), total_pages: totalPages, completed, updated_at: new Date().toISOString() };
     state.readingProgress.set(item.id, row);
@@ -2838,7 +3121,342 @@
     awardAchievement("first_read");
     if (isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
     const result = await sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
+    if (!result.error && completed && !wasCompleted) await maybeAwardCharacterStickers(item);
     if (result.error) console.warn("Não foi possível salvar o progresso de leitura:", result.error.message);
+    if (!result.error && completed && !wasCompleted && state.profile?.faction_id) {
+      await sb.rpc("complete_faction_mandatory_read", { p_item_id: String(item.id) });
+      const mandatory = await sb.rpc("get_faction_mandatory_reads", { p_faction_id: state.profile.faction_id });
+      if (!mandatory.error) state.factionMandatoryReads.set(state.profile.faction_id, mandatory.data || []);
+    }
+    if (!result.error && completed && !wasCompleted) {
+      await awardProfileXp("read", `read:${item.id}`);
+      if (state.section === "factions" && state.factionPageId === state.profile?.faction_id) {
+        await loadFactions();
+        render();
+      }
+    }
+  }
+
+  function stickerSlug(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  function stickerCharacterId(item) {
+    return `${stickerSlug(item?.publisher || "sem-editora")}::${stickerSlug(item?.character)}`;
+  }
+
+  function stickerGroups(library = state.db.library) {
+    const groups = new Map();
+    library.filter(item => !item.local && String(item.character || "").trim()).forEach(item => {
+      const characterName = String(item.character).trim();
+      const publisherName = String(item.publisher || "Sem editora").trim() || "Sem editora";
+      const id = stickerCharacterId(item);
+      if (!groups.has(id)) groups.set(id, { id, characterName, publisherName, items: [] });
+      groups.get(id).items.push(item);
+    });
+    return [...groups.values()].map(group => ({ ...group, items: [...new Map(group.items.map(item => [String(item.id), item])).values()] }))
+      .sort((a, b) => a.publisherName.localeCompare(b.publisherName, "pt-BR") || a.characterName.localeCompare(b.characterName, "pt-BR"));
+  }
+
+  function stickerFingerprint(group) {
+    return group.items.map(item => String(item.id)).sort().join("|");
+  }
+
+  function stickerCoverCandidates(group) {
+    const candidates = [];
+    group.items.forEach(item => {
+      [item.coverUrl, item.cover, item.featuredCoverUrl].forEach(url => { if (String(url || "").trim()) candidates.push({ itemId: item.id, url: String(url).trim() }); });
+      (state.coverVariants.get(String(item.id)) || state.coverVariants.get(item.id) || []).forEach(variant => {
+        if (String(variant.cover_url || "").trim()) candidates.push({ itemId: item.id, url: String(variant.cover_url).trim() });
+      });
+    });
+    return [...new Map(candidates.map(candidate => [`${candidate.itemId}|${candidate.url}`, candidate])).values()];
+  }
+
+  function currentStickerAwards(rows = state.stickerAwards) {
+    return new Map((rows || []).reduce((map, award) => {
+      if (!map.has(award.character_id)) map.set(award.character_id, award);
+      return map;
+    }, new Map()));
+  }
+
+  function stickerRarityLabel(rarity) {
+    return rarity === "gold" ? "Dourada" : rarity === "silver" ? "Prateada" : rarity === "creased" ? "Amassada" : rarity === "torn" ? "Rasgada" : "Comum";
+  }
+
+  async function maybeAwardCharacterStickers(item) {
+    if (!state.session || !sb || !item || item.local) return;
+    const groups = stickerGroups().filter(group => group.items.some(entry => String(entry.id) === String(item.id)));
+    for (const group of groups) {
+      if (!group.items.every(entry => state.readingProgress.get(entry.id)?.completed)) continue;
+      const fingerprint = stickerFingerprint(group);
+      if (state.stickerAwards.some(award => award.character_id === group.id && award.edition_fingerprint === fingerprint)) continue;
+      const claimKey = `${group.id}:${fingerprint}`;
+      if (state.stickerClaimKeys.has(claimKey)) continue;
+      const candidates = stickerCoverCandidates(group);
+      const previous = [...state.stickerAwards].filter(award => award.character_id === group.id).sort((a, b) => new Date(b.awarded_at || 0) - new Date(a.awarded_at || 0) || Number(b.id || 0) - Number(a.id || 0)).slice(0, 2);
+      const blockedCover = previous.length === 2 && previous[0].cover_url && previous[0].cover_url === previous[1].cover_url ? previous[0].cover_url : null;
+      const availableCandidates = blockedCover ? candidates.filter(candidate => candidate.url !== blockedCover) : candidates;
+      const selected = (availableCandidates.length ? availableCandidates : candidates)[Math.floor(Math.random() * (availableCandidates.length || candidates.length))] || { itemId: group.items[0].id, url: group.items[0].coverUrl || group.items[0].cover };
+      if (!selected?.url) continue;
+      const result = await sb.rpc("claim_character_sticker", {
+        p_character_id: group.id,
+        p_character_name: group.characterName,
+        p_publisher_name: group.publisherName,
+        p_edition_fingerprint: fingerprint,
+        p_edition_ids: group.items.map(entry => String(entry.id)),
+        p_cover_item_id: String(selected.itemId),
+        p_cover_url: selected.url
+      });
+      if (result.error) {
+        console.warn("Não foi possível conceder a figurinha automaticamente:", result.error.message, { characterId: group.id, fingerprint });
+      } else if (result.data) {
+        const award = Array.isArray(result.data) ? result.data[0] : result.data;
+        if (award && !state.stickerAwards.some(entry => entry.id === award.id)) state.stickerAwards.unshift(award);
+        state.stickerClaimKeys.add(claimKey);
+        toast(`Figurinha conquistada: ${group.characterName}!`);
+      }
+    }
+  }
+
+  async function maybeAwardCompletedStickers() {
+    if (!state.session || !sb) return;
+    for (const group of stickerGroups()) {
+      if (group.items.every(entry => state.readingProgress.get(entry.id)?.completed)) await maybeAwardCharacterStickers(group.items[0]);
+    }
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Propôs uma troca por" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions"><button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><small>${escapeHTML(offer.character_name)} · ${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offer = request.request_type === "trade" ? state.stickerRequestOffers.get(String(request.offered_award_id)) : null; const rarity = offer?.rarity === "gold" ? "Dourada" : offer?.rarity === "silver" ? "Prateada" : "Comum"; return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions">${offer ? `<span class="sticker-request-offer"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><span><b>${escapeHTML(offer.character_name)}</b><small>${rarity}</small></span></span>` : ""}<button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offer = request.request_type === "trade" ? state.stickerRequestOffers.get(String(request.offered_award_id)) : null; const rarity = offer?.rarity === "gold" ? "Dourada" : offer?.rarity === "silver" ? "Prateada" : "Comum"; return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small>${offer ? `<span class="sticker-request-offer"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><span>Oferece <b>${escapeHTML(offer.character_name)}</b> · ${rarity}</span></span>` : ""}</div></div><div class="sticker-request-actions"><button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><small>${escapeHTML(offer.character_name)} · ${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><strong>${escapeHTML(offer.character_name)}</strong><small>${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); const desired = (state.stickerAwards || []).find(award => award.character_id === request.character_id && award.edition_fingerprint === request.edition_fingerprint); return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><strong>${escapeHTML(offer.character_name)}</strong><small>${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<span class="sticker-request-buttons"><button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></span>${desired ? `<span class="sticker-request-target"><img src="${escapeHTML(desired.cover_url)}" alt="Figurinha desejada"><strong>${escapeHTML(desired.character_name)}</strong><small>${desired.rarity === "gold" ? "Dourada" : desired.rarity === "silver" ? "Prateada" : "Comum"}</small></span>` : ""}</div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); const desired = (state.stickerAwards || []).find(award => award.character_id === request.character_id && award.edition_fingerprint === request.edition_fingerprint); return `<article class="sticker-request-row"><div class="sticker-request-person">${requester ? avatarMarkup(requester, "sticker-request-avatar") : ""}<div><strong>${requester ? `@${escapeHTML(requester.username)}` : "Usuário"}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></div></div><div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><strong>${escapeHTML(offer.character_name)}</strong><small>${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<span class="sticker-request-buttons"><button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button>${requester ? `<button class="small-btn" data-sticker-view-album="${escapeHTML(requester.username)}">Ver álbum</button>` : ""}<button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></span>${desired ? `<span class="sticker-request-target"><img src="${escapeHTML(desired.cover_url)}" alt="Figurinha desejada"><strong>${escapeHTML(desired.character_name)}</strong><small>${desired.rarity === "gold" ? "Dourada" : desired.rarity === "silver" ? "Prateada" : "Comum"}</small></span>` : ""}</div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
+    if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
+    return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); const desired = (state.stickerAwards || []).find(award => award.character_id === request.character_id && award.edition_fingerprint === request.edition_fingerprint); const person = requester ? `<a class="sticker-request-person sticker-request-person-link" href="${escapeHTML(publicProfileHref(requester.username))}">${avatarMarkup(requester, "sticker-request-avatar")}<span><strong>@${escapeHTML(requester.username)}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></span></a>` : `<div class="sticker-request-person"><span><strong>Usuário</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></span></div>`; return `<article class="sticker-request-row">${person}<div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><strong>${escapeHTML(offer.character_name)}</strong><small>${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<span class="sticker-request-buttons"><button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn" data-sticker-view-album="${requester ? escapeHTML(requester.username) : ""}" ${requester ? "" : "disabled"}>Ver álbum</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></span>${desired ? `<span class="sticker-request-target"><img src="${escapeHTML(desired.cover_url)}" alt="Figurinha desejada"><strong>${escapeHTML(desired.character_name)}</strong><small>${desired.rarity === "gold" ? "Dourada" : desired.rarity === "silver" ? "Prateada" : "Comum"}</small></span>` : ""}</div></article>`; }).join("")}</div></div>`;
+  }
+
+  function stickerAlbumMarkup(profile, awards = [], options = {}) {
+    if (!profile) return '<div class="content sticker-album-page"><div class="empty">Carregando seu álbum…</div></div>';
+    const groups = stickerGroups();
+    const isOwn = options.isOwn === true || Boolean(state.session?.user?.id && profile?.id && String(state.session.user.id) === String(profile.id));
+    const canSeeRepeated = isOwn || state.profile?.plan === "admin";
+    const albumView = canSeeRepeated ? (state.stickerAlbumView || "pasted") : "pasted";
+    const pastedAwards = (awards || []).filter(award => award.album_section !== "repeated");
+    const owned = currentStickerAwards(pastedAwards);
+    const repeatedAwards = canSeeRepeated ? (awards || []).filter(award => award.album_section === "repeated") : [];
+    const ownerId = profile?.id;
+    const slotPreferences = options.slotPreferences || (isOwn ? state.stickerSlotPreferences : state.publicProfile?.stickerSlotPreferences) || new Map();
+    const offerable = isOwn ? (state.stickerAwards || []) : (state.stickerAwards || []);
+    const publishers = [...new Map(groups.map(group => [group.publisherName, groups.filter(entry => entry.publisherName === group.publisherName)])).entries()];
+    const pages = publishers.map(([publisher, publisherGroups]) => { const collapsed = state.stickerCollapsedPublishers.has(publisher); return `<section class="sticker-album-publisher ${collapsed ? "is-collapsed" : ""}"><div class="sticker-album-publisher-head"><div><div class="eyebrow">Álbum · Editora</div><h2>${escapeHTML(publisher)}</h2></div><div class="sticker-album-publisher-tools"><span>${publisherGroups.length} personagens</span><button type="button" class="small-btn" data-sticker-publisher="${escapeHTML(publisher)}" aria-expanded="${collapsed ? "false" : "true"}">${collapsed ? "Expandir" : "Recolher"}</button></div></div><div class="sticker-album-grid">${publisherGroups.map(group => {
+      const award = owned.get(group.id);
+      const completed = group.items.every(item => (options.progressMap || state.readingProgress).get(item.id)?.completed);
+      const donorAward = !isOwn && !award && state.session ? (state.stickerAwards || []).find(entry => entry.character_id === group.id) : null;
+      const adminCanDonate = !isOwn && !award && state.profile?.plan === "admin";
+      const slotPreference = slotPreferences.get(String(group.id));
+      const slotBlocked = Boolean(award?.requests_blocked || slotPreference?.blocked || slotPreference === true);
+      const gumPlacedBy = award?.gum_placed_by || slotPreference?.placedBy || null;
+      const gumAsset = gumPlacedBy && String(gumPlacedBy) !== String(state.session?.user?.id) ? "assets/album/chiclete2.png" : "assets/album/chiclete.png";
+      const adminDiscard = !isOwn && state.profile?.plan === "admin" && award ? `<button type="button" class="small-btn danger" data-admin-sticker-discard="${award.id}">Descartar</button>` : "";
+      const canPlaceGum = Boolean(!isOwn && state.session?.user?.id && ownerId);
+      const gum = isOwn
+        ? `<button type="button" class="sticker-slot-gum ${slotBlocked ? "is-active" : ""}" data-sticker-gum data-sticker-gum-character="${escapeHTML(group.id)}" ${award ? `data-sticker-gum-award="${award.id}"` : ""} data-blocked="${slotBlocked ? "true" : "false"}" title="${slotBlocked ? "Remover chiclete" : "Colar chiclete"}" aria-label="${slotBlocked ? "Remover chiclete" : "Colar chiclete"}">${slotBlocked ? `<img src="${gumAsset}" alt="Slot protegido" draggable="false">` : ""}</button>`
+        : slotBlocked
+          ? `<span class="sticker-slot-gum is-active" title="Interações bloqueadas"><img src="${gumAsset}" alt="Interações bloqueadas" draggable="false"></span>`
+          : canPlaceGum
+            ? `<button type="button" class="sticker-slot-gum" data-sticker-gum data-sticker-gum-owner="${escapeHTML(ownerId)}" data-sticker-gum-character="${escapeHTML(group.id)}" ${award ? `data-sticker-gum-award="${award.id}"` : ""} data-blocked="false" title="Colar chiclete" aria-label="Colar chiclete"></button>`
+            : "";
+      const action = isOwn && award ? `<div class="sticker-slot-actions"><button type="button" class="small-btn" data-sticker-move="${award.id}" data-sticker-section="repeated">Enviar para repetidas</button></div>` : !isOwn && award ? `<div class="sticker-slot-actions">${slotBlocked ? `<small class="sticker-request-locked">Pedidos e trocas bloqueados</small>` : `<button type="button" class="small-btn" data-sticker-request-character="${escapeHTML(group.id)}" data-sticker-request-owner="${escapeHTML(ownerId)}" data-sticker-request-type="gift">Pedir</button><button type="button" class="small-btn" data-sticker-request-character="${escapeHTML(group.id)}" data-sticker-request-owner="${escapeHTML(ownerId)}" data-sticker-request-type="trade">Trocar</button>`}${adminDiscard}</div>` : adminCanDonate && !slotBlocked ? `<div class="sticker-slot-actions"><button type="button" class="small-btn" data-admin-sticker-donate="${escapeHTML(group.id)}" data-admin-sticker-recipient="${escapeHTML(ownerId)}">Doar como admin</button></div>` : donorAward && !slotBlocked ? `<div class="sticker-slot-actions"><button type="button" class="small-btn" data-sticker-donate="${donorAward.id}" data-sticker-recipient="${escapeHTML(ownerId)}">Doar</button></div>` : slotBlocked && !award ? `<small class="sticker-request-locked">Doações bloqueadas</small>` : "";
+      return `<article class="sticker-slot ${award ? `has-sticker rarity-${escapeHTML(award.rarity || "standard")}` : "is-empty"}"><div class="sticker-slot-art">${award ? `<img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="Figurinha de ${escapeHTML(group.characterName)}" loading="lazy"><span class="sticker-rarity">${stickerRarityLabel(award.rarity)}</span>` : `<span class="sticker-placeholder">?</span>`}</div>${gum}<strong>${escapeHTML(group.characterName)}</strong><small>${award ? "Figurinha no álbum" : completed ? "Conquistável" : `${group.items.length} edição(ões) para ler`}</small>${action}</article>`;
+    }).join("")}</div></section>`; }).join("");
+     const repeatedPage = repeatedAwards.length ? `<section class="section sticker-repeated-panel"><div class="section-head"><div><div class="eyebrow">Álbum · Repetidas</div><h2 class="section-title">Figurinhas repetidas</h2><div class="section-subtitle">${isOwn ? "Estas figurinhas são privadas e só aparecem para você." : "Área visível apenas para administradores."} Você pode colá-las no álbum principal ou oferecê-las em uma troca.</div></div><strong>${repeatedAwards.length} figurinha${repeatedAwards.length === 1 ? "" : "s"}</strong></div><div class="sticker-repeated-grid">${repeatedAwards.map(award => `<article class="sticker-slot has-sticker rarity-${escapeHTML(award.rarity || "standard")}"><div class="sticker-slot-art"><img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="Figurinha de ${escapeHTML(award.character_name)}" loading="lazy"><span class="sticker-rarity">${stickerRarityLabel(award.rarity)}</span></div><strong>${escapeHTML(award.character_name)}</strong><small>${escapeHTML(award.publisher_name || "")}</small>${isOwn ? `<div class="sticker-slot-actions"><button class="small-btn" data-sticker-move="${award.id}" data-sticker-section="pasted">Colar no álbum</button><button class="small-btn danger" data-sticker-discard="${award.id}">Descartar</button></div>` : state.profile?.plan === "admin" ? `<div class="sticker-slot-actions"><button class="small-btn danger" data-admin-sticker-discard="${award.id}">Descartar</button></div>` : ""}</article>`).join("")}</div></section>` : '<section class="section sticker-repeated-panel"><div class="empty">Não há figurinhas repetidas para exibir.</div></section>';
+    const viewTabs = canSeeRepeated ? `<div class="sticker-album-tabs"><button class="small-btn ${albumView === "pasted" ? "is-active" : ""}" data-sticker-album-view="pasted">Coladas</button><button class="small-btn ${albumView === "repeated" ? "is-active" : ""}" data-sticker-album-view="repeated">Repetidas${repeatedAwards.length ? ` (${repeatedAwards.length})` : ""}</button></div>` : "";
+    const albumContent = albumView === "repeated" && canSeeRepeated ? repeatedPage : (pages || '<div class="empty">Ainda não há personagens cadastrados no catálogo.</div>');
+    const requestPanel = isOwn ? `<section class="section sticker-requests-panel"><div class="section-head"><div><h2 class="section-title">Pedidos de figurinhas</h2><div class="section-subtitle">Você decide se quer doar ou trocar.</div></div><label class="checkbox-inline"><input type="checkbox" data-sticker-requests-toggle ${profile?.allow_sticker_requests !== false ? "checked" : ""}> Aceitar pedidos</label></div>${stickerRequestsMarkup(profile.id)}</section>` : "";
+    return `<div class="content sticker-album-page"><div class="section-head"><div><div class="eyebrow">Coleção de figurinhas</div><h1 class="section-title">Álbum de ${isOwn ? "@" : "@"}${escapeHTML(profile?.username || "")}</h1><div class="section-subtitle">Personagens em ordem alfabética, separados por editora. Cada personagem recebe uma figurinha quando todas as edições atuais forem lidas.</div></div><div class="profile-actions">${isOwn ? `<button class="small-btn" data-section="shelf">Minha estante</button>` : `<a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a>`}</div></div>${viewTabs}${requestPanel}${albumContent}</div>`;
+  }
+
+  function openStickerPreview(imageUrl, label = "Figurinha") {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop sticker-preview-backdrop";
+    overlay.innerHTML = `<div class="modal sticker-preview-modal"><button type="button" class="small-btn" data-close>Fechar</button><img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(label)}" draggable="false"><strong>${escapeHTML(label)}</strong></div>`;
+    $("#modal-root").appendChild(overlay);
+    $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => overlay.remove()));
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $("img", overlay).addEventListener("dragstart", event => event.preventDefault());
+    $("img", overlay).addEventListener("contextmenu", event => event.preventDefault());
+  }
+
+  function chooseStickerForTrade(offerable = []) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal sticker-trade-picker"><div class="section-head"><div><div class="eyebrow">Proposta de troca</div><h2>Escolha a figurinha que vai oferecer</h2><div class="section-subtitle">Clique em uma figurinha para selecioná-la.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="sticker-trade-picker-grid">${offerable.map(award => `<button type="button" class="sticker-trade-choice rarity-${escapeHTML(award.rarity || "standard")}" data-offer-award="${award.id}"><span class="sticker-trade-choice-art"><img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="${escapeHTML(award.character_name)}" draggable="false"></span><strong>${escapeHTML(award.character_name)}</strong><small>${stickerRarityLabel(award.rarity)}</small></button>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-send-trade disabled>Enviar proposta</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const selectedIds = new Set();
+      const close = value => { overlay.remove(); resolve(value || []); };
+      $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => close(null)));
+      overlay.addEventListener("click", event => { if (event.target === overlay) close(null); });
+      $$('[data-offer-award]', overlay).forEach(button => button.addEventListener("click", () => {
+        const id = button.dataset.offerAward;
+        if (selectedIds.has(id)) selectedIds.delete(id);
+        else if (selectedIds.size < 2) selectedIds.add(id);
+        else return toast("Você pode oferecer no máximo duas figurinhas.");
+        button.classList.toggle("is-selected", selectedIds.has(id));
+        $('[data-send-trade]', overlay).disabled = selectedIds.size === 0;
+      }));
+      $('[data-send-trade]', overlay).addEventListener("click", () => close([...selectedIds].map(Number)));
+    });
+  }
+
+  function chooseStickerForDonation(offerable = []) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal sticker-trade-picker"><div class="section-head"><div><div class="eyebrow">Doação de figurinha</div><h2>Escolha qual figurinha doar</h2><div class="section-subtitle">Selecione uma das suas figurinhas desta personagem.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="sticker-trade-picker-grid">${offerable.map(award => `<button type="button" class="sticker-trade-choice rarity-${escapeHTML(award.rarity || "standard")}" data-donation-award="${award.id}"><span class="sticker-trade-choice-art"><img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="${escapeHTML(award.character_name)}" draggable="false"></span><strong>${escapeHTML(award.character_name)}</strong><small>${stickerRarityLabel(award.rarity)}</small></button>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-send-donation disabled>Doar figurinha selecionada</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      let selectedId = null;
+      const close = value => { overlay.remove(); resolve(value); };
+      $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => close(null)));
+      overlay.addEventListener("click", event => { if (event.target === overlay) close(null); });
+      $$('[data-donation-award]', overlay).forEach(button => button.addEventListener("click", () => {
+        selectedId = Number(button.dataset.donationAward);
+        $$('[data-donation-award]', overlay).forEach(item => item.classList.toggle("is-selected", item === button));
+        $('[data-send-donation]', overlay).disabled = false;
+      }));
+      $('[data-send-donation]', overlay).addEventListener("click", () => close(selectedId));
+    });
+  }
+
+  function chooseAdminStickerRarity() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      const rarities = ["standard", "torn", "creased", "silver", "gold"];
+      overlay.innerHTML = `<div class="modal sticker-rarity-picker"><div class="section-head"><div><div class="eyebrow">Doação administrativa</div><h2>Escolha a raridade</h2><div class="section-subtitle">Selecione a raridade da figurinha que será adicionada ao álbum.</div></div></div><div class="sticker-rarity-picker-grid">${rarities.map(rarity => `<button type="button" class="small-btn sticker-rarity-choice rarity-${rarity}" data-admin-rarity="${rarity}">${stickerRarityLabel(rarity)}</button>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const close = value => { overlay.remove(); resolve(value || null); };
+      $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => close(null)));
+      overlay.addEventListener("click", event => { if (event.target === overlay) close(null); });
+      $$('[data-admin-rarity]', overlay).forEach(button => button.addEventListener("click", () => close(button.dataset.adminRarity)));
+    });
+  }
+
+  function chooseStickerCoverCandidate(group, candidates = []) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal sticker-trade-picker"><div class="section-head"><div><div class="eyebrow">Doação administrativa</div><h2>Escolha a imagem da figurinha</h2><div class="section-subtitle">Selecione uma capa disponível ou use um link HTTPS.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="sticker-trade-picker-grid">${candidates.map((candidate, index) => `<button type="button" class="sticker-trade-choice" data-cover-candidate="${index}"><span class="sticker-trade-choice-art"><img src="${escapeHTML(proxiedImageUrl(candidate.url))}" alt="Capa de ${escapeHTML(group.characterName)}" draggable="false"></span><strong>${escapeHTML(state.db.library.find(item => String(item.id) === String(candidate.itemId))?.title || group.characterName)}</strong><small>${index === 0 ? "Capa disponível" : "Capa variante"}</small></button>`).join("")}</div><div class="field sticker-cover-link-field"><label for="admin-sticker-cover-url">Ou usar imagem por link</label><div class="inline-form"><input id="admin-sticker-cover-url" type="url" placeholder="https://exemplo.com/imagem.jpg" autocomplete="off"><button type="button" class="small-btn" data-use-cover-link>Usar link</button></div><small>O link precisa começar com https://.</small></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-send-cover disabled>Usar esta imagem</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      let selectedIndex = null;
+      const close = value => { overlay.remove(); resolve(value); };
+      const coverGrid = $(".sticker-trade-picker-grid", overlay);
+      const linkControls = $(".inline-form", overlay);
+      if (linkControls) {
+        linkControls.classList.add("sticker-cover-link-controls");
+        linkControls.style.justifyContent = "flex-end";
+      }
+      $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => close(null)));
+      overlay.addEventListener("click", event => { if (event.target === overlay) close(null); });
+      $$('[data-cover-candidate]', overlay).forEach(button => button.addEventListener("click", () => {
+        selectedIndex = Number(button.dataset.coverCandidate);
+        coverGrid.hidden = false;
+        $('[data-use-cover-link]', overlay).classList.remove("is-selected");
+        $('[data-send-cover]', overlay).dataset.customCoverUrl = "";
+        $$('[data-cover-candidate]', overlay).forEach(item => item.classList.toggle("is-selected", item === button));
+        $('[data-send-cover]', overlay).disabled = false;
+      }));
+      $('[data-use-cover-link]', overlay).addEventListener("click", () => {
+        const url = $('[name="admin-sticker-cover-url"]', overlay)?.value.trim() || $("#admin-sticker-cover-url", overlay)?.value.trim() || "";
+        if (!/^https:\/\//i.test(url)) return toast("Informe um link HTTPS válido para a imagem.");
+        $$('[data-cover-candidate]', overlay).forEach(item => item.classList.remove("is-selected"));
+        selectedIndex = null;
+        coverGrid.hidden = true;
+        $('[data-use-cover-link]', overlay).classList.add("is-selected");
+        $('[data-send-cover]', overlay).disabled = false;
+        $('[data-send-cover]', overlay).dataset.customCoverUrl = url;
+      });
+      $('[data-send-cover]', overlay).addEventListener("click", () => {
+        const customUrl = $('[data-send-cover]', overlay).dataset.customCoverUrl || "";
+        close(customUrl ? { itemId: group.items[0]?.id, url: customUrl } : (candidates[selectedIndex] || null));
+      });
+    });
+  }
+
+  function askStickerDiscardConfirmation() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal sticker-discard-confirm-modal"><div class="section-head"><div><div class="eyebrow">Álbum de figurinhas</div><h2>Descartar figurinha?</h2><div class="section-subtitle">Essa figurinha repetida será removida permanentemente e não poderá ser recuperada.</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Manter figurinha</button><button type="button" class="btn btn-danger" data-confirm-discard>Descartar</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-close]', overlay).forEach(button => button.addEventListener("click", () => finish(false)));
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+      $('[data-confirm-discard]', overlay).addEventListener("click", () => finish(true));
+    });
+  }
+
+  async function requestSticker(characterId, ownerId, type) {
+    if (!state.session) return openAuthPage();
+    const group = stickerGroups().find(entry => entry.id === characterId);
+    const ownerAwards = state.publicProfile?.stickerAwards || [];
+    const target = ownerAwards.find(award => award.character_id === characterId) || (state.publicProfile?.profile?.id === ownerId ? currentStickerAwards(state.stickerAwards).get(characterId) : null);
+    if (!group || !target) return toast("Esta figurinha não está disponível no álbum.");
+    let offeredAwardIds = [];
+    if (type === "trade") {
+      const offerable = (state.stickerAwards || []).filter(award => award.id !== target.id);
+      if (!offerable.length) return toast("Você precisa ter outra figurinha para oferecer.");
+      offeredAwardIds = await chooseStickerForTrade(offerable);
+      if (!offeredAwardIds.length) return;
+    }
+    const result = await sb.rpc("create_sticker_request", { p_owner_id: ownerId, p_character_id: characterId, p_character_name: group.characterName, p_edition_fingerprint: stickerFingerprint(group), p_request_type: type, p_offered_award_id: offeredAwardIds[0] || null, p_offered_award_id_2: offeredAwardIds[1] || null });
+    if (result.error) return toast(result.error.message || "Não foi possível enviar o pedido.");
+    toast(type === "trade" ? "Proposta de troca enviada." : "Pedido de doação enviado.");
   }
 
   function toggleReadingCompleted(item, totalPages = progressFor(item)?.total_pages || 1) {
@@ -2850,6 +3468,7 @@
     updateCompletionCards(item, row.completed);
     if (row.completed && isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
     const result = sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
+    result.then(async response => { if (!response.error && row.completed && !current?.completed) await maybeAwardCharacterStickers(item); });
     const nextCompleted = row.completed;
     result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
     return nextCompleted;
@@ -6426,7 +7045,7 @@
         <div class="feature-grid">
           ${state.db.collections.slice(0,4).map(c => `
             <div class="feature-card" data-collection="${escapeHTML(c.id)}">
-              <div class="cover" style="background-image:url('${escapeHTML(c.cover || "")}')"></div>
+              <div class="cover" style="background-image:url('${escapeHTML(proxiedImageUrl(c.cover || ""))}')"></div>
               <div class="gradient"></div>
               <div class="feature-info">
                 <h3>${escapeHTML(c.title)}</h3>
@@ -6644,7 +7263,9 @@
   }
 
   function publicCollectionItems(category, publicState) {
-    return shelfItemsByIds(category.itemIds || []).filter(item => publicState.favoriteIds.has(item.id) || (item.seriesId && publicState.favoriteIds.has(item.seriesId)));
+    // A coleção pública deve exibir as edições que foram gravadas nela,
+    // mesmo que o proprietário deixe de favoritar alguma delas depois.
+    return shelfItemsByIds(category.itemIds || []);
   }
 
   function profileWallMarkup(profileState, own = false) {
@@ -6729,6 +7350,8 @@
   ];
   const SHERIFF_ROOM_IDS = new Set(["geral", "decenautas", "marvetes", "leitores-colecionadores"]);
   const isSheriffRoom = room => Boolean(room && SHERIFF_ROOM_IDS.has(room.id) && !room.factionId);
+  const isFactionChatSheriff = (room, userId) => Boolean(room?.factionId && userId && state.factionRoles.some(role => role.faction_id === room.factionId && role.user_id === userId && ["leader", "curator"].includes(role.role)));
+  const factionChatSheriffIds = room => new Set((state.factionRoles || []).filter(role => role.faction_id === room?.factionId && ["leader", "curator"].includes(role.role)).map(role => String(role.user_id)));
 
   function canOpenChatRoom(room) {
     if (room.factionId) return ["moderator", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
@@ -6829,7 +7452,7 @@
     const reply = message.metadata?.reply_to;
     const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
     const canModerateChat = options.canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
-    const isSheriff = options.sheriffId && String(options.sheriffId) === String(message.sender_id);
+    const isSheriff = (options.sheriffId && String(options.sheriffId) === String(message.sender_id)) || options.sheriffIds?.has(String(message.sender_id));
     const messageAvatar = isSheriff ? sheriffAvatarMarkup({ ...profile, username }, "chat-message-avatar") : avatarMarkup({ ...profile, username }, "chat-message-avatar");
     const moderationButton = canModerateChat ? `<button type="button" class="chat-delete-action" data-chat-delete="${escapeHTML(message.id || "")}" aria-label="Excluir mensagem" title="Excluir mensagem"><span class="chat-delete-glyph">×</span></button>` : "";
     const expandButton = `<button type="button" class="chat-expand-message-action" data-chat-message-expand aria-expanded="false" hidden>Expandir</button>`;
@@ -7138,7 +7761,8 @@
   async function openChatRoom(room) {
     const sheriffResult = isSheriffRoom(room) && sb ? await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id }) : { data: [] };
     const sheriff = sheriffResult.data?.[0] || null;
-    const chatCanModerate = ["moderator", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id);
+    const chatCanModerate = ["moderator", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id) || isFactionChatSheriff(room, state.session?.user?.id);
+    const factionSheriffIds = factionChatSheriffIds(room);
     removeLegacyChatScrollControls();
     await markChatMentionsRead(room?.id);
     await loadNotifications();
@@ -7188,7 +7812,7 @@
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
-      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true, canModerate: chatCanModerate, sheriffId: sheriff?.user_id })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true, canModerate: chatCanModerate, sheriffId: sheriff?.user_id, sheriffIds: factionSheriffIds })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
       updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
       await renderChatPins(pinsRoot, room.id, chatCanModerate);
@@ -7550,9 +8174,12 @@
 
   function publicCollectionCard(collection, canManage = false) {
     const blog = collection.collection_type === "blog";
+    const factionCatalog = collection.is_faction_catalog === true;
     const count = blog ? (Array.isArray(collection.blog_ids) ? collection.blog_ids.length : 0) : (Array.isArray(collection.item_ids) ? collection.item_ids.length : 0);
     const cover = collection.cover_url || collection.coverUrl || instantCover({ title: collection.name });
-    return `<article class="public-shelf-collection-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username || "")}" role="link" tabindex="0"><div class="public-shelf-collection-cover has-image" style="background-image:url('${escapeHTML(cover)}')"></div><div class="public-shelf-collection-info"><div class="eyebrow">${collection.is_featured ? "Destaque · " : ""}${blog ? "Blogs" : "Quadrinhos"}</div><h3>${escapeHTML(collection.name)}</h3><p>${count} item(ns) · @${escapeHTML(collection.username || "usuário")}</p><div class="shelf-section-actions"><span class="shelf-visibility is-public">Pública</span><a class="small-btn" href="${escapeHTML(publicProfileHref(collection.username, collection.id))}">Abrir</a>${canManage ? `<button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(collection.username)}">Compartilhar</button><button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}</div></div></article>`;
+    const href = factionCatalog ? `?pagina=faccoes&faccao=${encodeURIComponent(collection.faction_page_key)}&catalogo=${encodeURIComponent(collection.catalog_id)}` : publicProfileHref(collection.username, collection.id);
+    const ownerLabel = factionCatalog ? `${collection.faction_emblem || ""} ${collection.faction_name}` : `@${collection.username || "usuário"}`;
+    return `<article class="public-shelf-collection-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username || "")}" ${factionCatalog ? `data-public-faction-page="${escapeHTML(collection.faction_page_key)}" data-public-faction-catalog="${escapeHTML(collection.catalog_id)}"` : ""} role="link" tabindex="0"><div class="public-shelf-collection-cover has-image" style="background-image:url('${escapeHTML(cover)}')"></div><div class="public-shelf-collection-info"><div class="eyebrow">${collection.is_featured ? "Destaque · " : ""}${factionCatalog ? "Catálogo de facção" : blog ? "Blogs" : "Quadrinhos"}</div><h3>${escapeHTML(collection.name)}</h3><p>${count} item(ns) · ${escapeHTML(ownerLabel)}${collection.likes ? ` · ${collection.likes} curtida(s)` : ""}</p><div class="shelf-section-actions"><span class="shelf-visibility is-public">Pública</span><a class="small-btn" href="${escapeHTML(href)}">Abrir</a>${canManage ? `<button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(collection.username)}">Compartilhar</button><button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}</div></div></article>`;
   }
 
   async function toggleShelfCollectionFeatured(id, featured) {
@@ -7628,7 +8255,7 @@
     const items = sortShelfItems(filteredItems, sortOrder, null, publicState.readingProgress);
     const isLiked = publicState.collectionLikes?.has(category.id);
     const likes = publicState.collectionLikeCounts?.get(category.id) || 0;
-    const cover = category.coverUrl ? `style="background-image:url('${escapeHTML(category.coverUrl)}')"` : "";
+    const cover = category.coverUrl ? `style="background-image:url('${escapeHTML(proxiedImageUrl(category.coverUrl))}')"` : "";
     return `<div class="content public-collection-page"><div class="public-collection-hero"><div class="public-collection-icon ${category.coverUrl ? "has-cover" : ""}" ${cover}>${category.coverUrl ? "" : "▣"}</div><div><div class="eyebrow">Coleção pública</div><h1 class="section-title">${escapeHTML(category.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${allItems.length} item(ns)</div></div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(category.name)}</h2><div class="section-subtitle">Uma coleção compartilhada da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn ${isLiked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${isLiked ? "♥ Curtida" : "♡ Curtir"} · ${likes}</button><button class="small-btn" data-copy-collection="${escapeHTML(category.id)}" data-copy-username="${escapeHTML(profile.username)}">Copiar link</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><form class="collection-filter" data-collection-filter-form><select name="field"><option value="all" ${filter.field === "all" ? "selected" : ""}>Filtrar por qualquer campo</option><option value="author" ${filter.field === "author" ? "selected" : ""}>Autor</option><option value="publisher" ${filter.field === "publisher" ? "selected" : ""}>Editora</option><option value="character" ${filter.field === "character" ? "selected" : ""}>Personagem</option><option value="tag" ${filter.field === "tag" ? "selected" : ""}>Gênero / tag</option><option value="seriesTitle" ${filter.field === "seriesTitle" ? "selected" : ""}>Série</option><option value="title" ${filter.field === "title" ? "selected" : ""}>Título</option></select><input name="query" value="${escapeHTML(filter.query)}" placeholder="Digite para filtrar a coleção"><button class="small-btn">Filtrar</button></form><div class="collection-results-meta">${items.length} de ${allItems.length} item(ns)</div><div class="results-grid">${items.map(item => card(item, publicState.readingProgress, publicState.favoriteIds)).join("") || '<div class="empty">Nenhum quadrinho corresponde ao filtro.</div>'}</div></div>`;
   }
 
@@ -7637,7 +8264,7 @@
     const posts = (collection.blogIds || [])
       .map(id => (publicState.authoredBlogPosts || []).find(post => String(post.id) === String(id)) || (publicState.savedBlogPosts || []).find(post => String(post.id) === String(id)) || (publicState.collectionBlogPosts || []).find(post => String(post.id) === String(id)))
       .filter(Boolean);
-    return `<div class="content public-collection-page public-blog-collection-page"><div class="public-collection-hero"><div class="public-collection-icon ${collection.coverUrl ? "has-cover" : ""}" ${collection.coverUrl ? `style="background-image:url('${escapeHTML(collection.coverUrl)}')"` : ""}>${collection.coverUrl ? "" : "✎"}</div><div><div class="eyebrow">Coleção pública de blogs</div><h1 class="section-title">${escapeHTML(collection.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${posts.length} blog(s)</div></div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(collection.name)}</h2><div class="section-subtitle">Uma coleção pública de blogs da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(profile.username)}">Compartilhar</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><div class="blog-shelf-grid">${posts.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog nesta coleção.</div>'}</div></div>`;
+    return `<div class="content public-collection-page public-blog-collection-page"><div class="public-collection-hero"><div class="public-collection-icon ${collection.coverUrl ? "has-cover" : ""}" ${collection.coverUrl ? `style="background-image:url('${escapeHTML(proxiedImageUrl(collection.coverUrl))}')"` : ""}>${collection.coverUrl ? "" : "✎"}</div><div><div class="eyebrow">Coleção pública de blogs</div><h1 class="section-title">${escapeHTML(collection.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${posts.length} blog(s)</div></div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(collection.name)}</h2><div class="section-subtitle">Uma coleção pública de blogs da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(profile.username)}">Compartilhar</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><div class="blog-shelf-grid">${posts.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog nesta coleção.</div>'}</div></div>`;
   }
 
   function filterCollectionItems(items, field, query) {
@@ -7729,11 +8356,11 @@
   }
 
   async function deletePublicCollection(ownerId, collectionId) {
-    if (state.profile?.plan !== "admin") return;
+    if (!["moderator", "admin"].includes(state.profile?.plan)) return;
     const result = await sb.from("shelf_collections").delete().eq("owner_id", ownerId).eq("id", collectionId);
     if (result.error) return toast("Não foi possível excluir a coleção.");
     toast("Coleção pública excluída.");
-    await loadPublicProfile(state.publicProfile.profile.username);
+    await loadPublicProfile(state.publicProfile.profile.username, null);
   }
 
   function openProfileBlockConfirm(profile, blocked) {
@@ -7772,6 +8399,7 @@
       : await query.insert({ follower_id: state.session.user.id, following_id: profile.id });
     if (result.error) return toast("Não foi possível atualizar o acompanhamento.");
     publicState.isFollowing = !following;
+    if (!following) await awardProfileXp("follow", `follow:${profile.id}`);
     publicState.followerCount = Math.max(0, (publicState.followerCount || 0) + (following ? -1 : 1));
     state.followingCount = Math.max(0, (state.followingCount || 0) + (following ? -1 : 1));
     render();
@@ -7802,13 +8430,17 @@
     const selectedBlogCollection = publicBlogCollections.find(collection => collection.id === publicState.collectionId);
     if (publicState.collectionId && selectedCategory) return renderPublicCollectionPage(publicState, selectedCategory);
     if (publicState.collectionId && selectedBlogCollection) return renderPublicBlogCollectionPage(publicState, selectedBlogCollection);
+    if (publicState.album) {
+      const isOwnAlbum = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
+      return stickerAlbumMarkup(profile, publicState.stickerAwards || [], { isOwn: isOwnAlbum, progressMap: publicState.readingProgress });
+    }
     if (publicState.collectionId && !selectedCategory && !selectedBlogCollection) return `<div class="content"><div class="empty">Esta coleção não existe ou é privada.</div><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a></div>`;
     const canModerate = ["moderator", "admin"].includes(state.profile?.plan) && !["moderator", "admin"].includes(profile.plan);
     const canFollow = Boolean(state.session?.user?.id && state.session.user.id !== profile.id);
     const canBlock = canFollow;
     return `<div class="content public-profile-page">
       <div class="profile-header">
-        ${avatarMarkup(profile)}
+        ${profileStickerMarkup(profile, publicState.stickerAwards || [])}${avatarMarkup(profile)}
         <div>
           <div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)}</div>
           ${profile.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : '<div class="section-subtitle">Perfil público</div>'}
@@ -8085,11 +8717,57 @@
   function factionAbafacOrder(factionId) {
     const faction = state.factions.find(item => item.id === factionId);
     const saved = faction?.abafac_order;
-    const allowed = ["stats", ...(faction?.abafac_catalog_url ? ["catalog"] : []), "leadership", "members", ...state.factionAbafacImages.filter(image => image.faction_id === factionId).map(image => `image:${image.id}`)];
+    const catalogKeys = [...state.factionAbafacCatalogs.entries()].filter(([, catalog]) => catalog.faction_id === factionId).map(([key]) => key);
+    const factionCatalogKeys = state.factionCatalogs.filter(catalog => catalog.faction_id === factionId).map(catalog => `faction-catalog:${catalog.id}`);
+    const legacyCatalogKey = faction?.abafac_catalog_url && !catalogKeys.length ? ["catalog"] : [];
+    const allowed = ["stats", "manifest", "mural", "missions", "mandatory-reads", "achievements", "hall", "report", ...catalogKeys, ...factionCatalogKeys, ...legacyCatalogKey, "leadership", "members", ...state.factionAbafacImages.filter(image => image.faction_id === factionId).map(image => `image:${image.id}`)];
     if (!Array.isArray(saved)) return allowed;
-    const order = [...new Set(saved.filter(key => allowed.includes(key)))];
+    const migratedCatalogKey = catalogKeys[0];
+    const order = [...new Set(saved.map(key => key === "catalog" && migratedCatalogKey ? migratedCatalogKey : key).filter(key => allowed.includes(key)))];
     if (!order.includes("stats")) order.unshift("stats");
-    return [...order, ...allowed.filter(key => !order.includes(key))];
+    if (!order.includes("mandatory-reads")) order.push("mandatory-reads");
+    return order;
+  }
+
+  function factionAchievementsMarkup(factionId) {
+    const achievements = state.factionAchievements.get(factionId) || [];
+    if (!achievements.length) return '<div class="empty">As conquistas da temporada ainda não estão disponíveis.</div>';
+    const unlocked = achievements.filter(achievement => achievement.unlocked).length;
+    return `<div class="faction-achievements-summary"><strong>Meta mensal: ${unlocked}/${achievements.length}</strong><span>conquistas desbloqueadas na temporada atual</span></div><div class="rail-viewport faction-achievements-carousel"><div class="rail faction-achievements-rail">${achievements.map(achievement => { const progress = Number(achievement.progress || 0); const threshold = Math.max(1, Number(achievement.threshold || 1)); const percent = Math.min(100, Math.round(progress / threshold * 100)); return `<article class="faction-achievement-card ${achievement.unlocked ? "is-unlocked" : ""}"><div class="faction-achievement-icon">${escapeHTML(achievement.icon || "★")}</div><div class="faction-achievement-copy"><strong>${escapeHTML(achievement.name)}</strong><p>${escapeHTML(achievement.description)}</p><div class="faction-achievement-progress"><span style="width:${percent}%"></span></div><small>${achievement.unlocked ? "Conquistada" : `${progress.toLocaleString("pt-BR")} / ${threshold.toLocaleString("pt-BR")}`}</small></div></article>`; }).join("")}</div></div>`;
+  }
+
+  function factionReportMarkup(factionId) {
+    const stats = state.factionStats.get(factionId) || { xp: 0 };
+    const members = state.factionMembers.filter(item => item.faction_id === factionId);
+    const activity = members.reduce((totals, member) => {
+      const values = member.faction_activity || {};
+      ["read", "comment", "like", "chat", "follow"].forEach(type => { totals[type] += Number(values[type] || 0); });
+      return totals;
+    }, { read: 0, comment: 0, like: 0, chat: 0, follow: 0 });
+    const achievements = state.factionAchievements.get(factionId) || [];
+    const unlocked = achievements.filter(item => item.unlocked).length;
+    return `<div class="faction-extra-stats faction-report-stats"><div><strong>${Number(stats.xp || 0).toLocaleString("pt-BR")}</strong><span>XP acumulado na temporada</span></div><div><strong>${unlocked}/${achievements.length}</strong><span>conquistas desbloqueadas</span></div><div><strong>${activity.read.toLocaleString("pt-BR")}</strong><span>XP em leituras</span></div></div>`;
+  }
+
+  function factionHallMarkup(factionId) {
+    const faction = state.factions.find(item => item.id === factionId);
+    const categories = { all: "Geral", read: "Leu mais · 7 dias", comment: "Comentou mais · 7 dias", like: "Curtiu mais · 7 dias", chat: "Conversou mais · 7 dias", follow: "Seguiu mais · 7 dias" };
+    const category = categories[state.factionHallCategory] ? state.factionHallCategory : "all";
+    const scoreFor = item => category === "all" ? Number(item.faction_xp || 0) : Number(item.faction_activity?.[`${category}:week`] || 0);
+    const ranked = state.factionMembers
+      .filter(item => item.faction_id === factionId && item.profile)
+      .map(item => ({
+        ...item.profile,
+        user_id: item.user_id,
+        faction_id: factionId,
+        period_xp: scoreFor(item),
+        is_online: item.profile.last_seen_at ? new Date(item.profile.last_seen_at) >= new Date(Date.now() - 5 * 60 * 1000) : false
+      }))
+      .sort((a, b) => Number(b.period_xp || 0) - Number(a.period_xp || 0) || Number(b.level || 1) - Number(a.level || 1) || Number(b.xp || 0) - Number(a.xp || 0) || String(a.username).localeCompare(String(b.username), "pt-BR"))
+      .map((member, index) => ({ ...member, ranking: index + 1 }));
+    if (!ranked.length) return '<div class="empty">Ainda não há membros para disputar o Hall da fama.</div>';
+    const top = ranked.slice(0, 3);
+    return `<div class="faction-hall-ranking"><div class="section-subtitle">${category === "all" ? `Membros da ${escapeHTML(faction?.name || "facção")} ordenados pela XP da temporada.` : `Atividade dos membros da ${escapeHTML(faction?.name || "facção")} nos últimos 7 dias.`}</div><div class="ranking-tabs faction-hall-filters">${Object.entries(categories).map(([key, label]) => `<button type="button" class="small-btn ${category === key ? "is-active" : ""}" data-faction-hall-category="${key}">${label}</button>`).join("")}</div><div class="ranking-top-grid">${top.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></div>`;
   }
 
   function normalizeInternalFactionLink(value) {
@@ -8175,27 +8853,21 @@
     return publicProfileHref(owner.data.username, collection.data.id);
   }
 
-  async function uploadFactionAbafacImage(factionId, file, link) {
-    if (!file) return true;
-    if (!String(file.type || "").startsWith("image/")) return toast("Escolha um arquivo de imagem.");
-    if (file.size > 8 * 1024 * 1024) return toast("A imagem deve ter no máximo 8 MB.");
+  async function addFactionAbafacImage(factionId, imageUrl, link) {
+    if (!String(imageUrl || "").trim()) return true;
+    let parsedUrl;
+    try { parsedUrl = new URL(String(imageUrl).trim(), window.location.origin); } catch { return toast("Informe uma URL válida para a imagem."); }
+    if (parsedUrl.protocol !== "https:") return toast("A imagem precisa usar uma URL HTTPS.");
     const normalizedLink = normalizeInternalFactionLink(link);
     if (normalizedLink === false) return toast("O link da abafac precisa apontar para dentro deste site.");
-    const extension = String(file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
-    const path = `${factionId}/${state.session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
-    const upload = await sb.storage.from("faction-abafac").upload(path, file, { upsert: false });
-    if (upload.error) return toast(upload.error.message || "Não foi possível enviar a imagem.");
-    const publicUrl = sb.storage.from("faction-abafac").getPublicUrl(path).data.publicUrl;
-    const inserted = await sb.from("faction_abafac_images").insert({ faction_id: factionId, image_url: publicUrl, link_url: normalizedLink, storage_path: path, created_by: state.session.user.id }).select("id").single();
+    const inserted = await sb.from("faction_abafac_images").insert({ faction_id: factionId, image_url: parsedUrl.href, link_url: normalizedLink, created_by: state.session.user.id }).select("id").single();
     if (inserted.error) {
-      await sb.storage.from("faction-abafac").remove([path]);
       return toast(inserted.error.message || "Não foi possível registrar a imagem.");
     }
     const order = [...factionAbafacOrder(factionId), `image:${inserted.data.id}`];
     const ordered = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
     if (ordered.error) {
       await sb.from("faction_abafac_images").delete().eq("id", inserted.data.id);
-      await sb.storage.from("faction-abafac").remove([path]);
       return toast(ordered.error.message || "Não foi possível adicionar a abafac.");
     }
     return true;
@@ -8271,11 +8943,48 @@
     render();
   }
 
+  async function toggleFactionCatalogLike(catalogId) {
+    if (!state.session) return openAuthPage();
+    const key = String(catalogId);
+    const liked = state.factionCatalogLikeIds.has(key);
+    const result = liked
+      ? await sb.from("faction_catalog_likes").delete().eq("catalog_id", catalogId).eq("user_id", state.session.user.id)
+      : await sb.from("faction_catalog_likes").insert({ catalog_id: catalogId, user_id: state.session.user.id });
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar a curtida.");
+    if (liked) {
+      state.factionCatalogLikeIds.delete(key);
+      state.factionCatalogLikeCounts.set(key, Math.max(0, (state.factionCatalogLikeCounts.get(key) || 1) - 1));
+    } else {
+      state.factionCatalogLikeIds.add(key);
+      state.factionCatalogLikeCounts.set(key, (state.factionCatalogLikeCounts.get(key) || 0) + 1);
+    }
+    render();
+  }
+
+  async function toggleFactionCatalogSave(catalogId) {
+    if (!state.session) return openAuthPage();
+    const key = String(catalogId);
+    const saved = state.factionCatalogSaveIds.has(key);
+    const result = saved
+      ? await sb.from("faction_catalog_saves").delete().eq("catalog_id", catalogId).eq("user_id", state.session.user.id)
+      : await sb.from("faction_catalog_saves").insert({ catalog_id: catalogId, user_id: state.session.user.id });
+    if (result.error) return toast(result.error.message || "Não foi possível salvar o catálogo.");
+    if (saved) {
+      state.factionCatalogSaveIds.delete(key);
+      state.savedPublicCollections = (state.savedPublicCollections || []).filter(collection => !(collection.is_faction_catalog && String(collection.catalog_id) === key));
+    } else {
+      state.factionCatalogSaveIds.add(key);
+      const collection = [...(state.popularPublicCollections || []), ...(state.featuredComicCollections || [])].find(item => item.is_faction_catalog && String(item.catalog_id) === key);
+      if (collection && !(state.savedPublicCollections || []).some(item => item.is_faction_catalog && String(item.catalog_id) === key)) state.savedPublicCollections = [...(state.savedPublicCollections || []), collection];
+    }
+    render();
+  }
+
   function openFactionAbafacLinkEditor(image) {
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop faction-modal-backdrop";
-      overlay.innerHTML = `<div class="modal faction-modal faction-abafac-link-modal"><div class="section-head"><div><div class="eyebrow">Imagem abafac</div><h2>Editar link</h2><div class="section-subtitle">Defina o destino que será aberto ao clicar na imagem.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Link interno da imagem (opcional)</span><input name="link" type="text" maxlength="500" value="${escapeHTML(image?.link_url || "")}" placeholder="?pagina=blogs ou /index.html?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. Deixe vazio para remover o link.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar link</button></div></form></div>`;
+      overlay.innerHTML = `<div class="modal faction-modal faction-abafac-link-modal"><div class="section-head"><div><div class="eyebrow">Imagem abafac</div><h2>Editar link</h2><div class="section-subtitle">Defina o destino que será aberto ao clicar na imagem.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Link interno da imagem (opcional)</span><input name="link" type="text" maxlength="500" value="${escapeHTML(image?.link_url || "")}" placeholder="?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. Deixe vazio para remover o link.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Salvar link</button></div></form></div>`;
       const finish = value => { overlay.remove(); resolve(value); };
       const form = $(".faction-identity-form", overlay);
       form.addEventListener("submit", async event => {
@@ -8318,22 +9027,48 @@
   }
 
   async function removeFactionAbafac(factionId, key) {
-    const order = factionAbafacOrder(factionId).filter(item => item !== key);
-    const result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+    const rawKey = String(key || "");
+    let result;
+    if (rawKey.startsWith("image:")) {
+      return removeFactionAbafacImage(factionId, rawKey);
+    }
+    if (rawKey.startsWith("catalog:")) {
+      const catalogId = Number(rawKey.split(":")[1]);
+      if (!Number.isInteger(catalogId)) return;
+      result = await sb.rpc("remove_faction_abafac_catalog", { p_catalog_id: catalogId });
+      // Compatibilidade com bancos que ainda não receberam a função nova.
+      if (result.error && (result.error.code === "PGRST202" || /remove_faction_abafac_catalog/i.test(result.error.message || ""))) {
+        const deleted = await sb.from("faction_abafac_catalogs").delete().eq("id", catalogId).eq("faction_id", factionId);
+        if (deleted.error) return toast(deleted.error.message || "NÃ£o foi possÃ­vel excluir este catÃ¡logo.");
+        const order = factionAbafacOrder(factionId).filter(item => item !== rawKey);
+        result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+      }
+    } else if (rawKey.startsWith("faction-catalog:")) {
+      const catalogId = Number(rawKey.split(":")[1]);
+      if (!Number.isInteger(catalogId)) return;
+      result = await sb.rpc("delete_faction_catalog", { p_catalog_id: catalogId });
+    } else {
+      const order = factionAbafacOrder(factionId).filter(item => item !== rawKey);
+      result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+    }
     if (result.error) return toast(result.error.message || "Não foi possível remover esta abafac.");
     await loadFactions();
     render();
   }
 
   function openFactionAbafacManager(factionId) {
-    const labels = { stats: "Resumo da facção", ...(state.factions.find(item => item.id === factionId)?.abafac_catalog_url ? { catalog: "Catálogo público" } : {}), leadership: "Cargos da facção", members: "Membros da facção" };
+    const labels = { stats: "Resumo da facção", manifest: "Manifesto", mural: "Mural de avisos", missions: "Missões da temporada", achievements: "Conquistas", hall: "Hall da fama", report: "Relatório da temporada", leadership: "Cargos da facção", members: "Membros da facção" };
+    state.factionAbafacCatalogs.forEach((catalog, key) => { if (catalog.faction_id === factionId) labels[key] = `Catálogo: ${catalog.name}`; });
+    state.factionCatalogs.filter(catalog => catalog.faction_id === factionId).forEach(catalog => { labels[`faction-catalog:${catalog.id}`] = `Catálogo da facção: ${catalog.name}`; });
+    if (state.factions.find(item => item.id === factionId)?.abafac_catalog_url && !labels.catalog) labels.catalog = "Catálogo legado";
     state.factionAbafacImages.filter(image => image.faction_id === factionId).forEach(image => { labels[`image:${image.id}`] = "Imagem abafac"; });
     const active = new Set(factionAbafacOrder(factionId));
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal faction-abafac-modal"><div class="section-head"><div><div class="eyebrow">Abafac da facção</div><h2>Gerenciar abas</h2><div class="section-subtitle">As abas fixas removidas podem ser recuperadas e voltarão abaixo das demais. Imagens removidas são apagadas definitivamente.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="faction-abafac-manager">${Object.entries(labels).map(([key, label]) => `<div class="faction-abafac-manager-row"><span>${label}</span>${active.has(key) ? '<small>Ativa</small>' : `<button type="button" class="small-btn" data-faction-abafac-restore="${key}">Recuperar</button>`}</div>`).join("")}</div></div>`;
+    overlay.innerHTML = `<div class="modal faction-abafac-modal"><div class="section-head"><div><div class="eyebrow">Abafac da facção</div><h2>Gerenciar abas</h2><div class="section-subtitle">As abafacs permanecem salvas. Use os controles da página para reorganizar a ordem; a remoção desativa somente a aba escolhida.</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><div class="faction-abafac-manager">${Object.entries(labels).map(([key, label]) => `<div class="faction-abafac-manager-row"><span>${label}</span>${active.has(key) ? '<small>Ativa</small>' : `<button type="button" class="small-btn" data-faction-abafac-restore="${key}">Recuperar</button>`}</div>`).join("")}</div></div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $$('[data-faction-abafac-restore]', overlay).forEach(button => button.addEventListener("click", async () => {
       const order = [...factionAbafacOrder(factionId), button.dataset.factionAbafacRestore];
       const result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
@@ -8347,12 +9082,38 @@
   function applyFactionAbafacOrder(factionId) {
     const page = $(".faction-detail-page");
     if (!page) return;
+    const catalogSections = Object.fromEntries($$(".faction-catalog-abafac", page).map(section => [section.dataset.factionAbafac, section]));
     const sections = {
       stats: $(".faction-stats-abafac", page),
-      catalog: $(".faction-catalog-abafac", page),
+      manifest: $(".faction-manifest-abafac", page),
+      mural: $(".faction-mural-abafac", page),
+      missions: $(".faction-missions-abafac", page),
+      achievements: $(".faction-achievements-abafac", page),
+      hall: $(".faction-hall-abafac", page),
+      showcase: $(".faction-showcase-abafac", page),
+      report: $(".faction-report-abafac", page),
       leadership: $(".faction-leadership-tools", page),
-      members: $(".faction-members-section", page)
+      members: $(".faction-members-section", page),
+      ...catalogSections
     };
+    if (sections.hall) {
+      const hallHead = $(".section-head", sections.hall);
+      sections.hall.innerHTML = `${hallHead?.outerHTML || ""}${factionHallMarkup(factionId)}`;
+      $$('[data-faction-hall-category]', sections.hall).forEach(button => button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.factionHallCategory = button.dataset.factionHallCategory || "all";
+        render();
+      }));
+    }
+    if (sections.achievements) {
+      const achievementsHead = $(".section-head", sections.achievements);
+      sections.achievements.innerHTML = `${achievementsHead?.outerHTML || ""}${factionAchievementsMarkup(factionId)}`;
+    }
+    if (sections.report) {
+      const reportHead = $(".section-head", sections.report);
+      sections.report.innerHTML = `${reportHead?.outerHTML || ""}${factionReportMarkup(factionId)}`;
+    }
     state.factionAbafacImages.filter(image => image.faction_id === factionId).forEach(image => {
       const key = `image:${image.id}`;
       const section = document.createElement("section");
@@ -8367,6 +9128,7 @@
     const order = factionAbafacOrder(factionId);
     const role = state.factionRoles.find(item => item.faction_id === factionId && item.user_id === state.session?.user?.id);
     const canManage = role && ["leader", "curator"].includes(role.role);
+    const standaloneCatalog = Boolean(state.factionCatalogId);
     const anchor = $(".faction-detail-hero", page);
     let previous = anchor;
     order.forEach((key, index) => {
@@ -8376,14 +9138,49 @@
       section.dataset.factionAbafac = key;
       previous?.after(section);
       previous = section;
+      if (standaloneCatalog && key.startsWith("faction-catalog:")) {
+        $(".section-head > div:first-child", section)?.remove();
+        const catalogPageHead = $(".faction-catalog-page > .section-head", page);
+        const backButton = $("a.small-btn", catalogPageHead);
+        const catalogActions = $(".shelf-section-actions", section);
+        if (catalogPageHead && backButton && catalogActions) {
+          backButton.replaceWith(catalogActions);
+          if (["moderator", "admin"].includes(state.profile?.plan) && !$("[data-faction-catalog-feature]", catalogActions)) {
+            const catalog = state.factionCatalogs.find(item => `faction-catalog:${item.id}` === key);
+            if (catalog) {
+              const featureButton = document.createElement("button");
+              featureButton.type = "button";
+              featureButton.className = "small-btn";
+              featureButton.dataset.factionCatalogFeature = catalog.id;
+              featureButton.dataset.factionCatalogFeatured = catalog.is_featured ? "true" : "false";
+              featureButton.textContent = catalog.is_featured ? "Remover destaque" : "Destacar";
+              catalogActions.appendChild(featureButton);
+              if (!$("[data-faction-catalog-delete]", catalogActions)) {
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.className = "small-btn danger";
+                deleteButton.dataset.factionCatalogDelete = catalog.id;
+                deleteButton.textContent = "Excluir";
+                catalogActions.appendChild(deleteButton);
+              }
+            }
+          }
+        }
+      }
       if ((!canManage && key !== "members") || $("[data-faction-abafac-controls]", section)) return;
       const head = $(".section-head", section);
       if (!key.startsWith("image:") && key !== "stats" && !head) return;
       const controls = document.createElement("div");
       controls.className = "faction-abafac-controls";
       controls.dataset.factionAbafacControls = "true";
-      controls.innerHTML = `${canManage ? `<button type="button" class="small-btn" data-faction-abafac-move="up" data-faction-abafac-key="${key}" ${index === 0 ? "disabled" : ""} title="Mover aba para cima" aria-label="Mover aba para cima">↑</button><button type="button" class="small-btn" data-faction-abafac-move="down" data-faction-abafac-key="${key}" ${index === order.length - 1 ? "disabled" : ""} title="Mover aba para baixo" aria-label="Mover aba para baixo">↓</button>` : ""}${key.startsWith("image:") ? `<button type="button" class="small-btn" data-faction-abafac-link="${key}" title="Editar link da imagem" aria-label="Editar link da imagem">↗</button>` : ""}${key === "members" ? `<button type="button" class="small-btn" data-faction-view-members="${factionId}" title="Ver todos os membros" aria-label="Ver todos os membros">Ver todos</button>` : ""}${canManage && !["stats", "catalog"].includes(key) ? `<button type="button" class="small-btn danger" data-faction-abafac-remove="${key}" title="Remover abafac" aria-label="Remover abafac">×</button>` : ""}`;
-      if (key.startsWith("image:")) {
+      controls.addEventListener("click", event => event.stopPropagation());
+      controls.innerHTML = `${canManage ? `<button type="button" class="small-btn" data-faction-abafac-move="up" data-faction-abafac-key="${key}" ${index === 0 ? "disabled" : ""} title="Mover aba para cima" aria-label="Mover aba para cima">↑</button><button type="button" class="small-btn" data-faction-abafac-move="down" data-faction-abafac-key="${key}" ${index === order.length - 1 ? "disabled" : ""} title="Mover aba para baixo" aria-label="Mover aba para baixo">↓</button>` : ""}${key.startsWith("image:") ? `<button type="button" class="small-btn" data-faction-abafac-link="${key}" title="Editar link da imagem" aria-label="Editar link da imagem">↗</button>` : ""}${key === "members" ? `<button type="button" class="small-btn" data-faction-view-members="${factionId}" title="Ver todos os membros" aria-label="Ver todos os membros">Ver todos</button>` : ""}${canManage && !["stats", "catalog"].includes(key) ? `<button type="button" class="small-btn danger" data-faction-abafac-remove="${key}" title="Mover abafac para o final" aria-label="Mover abafac para o final">×</button>` : ""}`;
+      if (standaloneCatalog) {
+        $$('[data-faction-abafac-move], [data-faction-abafac-remove]', controls).forEach(button => button.remove());
+      }
+      if (key === "mandatory-reads") {
+        $(".faction-mandatory-reads-note", section)?.after(controls);
+      } else if (key.startsWith("image:")) {
         $(".faction-abafac-image-layout", section)?.appendChild(controls);
       } else if (key === "stats") {
         section.appendChild(controls);
@@ -8393,8 +9190,86 @@
       $$('[data-faction-abafac-move]', controls).forEach(button => button.addEventListener("click", () => moveFactionAbafac(factionId, key, button.dataset.factionAbafacMove === "up" ? -1 : 1)));
       $('[data-faction-abafac-link]', controls)?.addEventListener("click", () => editFactionAbafacLink(factionId, key));
       $('[data-faction-view-members]', controls)?.addEventListener("click", () => navigate({ pagina: "faccoes", faccao: factionRouteKey(factionId), membros: "1" }));
-      $('[data-faction-abafac-remove]', controls)?.addEventListener("click", () => key.startsWith("image:") ? removeFactionAbafacImage(factionId, key) : removeFactionAbafac(factionId, key));
+      $('[data-faction-abafac-remove]', controls)?.addEventListener("click", () => removeFactionAbafac(factionId, key));
     });
+    $$('[data-faction-catalog-share]', page).forEach(button => button.onclick = async () => {
+      const link = new URL(`?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(factionId))}&catalogo=${encodeURIComponent(button.dataset.factionCatalogShare)}`, window.location.href).href;
+      try { await navigator.clipboard.writeText(link); toast("Link da facção copiado."); } catch { window.prompt("Copie o link da facção:", link); }
+    });
+    $$('[data-faction-catalog-like]', page).forEach(button => button.onclick = event => {
+      event.stopPropagation();
+      toggleFactionCatalogLike(button.dataset.factionCatalogLike);
+    });
+    $$('[data-faction-catalog-save]', page).forEach(button => button.onclick = event => {
+      event.stopPropagation();
+      toggleFactionCatalogSave(button.dataset.factionCatalogSave);
+    });
+    $$('[data-faction-catalog-feature]', page).forEach(button => button.onclick = async event => {
+      event.stopPropagation();
+      const result = await sb.rpc("set_faction_catalog_featured", { p_catalog_id: button.dataset.factionCatalogFeature, p_featured: button.dataset.factionCatalogFeatured !== "true" });
+      if (result.error) return toast(result.error.message || "Não foi possível atualizar o destaque do catálogo.");
+      await loadFactions();
+      render();
+    });
+    $$('[data-faction-catalog-sort]', page).forEach(select => select.onchange = async event => {
+      const result = await sb.rpc("update_faction_catalog_sort", { p_catalog_id: event.currentTarget.dataset.factionCatalogSort, p_sort_order: event.currentTarget.value });
+      if (result.error) return toast(result.error.message || "Não foi possível ordenar o catálogo.");
+      await loadFactions();
+      render();
+    });
+    $$('[data-faction-catalog-edit-inline]', page).forEach(button => button.onclick = async () => {
+      const catalog = state.factionCatalogs.find(item => String(item.id) === button.dataset.factionCatalogEditInline);
+      if (!catalog) return;
+      const values = await openFactionCatalogEditor(factionId, catalog);
+      if (!values) return;
+      const result = await sb.rpc("save_faction_catalog", { p_catalog_id: catalog.id, p_faction_id: factionId, p_name: values.name, p_cover_url: values.coverUrl || null, p_item_ids: values.itemIds });
+      if (result.error) return toast(result.error.message || "Não foi possível editar o catálogo.");
+      await loadFactions();
+      render();
+    });
+    $$('[data-faction-catalog-delete]', page).forEach(button => button.onclick = async () => {
+      if (!window.confirm("Excluir este catálogo da facção?")) return;
+      const result = await sb.rpc("delete_faction_catalog", { p_catalog_id: button.dataset.factionCatalogDelete });
+      if (result.error) return toast(result.error.message || "Não foi possível excluir o catálogo.");
+      await loadFactions();
+      render();
+    });
+    const currentFaction = state.factions.find(item => item.id === factionId);
+    const canEditManifest = currentFaction && (["admin"].includes(state.profile?.plan) || ["leader", "curator"].includes(role?.role));
+    const manifestSection = sections.manifest;
+    if (canEditManifest && manifestSection && !$("[data-faction-edit-manifest]", manifestSection)) {
+      const editManifestButton = document.createElement("button");
+      editManifestButton.type = "button";
+      editManifestButton.className = "small-btn faction-manifest-edit-button";
+      editManifestButton.dataset.factionEditManifest = "true";
+      editManifestButton.textContent = "Editar manifesto";
+      manifestSection.appendChild(editManifestButton);
+      editManifestButton.onclick = async () => {
+        const manifest = await openFactionManifestEditor(currentFaction);
+        if (manifest === null) return;
+        const result = await sb.rpc("update_faction_manifesto", { p_faction_id: currentFaction.id, p_manifesto: manifest });
+        if (result.error) return toast(result.error.message || "Não foi possível atualizar o manifesto.");
+        await loadFactions();
+        render();
+      };
+    }
+    const muralSection = sections.mural;
+    if (canEditManifest && muralSection && !$("[data-faction-edit-mural]", muralSection)) {
+      const editMuralButton = document.createElement("button");
+      editMuralButton.type = "button";
+      editMuralButton.className = "small-btn faction-manifest-edit-button";
+      editMuralButton.dataset.factionEditMural = "true";
+      editMuralButton.textContent = "Editar aviso";
+      muralSection.appendChild(editMuralButton);
+      editMuralButton.onclick = async () => {
+        const notice = await openFactionMuralEditor(currentFaction);
+        if (notice === null) return;
+        const result = await sb.rpc("update_faction_mural", { p_faction_id: currentFaction.id, p_notice: notice });
+        if (result.error) return toast(result.error.message || "Não foi possível atualizar o aviso.");
+        await loadFactions();
+        render();
+      };
+    }
     Object.entries(sections).forEach(([key, section]) => { if (section && !order.includes(key)) section.hidden = true; });
     $$('[data-faction-resign], .faction-management-note', page).forEach(element => { element.textContent = element.textContent.replaceAll("Desistir da liderança", "Renunciar").replaceAll("desistir do cargo", "renunciar"); });
 
@@ -8416,6 +9291,48 @@
         manageButton.textContent = "Gerenciar abafacs";
         manageButton.onclick = () => openFactionAbafacManager(factionId);
         detailActions.appendChild(manageButton);
+      }
+      if (detailActions && !$('[data-faction-abafac-add]', detailActions)) {
+        const addButton = document.createElement("button");
+        addButton.type = "button";
+        addButton.className = "small-btn";
+        addButton.dataset.factionAbafacAdd = "true";
+        addButton.textContent = "Adicionar abafac";
+        addButton.onclick = async () => {
+          const values = await openFactionAbafacAddEditor();
+          if (!values) return;
+          if (values.createFactionCatalog) {
+            const catalog = await openFactionCatalogEditor(factionId);
+            if (!catalog) return;
+            const result = await sb.rpc("save_faction_catalog", { p_catalog_id: null, p_faction_id: factionId, p_name: catalog.name, p_cover_url: catalog.coverUrl || null, p_item_ids: catalog.itemIds });
+            if (result.error) return toast(result.error.message || "Não foi possível criar o catálogo da facção.");
+            await loadFactions();
+            const order = factionAbafacOrder(factionId);
+            const key = `faction-catalog:${result.data}`;
+            if (!order.includes(key)) order.push(key);
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar o catálogo da facção.");
+            await loadFactions();
+            return render();
+          }
+          const catalogUrl = await validatePublicCatalogLink(values.catalogUrl);
+          if (catalogUrl === false) return toast("Informe o link de uma coleção pública de quadrinhos deste site.");
+          let catalogKey = null;
+          if (catalogUrl !== null) {
+            const catalogResult = await sb.rpc("add_faction_abafac_catalog", { p_faction_id: factionId, p_catalog_url: catalogUrl });
+            if (catalogResult.error) return toast(catalogResult.error.message || "Não foi possível adicionar o catálogo.");
+            if (catalogResult.data) catalogKey = `catalog:${catalogResult.data}`;
+          }
+          if (values.imageUrl && await addFactionAbafacImage(factionId, values.imageUrl, values.imageLink) !== true) return;
+          await loadFactions();
+          const catalogOrder = factionAbafacOrder(factionId);
+          if (catalogKey && !catalogOrder.includes(catalogKey)) catalogOrder.push(catalogKey);
+          const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: catalogOrder });
+          if (orderResult.error) return toast(orderResult.error.message || "Não foi possível atualizar a ordem das Abafacs.");
+          await loadFactions();
+          render();
+        };
+        detailActions.appendChild(addButton);
       }
       const roleActions = $(".faction-leader-actions", page);
       if (detailActions && roleActions) {
@@ -8440,12 +9357,38 @@
   }
 
   function factionCatalogMarkup(faction) {
-    const catalog = state.factionAbafacCatalogs.get(faction.id);
-    if (!catalog) return "";
-    const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : [];
-    const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean);
-    const collectionContext = { id: catalog.id, ownerId: catalog.owner_id, coverStyles: new Map(Object.entries(catalog.cover_styles || {})), coverChoices: new Map(Object.entries(catalog.cover_choices || {})) };
-    return `<section class="section faction-catalog-abafac" data-faction-abafac="catalog" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo público</div><h2 class="section-title">${escapeHTML(catalog.name)}</h2><div class="section-subtitle">Coleção de @${escapeHTML(catalog.username)} · ${items.length} item(ns)</div></div></div><div class="results-grid">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, false, collectionContext)).join("") || '<div class="empty">Nenhuma edição nesta coleção pública.</div>'}</div></section>`;
+    return [...state.factionAbafacCatalogs.entries()].filter(([, catalog]) => catalog.faction_id === faction.id).map(([key, catalog]) => {
+      const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : [];
+      const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean);
+      const collectionContext = { id: catalog.id, ownerId: catalog.owner_id, coverStyles: new Map(Object.entries(catalog.cover_styles || {})), coverChoices: new Map(Object.entries(catalog.cover_choices || {})) };
+      const creatorHref = publicProfileHref(catalog.username, catalog.id);
+      return `<section class="section faction-catalog-abafac" data-faction-abafac="${escapeHTML(key)}" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo público</div><h2 class="section-title">${escapeHTML(catalog.name)}</h2><div class="section-subtitle">Coleção de <a class="faction-catalog-creator" href="${escapeHTML(creatorHref)}">@${escapeHTML(catalog.username)}</a> · ${items.length} item(ns)</div></div></div><div class="rail-viewport faction-catalog-carousel"><div class="rail faction-catalog-rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, false, collectionContext)).join("") || '<div class="empty">Nenhuma edição nesta coleção pública.</div>'}</div></div></section>`;
+    }).join("");
+  }
+
+  function factionOwnedCatalogMarkup(faction, standalone = false, onlyCatalogId = null) {
+    return state.factionCatalogs.filter(catalog => catalog.faction_id === faction.id && (onlyCatalogId === null || String(catalog.id) === String(onlyCatalogId))).map(catalog => {
+      const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : [];
+      const items = sortShelfItems(ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean), catalog.sort_order || "added_desc");
+      const key = `faction-catalog:${catalog.id}`;
+      const factionHref = `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`;
+      const role = state.factionRoles.find(item => item.faction_id === faction.id && item.user_id === state.session?.user?.id);
+      const canManage = ["leader", "curator"].includes(role?.role);
+      const manageActions = canManage ? `<button type="button" class="small-btn" data-faction-catalog-edit-inline="${catalog.id}">Editar</button><button type="button" class="small-btn danger" data-faction-catalog-delete="${catalog.id}">Excluir</button><label class="shelf-sort-control"><span>Ordenar</span><select data-faction-catalog-sort="${catalog.id}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${catalog.sort_order === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>` : "";
+      const catalogKey = String(catalog.id);
+      const isLiked = state.factionCatalogLikeIds.has(catalogKey);
+      const likes = state.factionCatalogLikeCounts.get(catalogKey) || 0;
+      const isSaved = state.factionCatalogSaveIds.has(catalogKey);
+      const actions = standalone
+        ? `<div class="shelf-section-actions"><button type="button" class="small-btn ${isSaved ? "is-liked" : ""}" data-faction-catalog-save="${catalog.id}">${isSaved ? "★ Salvo" : "☆ Salvar"}</button><button type="button" class="small-btn ${isLiked ? "is-liked" : ""}" data-faction-catalog-like="${catalog.id}">${isLiked ? "♥ Curtido" : "♡ Curtir"} · ${likes}</button><a class="small-btn" href="?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}">Ver facção</a>${manageActions}</div>`
+        : `<div class="shelf-section-actions"><a class="small-btn" href="${escapeHTML(factionHref)}">Abrir</a><button type="button" class="small-btn" data-faction-catalog-share="${catalog.id}">Compartilhar</button>${manageActions}</div>`;
+      const content = standalone ? `<div class="results-grid faction-owned-catalog-grid">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false)).join("") || '<div class="empty">Nenhuma edição foi adicionada ao catálogo.</div>'}</div>` : `<div class="rail-viewport faction-catalog-carousel"><div class="rail faction-catalog-rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false)).join("") || '<div class="empty">Nenhuma edição foi adicionada ao catálogo.</div>'}</div></div>`;
+      return `<section class="section faction-catalog-abafac faction-owned-catalog-abafac" data-faction-abafac="${escapeHTML(key)}" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo da facção</div><h2 class="section-title">${escapeHTML(catalog.name)}</h2><div class="section-subtitle">${items.length} edição(ões) escolhida(s) pela liderança.</div></div>${actions}</div>${catalog.cover_url ? `<div class="faction-owned-catalog-cover" style="background-image:url('${escapeHTML(catalog.cover_url)}')"></div>` : ""}${content}</section>`;
+    }).join("");
+  }
+
+  function renderFactionCatalogPage(faction, catalog) {
+    return `<div class="content faction-page faction-detail-page faction-catalog-page" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo da facção · ${escapeHTML(faction.name)}</div><h1 class="section-title">${escapeHTML(catalog.name)}</h1><div class="section-subtitle">Edições escolhidas pela liderança da facção.</div></div><a class="small-btn" href="?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}">Voltar à facção</a></div>${factionOwnedCatalogMarkup(faction, true, catalog.id)}</div>`;
   }
 
   function factionMembersResultsMarkup(factionId, search = "") {
@@ -8467,21 +9410,62 @@
   }
 
   function renderFactionMembersPage() {
-    if (!state.session) return renderLoginPage();
     const faction = state.factions.find(item => item.id === state.factionPageId);
     if (!faction) return renderFactionPage();
     const total = state.factionMembers.filter(item => item.faction_id === faction.id).length;
     return `<div class="content faction-page faction-members-directory" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">${escapeHTML(faction.emblem)} ${escapeHTML(faction.name)}</div><h1 class="section-title">Todos os membros</h1><div class="section-subtitle">${total} membro(s) · os mais recentes aparecem primeiro.</div></div><button class="small-btn" data-faction-members-back>Voltar à facção</button></div><section class="section"><label class="ranking-user-search-wrap"><span>Pesquisar membro</span><input id="faction-member-search-input" class="ranking-user-search" type="search" data-faction-members-search value="${escapeHTML(state.factionMemberSearch)}" placeholder="Nome ou título..." autocomplete="off"></label><div class="faction-member-directory-grid" data-faction-member-results>${factionMembersResultsMarkup(faction.id, state.factionMemberSearch)}</div></section></div>`;
   }
 
+  function factionExtraAbafacsMarkup(faction, stats) {
+    function factionMandatoryReadsMarkup(factionId) {
+      const reads = state.factionMandatoryReads.get(factionId) || [];
+      if (!reads.length) return '<div class="empty">As leituras obrigatórias deste mês ainda estão sendo sorteadas.</div>';
+      const bonusPerEdition = 25;
+      const totalBonus = reads.length * bonusPerEdition;
+      return '<p class="faction-mandatory-reads-note">Cada edição concluída automaticamente vale <strong>+' + bonusPerEdition + ' XP</strong>. Total possível neste mês: <strong>+' + totalBonus + ' XP</strong>.</p><div class="faction-mandatory-reads-grid">' + reads.map(read => {
+        const item = state.db.library.find(entry => String(entry.id) === String(read.item_id));
+        const title = item?.title || read.item_title || "Edição";
+        const cover = item?.coverUrl || item?.cover || item?.cover_url || read.cover_url;
+        const href = routeUrl({ ler: String(read.item_id) });
+        return '<a class="faction-mandatory-read-card" href="' + escapeHTML(href) + '" title="Abrir ' + escapeHTML(title) + '">' + (cover ? '<img class="faction-mandatory-read-cover" src="' + escapeHTML(cover) + '" alt="Capa de ' + escapeHTML(title) + '" loading="lazy">' : '') + '<span class="faction-mandatory-read-copy"><strong>' + escapeHTML(title) + '</strong><small>+' + bonusPerEdition + ' XP bônus</small><small>' + Number(read.completed_count || 0) + ' concluíram · ' + Number(read.reader_count || 0) + ' lendo</small></span></a>';
+      }).join('') + '</div>';
+    }
+    const color = escapeHTML(faction.color);
+    const members = state.factionMembers.filter(item => item.faction_id === faction.id && item.profile);
+    const roles = state.factionRoleMembers.filter(item => item.faction_id === faction.id);
+    const xp = Number(stats.xp || 0);
+    const topMembers = members.slice().sort((a, b) => new Date(b.joined_at || 0) - new Date(a.joined_at || 0)).slice(0, 5);
+    const memberNames = topMembers.map(item => `@${escapeHTML(item.profile.username)}`).join(" · ") || "Nenhum membro em destaque ainda.";
+    const mandatoryReads = state.factionMandatoryReads.get(faction.id) || [];
+    /*
+      ? `<p class="faction-mandatory-reads-note">Estas edições mudam no início de cada mês. Ao chegar ao final de uma delas, a leitura é marcada automaticamente e rende <strong>25 XP bônus</strong> para a facção.</p><div class="faction-mandatory-reads-grid">${mandatoryReads.map(read => { const item = state.db.library.find(entry => String(entry.id) === String(read.item_id)); const title = item?.title || read.item_title || "Edição"; const cover = item?.coverUrl || item?.cover || item?.cover_url || read.cover_url; return `<article class="faction-mandatory-read-card">${cover ? `<div class="faction-mandatory-read-cover" style="background-image:url('${escapeHTML(cover)}')"></div>` : ""}<div><strong>${escapeHTML(title)}</strong><span>${Number(read.completed_count || 0)} concluíram · ${Number(read.reader_count || 0)} lendo</span></div></article>`; }).join("")}</div>`
+      : '<div class="empty">As leituras obrigatórias deste mês ainda estão sendo sorteadas.</div>';
+    */
+    const section = (key, eyebrow, title, subtitle, body) => `<section class="section faction-extra-abafac faction-${key}-abafac" data-faction-abafac="${key}" style="--faction-color:${color}"><div class="section-head"><div><div class="eyebrow">${eyebrow}</div><h2 class="section-title">${title}</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+    const mandatoryBody = factionMandatoryReadsMarkup(faction.id);
+    return [
+      section("manifest", "Identidade", "Manifesto", "O que move esta facção.", `<p>${escapeHTML(faction.description || "Esta facção ainda está escrevendo sua história.")}</p>`),
+      section("mural", "Comunicação", "Mural de avisos", "Um espaço para os comunicados da liderança.", `<div class="notice">${escapeHTML(faction.mural_notice || "Nenhum aviso publicado pela liderança ainda.")}</div>`),
+      section("missions", "Temporada", "Missões da temporada", "Desafios coletivos para fazer a facção avançar.", `<div class="faction-extra-list"><div><strong>Marcar presença</strong><span>Participe dos chats e das atividades da comunidade.</span></div><div><strong>Compartilhar leituras</strong><span>Leia, comente e ajude a movimentar a banca.</span></div><div><strong>Buscar o topo</strong><span>Acumule XP e acompanhe a disputa mensal.</span></div></div>`),
+      section("mandatory-reads", "Missão especial", "Leituras obrigatórias", "Edições do mês que valem XP bônus para a facção.", mandatoryBody),
+      section("achievements", "Marcos", "Conquistas", "Os feitos que a facção pode colecionar.", `<div class="faction-extra-stats"><div><strong>${xp.toLocaleString("pt-BR")} XP</strong><span>pontuação acumulada na temporada</span></div><div><strong>${stats.members}</strong><span>membros reunidos</span></div></div>`),
+      section("hall", "Destaques", "Hall da fama", "Membros que ajudam a construir a identidade da equipe.", `<p>${memberNames}</p><p class="section-subtitle">O destaque é atualizado conforme a atividade e a participação na facção.</p>`),
+      section("agenda", "Programação", "Agenda", "Eventos e leituras coletivas da facção.", `<div class="empty">Nenhum evento agendado no momento.</div>`),
+      section("showcase", "Comunidade", "Vitrine de membros", "Uma amostra das pessoas que formam a equipe.", `<div class="faction-member-grid">${topMembers.map(member => `<article class="faction-member-card" style="--faction-color:${color}">${avatarMarkup(member.profile, "faction-member-avatar")}<div><strong>@${escapeHTML(member.profile.username)}</strong>${member.profile.title ? `<small>${escapeHTML(member.profile.title)}</small>` : ""}</div></article>`).join("") || '<div class="empty">Nenhum membro para exibir.</div>'}</div>`),
+      section("alliances", "Histórico", "Rivalidades e alianças", "O espaço narrativo das disputas e parcerias.", `<p>Registre aqui os grandes confrontos, alianças e momentos memoráveis da temporada.</p>`),
+      section("report", "Transparência", "Relatório da temporada", "Um resumo rápido do desempenho da facção.", `<div class="faction-report-placeholder"></div>`)
+    ].join("").replace(/<section\b[^>]*data-faction-abafac="showcase"[\s\S]*?<\/section>/, "").replace(/<section\b[^>]*data-faction-abafac="agenda"[\s\S]*?<\/section>/, "").replace(/<section\b[^>]*data-faction-abafac="alliances"[\s\S]*?<\/section>/, "");
+  }
+
   function renderFactionPage() {
-    if (!state.session) return renderLoginPage();
     const selected = state.factions.find(faction => faction.id === state.factionPageId);
     if (selected) {
+      const directCatalog = state.factionCatalogId ? state.factionCatalogs.find(catalog => String(catalog.id) === String(state.factionCatalogId) && catalog.faction_id === selected.id) : null;
+      if (directCatalog) return renderFactionCatalogPage(selected, directCatalog);
       const stats = state.factionStats.get(selected.id) || { members: 0, xp: 0 };
-      return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats"><span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionCatalogMarkup(selected)}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">A identidade desta facção</h2><div class="section-subtitle">Espaço para história, ordens, eventos e coleções da equipe.</div></div></div><p>Os curadores organizam o conteúdo e os eventos. O líder coordena a equipe e responde pela condução da facção.</p></section></div>`;
+      return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats"><span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionExtraAbafacsMarkup(selected, stats)}${factionCatalogMarkup(selected)}${factionOwnedCatalogMarkup(selected)}</div>`;
     }
-    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, blogs, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
+    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
   }
 
   function renderStaffActivities() {
@@ -8888,9 +9872,11 @@
     else if (state.section === "surprise") markup = renderSurprisePage();
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
+    else if (state.section === "album") markup = stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true });
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
     markup = markup.replace(/\bFree\b/gi, "Comum").replace(/\bPremium\b/gi, "Lenda");
+    if (state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
     if (main.innerHTML === markup) {
       syncActiveNav();
       return;
@@ -9020,6 +10006,7 @@
   }
 
   function bind() {
+    hydrateProfileStickerHeaders();
     syncActiveNav();
     $$('[data-copy-donation-pix]').forEach(button => {
       if (button.dataset.donationBound) return;
@@ -9151,12 +10138,21 @@
       }
     }
     if (state.section === "shelf" && state.session) {
+      const shelfSticker = (state.stickerAwards || []).find(award => award.album_section !== "repeated" && award.cover_url);
+      const albumShelfLinkMarkup = `<button class="small-btn sticker-album-shelf-link" data-section="album"><span class="sticker-album-shelf-link-art">${shelfSticker ? `<img src="${escapeHTML(proxiedImageUrl(shelfSticker.cover_url))}" alt="Figurinha de ${escapeHTML(shelfSticker.character_name || "seu álbum")}" draggable="false">` : "★"}</span><span>Álbum</span></button>`;
       const shelfHead = $(".content > .section-head");
       if (shelfHead && !$(".shelf-media-tabs")) {
+        shelfHead.insertAdjacentHTML("afterend", albumShelfLinkMarkup);
         shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Públicas salvas</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
         $("[data-action=open-local-box]", shelfHead.nextElementSibling)?.addEventListener("click", () => { state.localBoxVisible = true; setSection("local-box"); });
         $("[data-shelf-tab-panel=wall]")?.setAttribute("hidden", "");
         $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
+      }
+      const albumShelfLink = $(".sticker-album-shelf-link");
+      const shelfMediaTabs = $(".shelf-media-tabs");
+      if (albumShelfLink && shelfMediaTabs) {
+        albumShelfLink.classList.remove("sticker-album-shelf-link");
+        shelfMediaTabs.appendChild(albumShelfLink);
       }
       const ownSavedPublicPanel = $("[data-shelf-tab-panel=saved-public]");
       if (ownSavedPublicPanel && !$(".saved-publishers", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.savedPublishers));
@@ -9176,6 +10172,7 @@
       const publicSummary = $(".public-profile-page > .section-head .section-subtitle");
       if (publicSummary) publicSummary.textContent = "Coleções públicas do perfil";
       const publicHead = $(".public-profile-page > .section-head");
+      if (publicHead && !$("[data-public-album-link]")) publicHead.querySelector(".profile-actions")?.insertAdjacentHTML("afterbegin", `<a class="small-btn" data-public-album-link href="${escapeHTML(publicProfileHref(publicProfile.username, "", true))}">Álbum</a>`);
       if (publicHead && !$(".public-shelf-media-tabs")) {
         publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Públicas salvas</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
       }
@@ -9257,6 +10254,7 @@
       if (badge) badge.hidden = true;
     });
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
+    $$('.album-nav').forEach(button => { button.style.display = state.session ? "" : "none"; });
     const downloadsSortHead = $(".downloads-completed .section-head");
     if (downloadsSortHead && !$("[data-download-sort]", downloadsSortHead)) {
       const completedCount = [...state.downloads.values()].filter(entry => entry.status === "completed").length;
@@ -9407,6 +10405,10 @@
       const results = $("[data-faction-member-results]");
       if (results) results.innerHTML = factionMembersResultsMarkup(state.factionPageId, state.factionMemberSearch);
     });
+    $$('[data-faction-hall-category]').forEach(button => button.addEventListener("click", () => {
+      state.factionHallCategory = button.dataset.factionHallCategory || "all";
+      render();
+    }));
     const factionBackButton = $('[data-faction-back]');
     if (factionBackButton) {
       factionBackButton.textContent = "Voltar";
@@ -9451,13 +10453,15 @@
         if (!faction) return;
         const values = await openFactionIdentityEditorV2(faction);
         if (!values) return;
-        const catalogUrl = await validatePublicCatalogLink(values.catalogUrl);
+        const catalogUrl = faction.abafac_catalog_url || null;
+        const catalogWasActive = factionAbafacOrder(faction.id).includes("catalog");
         if (catalogUrl === false) return toast("Informe o link de um catálogo público de quadrinhos deste site.");
         const result = await sb.rpc("update_faction_identity_v2", { p_faction_id: faction.id, p_name: values.name, p_color: values.color, p_emblem: values.emblem, p_description: values.description, p_catalog_url: catalogUrl });
         if (result.error) return toast(result.error.message || "Não foi possível atualizar a facção.");
-        if (values.imageFile) await uploadFactionAbafacImage(faction.id, values.imageFile, values.imageLink);
         await loadFactions();
-        const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: faction.id, p_order: factionAbafacOrder(faction.id) });
+        const catalogOrder = factionAbafacOrder(faction.id).filter(key => key !== "catalog");
+        if (catalogUrl && catalogWasActive) catalogOrder.push("catalog");
+        const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: faction.id, p_order: catalogOrder });
         if (orderResult.error) return toast(orderResult.error.message || "Não foi possível atualizar a ordem das abafacs.");
         await loadFactions();
         render();
@@ -9628,7 +10632,7 @@
         coverElement.appendChild(image);
       });
     }
-    $$('[data-public-collection]').forEach(el => el.addEventListener("click", event => { if (event.target.closest("a, button")) return; event.stopPropagation(); loadPublicProfile(el.dataset.publicOwner, el.dataset.publicCollection); }));
+    $$('[data-public-collection]').forEach(el => el.addEventListener("click", event => { if (event.target.closest("a, button")) return; event.stopPropagation(); if (el.dataset.publicFactionPage && el.dataset.publicFactionCatalog) return navigate({ pagina: "faccoes", faccao: el.dataset.publicFactionPage, catalogo: el.dataset.publicFactionCatalog }); loadPublicProfile(el.dataset.publicOwner, el.dataset.publicCollection); }));
     $$('.public-shelf-collection-card').forEach(cardElement => {
       if ($('[data-save-public-collection]', cardElement) || !state.session || cardElement.dataset.publicOwner === state.profile?.username) return;
       const collectionId = cardElement.dataset.publicCollection;
@@ -9639,11 +10643,14 @@
       const saved = state.savedPublicCollections?.some(item => item.id === collectionId);
       const button = document.createElement("button");
       button.className = `small-btn ${saved ? "is-liked" : ""}`;
-      button.dataset.savePublicCollection = collectionId;
-      button.dataset.savePublicOwner = collection.owner_id;
+      if (collection.is_faction_catalog) button.dataset.factionCatalogSave = collection.catalog_id;
+      else {
+        button.dataset.savePublicCollection = collectionId;
+        button.dataset.savePublicOwner = collection.owner_id;
+      }
       button.textContent = saved ? "★ Salva" : "☆ Salvar";
       actions.appendChild(button);
-      button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
+      button.onclick = event => { event.preventDefault(); event.stopPropagation(); collection.is_faction_catalog ? toggleFactionCatalogSave(collection.catalog_id) : toggleSavePublicCollection(button); };
     });
     if (state.section === "public-profile" && state.publicProfile?.collectionId) {
       const category = state.publicProfile.collections?.find(item => item.id === state.publicProfile.collectionId);
@@ -9819,10 +10826,16 @@
       }
       el.addEventListener("click", event => { event.stopPropagation(); copyCollectionLink(el.dataset.copyCollection, el.dataset.copyUsername || state.profile?.username); });
     });
-    if (state.section === "public-profile" && state.publicProfile?.collectionId && state.profile?.plan === "admin") {
+    if (state.section === "public-profile" && state.publicProfile?.collectionId && ["moderator", "admin"].includes(state.profile?.plan)) {
       const actions = $(".public-collection-page .shelf-section-actions");
       const category = state.publicProfile.collections?.find(item => item.id === state.publicProfile.collectionId);
-      if (actions && category && !$("[data-admin-delete-public-collection]", actions)) {
+      if (actions && category && category.isPublic !== false && !$("[data-staff-collection-actions]", actions)) {
+        const featureButton = document.createElement("button");
+        featureButton.className = "small-btn";
+        featureButton.textContent = category.is_featured ? "Remover destaque" : "Destacar";
+        featureButton.dataset.collectionFeature = category.id;
+        featureButton.dataset.collectionFeatured = category.is_featured ? "true" : "false";
+        actions.appendChild(featureButton);
         const button = document.createElement("button");
         button.className = "small-btn danger";
         button.textContent = "Excluir coleção";
@@ -9830,6 +10843,7 @@
         button.dataset.collectionOwner = state.publicProfile.profile.id;
         button.onclick = () => deletePublicCollection(button.dataset.collectionOwner, button.dataset.adminDeletePublicCollection);
         actions.appendChild(button);
+        actions.dataset.staffCollectionActions = "true";
       }
     }
     $$('[data-like-collection]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleCollectionLike(el.dataset.likeOwner, el.dataset.likeCollection); }));
@@ -9921,7 +10935,12 @@
       if (a === "open-local-box") { state.localBoxVisible = true; setSection("local-box"); }
       });
     });
-    $$("[data-collection]").forEach(el => el.addEventListener("click", () => openCollection(el.dataset.collection)));
+    $$('[data-profile-sticker-choose]').forEach(button => {
+      if (button.dataset.profileStickerBound) return;
+      button.dataset.profileStickerBound = "true";
+      button.addEventListener("click", openProfileStickerPicker);
+    });
+    $$('[data-collection]').forEach(el => el.addEventListener("click", () => openCollection(el.dataset.collection)));
     const openSeriesById = seriesId => {
       const first = state.db.library.find(item => item.seriesId === seriesId);
       if (first) openSeriesSelection(first, seriesEditions(first));
@@ -9964,6 +10983,221 @@
       const file = state.localBoxFiles.find(item => item.id === el.dataset.localOpen);
       if (file) openReader(file);
     }));
+    $$('[data-sticker-publisher]').forEach(button => button.addEventListener('click', () => {
+      const publisher = button.dataset.stickerPublisher;
+      const section = button.closest('.sticker-album-publisher');
+      const collapsed = state.stickerCollapsedPublishers.has(publisher);
+      if (collapsed) state.stickerCollapsedPublishers.delete(publisher);
+      else state.stickerCollapsedPublishers.add(publisher);
+      section?.classList.toggle('is-collapsed', !collapsed);
+      button.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+      button.textContent = collapsed ? 'Recolher' : 'Expandir';
+    }));
+    $$('[data-sticker-album-view]').forEach(button => button.addEventListener('click', () => {
+      state.stickerAlbumView = button.dataset.stickerAlbumView === 'repeated' ? 'repeated' : 'pasted';
+      render();
+    }));
+    $$('[data-sticker-move]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      const result = await sb.rpc('set_sticker_album_section', { p_award_id: Number(button.dataset.stickerMove), p_section: button.dataset.stickerSection });
+      if (result.error) {
+        toast(result.error.message || 'Não foi possível reorganizar a figurinha.');
+        button.disabled = false;
+        return;
+      }
+      const award = Array.isArray(result.data) ? result.data[0] : result.data;
+      if (award) {
+        const previous = state.stickerAwards.find(entry => Number(entry.id) === Number(award.id));
+        if (previous) Object.assign(previous, award);
+        state.stickerAwards.forEach(entry => {
+          if (entry.character_id === award.character_id && Number(entry.id) !== Number(award.id) && award.album_section === 'pasted' && entry.album_section === 'pasted') entry.album_section = 'repeated';
+        });
+      }
+      render();
+    }));
+    $$('[data-sticker-donate]').forEach(button => button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (button.dataset.donationInFlight === 'true') return;
+      if (!state.session?.user?.id || !sb) return openAuthPage();
+      button.dataset.donationInFlight = 'true';
+      button.disabled = true;
+      const recipientId = button.dataset.stickerRecipient;
+      if (!recipientId || String(recipientId) === String(state.session.user.id)) {
+        button.closest('.sticker-slot-actions')?.remove();
+        delete button.dataset.donationInFlight;
+        return;
+      }
+      const originalAward = state.stickerAwards.find(entry => Number(entry.id) === Number(button.dataset.stickerDonate));
+      if (!originalAward) {
+        toast('Esta figurinha não está mais disponível no seu álbum. Recarregue a página.');
+        button.closest('.sticker-slot-actions')?.remove();
+        delete button.dataset.donationInFlight;
+        return;
+      }
+      const donationCandidates = state.stickerAwards.filter(entry => entry.character_id === originalAward.character_id);
+      const selectedAwardId = await chooseStickerForDonation(donationCandidates);
+      if (!selectedAwardId) {
+        button.disabled = false;
+        delete button.dataset.donationInFlight;
+        return;
+      }
+      const awardId = Number(selectedAwardId);
+      // O álbum público pode ter sido aberto antes de outra ação alterar a
+      // figurinha. Revalida os dois lados imediatamente antes da transferência
+      // para nunca enviar ao RPC um ID antigo ou uma doação já impossível.
+      const donorCheck = await sb.from('sticker_awards')
+        .select('id, character_id')
+        .eq('id', awardId)
+        .eq('user_id', state.session.user.id)
+        .maybeSingle();
+      if (donorCheck.error || !donorCheck.data) {
+        toast('Esta figurinha não está mais disponível no seu álbum. Recarregue a página.');
+        button.closest('.sticker-slot-actions')?.remove();
+        delete button.dataset.donationInFlight;
+        return;
+      }
+      const result = await sb.rpc('transfer_sticker_award', { p_recipient_id: recipientId, p_award_id: awardId });
+      if (result.error) {
+        toast(result.error.message || 'Não foi possível doar a figurinha. Atualize o álbum e tente novamente.');
+        button.disabled = false;
+        delete button.dataset.donationInFlight;
+        return;
+      }
+      const award = Array.isArray(result.data) ? result.data[0] : result.data;
+      state.stickerAwards = state.stickerAwards.filter(entry => Number(entry.id) !== awardId);
+      if (state.publicProfile?.stickerAwards && award) state.publicProfile.stickerAwards = [...state.publicProfile.stickerAwards, award];
+      toast('Figurinha doada para o álbum.');
+      render();
+    }));
+    $$('[data-admin-sticker-donate]').forEach(button => button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const group = stickerGroups().find(entry => entry.id === button.dataset.adminStickerDonate);
+      if (!group) return;
+      const rarity = await chooseAdminStickerRarity();
+      if (!rarity) return;
+      const candidates = stickerCoverCandidates(group);
+      const selected = await chooseStickerCoverCandidate(group, candidates);
+      if (!selected) return;
+      if (!selected?.url) return toast('Esta edição não possui uma capa válida.');
+      button.disabled = true;
+      const result = await sb.rpc('admin_donate_sticker', { p_recipient_id: button.dataset.adminStickerRecipient, p_character_id: group.id, p_character_name: group.characterName, p_publisher_name: group.publisherName, p_edition_fingerprint: stickerFingerprint(group), p_edition_ids: group.items.map(entry => String(entry.id)), p_cover_item_id: String(selected.itemId), p_cover_url: selected.url, p_rarity: rarity });
+      if (result.error) {
+        toast(result.error.message || 'Não foi possível conceder a figurinha.');
+        button.disabled = false;
+        return;
+      }
+      const award = Array.isArray(result.data) ? result.data[0] : result.data;
+      if (state.publicProfile?.stickerAwards && award) state.publicProfile.stickerAwards = [...state.publicProfile.stickerAwards, award];
+      toast(`Figurinha ${stickerRarityLabel(rarity).toLowerCase()} adicionada ao álbum.`);
+      render();
+    }));
+    $$('[data-sticker-discard]').forEach(button => button.addEventListener('click', async () => {
+      if (!await askStickerDiscardConfirmation()) return;
+      button.disabled = true;
+      const result = await sb.rpc('discard_repeated_sticker', { p_award_id: Number(button.dataset.stickerDiscard) });
+      if (result.error) {
+        toast(result.error.message || 'Não foi possível descartar a figurinha.');
+        button.disabled = false;
+        return;
+      }
+      state.stickerAwards = state.stickerAwards.filter(entry => Number(entry.id) !== Number(button.dataset.stickerDiscard));
+      render();
+      toast('Figurinha descartada.');
+    }));
+    $$('[data-admin-sticker-discard]').forEach(button => button.addEventListener('click', async () => {
+      if (!await askStickerDiscardConfirmation()) return;
+      button.disabled = true;
+      const awardId = Number(button.dataset.adminStickerDiscard);
+      const result = await sb.rpc('admin_discard_sticker_award', { p_award_id: awardId });
+      if (result.error) {
+        toast(result.error.message || 'Não foi possível descartar a figurinha.');
+        button.disabled = false;
+        return;
+      }
+      state.stickerAwards = state.stickerAwards.filter(award => Number(award.id) !== awardId);
+      if (state.publicProfile?.stickerAwards) state.publicProfile.stickerAwards = state.publicProfile.stickerAwards.filter(award => Number(award.id) !== awardId);
+      render();
+      toast('Figurinha descartada pelo administrador.');
+    }));
+    $$('.sticker-album-page img').forEach(image => {
+      image.draggable = false;
+      image.addEventListener('dragstart', event => event.preventDefault());
+      image.addEventListener('contextmenu', event => event.preventDefault());
+    });
+    $$('.sticker-request-offer img, .sticker-request-target img').forEach(image => {
+      image.classList.add('sticker-preview-clickable');
+      image.addEventListener('click', () => openStickerPreview(image.src, image.alt || 'Figurinha'));
+    });
+    $$('[data-sticker-view-album]').forEach(button => button.addEventListener('click', () => {
+      window.location.href = publicProfileHref(button.dataset.stickerViewAlbum, "", true);
+    }));
+    $$('[data-sticker-gum]').forEach(button => button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const ownerId = button.dataset.stickerGumOwner || null;
+      const isOwnAlbum = !ownerId;
+      const blocked = isOwnAlbum ? button.dataset.blocked !== 'true' : true;
+      button.disabled = true;
+      const payload = ownerId
+        ? { p_owner_id: ownerId, p_character_id: button.dataset.stickerGumCharacter, p_award_id: button.dataset.stickerGumAward ? Number(button.dataset.stickerGumAward) : null }
+        : { p_character_id: button.dataset.stickerGumCharacter, p_award_id: button.dataset.stickerGumAward ? Number(button.dataset.stickerGumAward) : null, p_blocked: blocked };
+      const result = await sb.rpc('set_sticker_slot_gum', payload);
+      if (result.error) {
+        toast(result.error.message || 'Não foi possível atualizar a proteção do slot.');
+        button.disabled = false;
+        return;
+      }
+      button.dataset.blocked = blocked ? 'true' : 'false';
+      button.classList.toggle('is-active', blocked);
+      button.title = blocked ? 'Permitir pedidos, trocas e doações' : 'Bloquear pedidos, trocas e doações';
+      if (isOwnAlbum) {
+        const award = state.stickerAwards.find(entry => Number(entry.id) === Number(button.dataset.stickerGumAward));
+        if (award) { award.requests_blocked = blocked; award.gum_placed_by = blocked ? state.session?.user?.id : null; }
+        else if (blocked) state.stickerSlotPreferences.set(String(button.dataset.stickerGumCharacter), { blocked: true, placedBy: state.session?.user?.id || null });
+        else state.stickerSlotPreferences.delete(String(button.dataset.stickerGumCharacter));
+      } else {
+        const publicProfile = state.publicProfile;
+        const publicAward = publicProfile?.stickerAwards?.find(entry => Number(entry.id) === Number(button.dataset.stickerGumAward));
+        if (publicAward) { publicAward.requests_blocked = true; publicAward.gum_placed_by = state.session?.user?.id || null; }
+        else publicProfile?.stickerSlotPreferences?.set(String(button.dataset.stickerGumCharacter), { blocked: true, placedBy: state.session?.user?.id || null });
+      }
+      button.querySelector('img')?.setAttribute('alt', blocked ? 'Slot protegido' : 'Proteger slot');
+      button.disabled = false;
+      render();
+    }));
+    $$('[data-sticker-request]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      const requestId = Number(button.dataset.stickerRequest);
+      const requestRow = button.closest('.sticker-request-row');
+      state.stickerRequests = state.stickerRequests.filter(request => Number(request.id) !== requestId);
+      requestRow?.remove();
+      const result = await sb.rpc('respond_sticker_request', { p_request_id: requestId, p_status: button.dataset.stickerResponse });
+      if (result.error) toast(result.error.message || 'Não foi possível responder ao pedido.');
+      else { toast(button.dataset.stickerResponse === 'accepted' ? 'Pedido concluído.' : 'Pedido recusado.'); await loadAccount(); }
+      button.disabled = false;
+    }));
+    $$('[data-sticker-request-character]').forEach(button => button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        await requestSticker(button.dataset.stickerRequestCharacter, button.dataset.stickerRequestOwner, button.dataset.stickerRequestType);
+      } catch (error) {
+        console.error('Falha ao enviar pedido ou proposta de figurinha:', error);
+        toast(error?.message || 'NÃ£o foi possÃ­vel iniciar esse pedido. Atualize o Ã¡lbum e tente novamente.');
+      } finally {
+        button.disabled = false;
+      }
+    }));
+    $('[data-sticker-requests-toggle]')?.addEventListener('change', async event => {
+      const result = await sb.rpc('set_sticker_request_preference', { p_allowed: event.currentTarget.checked });
+      if (result.error) { event.currentTarget.checked = !event.currentTarget.checked; toast(result.error.message); }
+      else if (state.profile) state.profile.allow_sticker_requests = event.currentTarget.checked;
+    });
     $("#search-input")?.addEventListener("keydown", e => {
       if (e.key === "Enter") { state.search = e.target.value; render(); $("#search-input")?.focus(); }
     });
@@ -10095,6 +11329,42 @@
       if (!item || download?.status === "downloading" || download?.status === "waiting") return;
       isCompleted ? deleteDownload(item.id) : startDownload(item);
     }));
+    $$('[data-sticker-request-character]').forEach(button => button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        await requestSticker(button.dataset.stickerRequestCharacter, button.dataset.stickerRequestOwner, button.dataset.stickerRequestType);
+      } catch (error) {
+        console.error('Falha ao abrir o fluxo de pedido/troca de figurinha:', error);
+        toast(error?.message || 'Não foi possível iniciar esse pedido. Atualize o álbum e tente novamente.');
+      } finally {
+        button.disabled = false;
+      }
+    }));
+    $$('[data-sticker-publisher]').forEach(button => button.addEventListener('click', () => {
+      const publisher = button.dataset.stickerPublisher;
+      const section = button.closest('.sticker-album-publisher');
+      const collapsed = state.stickerCollapsedPublishers.has(publisher);
+      if (collapsed) state.stickerCollapsedPublishers.delete(publisher);
+      else state.stickerCollapsedPublishers.add(publisher);
+      section?.classList.toggle('is-collapsed', !collapsed);
+      button.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+      button.textContent = collapsed ? 'Recolher' : 'Expandir';
+    }));
+    $$('[data-sticker-request]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      const result = await sb.rpc('respond_sticker_request', { p_request_id: Number(button.dataset.stickerRequest), p_status: button.dataset.stickerResponse });
+      if (result.error) toast(result.error.message || 'Não foi possível responder ao pedido.');
+      else { toast(button.dataset.stickerResponse === 'accepted' ? 'Pedido concluído.' : 'Pedido recusado.'); await loadAccount(); }
+      button.disabled = false;
+    }));
+    $('[data-sticker-requests-toggle]')?.addEventListener('change', async event => {
+      const result = await sb.rpc('set_sticker_request_preference', { p_allowed: event.currentTarget.checked });
+      if (result.error) { event.currentTarget.checked = !event.currentTarget.checked; toast(result.error.message); }
+      else if (state.profile) state.profile.allow_sticker_requests = event.currentTarget.checked;
+    });
     $$('[data-entity-kind]', overlay).forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -10607,12 +11877,12 @@
     const publishers = new Map();
     items.filter(item => String(item.publisher || "").trim()).forEach(item => { const name = String(item.publisher).trim(); if (!publishers.has(name)) publishers.set(name, []); publishers.get(name).push(item); });
     const publisherEntries = [...publishers.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
-    const publisherCard = ([name, publisherItems]) => { const setting = state.publisherSettings.get(publisherKey(name)); const cover = setting?.cover_url || instantCover({ title: name }); return `<button class="publisher-card ${setting?.is_pinned ? "is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} quadrinho(s)</span></div></button>`; };
+    const publisherCard = ([name, publisherItems]) => { const setting = state.publisherSettings.get(publisherKey(name)); const cover = proxiedImageUrl(setting?.cover_url || instantCover({ title: name })); return `<button class="publisher-card ${setting?.is_pinned ? "is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} quadrinho(s)</span></div></button>`; };
     const pinned = publisherEntries.filter(([name]) => state.publisherSettings.get(publisherKey(name))?.is_pinned);
     const publisherPinnedCarousel = type === "comic" && pinned.length ? `<section class="section publisher-pinned-section"><div class="section-head"><div><h2 class="section-title">Editoras fixadas</h2><div class="section-subtitle">Acesso rápido às editoras em destaque</div></div></div><div class="publisher-carousel">${pinned.map(publisherCard).join("")}</div></section>` : "";
     const publisherCarousel = type === "comic" && publisherEntries.length ? `<section class="section publisher-all-section"><div class="section-head"><div><h2 class="section-title">Editoras</h2><div class="section-subtitle">Explore todos os quadrinhos por editora</div></div></div><div class="publisher-carousel">${publisherEntries.map(publisherCard).join("")}</div></section>` : "";
     const popularCollections = state.popularPublicCollections || [];
-    const popularCollectionsMarkup = type === "comic" && popularCollections.length ? `<section class="section popular-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções públicas mais curtidas</h2><div class="section-subtitle">Descubra listas públicas da comunidade</div></div></div><div class="feature-grid">${popularCollections.map(collection => `<div class="feature-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username)}"><div class="cover" style="background-image:url('${escapeHTML(collection.cover_url || "")}')"></div><div class="gradient"></div><div class="feature-info"><h3>${escapeHTML(collection.name)}</h3><p>${collection.likes} curtida(s) · @${escapeHTML(collection.username)}</p></div></div>`).join("")}</div></section>` : "";
+    const popularCollectionsMarkup = type === "comic" && popularCollections.length ? `<section class="section popular-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções públicas mais curtidas</h2><div class="section-subtitle">Descubra listas públicas da comunidade</div></div></div><div class="feature-grid">${popularCollections.map(collection => `<div class="feature-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username)}"><div class="cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover_url || ""))}')"></div><div class="gradient"></div><div class="feature-info"><h3>${escapeHTML(collection.name)}</h3><p>${collection.likes} curtida(s) · @${escapeHTML(collection.username)}</p></div></div>`).join("")}</div></section>` : "";
     const heading = type === "manga" ? "Mangás" : type === "comic" ? "Quadrinhos" : "Catálogo";
     const catalogHeader = type === "comic" ? "" : `<div class="section-head"><div><h1 class="section-title">${heading}</h1><div class="section-subtitle">${items.length} edição(ões)</div></div></div>`;
     return `<div class="content">${catalogHeader}${publisherPinnedCarousel}${group("Séries", series, true)}${group("Oneshots", oneshots)}${!items.length ? `<div class="empty">Nenhuma edição cadastrada.</div>` : ""}${publisherCarousel}${popularCollectionsMarkup}</div>`;
@@ -10752,7 +12022,7 @@
       : "";
   if (initialPublicUsername && /^[a-z0-9_]{3,24}$/.test(initialPublicUsername)) {
     state.section = "public-profile";
-    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection };
+    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, album: new URLSearchParams(window.location.search).get("album") === "1" };
   }
   const bootOfflineAccount = readOfflineAccount();
   if (!initialPublicUsername && navigator.onLine === false && bootOfflineAccount?.user) {
@@ -10826,7 +12096,7 @@
   loadAccount()
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
-      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection);
+      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1");
       pumpDownloadQueue();
     })
     .catch(error => console.warn("Supabase indisponível:", error))

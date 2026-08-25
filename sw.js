@@ -1,11 +1,11 @@
-const CACHE_VERSION = "banca-digital-shell-v106";
+const CACHE_VERSION = "banca-digital-shell-v242";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=2.2.10.35",
-  "./js/app.js?v=2.2.10.58",
+  "./css/style.css?v=2.2.10.89",
+  "./js/app.js?v=2.2.10.171",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.39",
   "./js/supabase.js",
@@ -60,6 +60,24 @@ self.addEventListener("fetch", event => {
     return;
   }
 
+  // O app muda com frequência; tente sempre a versão publicada antes
+  // de recorrer ao cache offline.
+  if (url.pathname.endsWith("/js/app.js")) {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request, { cache: "no-store" });
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
+        }
+        return response;
+      } catch {
+        return caches.match(request).then(cached => cached || new Response("", { status: 504, statusText: "Offline" }));
+      }
+    })());
+    return;
+  }
+
   event.respondWith((async () => {
     try {
       const cached = await caches.match(request);
@@ -71,7 +89,14 @@ self.addEventListener("fetch", event => {
       }
       return response;
     } catch {
-      return new Response("", { status: 504, statusText: "Offline" });
+      // Uma navegação do SPA ainda pode funcionar com o shell local. Não
+      // devolva um 504 vazio, pois isso quebra a rota /?pagina=... mesmo
+      // quando o index.html já está no cache.
+      return caches.match("./index.html").then(cached => cached || new Response("Offline", {
+        status: 503,
+        statusText: "Offline",
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      }));
     }
   })());
 });

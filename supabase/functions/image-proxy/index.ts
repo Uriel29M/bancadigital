@@ -26,7 +26,10 @@ Deno.serve(async request => {
     const source = new URL(value);
     if (source.protocol !== "https:" || !isAllowedImageHost(source.hostname)) return errorResponse("A URL precisa apontar para uma imagem autorizada.", 400);
     const upstream = await fetch(source, {
-      headers: { Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8", Referer: "https://hqs-soquadrinhos.blogspot.com/" },
+      headers: {
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (compatible; BancaDigitalImageProxy/1.0)",
+      },
     });
     if (!upstream.ok || !upstream.body) return errorResponse(`Imgur respondeu HTTP ${upstream.status}.`, 502);
     const headers = new Headers(corsHeaders);
