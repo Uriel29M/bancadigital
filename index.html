@@ -8,12 +8,12 @@
   <link rel="modulepreload" href="libarchive/libarchive.js">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-  <link rel="stylesheet" href="css/style.css?v=2.2.7.289">
+  <link rel="stylesheet" href="css/style.css?v=2.2.7.290">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=52", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponÃ­vel:", error));
       });
     }
@@ -124,7 +124,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/data.js?v=2.2.7.38"></script>
-  <script src="js/app.js?v=2.2.7.331"></script>
+  <script src="js/app.js?v=2.2.7.332"></script>
 </body>
 </html>
 

@@ -3632,32 +3632,16 @@
       const button = direction > 0 ? $("[data-next]", controls) : $("[data-prev]", controls);
       if (button && !button.disabled) button.click();
     };
-    let suppressReaderClick = false;
     const toggleReaderChrome = () => overlay.classList.toggle("reader-immersive");
     $("[data-reader-zoom]", overlay).onclick = () => {
       overlay.classList.toggle("reader-zoom-fit");
       overlay.classList.add("reader-immersive");
     };
     body.addEventListener("click", event => {
-      if (suppressReaderClick || event.target.closest("button, a, select, textarea")) {
-        suppressReaderClick = false;
+      if (event.target.closest("button, a, select, textarea")) {
         return;
       }
       toggleReaderChrome();
-    });
-    let pointerStart = null;
-    body.addEventListener("pointerdown", event => {
-      pointerStart = { x: event.clientX, y: event.clientY };
-    });
-    body.addEventListener("pointerup", event => {
-      if (!pointerStart) return;
-      const dx = event.clientX - pointerStart.x;
-      const dy = event.clientY - pointerStart.y;
-      pointerStart = null;
-      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
-        suppressReaderClick = true;
-        overlay._readerNavigate?.(dx < 0 ? 1 : -1);
-      }
     });
     const onReaderKeydown = event => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
@@ -6093,7 +6077,7 @@
         <div class="hero-cover" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" data-open="${escapeHTML(heroItem?.id || "")}" data-open-direct="true" style="background-image:url('${escapeHTML(coverFor(heroItem, "hero"))}')" aria-label="Abrir quadrinho em destaque"></div>
         <div class="hero-content">
           <div class="eyebrow">Destaque da banca</div>
-          <h1>${escapeHTML(heroTitle)}</h1>
+          <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
           ${heroMeta ? `<div class="hero-meta">${escapeHTML(heroMeta)}</div>` : ""}
           <p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p><button class="hero-more" type="button" data-hero-more>Ler mais</button>
           ${heroItem ? `<button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button>` : ""}
@@ -6648,11 +6632,6 @@
       image.hidden = true;
       image.parentElement.classList.add("is-broken");
     }, true);
-    let touchStartX = 0;
-    let touchMessage = null;
-    messagesRoot.addEventListener("touchstart", event => { const message = event.target.closest(".chat-message[data-chat-message-id]"); if (!message || event.touches.length !== 1) return; touchMessage = message; touchStartX = event.touches[0].clientX; message.classList.add("is-swiping"); }, { passive: true });
-    messagesRoot.addEventListener("touchmove", event => { if (!touchMessage || event.touches.length !== 1) return; const distance = Math.max(0, Math.min(92, event.touches[0].clientX - touchStartX)); touchMessage.style.setProperty("--chat-swipe-x", `${distance}px`); }, { passive: true });
-    messagesRoot.addEventListener("touchend", () => { if (!touchMessage) return; const message = touchMessage; const distance = parseFloat(getComputedStyle(message).getPropertyValue("--chat-swipe-x")) || 0; message.classList.remove("is-swiping"); message.style.removeProperty("--chat-swipe-x"); if (distance >= 64) choose(message.dataset.chatMessageId); touchMessage = null; }, { passive: true });
     const getReply = () => selectedMessage ? { id: selectedMessage.id, body: selectedMessage.body, username: selectedMessage.profile?.username || "usuario" } : null;
     getReply.clear = () => { selectedMessage = null; update(); };
     return getReply;
@@ -6826,35 +6805,8 @@
     };
     toggles.forEach(toggle => toggle.onclick = () => { paused = !paused; updatePauseButton(); });
     root._chatPinPause = () => { paused = true; updatePauseButton(); };
-    let touchStartX = null;
-    let lastWheelAt = 0;
-    const onTouchStart = event => {
-      if (event.target.closest?.(".chat-pin-slide.is-expanded")) {
-        touchStartX = null;
-        return;
-      }
-      touchStartX = event.touches[0]?.clientX || 0;
-    };
-    const onTouchEnd = event => {
-      if (touchStartX === null) return;
-      const distance = (event.changedTouches[0]?.clientX || 0) - touchStartX;
-      if (Math.abs(distance) >= 36) show(current + (distance < 0 ? 1 : -1));
-      touchStartX = null;
-    };
-    root.addEventListener("touchstart", onTouchStart, { passive: true });
-    root.addEventListener("touchend", onTouchEnd, { passive: true });
-    const onWheel = event => {
-      if (event.target.closest?.(".chat-pin-slide.is-expanded")) return;
-      if (Math.abs(event.deltaX) < 8 && Math.abs(event.deltaY) < 8) return;
-      const now = Date.now();
-      if (now - lastWheelAt < 350) return;
-      lastWheelAt = now;
-      event.preventDefault();
-      show(current + ((event.deltaX || event.deltaY) > 0 ? 1 : -1));
-    };
-    root.addEventListener("wheel", onWheel, { passive: false });
     const timer = window.setInterval(() => { if (!paused) show(current + 1); }, 10000);
-    root._chatPinCleanup = () => { window.clearInterval(timer); root.removeEventListener("touchstart", onTouchStart); root.removeEventListener("touchend", onTouchEnd); root.removeEventListener("wheel", onWheel); root._chatPinPause = null; };
+    root._chatPinCleanup = () => { window.clearInterval(timer); root._chatPinPause = null; };
   }
 
   async function renderChatPins(root, roomId) {
@@ -10110,7 +10062,7 @@
     const mainCover = seriesCoverFor(item);
     const stackCovers = [editions[1], editions[2]].map(edition => edition ? seriesCoverFor(edition) : mainCover);
     const stackMarkup = stackCovers.map((cover, index) => `<div class="series-card-stack-cover series-card-stack-cover-${index + 1}" style="background-image:url('${escapeHTML(cover)}')"></div>`).join("");
-    return `<article class="series-card" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série</div><h3>${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
+    return `<article class="series-card" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
   }
 
   window.addEventListener("popstate", applyRoute);
@@ -10118,6 +10070,9 @@
   const appRoot = document.getElementById("app");
   const modalRoot = document.getElementById("modal-root");
   let modalScrollLock = null;
+  ["pointerdown", "pointermove", "pointerup", "pointercancel"].forEach(type => {
+    modalRoot?.addEventListener(type, event => event.stopPropagation(), true);
+  });
   const preventBackgroundScroll = event => {
     if (!modalRoot?.children.length) return;
     const target = event.target instanceof Element ? event.target : null;
