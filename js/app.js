@@ -3613,7 +3613,8 @@
         ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
         ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
         ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
-        ${!state.session?.offline ? `<button class="small-btn" data-open-external>Abrir arquivo</button>` : ''}
+        ${item.seriesId ? `<button class="small-btn" data-view-series="${escapeHTML(item.seriesId)}">Série</button>` : ""}
+        ${state.profile?.plan === "admin" && !state.session?.offline ? `<button class="small-btn" data-open-external>Ver arquivo</button>` : ''}
       </div>
       <div class="reader-body" id="reader-body"></div>
       <div class="reader-bottom-controls">
@@ -3625,6 +3626,7 @@
     document.body.appendChild(overlay);
 
     const closeReaderButton = $("[data-close-reader]", overlay);
+    let removeReaderSwipeListeners = () => {};
     const cleanupReader = () => {
       if (activeReaderCleanup === cleanupReader) activeReaderCleanup = null;
       readerIsOpen = false;
@@ -3632,6 +3634,7 @@
       overlay.remove();
       resumeCoverLoading();
       if (options.localObjectUrl) URL.revokeObjectURL(options.localObjectUrl);
+      removeReaderSwipeListeners();
     };
     activeReaderCleanup = cleanupReader;
     // Preserve the temporary Blob URL when the reader is re-opened for a
@@ -3658,6 +3661,13 @@
     $("[data-like-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(item.id); });
     $("[data-share-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); shareComic(item.id); });
     $("[data-comment-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); openCommentsPopup(item); });
+    $("[data-view-series]", overlay)?.addEventListener("click", event => {
+      event.stopPropagation();
+      const editions = seriesEditions(item);
+      cleanupReader();
+      setSection("home");
+      openSeriesSelection(item, editions, false, false, item);
+    });
     $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
@@ -3678,6 +3688,7 @@
 
     const body = $("#reader-body", overlay);
     const controls = $("#reader-controls", overlay);
+    body.classList.toggle("reader-page-swipe", ["single-page", "double-page"].includes(state.readingMode));
     const toggleReadButton = $("[data-toggle-read]", overlay);
     if (toggleReadButton) toggleReadButton.disabled = true;
     const markReaderReady = () => { if (toggleReadButton) toggleReadButton.disabled = false; };
@@ -3705,7 +3716,56 @@
       overlay.classList.toggle("reader-zoom-fit");
       overlay.classList.add("reader-immersive");
     };
+    let readerSwipe = null;
+    let suppressReaderClick = false;
+    const onReaderPointerDown = event => {
+      if (!["single-page", "double-page"].includes(state.readingMode)) return;
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (event.target.closest("button, a, select, textarea, input")) return;
+      readerSwipe = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    };
+    const onReaderPointerMove = event => {
+      if (!readerSwipe || event.pointerId !== readerSwipe.pointerId) return;
+      const dx = event.clientX - readerSwipe.x;
+      const dy = event.clientY - readerSwipe.y;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        event.preventDefault();
+        body.setPointerCapture?.(event.pointerId);
+      }
+    };
+    const finishReaderSwipe = event => {
+      if (!readerSwipe || event.pointerId !== readerSwipe.pointerId) return;
+      const swipe = readerSwipe;
+      readerSwipe = null;
+      const distance = event.clientX - swipe.x;
+      const verticalDistance = Math.abs(event.clientY - swipe.y);
+      if (Math.abs(distance) < 45 || Math.abs(distance) <= verticalDistance) return;
+      event.preventDefault();
+      suppressReaderClick = true;
+      window.setTimeout(() => { suppressReaderClick = false; }, 500);
+      body.releasePointerCapture?.(event.pointerId);
+      overlay._readerNavigate?.(distance < 0 ? 1 : -1);
+    };
+    const cancelReaderSwipe = () => { readerSwipe = null; };
+    const preventReaderDrag = event => event.preventDefault();
+    body.addEventListener("pointerdown", onReaderPointerDown);
+    body.addEventListener("pointermove", onReaderPointerMove, { passive: false });
+    body.addEventListener("pointerup", finishReaderSwipe);
+    body.addEventListener("pointercancel", cancelReaderSwipe);
+    body.addEventListener("dragstart", preventReaderDrag);
+    removeReaderSwipeListeners = () => {
+      body.removeEventListener("pointerdown", onReaderPointerDown);
+      body.removeEventListener("pointermove", onReaderPointerMove);
+      body.removeEventListener("pointerup", finishReaderSwipe);
+      body.removeEventListener("pointercancel", cancelReaderSwipe);
+      body.removeEventListener("dragstart", preventReaderDrag);
+    };
     body.addEventListener("click", event => {
+      if (suppressReaderClick) {
+        suppressReaderClick = false;
+        return;
+      }
       if (event.target.closest("button, a, select, textarea")) {
         return;
       }
@@ -4092,7 +4152,7 @@
       await reader.close();
       return true;
     } catch (error) {
-      console.warn("Prévia progressiva do CBZ indisponível:", error);
+      if (!isInvalidZipError(error)) console.warn("Prévia progressiva do CBZ indisponível:", error);
       return false;
     }
   }
@@ -4131,7 +4191,7 @@
       return true;
     } catch (error) {
       try { await reader?.close(); } catch {}
-      console.warn("CBZ por Range indisponível; usando fallback:", error);
+      if (!isInvalidZipError(error)) console.warn("CBZ por Range indisponível; usando fallback:", error);
       return false;
     }
   }
@@ -4198,6 +4258,11 @@
     };
     showCbzProgress("Abrindo arquivo CBZ…");
     try {
+      const archiveSignature = await probeArchiveSignature(url);
+      if (isRarSignature(archiveSignature)) {
+        console.info("[CBZ] Contêiner RAR detectado; encaminhando para o leitor CBR.");
+        return renderCBRReader(item, url, body, controls, overlay, skipCover, resumePage, onPageChange, null);
+      }
       let JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
       if (!JSZipLib) JSZipLib = { loadAsync: async archiveBuffer => {
         const archive = await zipJsArchiveFromBuffer(archiveBuffer);
@@ -4220,7 +4285,25 @@
           showCbzProgress("Abrindo arquivo CBZ…", value, detail);
         }, undefined, downloadController.signal);
       }
-      const zip = await JSZipLib.loadAsync(buffer);
+      let zip;
+      try {
+        zip = await JSZipLib.loadAsync(buffer);
+      } catch (error) {
+        const isZipStructureError = /end of central directory|central directory|is this a zip file/i.test(String(error?.message || error));
+        if (!isZipStructureError || /^blob:/i.test(String(url || ""))) throw error;
+        const proxyUrl = proxiedFileUrl(url);
+        await deleteReaderFileCache(`${proxyUrl}${proxyUrl.includes("?") ? "&" : "?"}v=240`);
+        showCbzProgress("Arquivo incompleto. Tentando baixar novamente…");
+        buffer = await fetchFileArrayBuffer(url, (received, total) => {
+          const value = total ? Math.min(99, Math.round(received / total * 100)) : null;
+          const detail = total
+            ? `${(received / 1048576).toFixed(1)} MB de ${(total / 1048576).toFixed(1)} MB`
+            : `${(received / 1048576).toFixed(1)} MB processados`;
+          showCbzProgress("Baixando arquivo CBZ…", value, detail);
+        }, undefined, downloadController.signal, true);
+        if (!hasZipEndRecord(buffer)) throw error;
+        zip = await JSZipLib.loadAsync(buffer);
+      }
       const names = Object.keys(zip.files)
         .filter(n => !zip.files[n].dir && /\.(jpg|jpeg|png|webp|gif)$/i.test(n))
         .sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
@@ -4441,11 +4524,15 @@
       const status = (message) => body.innerHTML = `<div class="empty" style="margin:auto">${escapeHTML(message)}</div>`;
 
 
-      console.error(err);
+      if (isInvalidZipError(err)) {
+        console.warn("CBZ inválido ou incompleto: a fonte não entregou um arquivo ZIP completo.");
+      } else {
+        console.error(err);
+      }
       body.innerHTML = `
         <div class="empty" style="margin:auto;max-width:650px">
-          <h3>Não foi possível abrir o CBZ.</h3>
-          <p>O servidor precisa permitir downloads CORS. Você também pode abrir o arquivo diretamente.</p>
+          <h3>Não temos mais</h3>
+          <p>Sentimos muito por não conseguirmos oferecer esta história agora. Se ela deveria continuar disponível, relate o problema aos moderadores do site para tentarmos recuperá-la.</p>
           <button class="btn btn-primary" data-report-file>Relatar arquivo</button>
         </div>`;
       controls.innerHTML = `<span class="reader-page">CBZ</span>`;
@@ -4487,6 +4574,12 @@
 
   function isZipSignature(bytes) {
     return bytes?.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  }
+
+  function isRarSignature(bytes) {
+    return bytes?.length >= 7
+      && bytes[0] === 0x52 && bytes[1] === 0x61 && bytes[2] === 0x72 && bytes[3] === 0x21
+      && bytes[4] === 0x1a && bytes[5] === 0x07 && (bytes[6] === 0x00 || bytes[6] === 0x01);
   }
 
   async function renderCBRReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
@@ -5448,10 +5541,35 @@
       return false;
   }
 
+  async function deleteReaderFileCache(proxyUrl) {
+    if (!window.caches || !proxyUrl || /^blob:/i.test(String(proxyUrl))) return;
+    try {
+      const cache = await window.caches.open(READER_FILE_CACHE);
+      await cache.delete(proxyUrl);
+    } catch (error) {
+      console.warn("Não foi possível invalidar o cache do leitor:", error);
+    }
+  }
+
+  function hasZipEndRecord(buffer) {
+    const bytes = new Uint8Array(buffer || 0);
+    const start = Math.max(0, bytes.length - 65557);
+    for (let index = bytes.length - 22; index >= start; index -= 1) {
+      if (bytes[index] === 0x50 && bytes[index + 1] === 0x4b && bytes[index + 2] === 0x05 && bytes[index + 3] === 0x06) return true;
+      if (bytes[index] === 0x50 && bytes[index + 1] === 0x4b && bytes[index + 2] === 0x06 && bytes[index + 3] === 0x06) return true;
+    }
+    return false;
+  }
+
+  function isInvalidZipError(error) {
+    return /end of central directory|central directory|is this a zip file/i.test(String(error?.message || error));
+  }
+
   async function readResponseBuffer(response, onProgress) {
     const total = Number(response.headers.get("content-length")) || 0;
     if (!response.body?.getReader) {
       const buffer = await response.arrayBuffer();
+      if (total && buffer.byteLength !== total) throw new Error(`Download incompleto: ${buffer.byteLength} de ${total} bytes.`);
       onProgress(buffer.byteLength, total || buffer.byteLength);
       return buffer;
     }
@@ -5470,6 +5588,7 @@
       error.readerTransfer = { chunks, received, total };
       throw error;
     }
+    if (total && received !== total) throw new Error(`Download incompleto: ${received} de ${total} bytes.`);
     onProgress(received, total || received);
     const bytes = new Uint8Array(received);
     let offset = 0;
@@ -5477,7 +5596,7 @@
     return bytes.buffer;
   }
 
-  async function fetchFileArrayBuffer(url, onProgress = () => {}, onComplete = () => {}, signal = null) {
+  async function fetchFileArrayBuffer(url, onProgress = () => {}, onComplete = () => {}, signal = null, forceFresh = false) {
     const source = String(url || "");
     if (/^blob:/i.test(source)) {
       const response = await fetch(source, signal ? { signal } : {});
@@ -5488,14 +5607,21 @@
     }
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(source);
     const proxyUrl = proxiedFileUrl(source);
-    const cacheKey = `${proxyUrl}${proxyUrl.includes("?") ? "&" : "?"}v=240`;
-    const cached = await readReaderFileCache(cacheKey, onProgress);
+    const requestUrl = forceFresh ? (() => {
+      try {
+        const fresh = new URL(proxyUrl);
+        fresh.searchParams.set("_reader_retry", `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        return fresh.toString();
+      } catch { return proxyUrl; }
+    })() : proxyUrl;
+    const cacheKey = `${requestUrl}${requestUrl.includes("?") ? "&" : "?"}v=240`;
+    const cached = forceFresh ? null : await readReaderFileCache(cacheKey, onProgress);
     if (cached) { onComplete(); return cached; }
 
     if (!isMega) {
       // Tenta uma única transferência; usa faixas apenas se o servidor falhar.
       try {
-        const response = await fetch(proxyUrl, {
+        const response = await fetch(requestUrl, {
           method: "GET",
           mode: "cors",
           credentials: "omit",
@@ -5523,7 +5649,7 @@
         let lastError;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
-            response = await fetch(proxyUrl, {
+            response = await fetch(requestUrl, {
               headers: { Range: `bytes=${received}-${end}` },
               mode: "cors",
               credentials: "omit",
@@ -5565,7 +5691,7 @@
     if (false) {
     let continuousError = null;
     try {
-      const response = await fetch(proxyUrl, {
+      const response = await fetch(requestUrl, {
         method: "GET",
         mode: "cors",
         credentials: "omit",
@@ -5595,7 +5721,7 @@
         let lastError;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            response = await fetch(proxyUrl, {
+            response = await fetch(requestUrl, {
               headers: { Range: `bytes=${start}-${end}` },
               mode: "cors",
               credentials: "omit",
@@ -6169,8 +6295,7 @@
           <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
           ${heroMeta ? `<div class="hero-meta">${escapeHTML(heroMeta)}</div>` : ""}
           <div class="hero-description-row"><p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p></div>
-          ${heroItem ? `<button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button>` : ""}
-          ${heroItem ? `<button class="btn btn-secondary" data-hero-about="${escapeHTML(heroItem.id)}">Sobre</button>` : ""}
+          ${heroItem ? `<div class="hero-actions"><button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button><button class="btn btn-secondary" data-hero-about="${escapeHTML(heroItem.id)}">Ver mais</button></div>` : ""}
         </div>
       </section>
       <div class="content">
@@ -8260,23 +8385,37 @@
 
   function renderFileReports() {
     if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
-    const reports = state.fileReports || [];
+    const selectedTab = ["pending", "ignored", "resolved"].includes(state.fileReportsTab) ? state.fileReportsTab : "pending";
+    const reports = [...(state.fileReports || [])].filter(report => report.status === selectedTab).sort((a, b) => {
+      const order = { pending: 0, ignored: 1, resolved: 2 };
+      return (order[a.status] ?? 3) - (order[b.status] ?? 3) || new Date(b.created_at) - new Date(a.created_at);
+    });
     return `<div class="staff-activity-list">${reports.map(report => {
       const snapshot = report.item_snapshot || {};
       const item = state.db.library.find(entry => String(entry.id) === String(report.item_id));
       const title = itemDisplayTitle(item || snapshot) || "Edição sem título";
       const status = report.status === "pending" ? "Pendente" : report.status === "resolved" ? "Resolvido" : "Ignorado";
-      return `<article class="staff-activity-item file-report-item"><header><span>⚠ Relato de @${escapeHTML(report.reporterName || "usuário")}</span><span>${escapeHTML(formatCommentDate(report.created_at))}</span></header><strong>${escapeHTML(title)}</strong><p>${escapeHTML(report.reason || "O arquivo não abriu.")}</p><small>Status: ${status}</small><div class="staff-activity-actions">${item ? `<button class="small-btn" data-report-open="${escapeHTML(item.id)}">Ver edição</button>` : ""}${report.status === "pending" ? `<button class="small-btn" data-report-status="resolved" data-report-id="${report.id}">Marcar resolvido</button><button class="small-btn danger" data-report-status="ignored" data-report-id="${report.id}">Ignorar</button>` : ""}</div></article>`;
+      return `<article class="staff-activity-item file-report-item"><header><span>⚠ Relato de @${escapeHTML(report.reporterName || "usuário")}</span><span>${escapeHTML(formatCommentDate(report.created_at))}</span></header><strong>${escapeHTML(title)}</strong><p>${escapeHTML(report.reason || "O arquivo não abriu.")}</p><small>Status: ${status}</small><div class="staff-activity-actions">${report.reporterName ? `<button class="small-btn" data-report-reporter="${escapeHTML(report.reporterName)}">Ver quem relatou</button>` : ""}${item ? `<button class="small-btn" data-report-open="${escapeHTML(item.id)}">Ver edição</button>` : ""}${report.status === "pending" ? `<button class="small-btn" data-report-status="resolved" data-report-id="${report.id}">Marcar resolvido</button><button class="small-btn danger" data-report-status="ignored" data-report-id="${report.id}">Ignorar</button>` : `<button class="small-btn" data-report-status="pending" data-report-id="${report.id}" data-report-item-id="${escapeHTML(report.item_id)}" data-report-reporter-id="${escapeHTML(report.reporter_id)}">Reabrir</button>`}</div></article>`;
     }).join("") || '<div class="empty">Nenhum relato de arquivo aguardando atenção.</div>'}</div>`;
   }
 
-  function reportFileFailure(item, reason = "O arquivo não abriu no leitor.") {
+  async function reportFileFailure(item, reason = "O arquivo não abriu no leitor.") {
     if (!state.session?.user?.id || state.session?.offline || !sb) return toast("Entre na sua conta para relatar este arquivo aos moderadores.");
     const snapshot = { id: item.id, title: item.title, seriesTitle: item.seriesTitle, seriesId: item.seriesId, issue: item.issue, format: item.format, fileUrl: item.fileUrl || item.telegramUrl || "" };
-    sb.from("file_reports").insert({ item_id: String(item.id), reporter_id: state.session.user.id, item_snapshot: snapshot, reason }).then(result => {
-      if (result.error && !/duplicate|unique/i.test(result.error.message || "")) return toast("Não foi possível enviar o relato agora.");
-      toast(result.error ? "Este arquivo já foi relatado aos moderadores." : "Relato enviado aos moderadores.");
-    });
+    const existing = await sb.from("file_reports").select("id, status, notified_at").eq("item_id", String(item.id)).eq("reporter_id", state.session.user.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (existing.error && !/permission|policy|row-level/i.test(existing.error.message || "")) return toast("Não foi possível enviar o relato agora.");
+    if (existing.data?.status === "pending") return toast("Este arquivo já foi relatado aos moderadores.");
+    if (existing.data?.id) {
+      const reopened = await sb.from("file_reports").update({ status: "pending", reviewed_by: null, reviewed_at: null, item_snapshot: snapshot, reason }).eq("id", existing.data.id).eq("reporter_id", state.session.user.id);
+      if (!reopened.error) return toast("Relato reaberto e enviado aos moderadores.");
+      if (reopened.error.code === "23505" || /duplicate|unique/i.test(reopened.error.message || "")) return toast("Este arquivo já tem um relato pendente aos moderadores.");
+      const fallback = await sb.from("file_reports").insert({ item_id: String(item.id), reporter_id: state.session.user.id, item_snapshot: snapshot, reason, notified_at: existing.data?.notified_at || null });
+      if (fallback.error) return toast("Não foi possível reabrir o relato agora.");
+      return toast("Relato reaberto e enviado aos moderadores.");
+    }
+    const result = await sb.from("file_reports").insert({ item_id: String(item.id), reporter_id: state.session.user.id, item_snapshot: snapshot, reason });
+    if (result.error) return toast(/duplicate|unique/i.test(result.error.message || "") ? "Este arquivo já foi relatado aos moderadores." : "Não foi possível enviar o relato agora.");
+    toast("Relato enviado aos moderadores.");
   }
 
   function coverVariantCandidates(status = "pending") {
@@ -8529,6 +8668,8 @@
       const result = await sb.rpc("review_bot_action", { p_action_id: Number(button.dataset.botReview), p_status: button.dataset.status });
       if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível revisar a ação do bot."); }
       if (button.dataset.status === "approved") await loadCoverCatalog();
+      if (button.dataset.reportStatus === "resolved") state.fileReportsTab = "resolved";
+      if (button.dataset.reportStatus === "pending") state.fileReportsTab = "pending";
       await loadStaffActivities();
       openNotificationsPopup("staff");
     });
@@ -8641,21 +8782,44 @@
     closeNotificationsPopups();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>⚠ Relatos de arquivos</h2><div class="section-subtitle">Edições que usuários relataram como impossíveis de abrir</div></div><button class="small-btn" data-close>Fechar</button></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">⚠ Arquivos com problema${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${["moderator", "admin"].includes(state.profile?.plan) ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>${renderFileReports()}</div>`;
+    const reportTabLabels = { pending: "Pendentes", ignored: "Ignorados", resolved: "Resolvidos" };
+    const reportTabButtons = Object.entries(reportTabLabels).map(([key, label]) => `<button class="small-btn notification-tab ${state.fileReportsTab === key || (!state.fileReportsTab && key === "pending") ? "is-active" : ""}" data-file-reports-tab="${key}">${label} (${(state.fileReports || []).filter(report => report.status === key).length})</button>`).join("");
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>⚠ Relatos de arquivos</h2><div class="section-subtitle">Edições que usuários relataram como impossíveis de abrir</div></div><button class="small-btn" data-close>Fechar</button></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">⚠ Arquivos com problema</button>${["moderator", "admin"].includes(state.profile?.plan) ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div><div class="notification-tabs file-reports-status-tabs">${reportTabButtons}</div>${renderFileReports()}</div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $("[data-notification-tab]", overlay).onclick = () => { overlay.remove(); openNotificationsPopup("staff"); };
     $("[data-open-cover-variants]", overlay)?.addEventListener("click", () => openCoverVariantsReviewPopup());
+    $$('[data-file-reports-tab]', overlay).forEach(button => button.onclick = () => {
+      state.fileReportsTab = button.dataset.fileReportsTab || "pending";
+      overlay.remove();
+      openFileReportsPopup();
+    });
     $$('[data-report-status]', overlay).forEach(button => button.onclick = async () => {
       button.disabled = true;
+      if (button.dataset.reportStatus === "pending" && button.dataset.reportItemId && button.dataset.reporterId) {
+        const pending = await sb.from("file_reports").select("id").eq("item_id", button.dataset.reportItemId).eq("reporter_id", button.dataset.reporterId).eq("status", "pending").neq("id", button.dataset.reportId).limit(1).maybeSingle();
+        if (pending.data?.id) {
+          button.disabled = false;
+          return toast("Já existe outro relato pendente para esta edição e usuário.");
+        }
+      }
       const result = await sb.from("file_reports").update({ status: button.dataset.reportStatus, reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString() }).eq("id", button.dataset.reportId);
-      if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível atualizar o relato."); }
+      if (result.error) {
+        button.disabled = false;
+        if (result.error.code === "23505" || /duplicate|unique/i.test(result.error.message || "")) return toast("Já existe outro relato pendente para esta edição e usuário.");
+        return toast(result.error.message || "Não foi possível atualizar o relato.");
+      }
+      if (button.dataset.reportStatus === "resolved") state.fileReportsTab = "resolved";
       await loadStaffActivities();
       openFileReportsPopup();
     });
     $$('[data-report-open]', overlay).forEach(button => button.onclick = () => {
       const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.reportOpen));
-      if (item) { overlay.remove(); openSeriesSelection(item, seriesEditions(item), true); }
+      if (item) { overlay.remove(); openSeriesSelection(item, seriesEditions(item), false, true); }
+    });
+    $$('[data-report-reporter]', overlay).forEach(button => button.onclick = () => {
+      window.location.href = publicProfileHref(button.dataset.reportReporter);
     });
   }
 
@@ -8714,15 +8878,37 @@
     const title = itemDisplayTitle(item) || item.title || "Edição em destaque";
     const meta = [item.issue ? `Edição ${item.issue}` : "", formatType(item.type), item.year || ""].filter(Boolean).join(" · ");
     const cover = coverFor(item, "hero");
-    overlay.innerHTML = `<div class="modal hero-details-modal"><button class="small-btn hero-details-close" data-close aria-label="Fechar">×</button><div class="hero-details-copy"><div class="eyebrow">Destaque da banca</div><h2>${escapeHTML(title)}</h2>${meta ? `<div class="hero-details-meta">${escapeHTML(meta)}</div>` : ""}<p>${escapeHTML(item.description || "Esta edição está em destaque na Banca Digital.")}</p><div class="hero-details-actions"><button class="btn btn-primary" data-hero-details-open>▶ Ler agora</button><button class="btn btn-secondary" data-close>Fechar</button></div></div><div class="hero-details-cover" style="background-image:url('${escapeHTML(cover)}')" role="img" aria-label="Capa de ${escapeHTML(title)}"></div></div>`;
+    overlay.innerHTML = `<div class="modal hero-details-modal"><button class="small-btn hero-details-close" data-close aria-label="Fechar">×</button><div class="hero-details-copy"><div class="eyebrow">Destaque da banca</div><h2>${escapeHTML(title)}</h2>${meta ? `<div class="hero-details-meta">${escapeHTML(meta)}</div>` : ""}<p>${escapeHTML(item.description || "Esta edição está em destaque na Banca Digital.")}</p><div class="hero-details-actions"><button class="btn btn-primary" data-hero-details-open>▶ Ler agora</button><button class="btn btn-secondary" data-close>Fechar</button></div></div><div class="hero-details-cover" data-hero-details-open role="button" tabindex="0" style="background-image:url('${escapeHTML(cover)}')" aria-label="Ler ${escapeHTML(title)}"></div></div>`;
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
-    $("[data-hero-details-open]", overlay).onclick = () => { overlay.remove(); openReader(item); };
+    $$('[data-hero-details-open]', overlay).forEach(element => {
+      element.onclick = () => { overlay.remove(); openReader(item); };
+      element.onkeydown = event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        overlay.remove();
+        openReader(item);
+      };
+    });
   }
 
   function bind() {
     syncActiveNav();
+    $$('[data-copy-donation-pix]').forEach(button => {
+      if (button.dataset.donationBound) return;
+      button.dataset.donationBound = "true";
+      button.addEventListener("click", async () => {
+      const key = $("#donation-pix-key")?.textContent?.trim();
+      if (!key) return;
+      try {
+        await navigator.clipboard.writeText(key);
+        toast("Chave Pix copiada.");
+      } catch {
+        toast("Não foi possível copiar a chave Pix.");
+      }
+      });
+    });
     $$('[data-hero-about]').forEach(button => button.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -9726,7 +9912,7 @@
     });
   }
 
-  function openSeriesSelection(series, editions, returnToCoverVariants = false) {
+  function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null) {
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const volumeGroups = new Map();
@@ -9744,7 +9930,7 @@
       <div class="modal series-modal">
         <div class="section-head">
           <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições disponíveis · clique em uma edição para ler</div></div>
-          <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-close>Fechar</button></div>
+          <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-file-reports ${returnToFileReports ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-reader ${returnToReader ? "" : "hidden"}>Voltar à história</button><button class="small-btn" data-close>Fechar</button></div>
         </div>
         ${volumeTabs}${volumePanels}
       </div>`;
@@ -9761,7 +9947,9 @@
       if (event.target === overlay) overlay.remove();
     });
     $("[data-close]", overlay).onclick = () => overlay.remove();
+    $("[data-back-reader]", overlay)?.addEventListener("click", () => { overlay.remove(); openReader(returnToReader); });
    $('[data-back-cover-variants]', overlay)?.addEventListener("click", () => { overlay.remove(); openCoverVariantsReviewPopup(); });
+    $('[data-back-file-reports]', overlay)?.addEventListener("click", () => { overlay.remove(); openFileReportsPopup(); });
     $$('[data-download]', overlay).forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();

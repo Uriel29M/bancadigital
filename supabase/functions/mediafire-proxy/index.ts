@@ -1,6 +1,6 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, range",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition, Content-Range, Accept-Ranges",
 };
@@ -113,7 +113,10 @@ Deno.serve(async request => {
     const contentRange = upstream.response.headers.get("content-range");
     if (contentRange) headers.set("Content-Range", contentRange);
     headers.set("Accept-Ranges", "bytes");
-    headers.set("Cache-Control", "public, max-age=300");
+    // A resposta depende do cabeçalho Range. Nunca permita que um trecho
+    // parcial seja reutilizado para outra requisição/perfil.
+    headers.set("Vary", "Range");
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
 
     // Entrega o arquivo conforme chega. Assim o navegador pode começar a
     // processar a resposta enquanto o restante ainda está sendo recebido.

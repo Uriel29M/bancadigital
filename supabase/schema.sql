@@ -658,8 +658,35 @@ create table if not exists public.file_reports (
   reviewed_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table public.file_reports add column if not exists notified_at timestamptz;
 create index if not exists file_reports_status_created_idx on public.file_reports(status, created_at desc);
 create unique index if not exists file_reports_pending_reporter_item_idx on public.file_reports(item_id, reporter_id) where status = 'pending';
+
+create or replace function public.notify_resolved_file_report_once()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if old.status is distinct from 'resolved' and new.status = 'resolved' and new.notified_at is null then
+    perform public.create_notification(
+      new.reporter_id,
+      'file_report_resolved',
+      'Relato de arquivo resolvido',
+      'Seu relato foi verificado pela equipe. Obrigado por ajudar a Banca Digital.',
+      auth.uid(),
+      null,
+      jsonb_build_object('item_id', new.item_id, 'report_id', new.id)
+    );
+    new.notified_at := now();
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.notify_resolved_file_report_once() from anon, authenticated;
+drop trigger if exists file_report_resolved_cleanup_trigger on public.file_reports;
+drop trigger if exists file_report_resolved_notification_trigger on public.file_reports;
+create trigger file_report_resolved_notification_trigger
+before update of status on public.file_reports
+for each row execute function public.notify_resolved_file_report_once();
 
 create or replace function public.submit_bot_action(p_bot_name text, p_action text, p_title text, p_body text, p_metadata jsonb default '{}'::jsonb)
 returns bigint language plpgsql security definer set search_path = public as $$
@@ -1276,6 +1303,8 @@ create policy "moderators create moderation history" on public.moderation_action
 create policy "staff read bot actions" on public.bot_actions for select using (public.is_moderator());
 create policy "moderators review bot actions" on public.bot_actions for update using (public.is_moderator()) with check (public.is_moderator());
 create policy "users create file reports" on public.file_reports for insert with check (auth.uid() = reporter_id);
+create policy "reporters read own file reports" on public.file_reports for select using (auth.uid() = reporter_id);
+create policy "reporters reopen own file reports" on public.file_reports for update using (auth.uid() = reporter_id and status in ('resolved', 'ignored')) with check (auth.uid() = reporter_id and status = 'pending' and reviewed_by is null and reviewed_at is null);
 create policy "staff read file reports" on public.file_reports for select using (public.is_moderator());
 create policy "staff review file reports" on public.file_reports for update using (public.is_moderator()) with check (public.is_moderator());
 create policy "achievements are public" on public.achievements for select using (true);
