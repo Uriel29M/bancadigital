@@ -1117,6 +1117,9 @@ window.DEFAULT_LIBRARY = [
   
 ];
 
+const updatedShazam04 = window.DEFAULT_LIBRARY.find((item) => item.id === "series-shazam-2023-04");
+if (updatedShazam04) updatedShazam04.fileUrl = "https://www.mediafire.com/file/ott0zs5u6wo55q7/Shzm%2521_004_%25282023%2529_%2528ZonaFantasma%2529.cbr/file";
+
 window.DEFAULT_LIBRARY.filter(item => item.seriesId === "series-justice-godzilla-kong-2023").forEach((item, index) => {
   const volume = index < 7 ? "Volume 1" : "Volume 2";
   item.volume = volume;

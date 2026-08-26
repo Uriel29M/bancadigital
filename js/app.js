@@ -3544,6 +3544,12 @@
     return getReaderSpreadPages(totalPages, spread, skipCover).map(page => page - 1);
   }
 
+  const READER_END_PAGE_URL = "assets/somosumabiblioteca.jpg";
+
+  function isReaderEndPage(page, totalPages) {
+    return page === totalPages + 1;
+  }
+
   function formatType(type) {
     return type === "manga" ? "Mangá" : "Quadrinho";
   }
@@ -4164,6 +4170,34 @@
     $("#achievement-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); const title = String(fd.get("title") || "").trim(); const title_color = safeTitleColor(fd.get("titleColor")); const profile = await sb.from("profiles").select("id").eq("username", username).single(); if (profile.error) return toast("Usuário não encontrado."); let update = await sb.from("profiles").update({ title: title || null, title_color }).eq("id", profile.data.id); if (update.error && /title_color|schema cache/i.test(update.error.message)) update = await sb.from("profiles").update({ title: title || null }).eq("id", profile.data.id); if (update.error) return toast(update.error.message); if (state.profile?.id === profile.data.id) state.profile = { ...state.profile, title, title_color }; overlay.remove(); render(); toast("Título atualizado."); };
   }
 
+  function readerSourceCandidates(item) {
+    const primary = item?.fileUrl || (!/^https?:\/\/(www\.)?t(?:elegram)?\.me\//i.test(item?.telegramUrl || "") ? item?.telegramUrl : "") || "";
+    const backups = Array.isArray(item?.backupUrls) ? item.backupUrls : (item?.backupUrl ? [item.backupUrl] : []);
+    return [primary, ...backups].map(value => String(value || "").trim()).filter((value, index, values) => value && values.indexOf(value) === index);
+  }
+
+  async function probeReaderSource(url) {
+    if (!url || /^blob:/i.test(url)) return true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(proxiedFileUrl(url), {
+        method: "GET",
+        headers: { Range: "bytes=0-0" },
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      return response.ok && (response.status === 200 || response.status === 206) && !contentType.includes("text/html");
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   function openReader(item, options = {}) {
     if (!item) return;
 
@@ -4193,7 +4227,8 @@
 
     // A URL direta (fileUrl) tem prioridade. Se não houver, usamos a 'telegramUrl'
     // somente se ela NÃO for um link real do Telegram (ou seja, é um caminho de arquivo).
-    const resolvedUrl = item.fileUrl || (!isTelegramLink(item.telegramUrl) ? item.telegramUrl : "") || "";
+    const sourceCandidates = readerSourceCandidates(item);
+    let resolvedUrl = sourceCandidates[0] || "";
 
     if (!resolvedUrl) {
       toast(item.telegramUrl ? "Links do Telegram não são suportados sem um servidor de ponte." : "Esta edição não tem uma URL de arquivo direto.");
@@ -4259,6 +4294,8 @@
     const cleanupReader = () => {
       if (activeReaderCleanup === cleanupReader) activeReaderCleanup = null;
       readerIsOpen = false;
+      if (readerSingleClickTimer) window.clearTimeout(readerSingleClickTimer);
+      readerSingleClickTimer = null;
       overlay._cbzDownloadController?.abort();
       overlay.remove();
       resumeCoverLoading();
@@ -4341,19 +4378,110 @@
       if (button && !button.disabled) button.click();
     };
     const toggleReaderChrome = () => overlay.classList.toggle("reader-immersive");
-    $("[data-reader-zoom]", overlay).onclick = () => {
-      overlay.classList.toggle("reader-zoom-fit");
+    const readerZoomButton = $("[data-reader-zoom]", overlay);
+    let readerZoom = 1;
+    const READER_DEFAULT_ZOOM = 1;
+    const READER_BUTTON_ZOOM = 2;
+    let readerZoomOrigin = { x: "50%", y: "50%" };
+    let readerPan = { x: 0, y: 0 };
+    let readerPanPointer = null;
+    let readerSingleClickTimer = null;
+    let lastReaderZoomAt = 0;
+    const setReaderZoom = (nextZoom, origin = readerZoomOrigin) => {
+      readerZoom = Math.max(1, Math.min(3, nextZoom));
+      readerZoomOrigin = origin;
+      if (readerZoom === READER_DEFAULT_ZOOM) readerPan = { x: 0, y: 0 };
+      body.style.setProperty("--reader-zoom", String(readerZoom));
+      body.style.setProperty("--reader-pan-x", `${readerPan.x}px`);
+      body.style.setProperty("--reader-pan-y", `${readerPan.y}px`);
+      body.style.setProperty("--reader-origin-x", origin.x);
+      body.style.setProperty("--reader-origin-y", origin.y);
+      body.classList.toggle("reader-gesture-zoom", readerZoom > 1);
+      readerZoomButton.textContent = readerZoom > 1 ? `Zoom ${Math.round(readerZoom * 100)}%` : "Zoom";
+    };
+    const toggleReaderZoom = (origin = readerZoomOrigin) => {
+      lastReaderZoomAt = Date.now();
+      lastReaderClickAt = 0;
+      if (readerSingleClickTimer) {
+        window.clearTimeout(readerSingleClickTimer);
+        readerSingleClickTimer = null;
+      }
+      setReaderZoom(readerZoom >= READER_BUTTON_ZOOM ? READER_DEFAULT_ZOOM : READER_BUTTON_ZOOM, origin);
       overlay.classList.add("reader-immersive");
     };
+    readerZoomButton.onclick = () => toggleReaderZoom();
     let readerSwipe = null;
     let suppressReaderClick = false;
+    let lastReaderClickAt = 0;
+    let ignoreReaderClicksUntil = 0;
+    const activeReaderPointers = new Map();
+    let readerPinchStart = null;
+    let lastReaderTap = 0;
+    let readerTap = null;
+    const readerZoomOriginAt = (clientX, clientY) => {
+      const rect = body.getBoundingClientRect();
+      return { x: `${Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100))}%`, y: `${Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))}%` };
+    };
+    const readerPointerDistance = () => {
+      const points = [...activeReaderPointers.values()];
+      return points.length < 2 ? 0 : Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+    };
+    const readerPointerCenter = () => {
+      const points = [...activeReaderPointers.values()];
+      return { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 };
+    };
     const onReaderPointerDown = event => {
-      if (!["single-page", "double-page"].includes(state.readingMode)) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
       if (event.target.closest("button, a, select, textarea, input")) return;
+      activeReaderPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      body.setPointerCapture?.(event.pointerId);
+      if (activeReaderPointers.size === 2) {
+        readerPanPointer = null;
+        readerSwipe = null;
+        readerTap = null;
+        readerPinchStart = { distance: readerPointerDistance(), zoom: readerZoom };
+        ignoreReaderClicksUntil = Date.now() + 600;
+        body.classList.add("reader-panning");
+        event.preventDefault();
+        return;
+      }
+      if (readerZoom > 1) {
+        readerPanPointer = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: readerPan.x, startY: readerPan.y };
+        body.setPointerCapture?.(event.pointerId);
+        body.classList.add("reader-panning");
+        event.preventDefault();
+        return;
+      }
+      readerTap = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      if (!["single-page", "double-page"].includes(state.readingMode)) return;
       readerSwipe = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
     };
     const onReaderPointerMove = event => {
+      if (activeReaderPointers.has(event.pointerId)) activeReaderPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (readerPinchStart && activeReaderPointers.size >= 2) {
+        const distance = readerPointerDistance();
+        const center = readerPointerCenter();
+        const rect = body.getBoundingClientRect();
+        if (distance > 0 && rect.width && rect.height) {
+          setReaderZoom(readerPinchStart.zoom * distance / readerPinchStart.distance, {
+            x: `${((center.x - rect.left) / rect.width) * 100}%`,
+            y: `${((center.y - rect.top) / rect.height) * 100}%`
+          });
+          event.preventDefault();
+        }
+        return;
+      }
+      if (readerPanPointer && event.pointerId === readerPanPointer.pointerId) {
+        readerPan = {
+          x: readerPanPointer.startX + event.clientX - readerPanPointer.x,
+          y: readerPanPointer.startY + event.clientY - readerPanPointer.y
+        };
+        body.style.setProperty("--reader-pan-x", `${readerPan.x}px`);
+        body.style.setProperty("--reader-pan-y", `${readerPan.y}px`);
+        body.classList.add("reader-panning");
+        event.preventDefault();
+        return;
+      }
       if (!readerSwipe || event.pointerId !== readerSwipe.pointerId) return;
       const dx = event.clientX - readerSwipe.x;
       const dy = event.clientY - readerSwipe.y;
@@ -4375,18 +4503,71 @@
       overlay._readerNavigate?.(distance < 0 ? 1 : -1);
     };
     const finishReaderSwipe = event => {
+      activeReaderPointers.delete(event.pointerId);
+      if (readerPanPointer && event.pointerId === readerPanPointer.pointerId) {
+        readerPanPointer = null;
+        body.classList.remove("reader-panning");
+        body.releasePointerCapture?.(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+      if (readerPinchStart) {
+        if (activeReaderPointers.size < 2) {
+          readerPinchStart = null;
+          ignoreReaderClicksUntil = Date.now() + 600;
+          body.classList.remove("reader-panning");
+        }
+        body.releasePointerCapture?.(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+      const tap = readerTap;
+      readerTap = null;
+      if (tap && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) < 20) {
+        const now = Date.now();
+        if (now - lastReaderTap < 320) {
+          suppressReaderClick = true;
+          toggleReaderZoom(readerZoomOriginAt(event.clientX, event.clientY));
+          lastReaderTap = 0;
+        } else {
+          lastReaderTap = now;
+        }
+        readerSwipe = null;
+        return;
+      }
       if (!readerSwipe || event.pointerId !== readerSwipe.pointerId) return;
       event.preventDefault();
       body.releasePointerCapture?.(event.pointerId);
+      const now = Date.now();
+      if (event.pointerType !== "mouse" && now - lastReaderTap < 320) {
+        readerSwipe = null;
+        suppressReaderClick = true;
+        toggleReaderZoom(readerZoomOriginAt(event.clientX, event.clientY));
+        lastReaderTap = 0;
+        return;
+      }
+      lastReaderTap = now;
       finishReaderSwipeAt(event.clientX, event.clientY);
     };
     const onReaderTouchStart = event => {
       if (!["single-page", "double-page"].includes(state.readingMode) || event.touches.length !== 1) return;
+      if (readerZoom > 1) return;
       if (event.target.closest("button, a, select, textarea, input")) return;
       const touch = event.touches[0];
       readerSwipe = { pointerId: null, x: touch.clientX, y: touch.clientY };
     };
     const onReaderTouchMove = event => {
+      if (readerZoom > 1 && readerPanPointer && event.touches.length === 1) {
+        const touch = event.touches[0];
+        readerPan = {
+          x: readerPanPointer.startX + touch.clientX - readerPanPointer.x,
+          y: readerPanPointer.startY + touch.clientY - readerPanPointer.y
+        };
+        body.style.setProperty("--reader-pan-x", `${readerPan.x}px`);
+        body.style.setProperty("--reader-pan-y", `${readerPan.y}px`);
+        event.preventDefault();
+        return;
+      }
       if (!readerSwipe || event.touches.length !== 1) return;
       const touch = event.touches[0];
       const dx = touch.clientX - readerSwipe.x;
@@ -4402,10 +4583,21 @@
     };
     const onReaderMouseDown = event => {
       if (event.button !== 0 || !["single-page", "double-page"].includes(state.readingMode)) return;
+      if (readerZoom > 1) return;
       if (event.target.closest("button, a, select, textarea, input")) return;
       readerSwipe = { pointerId: null, x: event.clientX, y: event.clientY };
     };
     const onReaderMouseMove = event => {
+      if (readerZoom > 1 && readerPanPointer) {
+        readerPan = {
+          x: readerPanPointer.startX + event.clientX - readerPanPointer.x,
+          y: readerPanPointer.startY + event.clientY - readerPanPointer.y
+        };
+        body.style.setProperty("--reader-pan-x", `${readerPan.x}px`);
+        body.style.setProperty("--reader-pan-y", `${readerPan.y}px`);
+        event.preventDefault();
+        return;
+      }
       if (!readerSwipe) return;
       const dx = event.clientX - readerSwipe.x;
       const dy = event.clientY - readerSwipe.y;
@@ -4416,7 +4608,7 @@
       event.preventDefault();
       finishReaderSwipeAt(event.clientX, event.clientY);
     };
-    const cancelReaderSwipe = () => { readerSwipe = null; };
+    const cancelReaderSwipe = () => { readerSwipe = null; readerTap = null; readerPanPointer = null; body.classList.remove("reader-panning"); activeReaderPointers.clear(); readerPinchStart = null; };
     const preventReaderDrag = event => event.preventDefault();
     body.addEventListener("pointerdown", onReaderPointerDown);
     body.addEventListener("pointermove", onReaderPointerMove, { passive: false });
@@ -4443,6 +4635,26 @@
       document.removeEventListener("mouseup", onReaderMouseUp);
     };
     body.addEventListener("click", event => {
+      const now = Date.now();
+      if (now < ignoreReaderClicksUntil) {
+        lastReaderClickAt = 0;
+        return;
+      }
+      const isDoubleReaderClick = event.detail >= 2 || (now - lastReaderClickAt > 0 && now - lastReaderClickAt < 360);
+      if (isDoubleReaderClick) {
+        if (readerSingleClickTimer) {
+          window.clearTimeout(readerSingleClickTimer);
+          readerSingleClickTimer = null;
+        }
+        lastReaderClickAt = 0;
+        if (suppressReaderClick) {
+          suppressReaderClick = false;
+          return;
+        }
+        toggleReaderZoom(readerZoomOriginAt(event.clientX, event.clientY));
+        return;
+      }
+      lastReaderClickAt = now;
       if (suppressReaderClick) {
         suppressReaderClick = false;
         return;
@@ -4450,7 +4662,15 @@
       if (event.target.closest("button, a, select, textarea")) {
         return;
       }
-      toggleReaderChrome();
+      if (readerSingleClickTimer) {
+        window.clearTimeout(readerSingleClickTimer);
+        readerSingleClickTimer = null;
+        return;
+      }
+      readerSingleClickTimer = window.setTimeout(() => {
+        readerSingleClickTimer = null;
+        toggleReaderChrome();
+      }, 280);
     });
     const onReaderKeydown = event => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
@@ -4485,19 +4705,45 @@
     }
 
 
-    if (format === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
-      void renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, (...args) => { markReaderReady(); saveReadingProgress(...args); }, prefetchedBuffer).then(markReaderReady).catch(() => {});
-    } else if (format === "cbz" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbz")) {
-      void renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, (...args) => { markReaderReady(); saveReadingProgress(...args); }, prefetchedBuffer).then(markReaderReady).catch(() => {});
-    } else if (format === "cbr" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbr")) {
-      void renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, (...args) => { markReaderReady(); saveReadingProgress(...args); }, prefetchedBuffer).then(markReaderReady).catch(() => {});
+    const startReader = async () => {
+      const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(format);
+      let selectedIndex = 0;
+      if (!item.local && sourceCandidates.length && !isImage) {
+        for (let index = 0; index < sourceCandidates.length; index += 1) {
+          if (await probeReaderSource(sourceCandidates[index])) { selectedIndex = index; break; }
+          if (index === 0) {
+            const fallback = sourceCandidates[1] || "nenhuma fonte reserva cadastrada";
+            await reportFileFailure(item, `A fonte principal falhou ao abrir. O leitor tentou uma fonte reserva: ${fallback}`, { silent: true, automatic: true, failedUrl: sourceCandidates[0], fallbackUrl: sourceCandidates[1] });
+          }
+          selectedIndex = index;
+        }
+        resolvedUrl = sourceCandidates[selectedIndex] || resolvedUrl;
+      }
+      const selectedFormat = String(item.format || format).toLowerCase();
+      const callback = (...args) => { markReaderReady(); saveReadingProgress(...args); };
+      if (selectedFormat === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
+        await renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
+      } else if (selectedFormat === "cbz" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbz")) {
+        await renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
+      } else if (selectedFormat === "cbr" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbr")) {
+        await renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
+      }
+    };
+    if (format === "pdf" || format === "cbz" || format === "cbr") {
+      void startReader().then(markReaderReady).catch(() => {});
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
       body.innerHTML = `<img class="reader-image" src="${escapeHTML(resolvedUrl)}" alt="" fetchpriority="high">`;
       const readerImage = $(".reader-image", body);
       if (readerImage) {
         readerImage.loading = "eager";
         readerImage.fetchPriority = "high";
-        readerImage.addEventListener("error", () => {
+        readerImage.addEventListener("error", async () => {
+          if (sourceCandidates.length && readerImage.dataset.backupTried !== "true") {
+            readerImage.dataset.backupTried = "true";
+            const fallback = sourceCandidates[1] || "nenhuma fonte reserva cadastrada";
+            await reportFileFailure(item, `A fonte principal da imagem falhou ao abrir. O leitor tentou uma fonte reserva: ${fallback}`, { silent: true, automatic: true, failedUrl: sourceCandidates[0], fallbackUrl: sourceCandidates[1] });
+            if (sourceCandidates[1]) { readerImage.src = sourceCandidates[1]; return; }
+          }
           body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px"><h3>Não foi possível abrir esta imagem.</h3><p>O arquivo não abriu. Relate o problema aos moderadores do site para que ele seja verificado.</p><button class="btn btn-primary" data-report-file>Relatar arquivo</button></div>`;
           controls.innerHTML = `<span class="reader-page">Imagem</span>`;
           $("[data-report-file]", body).onclick = () => reportFileFailure(item, "A imagem não abriu no leitor.");
@@ -5680,7 +5926,8 @@
 
       if (currentReadingMode === 'single-page') {
         const firstIndex = skipCover && imageFiles.length > 1 ? 1 : 0;
-        let page = Math.max(firstIndex, Math.min(resumePage - 1, imageFiles.length - 1));
+        const totalPages = imageFiles.length + 1;
+        let page = Math.max(firstIndex, Math.min(resumePage - 1, totalPages - 1));
         const pageCache = createArchivePageCache(imageFiles, file => withTimeout(file.extract(), 120000, "A pÃ¡gina demorou mais de 120 segundos para ser extraÃ­da."));
         const img = document.createElement("img");
         img.className = "reader-image";
@@ -5690,6 +5937,10 @@
 
         async function draw() {
           controls.innerHTML = `<span class="reader-page">Extraindo página ${page + 1}…</span>`;
+          if (page === imageFiles.length) {
+            if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+            img.src = READER_END_PAGE_URL;
+          } else {
           const currentThird = Math.floor(page / pageCache.thirdSize);
           const extracted = await pageCache.get(page);
           // Não bloqueia a primeira página esperando dezenas de extrações.
@@ -5699,14 +5950,20 @@
           if (objectUrl) URL.revokeObjectURL(objectUrl);
           objectUrl = URL.createObjectURL(blob);
           img.src = objectUrl;
+          }
           controls.innerHTML = `
             <button data-prev ${page <= firstIndex ? "disabled" : ""}>‹</button>
-            <span class="reader-page">${page + 1} / ${imageFiles.length}</span>
+            <span class="reader-page">${page + 1} / ${totalPages}</span>
             <button data-next ${page === imageFiles.length - 1 ? "disabled" : ""}>›</button>
           `;
           $("[data-prev]", controls)?.addEventListener("click", async () => { if (page > 0) { page--; await draw().catch(e => { page++; console.error(e); }); } });
           $("[data-next]", controls)?.addEventListener("click", async () => { if (page < imageFiles.length - 1) { page++; await draw().catch(e => { page--; console.error(e); }); } });
-          onPageChange(item, page + 1, imageFiles.length);
+          if (page === imageFiles.length - 1) {
+            const nextButton = $("[data-next]", controls);
+            nextButton?.removeAttribute("disabled");
+            nextButton?.addEventListener("click", async () => { page++; await draw().catch(e => { page--; console.error(e); }); }, { once: true });
+          }
+          onPageChange(item, page + 1, totalPages);
         }
         await draw();
         $("[data-close-reader]", overlay).addEventListener('click', () => {
@@ -5728,10 +5985,22 @@
           spreadUrls.length = 0;
           spreadContainer.innerHTML = "";
 
-          const indexesToRender = getReaderSpreadIndexes(imageFiles.length, spread, skipCover);
+          const totalPages = imageFiles.length + 1;
+          const indexesToRender = getReaderSpreadIndexes(totalPages, spread, skipCover);
           const second = indexesToRender[indexesToRender.length - 1];
 
           for (const index of indexesToRender) {
+            if (index === imageFiles.length) {
+              const wrapper = document.createElement("div");
+              wrapper.className = "double-page";
+              const img = document.createElement("img");
+              img.className = "reader-image";
+              img.alt = "Página final";
+              img.src = READER_END_PAGE_URL;
+              wrapper.appendChild(img);
+              spreadContainer.appendChild(wrapper);
+              continue;
+            }
             const extracted = await withTimeout(
               imageFiles[index].extract(),
               120000,
@@ -5771,7 +6040,14 @@
           $("[data-next]", controls)?.addEventListener("click", async () => {
             if (second < imageFiles.length - 1) { spread++; await drawSpread(); }
           });
-          onPageChange(item, indexesToRender[0] + 1, imageFiles.length);
+          const readerPageLabel = $(".reader-page", controls);
+          if (readerPageLabel) readerPageLabel.textContent = readerPageLabel.textContent.replace(/\/\s*\d+$/, `/ ${totalPages}`);
+          if (second === imageFiles.length - 1) {
+            const nextButton = $("[data-next]", controls);
+            nextButton?.removeAttribute("disabled");
+            nextButton?.addEventListener("click", async () => { spread++; await drawSpread(); }, { once: true });
+          }
+          onPageChange(item, indexesToRender[0] + 1, totalPages);
         }
 
         await drawSpread();
@@ -5808,7 +6084,25 @@
           pageStates.set(index, { url: null, loading: null });
         });
 
+        const endPage = { file: null, pageNum: imageFiles.length + 1, isEnd: true };
+        const endWrapper = document.createElement("div");
+        endWrapper.className = "image-page-wrapper";
+        endWrapper.style.minHeight = "65vh";
+        endWrapper.style.width = "min(90%, 900px)";
+        endWrapper.dataset.pageNum = endPage.pageNum;
+        endPage.wrapper = endWrapper;
+        endPage.img = document.createElement("img");
+        endPage.img.className = "reader-image";
+        endPage.img.alt = "Página final";
+        endWrapper.appendChild(endPage.img);
+        pageContainer.appendChild(endWrapper);
+        pageElements.push(endPage);
+
         const loadPage = async page => {
+          if (page.isEnd) {
+            page.img.src = READER_END_PAGE_URL;
+            return;
+          }
           const pageState = pageStates.get(imageFiles.indexOf(page.file));
           if (!pageState || pageState.url || pageState.loading) return;
           pageState.loading = (async () => {
@@ -5860,14 +6154,14 @@
           currentPageIndex = pageElements.indexOf(visiblePage);
           controls.innerHTML = `
             <button data-prev ${currentPageIndex <= 0 ? "disabled" : ""}>↑</button>
-            <span class="reader-page">${visiblePage.pageNum} / ${imageFiles.length}</span>
+            <span class="reader-page">${visiblePage.pageNum} / ${imageFiles.length + 1}</span>
             <button data-next ${currentPageIndex >= pageElements.length - 1 ? "disabled" : ""}>↓</button>
           `;
           const prevBtn = $("[data-prev]", controls);
           const nextBtn = $("[data-next]", controls);
           prevBtn?.addEventListener("click", () => pageElements[Math.max(0, currentPageIndex - 1)].wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' }));
           nextBtn?.addEventListener("click", () => pageElements[Math.min(pageElements.length - 1, currentPageIndex + 1)].wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-          onPageChange(item, visiblePage.pageNum, imageFiles.length);
+          onPageChange(item, visiblePage.pageNum, imageFiles.length + 1);
         };
 
         pageContainer.addEventListener('scroll', updateControls, { passive: true });
@@ -9492,23 +9786,29 @@
     }).join("") || '<div class="empty">Nenhum relato de arquivo aguardando atenção.</div>'}</div>`;
   }
 
-  async function reportFileFailure(item, reason = "O arquivo não abriu no leitor.") {
-    if (!state.session?.user?.id || state.session?.offline || !sb) return toast("Entre na sua conta para relatar este arquivo aos moderadores.");
-    const snapshot = { id: item.id, title: item.title, seriesTitle: item.seriesTitle, seriesId: item.seriesId, issue: item.issue, format: item.format, fileUrl: item.fileUrl || item.telegramUrl || "" };
-    const existing = await sb.from("file_reports").select("id, status, notified_at").eq("item_id", String(item.id)).eq("reporter_id", state.session.user.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (existing.error && !/permission|policy|row-level/i.test(existing.error.message || "")) return toast("Não foi possível enviar o relato agora.");
-    if (existing.data?.status === "pending") return toast("Este arquivo já foi relatado aos moderadores.");
+  async function reportFileFailure(item, reason = "O arquivo não abriu no leitor.", options = {}) {
+    const automatic = options.automatic === true;
+    const notify = message => { if (!options.silent) toast(message); };
+    if (!state.session?.user?.id || state.session?.offline || !sb) {
+      if (!automatic) notify("Entre na sua conta para relatar este arquivo aos moderadores.");
+      return;
+    }
+    const snapshot = { id: item.id, title: item.title, seriesTitle: item.seriesTitle, seriesId: item.seriesId, issue: item.issue, format: item.format, fileUrl: item.fileUrl || item.telegramUrl || "", backupUrls: Array.isArray(item.backupUrls) ? item.backupUrls : [], failedUrl: options.failedUrl || "", fallbackUrl: options.fallbackUrl || "" };
+    const existing = await sb.from("file_reports").select("id, status, notified_at, created_at").eq("item_id", String(item.id)).eq("reporter_id", state.session.user.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (automatic && existing.data?.created_at && Date.now() - new Date(existing.data.created_at).getTime() < 6 * 60 * 60 * 1000) return;
+    if (existing.error && !/permission|policy|row-level/i.test(existing.error.message || "")) return notify("Não foi possível enviar o relato agora.");
+    if (existing.data?.status === "pending") return notify("Este arquivo já foi relatado aos moderadores.");
     if (existing.data?.id) {
       const reopened = await sb.from("file_reports").update({ status: "pending", reviewed_by: null, reviewed_at: null, item_snapshot: snapshot, reason }).eq("id", existing.data.id).eq("reporter_id", state.session.user.id);
-      if (!reopened.error) return toast("Relato reaberto e enviado aos moderadores.");
-      if (reopened.error.code === "23505" || /duplicate|unique/i.test(reopened.error.message || "")) return toast("Este arquivo já tem um relato pendente aos moderadores.");
+      if (!reopened.error) return notify("Relato reaberto e enviado aos moderadores.");
+      if (reopened.error.code === "23505" || /duplicate|unique/i.test(reopened.error.message || "")) return notify("Este arquivo já tem um relato pendente aos moderadores.");
       const fallback = await sb.from("file_reports").insert({ item_id: String(item.id), reporter_id: state.session.user.id, item_snapshot: snapshot, reason, notified_at: existing.data?.notified_at || null });
-      if (fallback.error) return toast("Não foi possível reabrir o relato agora.");
-      return toast("Relato reaberto e enviado aos moderadores.");
+      if (fallback.error) return notify("Não foi possível reabrir o relato agora.");
+      return notify("Relato reaberto e enviado aos moderadores.");
     }
     const result = await sb.from("file_reports").insert({ item_id: String(item.id), reporter_id: state.session.user.id, item_snapshot: snapshot, reason });
-    if (result.error) return toast(/duplicate|unique/i.test(result.error.message || "") ? "Este arquivo já foi relatado aos moderadores." : "Não foi possível enviar o relato agora.");
-    toast("Relato enviado aos moderadores.");
+    if (result.error) return notify(/duplicate|unique/i.test(result.error.message || "") ? "Este arquivo já foi relatado aos moderadores." : "Não foi possível enviar o relato agora.");
+    notify("Relato enviado aos moderadores.");
   }
 
   function coverVariantCandidates(status = "pending") {
@@ -11821,6 +12121,7 @@
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
           <div class="field full"><label>Link direto do arquivo</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="arquivo.pdf, arquivo.cbz, arquivo.cbr..."><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
+          <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://.../capa-do-destaque.jpg"><small class="format-hint">Use uma imagem horizontal ou uma capa em alta resolução para controlar melhor o destaque.</small></div>
           <div class="field full"><label>Descrição</label><textarea name="description">${escapeHTML(x.description || "")}</textarea></div><div class="field full"><label>Tags</label><input name="tags" value="${escapeHTML((x.tags || []).join(", "))}"></div><div class="field full"><label><input name="featured" type="checkbox" ${x.featured ? "checked" : ""}> Mostrar como destaque</label></div>
         </div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar edição</button></div></form>
@@ -11831,7 +12132,7 @@
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
-    $("#edit-form", overlay).onsubmit = event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const sourceUrl = String(fd.get("sourceUrl") || "").trim(); const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim(); const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, ""); const item = { ...x, title: String(fd.get("title") || "").trim(), seriesTitle, seriesId: seriesTitle ? seriesKey(seriesTitle) : "", issue: volumeNumber, type: fd.get("type"), year: Number(fd.get("year")) || new Date().getFullYear(), publisher: String(fd.get("publisher") || "").trim(), imprint: String(fd.get("imprint") || "").trim(), character: String(fd.get("character") || "").trim(), author: String(fd.get("author") || "").trim(), format: detectFormat(sourceUrl), fileUrl: sourceUrl, telegramUrl: "", featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(), description: String(fd.get("description") || "").trim(), tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean), featured: fd.get("featured") === "on" }; delete item.randomWeight; const index = state.db.library.findIndex(i => i.id === item.id); if (index >= 0) state.db.library[index] = item; else state.db.library.push(item); saveCatalog("Edição salva."); overlay.remove(); render(); };
+    $("#edit-form", overlay).onsubmit = event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const sourceUrl = String(fd.get("sourceUrl") || "").trim(); const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean); const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim(); const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, ""); const item = { ...x, title: String(fd.get("title") || "").trim(), seriesTitle, seriesId: seriesTitle ? seriesKey(seriesTitle) : "", issue: volumeNumber, type: fd.get("type"), year: Number(fd.get("year")) || new Date().getFullYear(), publisher: String(fd.get("publisher") || "").trim(), imprint: String(fd.get("imprint") || "").trim(), character: String(fd.get("character") || "").trim(), author: String(fd.get("author") || "").trim(), format: detectFormat(sourceUrl), fileUrl: sourceUrl, backupUrls, telegramUrl: "", featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(), description: String(fd.get("description") || "").trim(), tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean), featured: fd.get("featured") === "on" }; delete item.randomWeight; const index = state.db.library.findIndex(i => i.id === item.id); if (index >= 0) state.db.library[index] = item; else state.db.library.push(item); saveCatalog("Edição salva."); overlay.remove(); render(); };
   }
 
   function renderCatalog(type = null) {
