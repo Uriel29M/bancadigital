@@ -10088,7 +10088,15 @@
       button.disabled = true;
       const result = await sb.functions.invoke("series-link-monitor", { body: { action: "scan" } });
       if (result.error || result.data?.error) toast(result.error?.message || result.data?.error || "Não foi possível verificar as fontes.");
-      else toast(`${Number(result.data?.discovered || 0)} nova(s) descoberta(s).`);
+      else {
+        const data = result.data || {};
+        const missing = Object.values(data.missingIssues || {}).flat();
+        const summary = `${Number(data.sourceLinks || 0)} arquivo(s) no Blogspot · ${Number(data.discovered || 0)} nova(s) descoberta(s)`;
+        const missingLabel = missing.length ? ` · Ausente(s) no catálogo: #${missing.join(", #")}` : "";
+        const unidentifiedLabel = Number(data.unidentifiedLinks || 0) ? ` · ${Number(data.unidentifiedLinks)} sem número` : "";
+        const errorLabel = Object.keys(data.errors || {}).length ? ` · ${Object.keys(data.errors).length} fonte(s) com erro` : "";
+        toast(`${summary}${missingLabel}${unidentifiedLabel}${errorLabel}.`);
+      }
       await loadStaffActivities();
       overlay.remove();
       openSeriesLinkMonitorPopup();

@@ -33,8 +33,16 @@ function issueFromText(value: string) {
   return match?.[1] ? String(Number(match[1])) : null;
 }
 
+function issueFromFilename(value: string) {
+  const filename = decodeURIComponent(String(value || "").split("/").pop() || "");
+  const seriesPattern = filename.match(/(?:\(|\s|[-_])0*(\d{1,3})-0{2,3}(?:[-_.\s]|$)/i);
+  if (seriesPattern?.[1]) return String(Number(seriesPattern[1]));
+  const padded = filename.match(/(?:^|[-_\s])0+(\d{1,3})(?=[-_.\s]|$)/i);
+  return padded?.[1] ? String(Number(padded[1])) : null;
+}
+
 function extractLinks(html: string, sourceUrl: string) {
-  const found = new Map<string, { fileUrl: string; issue: string; anchor: string }>();
+  const found = new Map<string, { fileUrl: string; issue: string | null; anchor: string }>();
   const anchors = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchors)) {
     const raw = match[1].replace(/&amp;/g, "&");
@@ -45,8 +53,7 @@ function extractLinks(html: string, sourceUrl: string) {
     if (!fileUrl) continue;
     const anchor = String(match[2]).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     const context = `${anchor} ${match[0]} ${url.pathname} ${url.search}`;
-    const issue = issueFromText(context);
-    if (!issue) continue;
+    const issue = issueFromFilename(url.pathname) || issueFromText(context);
     found.set(fileUrl, { fileUrl, issue, anchor });
   }
   return [...found.values()];
@@ -97,6 +104,15 @@ async function scan(service: ReturnType<typeof createClient>) {
     } catch { return false; }
   };
   let discovered = 0;
+  let sourceLinks = 0;
+  let numberedLinks = 0;
+  let unidentifiedLinks = 0;
+  const missingIssues: Record<string, string[]> = {};
+  const catalogIssuesBySeries = new Map<string, Set<string>>();
+  for (const match of catalogSource.matchAll(/"seriesId"\s*:\s*"([^"]+)"[\s\S]{0,500}?"issue"\s*:\s*"?(\d{1,3})"?/gi)) {
+    if (!catalogIssuesBySeries.has(match[1])) catalogIssuesBySeries.set(match[1], new Set());
+    catalogIssuesBySeries.get(match[1])!.add(String(Number(match[2])));
+  }
   const errors: Record<string, string> = {};
   for (const source of sources || []) {
     try {
@@ -104,12 +120,19 @@ async function scan(service: ReturnType<typeof createClient>) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const html = await response.text();
       const links = extractLinks(html, source.source_url);
+      sourceLinks += links.length;
+      numberedLinks += links.filter(link => Boolean(link.issue)).length;
+      unidentifiedLinks += links.filter(link => !link.issue).length;
+      const catalogIssues = catalogIssuesBySeries.get(source.series_id) || new Set<string>();
+      const sourceIssues = new Set(links.map(link => link.issue).filter(Boolean) as string[]);
+      const missing = [...sourceIssues].filter(issue => !catalogIssues.has(issue));
+      if (missing.length) missingIssues[source.series_id] = missing.sort((a, b) => Number(a) - Number(b));
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
       const hashText = [...new Uint8Array(hash)].map(value => value.toString(16).padStart(2, "0")).join("");
       await service.from("series_link_sources").update({ last_checked_at: new Date().toISOString(), last_content_hash: hashText, last_error: null, updated_at: new Date().toISOString() }).eq("id", source.id);
       for (const link of links) {
         const normalized = normalizeUrl(link.fileUrl);
-        if (!normalized || isKnown(link.fileUrl, normalized)) continue;
+        if (!normalized || !link.issue || isKnown(link.fileUrl, normalized)) continue;
         const existing = await service.from("series_link_discoveries").select("id").eq("source_id", source.id).eq("normalized_url", normalized).maybeSingle();
         if (existing.data?.id) continue;
         const inserted = await service.from("series_link_discoveries").insert({ source_id: source.id, series_id: source.series_id, issue: link.issue, title: `Edição ${link.issue}`, file_url: link.fileUrl, normalized_url: normalized, source_url: source.source_url, metadata: { provider: source.provider, anchor: link.anchor } });
@@ -122,7 +145,7 @@ async function scan(service: ReturnType<typeof createClient>) {
       await service.from("series_link_sources").update({ last_checked_at: new Date().toISOString(), last_error: message, updated_at: new Date().toISOString() }).eq("id", source.id);
     }
   }
-  return { ok: true, sources: sources?.length || 0, discovered, errors };
+  return { ok: true, sources: sources?.length || 0, sourceLinks, numberedLinks, unidentifiedLinks, missingIssues, discovered, errors };
 }
 
 Deno.serve(async request => {
