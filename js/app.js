@@ -4345,6 +4345,10 @@
 
   async function probeReaderSource(url) {
     if (!url || /^blob:/i.test(url)) return true;
+    // O Mega exige uma negociação própria para cada requisição. A sondagem
+    // extra de um byte costuma expirar (546), mas o leitor já faz a leitura
+    // real por faixas e trata o erro no ponto correto.
+    if (/^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url))) return true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
@@ -6933,7 +6937,7 @@
     if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:i\.imgur\.com|(?:www\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com)\//i.test(source)) return source;
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
-    proxy.searchParams.set("v", "2");
+    proxy.searchParams.set("v", "3");
     return proxy.toString();
   }
 
@@ -6942,7 +6946,7 @@
     if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:(?:i\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com|(?:www\.)?dcuguide\.com|multiversohq\.com|www\.midtowncomics\.com|(?:i\.)?ibb\.co|image\.keycollectorcomics\.com|comicvine\.gamespot\.com|static\.pulps\.fr)\//i.test(source)) return proxiedImageUrl(source);
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
-    proxy.searchParams.set("v", "2");
+    proxy.searchParams.set("v", "3");
     return proxy.toString();
   }
 
@@ -10181,6 +10185,7 @@
   async function runCoverVariantsBot(button, overlay, selectedItems = null) {
     button.disabled = true;
     const sourceItems = Array.isArray(selectedItems) && selectedItems.length ? selectedItems : state.db.library;
+    const isTargetedRescan = Array.isArray(selectedItems) && selectedItems.length > 0;
     const items = sourceItems.map(item => ({ id: item.id, title: item.title, seriesTitle: item.seriesTitle, originalTitle: item.originalTitle, seriesId: item.seriesId, issue: item.issue, publisher: item.publisher, coverUrl: item.coverUrl }));
     // The Edge Function scans the complete payload. Keep the payload small
     // enough for slow image sources while ensuring every catalog item is sent.
@@ -10189,9 +10194,9 @@
     try {
       for (let offset = 0; offset < items.length; offset += batchSize) {
         const result = await sb.functions.invoke("cover-variants-bot", { body: { items: items.slice(offset, offset + batchSize) } });
-        if (result.error) {
-          let detail = result.error.message || "Erro ao executar o bot de capas.";
-          try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
+        if (result.error || result.data?.error) {
+          let detail = result.data?.error || result.error?.message || "Erro ao executar o bot de capas.";
+          try { const body = await result.error?.context?.json?.(); if (body?.error) detail = body.error; } catch {}
           throw new Error(detail);
         }
         candidates += Number(result.data?.candidates || 0);
@@ -10203,8 +10208,11 @@
     button.disabled = false;
     await loadStaffActivities();
     overlay?.remove();
+    if (isTargetedRescan) state.coverVariantReviewTab = "pending";
     openCoverVariantsReviewPopup();
-    toast(`${candidates} capa(s) candidata(s) encontrada(s).`);
+    toast(isTargetedRescan
+      ? `${candidates} nova(s) capa(s) candidata(s) encontrada(s). Veja a aba Pendentes.`
+      : `${candidates} capa(s) candidata(s) encontrada(s).`);
   }
 
   function openCoverVariantsReviewPopup() {
@@ -10652,7 +10660,6 @@
         if (result.error.code === "23505" || /duplicate|unique/i.test(result.error.message || "")) return toast("Já existe outro relato pendente para esta edição e usuário.");
         return toast(result.error.message || "Não foi possível atualizar o relato.");
       }
-      if (button.dataset.reportStatus === "resolved") state.fileReportsTab = "resolved";
       await loadStaffActivities();
       openFileReportsPopup();
     });

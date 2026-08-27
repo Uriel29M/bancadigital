@@ -28,14 +28,22 @@ Deno.serve(async request => {
     const upstream = await fetch(source, {
       headers: {
         Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Encoding": "identity",
         "User-Agent": "Mozilla/5.0 (compatible; BancaDigitalImageProxy/1.0)",
       },
     });
-    if (!upstream.ok || !upstream.body) return errorResponse(`Imgur respondeu HTTP ${upstream.status}.`, 502);
+    if (!upstream.ok || !upstream.body) return errorResponse(`A fonte respondeu HTTP ${upstream.status}.`, 502);
+    // Bufferizar evita que a conexão HTTP/3 do Edge Function seja encerrada
+    // no meio do stream, o que aparece no Chrome como ERR_QUIC_PROTOCOL_ERROR.
+    const body = await upstream.arrayBuffer();
+    if (!body.byteLength) return errorResponse("A fonte devolveu uma imagem vazia.", 502);
     const headers = new Headers(corsHeaders);
     headers.set("Content-Type", upstream.headers.get("content-type") || "image/jpeg");
+    headers.set("Content-Length", String(body.byteLength));
+    headers.set("Content-Disposition", "inline");
+    headers.set("X-Content-Type-Options", "nosniff");
     headers.set("Cache-Control", "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400");
-    return new Response(upstream.body, { status: 200, headers });
+    return new Response(body, { status: 200, headers });
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : "Falha ao acessar a imagem.", 502);
   }
