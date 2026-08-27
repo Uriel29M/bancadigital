@@ -43,6 +43,12 @@ drop policy if exists "admins view series link sources" on public.series_link_so
 create policy "admins view series link sources" on public.series_link_sources
   for select to authenticated using (public.is_admin());
 
+drop policy if exists "admins manage series link sources" on public.series_link_sources;
+create policy "admins manage series link sources" on public.series_link_sources
+  for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
 drop policy if exists "staff view series link discoveries" on public.series_link_discoveries;
 drop policy if exists "admins view series link discoveries" on public.series_link_discoveries;
 drop policy if exists "admins review series link discoveries" on public.series_link_discoveries;
@@ -57,3 +63,7 @@ create policy "admins review series link discoveries" on public.series_link_disc
 insert into public.series_link_sources (series_id, source_url, provider)
 values ('series-shazam-2023', 'https://hqs-soquadrinhos.blogspot.com/2023/05/shazam-2023.html', 'blogspot')
 on conflict (series_id, source_url) do update set provider = excluded.provider, enabled = true, updated_at = now();
+
+grant select, insert, update, delete on public.series_link_sources to authenticated;
+grant usage, select on sequence public.series_link_sources_id_seq to authenticated;
+grant select, update on public.series_link_discoveries to authenticated;

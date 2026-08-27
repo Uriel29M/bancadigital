@@ -105,10 +105,12 @@ async function expandMediafireFileUrl(url: URL) {
 }
 
 function extractCoverUrl(anchorHtml: string, sourceUrl: string) {
-  const image = anchorHtml.match(/<img\b[^>]*\b(?:data-src|data-original|src)=["']([^"']+)["']/i);
+  const image = anchorHtml.match(/<img\b[^>]*\b(?:data-lazy-src|data-src|data-original|src)=["']([^"']+)["']/i)
+    || anchorHtml.match(/<img\b[^>]*\bsrcset=["']([^"']+)["']/i);
   if (!image?.[1]) return "";
   try {
-    const url = new URL(image[1].replace(/&amp;/gi, "&"), sourceUrl);
+    const raw = image[1].split(",")[0].trim().split(/\s+/)[0];
+    const url = new URL(raw.replace(/&amp;/gi, "&"), sourceUrl);
     return /^https?:$/.test(url.protocol) && !/(?:mediafire\.com|mega\.nz)$/i.test(url.hostname) ? url.href : "";
   } catch { return ""; }
 }

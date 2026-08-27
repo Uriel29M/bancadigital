@@ -9793,7 +9793,7 @@ window.DEFAULT_LIBRARY = [
     "name": "Stargirl",
     "originalTitle": "Stargirl: The Lost Children",
     "type": "comic",
-    "coverUrl": "https://static.dc.com/dc/files/default_images/SGTLC_Cv1_00111_DIGITAL_635b18d4d6d074.15503217.jpg",
+    "coverUrl": "https://dcuguide.com/images/d/d6/Stargirl_-_The_Lost_Children_1.png",
     "seriesId": "series-stargirl-lost-children-2022",
     "issue": "1",
     "format": "cbr",

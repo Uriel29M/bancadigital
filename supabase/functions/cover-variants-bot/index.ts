@@ -199,6 +199,7 @@ Deno.serve(async request => {
       const itemId = String(action.metadata?.item_id || "").trim();
       const variantKey = String(action.metadata?.variant_key || "").trim();
       const validTransition = (action.status === "approved" && nextStatus === "rejected") || (action.status === "rejected" && nextStatus === "pending");
+      if (action.status === nextStatus) return json({ ok: true, status: nextStatus, unchanged: true });
       if (!validTransition) return json({ error: "This cover cannot be moved to the selected status" }, 409);
       if (action.status === "approved" && nextStatus === "rejected") {
         const removed = await service.from("comic_cover_variants")

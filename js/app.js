@@ -97,6 +97,10 @@
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
         if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
       }
+      if (["series-stargirl-lost-children-2022-01", "series-stargirl-lost-children-2022-02"].includes(merged.id)) {
+        const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+      }
       if (String(merged.id || "").startsWith("fury-of-firestorm-2026-") && !String(merged.fileUrl || "").endsWith("/file")) {
         merged.fileUrl = `${merged.fileUrl}/file`;
       }
@@ -321,6 +325,7 @@
     staffActivities: [],
     staffPendingCount: 0,
     fileReports: [],
+    seriesLinkSources: [],
     seriesLinkDiscoveries: [],
     seriesLinkMonitorTab: "pending",
     seriesLinkPendingCount: 0,
@@ -2513,12 +2518,15 @@
     state.staffActivities = [];
     state.staffPendingCount = 0;
     if (!sb || state.session?.offline || navigator.onLine === false || !["moderator", "admin"].includes(state.profile?.plan)) return;
-    const [moderation, bots, reports, discoveries] = await Promise.all([
+    const [moderation, bots, reports, discoveries, sources] = await Promise.all([
       sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
       sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
       sb.from("file_reports").select("id, item_id, reporter_id, source, bot_name, item_snapshot, reason, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
       state.profile?.plan === "admin"
         ? sb.from("series_link_discoveries").select("id, source_id, series_id, issue, title, file_url, normalized_url, source_url, status, metadata, reviewed_by, reviewed_at, created_at, updated_at").order("created_at", { ascending: false }).limit(1000)
+        : { data: [], error: null },
+      state.profile?.plan === "admin"
+        ? sb.from("series_link_sources").select("id, series_id, source_url, provider, enabled, last_checked_at, last_error, updated_at").order("series_id").order("source_url")
         : { data: [], error: null }
     ]);
     const rows = moderation.data || [];
@@ -2537,6 +2545,7 @@
     state.fileReports = (reports.data || []).map(row => ({ ...row, reporterName: names.get(row.reporter_id) || "" }));
     state.staffPendingCount = state.fileReports.filter(report => report.status === "pending").length;
     state.seriesLinkDiscoveries = discoveries.data || [];
+    state.seriesLinkSources = sources.data || [];
     state.seriesLinkPendingCount = state.seriesLinkDiscoveries.filter(row => row.status === "pending").length;
   }
 
@@ -10041,6 +10050,66 @@
     return `<div class="notification-tabs series-link-status-tabs">${tabs}</div><div class="staff-activity-list">${cards || `<div class="empty">Nenhuma descoberta ${selectedTab === "pending" ? "pendente" : selectedTab === "approved" ? "aprovada" : "rejeitada"}.</div>`}</div>`;
   }
 
+  function openSeriesLinkSourcesPopup(parentOverlay = null) {
+    if (state.profile?.plan !== "admin") return toast("Apenas administradores podem editar as fontes.");
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    const series = (window.DEFAULT_SERIES || []).slice().sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), "pt-BR"));
+    const sourceRows = () => (state.seriesLinkSources || []).map(source => {
+      const label = series.find(item => item.id === source.series_id)?.name || source.series_id;
+      const checked = source.enabled ? "checked" : "";
+      const status = source.last_error ? `Erro: ${source.last_error}` : source.last_checked_at ? `Última verificação: ${formatCommentDate(source.last_checked_at)}` : "Ainda não verificada";
+      return `<article class="staff-activity-item series-link-source-item"><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(source.source_url)}</small><small>${escapeHTML(status)}</small></div><div class="staff-activity-actions"><label class="checkbox-inline"><input type="checkbox" data-series-source-enabled="${source.id}" ${checked}> Ativa</label><button class="small-btn" data-series-source-edit="${source.id}">Editar</button><button class="small-btn danger" data-series-source-delete="${source.id}">Excluir</button></div></article>`;
+    }).join("") || '<div class="empty">Nenhuma fonte cadastrada.</div>';
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>Fontes das novas edições</h2><div class="section-subtitle">O bot verifica diariamente estas páginas e recomenda links novos para aprovação.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="series-link-source-form"><div class="form-grid"><div class="field"><label>Série</label><select name="seriesId" required>${series.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name || item.id)}</option>`).join("")}</select></div><div class="field"><label>Provedor</label><input name="provider" value="blogspot" maxlength="80"></div></div><div class="field full"><label>URL da página fonte</label><input name="sourceUrl" type="url" required placeholder="https://exemplo.blogspot.com/..." pattern="https://.+"><small class="format-hint">Use a página que contém os links dos arquivos e, se possível, a imagem da capa.</small></div><div class="modal-actions"><button type="submit" class="btn btn-danger">Adicionar fonte</button></div></form><div class="series-link-source-list">${sourceRows()}</div></div>`;
+    $("#modal-root").appendChild(overlay);
+    const close = () => overlay.remove();
+    $("[data-close]", overlay).onclick = close;
+    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
+    const form = $("#series-link-source-form", overlay);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const data = new FormData(form);
+      const sourceUrl = String(data.get("sourceUrl") || "").trim();
+      if (!/^https:\/\/.+/i.test(sourceUrl)) return toast("A fonte precisa começar com https://.");
+      const result = await sb.from("series_link_sources").insert({ series_id: String(data.get("seriesId")), source_url: sourceUrl, provider: String(data.get("provider") || "blogspot").trim() || "blogspot", enabled: true });
+      if (result.error) return toast(result.error.message || "Não foi possível adicionar a fonte.");
+      await loadStaffActivities();
+      overlay.remove();
+      openSeriesLinkSourcesPopup(parentOverlay);
+      toast("Fonte adicionada ao monitoramento diário.");
+    };
+    $$('[data-series-source-enabled]', overlay).forEach(input => input.onchange = async () => {
+      const result = await sb.from("series_link_sources").update({ enabled: input.checked, updated_at: new Date().toISOString() }).eq("id", input.dataset.seriesSourceEnabled);
+      if (result.error) { input.checked = !input.checked; return toast(result.error.message || "Não foi possível atualizar a fonte."); }
+      await loadStaffActivities();
+    });
+    $$('[data-series-source-edit]', overlay).forEach(button => button.onclick = async () => {
+      const source = state.seriesLinkSources.find(item => String(item.id) === String(button.dataset.seriesSourceEdit));
+      if (!source) return;
+      const nextUrl = window.prompt("URL da página fonte", source.source_url);
+      if (nextUrl === null) return;
+      if (!/^https:\/\/.+/i.test(nextUrl.trim())) return toast("A fonte precisa começar com https://.");
+      const nextProvider = window.prompt("Provedor", source.provider || "blogspot");
+      if (nextProvider === null) return;
+      const result = await sb.from("series_link_sources").update({ source_url: nextUrl.trim(), provider: nextProvider.trim() || "blogspot", updated_at: new Date().toISOString() }).eq("id", source.id);
+      if (result.error) return toast(result.error.message || "Não foi possível editar a fonte.");
+      await loadStaffActivities();
+      overlay.remove();
+      openSeriesLinkSourcesPopup(parentOverlay);
+      toast("Fonte atualizada.");
+    });
+    $$('[data-series-source-delete]', overlay).forEach(button => button.onclick = async () => {
+      if (!window.confirm("Excluir esta fonte e as descobertas associadas?")) return;
+      const result = await sb.from("series_link_sources").delete().eq("id", button.dataset.seriesSourceDelete);
+      if (result.error) return toast(result.error.message || "Não foi possível excluir a fonte.");
+      await loadStaffActivities();
+      overlay.remove();
+      openSeriesLinkSourcesPopup(parentOverlay);
+      toast("Fonte removida.");
+    });
+  }
+
   async function approveSeriesLinkDiscovery(row, button, overlay) {
     if (!row || state.profile?.plan !== "admin") return;
     button.disabled = true;
@@ -10051,11 +10120,12 @@
       .filter(item => item.seriesId === row.series_id)
       .sort((a, b) => Number(b.issue) - Number(a.issue))[0];
     const inheritedMetadata = latestEdition ? { ...latestEdition } : { ...series };
+    const discoveredCoverUrl = String(row.metadata?.coverUrl || "").trim();
     const item = existing || {
       ...inheritedMetadata,
       id: `${row.series_id}-${/^\d+$/.test(String(row.issue)) ? String(row.issue).padStart(2, "0") : String(row.issue).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       seriesId: row.series_id,
-      coverUrl: row.metadata?.coverUrl || series.coverUrl || "",
+      coverUrl: discoveredCoverUrl || series.coverUrl || "",
       title: inheritedMetadata.title || series.name || row.title,
       issue: row.issue,
       fileUrl: row.file_url,
@@ -10065,7 +10135,11 @@
       collectionIds: Array.isArray(inheritedMetadata.collectionIds) ? [...inheritedMetadata.collectionIds] : [],
     };
     const previousFileUrl = existing?.fileUrl;
-    if (existing) existing.fileUrl = row.file_url;
+    const previousCoverUrl = existing?.coverUrl;
+    if (existing) {
+      existing.fileUrl = row.file_url;
+      if (discoveredCoverUrl) existing.coverUrl = discoveredCoverUrl;
+    }
     else state.db.library = [...state.db.library, { ...item, fileUrl: row.file_url }];
     try {
       save();
@@ -10083,7 +10157,7 @@
       toast(existing ? "Link da edição atualizado e catálogo publicado." : "Nova edição aprovada e catálogo publicado.");
     } catch (error) {
       state.db.library = previousLibrary;
-      if (existing) existing.fileUrl = previousFileUrl;
+      if (existing) { existing.fileUrl = previousFileUrl; existing.coverUrl = previousCoverUrl; }
       save();
       button.disabled = false;
       toast(error.message || "Não foi possível aprovar a descoberta.");
@@ -10097,12 +10171,13 @@
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const tab = state.seriesLinkMonitorTab || "pending";
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>🔎 Novas edições</h2><div class="section-subtitle">Descobertas nas páginas fonte das séries, separadas do verificador de links.</div></div><div class="cover-variants-review-actions"><button class="small-btn danger" data-series-link-scan>Verificar agora</button><button class="small-btn" data-close>Fechar</button></div></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">🔎 Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes</button></div>${renderSeriesLinkDiscoveries()}</div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>🔎 Novas edições</h2><div class="section-subtitle">Descobertas nas páginas fonte das séries, separadas do verificador de links.</div></div><div class="cover-variants-review-actions"><button class="small-btn" data-series-link-sources>Editar fontes</button><button class="small-btn danger" data-series-link-scan>Verificar agora</button><button class="small-btn" data-close>Fechar</button></div></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">🔎 Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes</button></div>${renderSeriesLinkDiscoveries()}</div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $("[data-notification-tab]", overlay).onclick = () => { overlay.remove(); openNotificationsPopup("staff"); };
     $("[data-open-cover-variants]", overlay).onclick = () => openCoverVariantsReviewPopup();
+    $("[data-series-link-sources]", overlay).onclick = () => openSeriesLinkSourcesPopup(overlay);
     $("[data-series-link-scan]", overlay).onclick = async event => {
       const button = event.currentTarget;
       button.disabled = true;
@@ -10422,6 +10497,12 @@
         button.disabled = true;
         const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "change_review_status", action_id: actionId, status: nextStatus } });
         if (result.error) {
+          if (result.error.status === 409) {
+            overlay.remove();
+            await loadStaffActivities();
+            openCoverVariantsReviewPopup();
+            return toast("Essa candidatura já foi atualizada. A lista foi sincronizada.");
+          }
           button.disabled = false;
           return toast(result.error.message || "Não foi possível alterar a decisão.");
         }
