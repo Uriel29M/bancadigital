@@ -10047,7 +10047,23 @@
     const series = (window.DEFAULT_SERIES || []).find(entry => entry.id === row.series_id) || {};
     const existing = state.db.library.find(item => item.seriesId === row.series_id && String(item.issue).trim() === String(row.issue).trim());
     const previousLibrary = state.db.library;
-    const item = existing || { id: `${row.series_id}-${/^\d+$/.test(String(row.issue)) ? String(row.issue).padStart(2, "0") : String(row.issue).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, seriesId: row.series_id, title: series.name || row.title, issue: row.issue, format: "cbr", coverUrl: series.coverUrl || "", clicks: 0, featured: true, randomWeight: 5, collectionIds: [] };
+    const latestEdition = state.db.library
+      .filter(item => item.seriesId === row.series_id)
+      .sort((a, b) => Number(b.issue) - Number(a.issue))[0];
+    const inheritedMetadata = latestEdition ? { ...latestEdition } : { ...series };
+    const item = existing || {
+      ...inheritedMetadata,
+      id: `${row.series_id}-${/^\d+$/.test(String(row.issue)) ? String(row.issue).padStart(2, "0") : String(row.issue).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      seriesId: row.series_id,
+      coverUrl: row.metadata?.coverUrl || series.coverUrl || "",
+      title: inheritedMetadata.title || series.name || row.title,
+      issue: row.issue,
+      fileUrl: row.file_url,
+      clicks: 0,
+      featured: true,
+      randomWeight: inheritedMetadata.randomWeight ?? 5,
+      collectionIds: Array.isArray(inheritedMetadata.collectionIds) ? [...inheritedMetadata.collectionIds] : [],
+    };
     const previousFileUrl = existing?.fileUrl;
     if (existing) existing.fileUrl = row.file_url;
     else state.db.library = [...state.db.library, { ...item, fileUrl: row.file_url }];
@@ -10168,21 +10184,27 @@
       const catalogItem = state.db.library.find(entry => String(entry.id) === String(item.metadata?.item_id));
       const itemId = String(item.metadata?.item_id || "");
       const candidateCreator = creatorKey(item.metadata?.creator || item.metadata?.label);
+      const isRecalledBanner = item.metadata?.recalled_from_banner === true;
       if (status !== "pending") return Boolean(url && candidateCreator);
-      if (!candidateCreator || knownCreators.has(`${itemId}:${candidateCreator}`)) return false;
+      if (!candidateCreator || (!isRecalledBanner && knownCreators.has(`${itemId}:${candidateCreator}`))) return false;
       const imageKeys = value => { let key = String(value || "").trim().split(/[?#]/, 1)[0]; try { key = decodeURIComponent(key); } catch {} key = key.replace(/\/Special:FilePath\//i, "/images/").replace(/\/images\/thumb\/([^/]+\/[^/]+)\/[^/]+\/(?:\d+px-)?(.+)$/i, "/images/$1/$2").toLowerCase(); const file = (key.split("/").pop() || "").replace(/^\d+px[-_]/i, "").replace(/[^a-z0-9]+/gi, ""); return file ? [key, `file:${file}`] : [key]; };
       const keys = imageKeys(url);
       const primaryKeys = imageKeys(catalogItem?.coverUrl);
       const storedKeys = (state.coverVariants.get(String(item.metadata?.item_id)) || []).flatMap(variant => imageKeys(variant.cover_url));
-      if (!url || keys.some(key => primaryKeys.includes(key) || storedKeys.includes(key) || seen.has(`${itemId}:${key}`))) return false;
-      if (seen.has(`${itemId}:creator:${candidateCreator}`)) return false;
-      keys.forEach(key => seen.add(`${itemId}:${key}`));
-      seen.add(`${itemId}:creator:${candidateCreator}`);
+      if (!url || (!isRecalledBanner && keys.some(key => primaryKeys.includes(key) || storedKeys.includes(key) || seen.has(`${itemId}:${key}`)))) return false;
+      if (!isRecalledBanner && seen.has(`${itemId}:creator:${candidateCreator}`)) return false;
+      if (!isRecalledBanner) {
+        keys.forEach(key => seen.add(`${itemId}:${key}`));
+        seen.add(`${itemId}:creator:${candidateCreator}`);
+      }
       return true;
     });
   }
 
   async function runCoverVariantsBot(button, overlay, selectedItems = null) {
+    if (button?.dataset?.repescarBannerId || button?.dataset?.repescarBanner) {
+      return toast("Use a recuperação do banner para devolvê-lo aos pendentes.");
+    }
     button.disabled = true;
     const sourceItems = Array.isArray(selectedItems) && selectedItems.length ? selectedItems : state.db.library;
     const isTargetedRescan = Array.isArray(selectedItems) && selectedItems.length > 0;
@@ -10193,7 +10215,7 @@
     let candidates = 0;
     try {
       for (let offset = 0; offset < items.length; offset += batchSize) {
-        const result = await sb.functions.invoke("cover-variants-bot", { body: { items: items.slice(offset, offset + batchSize) } });
+        const result = await sb.functions.invoke("cover-variants-bot", { body: { items: items.slice(offset, offset + batchSize), rescan: isTargetedRescan } });
         if (result.error || result.data?.error) {
           let detail = result.data?.error || result.error?.message || "Erro ao executar o bot de capas.";
           try { const body = await result.error?.context?.json?.(); if (body?.error) detail = body.error; } catch {}
@@ -10262,8 +10284,7 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "small-btn";
-        button.dataset.repescarBanner = String(banner?.item_id || "");
-        button.dataset.repescarBannerSeries = String(banner?.series_id || "");
+        button.dataset.repescarBannerId = String(banner?.id || "");
         button.textContent = "Repescar";
         actions.appendChild(button);
         card.querySelector(".cover-variant-review-copy")?.appendChild(actions);
@@ -10311,16 +10332,27 @@
       });
     });
     $('[data-run-cover-variants-bot]', overlay)?.addEventListener("click", event => runCoverVariantsBot(event.currentTarget, overlay));
-    $$('[data-repescar-banner]', overlay).forEach(button => button.addEventListener("click", () => {
-      const legacyItemIds = {
-        "war-earth-3-2022-001": "war-earth-3-2022-01",
-        "war-earth-3-2022-002": "war-earth-3-2022-02"
-      };
-      const itemId = legacyItemIds[button.dataset.repescarBanner] || button.dataset.repescarBanner;
-      const item = state.db.library.find(entry => String(entry.id) === String(itemId))
-        || state.db.library.find(entry => String(entry.seriesId) === String(button.dataset.repescarBannerSeries));
-      if (!item) return toast("A edição deste banner não está no catálogo atual.");
-      runCoverVariantsBot(button, overlay, [item]);
+    $$('[data-repescar-banner-id], [data-repescar-banner]', overlay).forEach(button => button.addEventListener("click", async () => {
+      const legacyBanner = (state.homepageBanners || []).find(banner =>
+        String(banner.item_id) === String(button.dataset.repescarBanner) &&
+        (!button.dataset.repescarBannerSeries || String(banner.series_id) === String(button.dataset.repescarBannerSeries))
+      );
+      const bannerId = Number(button.dataset.repescarBannerId || legacyBanner?.id);
+      if (!Number.isInteger(bannerId) || bannerId < 1) return toast("Banner inválido.");
+      button.disabled = true;
+      const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "recall_banner", banner_id: bannerId } });
+      if (result.error) {
+        button.disabled = false;
+        let detail = result.error.message || "Não foi possível repescar o banner.";
+        try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
+        return toast(detail);
+      }
+      state.coverVariantReviewTab = "pending";
+      await loadHomepageBanners();
+      await loadStaffActivities();
+      overlay.remove();
+      openCoverVariantsReviewPopup();
+      toast("Banner repescado para Pendentes.");
     }));
     $("#manual-cover-variant-form", overlay)?.addEventListener("submit", async event => {
       event.preventDefault();
@@ -12257,7 +12289,6 @@
           <button class="small-btn" data-cover-variants>Capas variantes</button>
           <button class="small-btn" data-export>Exportar catálogo</button>
           <button class="small-btn" data-import>Importar catálogo</button>
-          <button class="small-btn" data-reset>Restaurar exemplo</button>
         </div>
 
         <table class="admin-table">
@@ -12283,10 +12314,6 @@
     $("[data-new]", overlay).onclick = () => { overlay.remove(); openEditForm(); };
     $("[data-export]", overlay).onclick = exportDB;
     $("[data-import]", overlay).onclick = importDB;
-    $("[data-reset]", overlay).onclick = () => {
-      state.db = {library:structuredClone(window.DEFAULT_LIBRARY), collections:structuredClone(window.DEFAULT_COLLECTIONS), submissions:[], removedItemIds:[]};
-      save(); overlay.remove(); render(); toast("Catálogo restaurado.");
-    };
     $$("[data-edit]", overlay).forEach(b => b.onclick = () => { overlay.remove(); openEditForm(b.dataset.edit); });
     $$("[data-delete]", overlay).forEach(b => b.onclick = () => {
       const itemId = b.dataset.delete;
@@ -12516,7 +12543,7 @@
         <div class="notice"><b>Oneshots e séries</b><br>Deixe o campo Série vazio para abrir uma edição diretamente. Use o mesmo nome de série em várias edições para criar a seleção de volumes.</div>
         <div class="admin-actions" style="margin-bottom:15px">
           <button class="btn btn-danger" data-new>+ Nova edição</button><button class="small-btn" data-new-collection>+ Criar coleção</button><button class="small-btn" data-achievements>Títulos</button><button class="small-btn" data-account-plan>Tipo de conta</button>
-          <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button><button class="small-btn" data-reset>Restaurar exemplo</button>
+          <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
         </div>
         <table class="admin-table"><thead><tr><th>Série / edição</th><th>Editora</th><th>Selo</th><th>Personagem</th><th>Ano</th><th>Ações</th></tr></thead><tbody>
           ${state.db.library.map(x => `<tr><td><b>${escapeHTML(x.seriesTitle || x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue || (x.seriesId ? "Edição" : "Oneshot"))}</span></td><td>${escapeHTML(x.publisher || "—")}</td><td>${escapeHTML(x.imprint || "—")}</td><td>${escapeHTML(x.character || "—")}</td><td>${escapeHTML(String(x.year || "—"))}</td><td><div class="admin-actions"><button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button><button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button></div></td></tr>`).join("")}
@@ -12575,7 +12602,6 @@
     $("[data-achievements]", overlay).onclick = () => { overlay.remove(); openAchievementAdmin(); };
     $("[data-account-plan]", overlay).onclick = () => { overlay.remove(); openAccountPlanAdmin(); };
     $("[data-export]", overlay).onclick = exportDB; $("[data-import]", overlay).onclick = importDB;
-    $("[data-reset]", overlay).onclick = () => { state.db = { library: structuredClone(window.DEFAULT_LIBRARY), collections: structuredClone(window.DEFAULT_COLLECTIONS), submissions: [] }; saveCatalog("Catálogo restaurado."); overlay.remove(); render(); };
     $$('[data-edit]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openEditForm(button.dataset.edit); });
     $$('[data-delete]', overlay).forEach(button => button.onclick = () => { state.db.library = state.db.library.filter(x => x.id !== button.dataset.delete); state.db.collections.forEach(c => c.issueIds = c.issueIds.filter(id => id !== button.dataset.delete)); saveCatalog("Edição excluída."); overlay.remove(); render(); openAdmin(); });
     $$('[data-delete-collection]', overlay).forEach(button => button.onclick = () => { state.db.collections = state.db.collections.filter(c => c.id !== button.dataset.deleteCollection); saveCatalog("Coleção excluída."); overlay.remove(); openAdmin(); });

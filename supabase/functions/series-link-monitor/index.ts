@@ -41,20 +41,94 @@ function issueFromFilename(value: string) {
   return padded?.[1] ? String(Number(padded[1])) : null;
 }
 
-function extractLinks(html: string, sourceUrl: string) {
-  const found = new Map<string, { fileUrl: string; issue: string | null; anchor: string }>();
+function isMediafire(url: URL) {
+  return /(?:^|\.)mediafire\.com$/i.test(url.hostname);
+}
+
+function isShortMediafireFileUrl(url: URL) {
+  return isMediafire(url) && /^\/file\/[^/]+\/?$/i.test(url.pathname);
+}
+
+function decodeHtmlAttribute(value: string) {
+  return String(value || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x2f;/gi, "/")
+    .replace(/&#x3a;/gi, ":");
+}
+
+function mediafireCanonicalUrl(html: string, pageUrl: URL) {
+  const fileId = pageUrl.pathname.match(/^\/file\/([^/]+)/i)?.[1]?.toLowerCase();
+  if (!fileId) return null;
+  const candidates: string[] = [];
+  for (const match of html.matchAll(/<(?:link|meta)\b[^>]*>/gi)) {
+    const tag = match[0];
+    const rel = tag.match(/\brel=["']([^"']+)["']/i)?.[1] || "";
+    const property = tag.match(/\b(?:property|name)=["']([^"']+)["']/i)?.[1] || "";
+    const value = /canonical/i.test(rel) ? tag.match(/\bhref=["']([^"']+)["']/i)?.[1]
+      : /^(?:og:url|twitter:url)$/i.test(property) ? tag.match(/\bcontent=["']([^"']+)["']/i)?.[1]
+      : null;
+    if (value) candidates.push(decodeHtmlAttribute(value));
+  }
+  for (const match of html.matchAll(/https?:\/\/(?:www\.)?mediafire\.com\/file\/[^\s"'<>]+/gi)) {
+    candidates.push(decodeHtmlAttribute(match[0]));
+  }
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate, pageUrl);
+      const candidateId = url.pathname.match(/^\/file\/([^/]+)/i)?.[1]?.toLowerCase();
+      if (isMediafire(url) && candidateId === fileId && url.pathname.split("/").filter(Boolean).length >= 3) {
+        return url.href;
+      }
+    } catch { /* metadata inválida */ }
+  }
+  return null;
+}
+
+function mediafireIdentity(value: string) {
+  try {
+    const url = new URL(value);
+    return isMediafire(url) ? url.pathname.match(/^\/file\/([^/]+)/i)?.[1]?.toLowerCase() || null : null;
+  } catch { return null; }
+}
+
+async function expandMediafireFileUrl(url: URL) {
+  if (!isShortMediafireFileUrl(url)) return url.href;
+  try {
+    const response = await fetchWithTimeout(url.href, 10000);
+    if (!response.ok) return url.href;
+    return mediafireCanonicalUrl(await response.text(), url) || url.href;
+  } catch {
+    return url.href;
+  }
+}
+
+function extractCoverUrl(anchorHtml: string, sourceUrl: string) {
+  const image = anchorHtml.match(/<img\b[^>]*\b(?:data-src|data-original|src)=["']([^"']+)["']/i);
+  if (!image?.[1]) return "";
+  try {
+    const url = new URL(image[1].replace(/&amp;/gi, "&"), sourceUrl);
+    return /^https?:$/.test(url.protocol) && !/(?:mediafire\.com|mega\.nz)$/i.test(url.hostname) ? url.href : "";
+  } catch { return ""; }
+}
+
+async function extractLinks(html: string, sourceUrl: string) {
+  const found = new Map<string, { fileUrl: string; issue: string | null; anchor: string; coverUrl: string }>();
   const anchors = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(anchors)) {
     const raw = match[1].replace(/&amp;/g, "&");
     let url: URL;
     try { url = new URL(raw, sourceUrl); } catch { continue; }
     if (!/^https?:$/.test(url.protocol) || !/(?:mediafire\.com|mega\.nz)$/i.test(url.hostname)) continue;
+    if (isShortMediafireFileUrl(url)) url = new URL(await expandMediafireFileUrl(url));
     const fileUrl = normalizeUrl(url.href);
     if (!fileUrl) continue;
+    const coverUrl = extractCoverUrl(match[0], sourceUrl);
     const anchor = String(match[2]).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     const context = `${anchor} ${match[0]} ${url.pathname} ${url.search}`;
     const issue = issueFromFilename(url.pathname) || issueFromText(context);
-    found.set(fileUrl, { fileUrl, issue, anchor });
+    found.set(fileUrl, { fileUrl, issue, anchor, coverUrl });
   }
   return [...found.values()];
 }
@@ -119,7 +193,7 @@ async function scan(service: ReturnType<typeof createClient>) {
       const response = await fetchWithTimeout(source.source_url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const html = await response.text();
-      const links = extractLinks(html, source.source_url);
+      const links = await extractLinks(html, source.source_url);
       sourceLinks += links.length;
       numberedLinks += links.filter(link => Boolean(link.issue)).length;
       unidentifiedLinks += links.filter(link => !link.issue).length;
@@ -135,7 +209,20 @@ async function scan(service: ReturnType<typeof createClient>) {
         if (!normalized || !link.issue || isKnown(link.fileUrl, normalized)) continue;
         const existing = await service.from("series_link_discoveries").select("id").eq("source_id", source.id).eq("normalized_url", normalized).maybeSingle();
         if (existing.data?.id) continue;
-        const inserted = await service.from("series_link_discoveries").insert({ source_id: source.id, series_id: source.series_id, issue: link.issue, title: `Edição ${link.issue}`, file_url: link.fileUrl, normalized_url: normalized, source_url: source.source_url, metadata: { provider: source.provider, anchor: link.anchor } });
+        const identity = mediafireIdentity(link.fileUrl);
+        if (identity) {
+          const previous = await service.from("series_link_discoveries").select("id, file_url, normalized_url").eq("source_id", source.id);
+          if (previous.error) throw previous.error;
+          const matching = (previous.data || []).find(row => mediafireIdentity(row.file_url) === identity);
+          if (matching?.id) {
+            if (matching.normalized_url !== normalized) {
+              const updated = await service.from("series_link_discoveries").update({ file_url: link.fileUrl, normalized_url: normalized, updated_at: new Date().toISOString() }).eq("id", matching.id);
+              if (updated.error) throw updated.error;
+            }
+            continue;
+          }
+        }
+        const inserted = await service.from("series_link_discoveries").insert({ source_id: source.id, series_id: source.series_id, issue: link.issue, title: `Edição ${link.issue}`, file_url: link.fileUrl, normalized_url: normalized, source_url: source.source_url, metadata: { provider: source.provider, anchor: link.anchor, coverUrl: link.coverUrl } });
         if (inserted.error) throw inserted.error;
         discovered++;
       }

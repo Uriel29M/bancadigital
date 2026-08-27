@@ -159,6 +159,7 @@ Deno.serve(async request => {
 
     const service = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVICE_ROLE_KEY"));
     const payload = await request.json().catch(() => ({}));
+    const isTargetedRescan = payload.rescan === true;
     if (payload.action === "remove_bot_variants") {
       const itemId = String(payload.item_id || "").trim();
       if (!itemId) return json({ error: "Send item_id to remove bot variants" }, 400);
@@ -245,6 +246,43 @@ Deno.serve(async request => {
       if (inserted.error) throw inserted.error;
       await service.from("bot_actions").update({ status: "approved", reviewed_by: user.id, reviewed_at: new Date().toISOString() }).eq("id", actionId);
       return json({ ok: true, inserted: Boolean(inserted.data) });
+    }
+    if (payload.action === "recall_banner") {
+      const bannerId = Number(payload.banner_id);
+      if (!Number.isInteger(bannerId) || bannerId < 1) return json({ error: "Invalid banner" }, 400);
+      const bannerResult = await service.from("homepage_banners")
+        .select("id, item_id, banner_key")
+        .eq("id", bannerId)
+        .maybeSingle();
+      if (bannerResult.error) throw bannerResult.error;
+      const banner = bannerResult.data;
+      if (!banner) return json({ error: "Banner not found" }, 404);
+
+      const actionResult = await service.from("bot_actions")
+        .select("id, status, metadata")
+        .eq("bot_name", "cover-variants-bot")
+        .eq("action", "cover_variant_candidate")
+        .eq("status", "approved")
+        .eq("metadata->>item_id", String(banner.item_id))
+        .eq("metadata->>variant_key", String(banner.banner_key))
+        .order("reviewed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (actionResult.error) throw actionResult.error;
+      if (!actionResult.data) return json({ error: "A candidatura original deste banner não foi encontrada" }, 404);
+
+      const removed = await service.from("homepage_banners").delete().eq("id", bannerId).select("id");
+      if (removed.error) throw removed.error;
+      const updated = await service.from("bot_actions")
+        .update({
+          status: "pending",
+          reviewed_by: null,
+          reviewed_at: null,
+          metadata: { ...(actionResult.data.metadata || {}), recalled_from_banner: true }
+        })
+        .eq("id", actionResult.data.id);
+      if (updated.error) throw updated.error;
+      return json({ ok: true, action_id: actionResult.data.id });
     }
     if (payload.action === "approve_variant") {
       const actionId = Number(payload.action_id);
@@ -365,7 +403,10 @@ Deno.serve(async request => {
           if (source.name.toLowerCase().includes("dcu guide") && !/cover[_%20-]*[b-z]/i.test(new URL(coverUrl).pathname)) continue;
           const label = image.label || `${source.name} · Capa variante`;
           const candidateCreator = creatorKey(label);
-          if (!candidateCreator || knownCreators.has(`${item.id}:${candidateCreator}`)) continue;
+          // A targeted rescan must be able to find another cover by the same
+          // artist. Image identities are still checked below, so duplicates
+          // already present in the catalog remain excluded.
+          if (!candidateCreator || (!isTargetedRescan && knownCreators.has(`${item.id}:${candidateCreator}`))) continue;
           const checked = await verifyImage(coverUrl);
           if (!checked.ok) continue;
           const imageIdentity = imageKeys(coverUrl).map(key => `${item.id}:${key}`);
