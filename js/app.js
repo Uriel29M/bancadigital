@@ -17,6 +17,9 @@
   ];
   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
+  // Consolida entradas repetidas quando catálogos sobrepostos são carregados.
+  window.DEFAULT_SERIES = [...new Map((window.DEFAULT_SERIES || []).map(series => [series.id, series])).values()];
+  window.DEFAULT_LIBRARY = [...new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item])).values()];
   // Fonte única das vantagens exibidas no banner de Lenda. Ao adicionar uma
   // nova vantagem ao produto, inclua-a aqui para atualizar o banner também.
   const LEGENDARY_BENEFITS = [
@@ -3870,12 +3873,20 @@
   function seriesEditions(item) {
     if (!item?.seriesId) return [];
     const current = state.db.library.filter(x => x.seriesId === item.seriesId);
+    const uniqueCurrent = [...new Map(current.map(entry => [entry.id, entry])).values()];
+    if (uniqueCurrent.length !== current.length) {
+      state.db.library = [
+        ...state.db.library.filter(entry => entry.seriesId !== item.seriesId),
+        ...uniqueCurrent
+      ];
+      DataStore.save(state.db);
+    }
     if (item.seriesId === "series-shazam-2023") {
       const defaults = (window.DEFAULT_LIBRARY || []).filter(entry => entry.seriesId === item.seriesId);
-      const currentById = new Map(current.map(entry => [entry.id, entry]));
+      const currentById = new Map(uniqueCurrent.map(entry => [entry.id, entry]));
       const reconciled = defaults.map(entry => ({ ...structuredClone(entry), ...(currentById.get(entry.id) || {}) }));
-      const extras = current.filter(entry => !defaults.some(defaultEntry => defaultEntry.id === entry.id));
-      if (reconciled.length !== current.length || reconciled.some((entry, index) => entry.id !== current[index]?.id)) {
+      const extras = uniqueCurrent.filter(entry => !defaults.some(defaultEntry => defaultEntry.id === entry.id));
+      if (reconciled.length !== uniqueCurrent.length || reconciled.some((entry, index) => entry.id !== uniqueCurrent[index]?.id)) {
         state.db.library = [
           ...state.db.library.filter(entry => entry.seriesId !== item.seriesId),
           ...reconciled,
@@ -3885,7 +3896,7 @@
       }
       return [...reconciled, ...extras].sort((a, b) => issueSortValue(a) - issueSortValue(b));
     }
-    return current
+    return uniqueCurrent
       .sort((a, b) => issueSortValue(a) - issueSortValue(b));
   }
 
@@ -4965,8 +4976,15 @@
     return /^.+\.[a-z0-9]{1,8}$/i.test(filename) ? filename.split(".").pop().toLowerCase() : "";
   }
 
+  function readerLoadingTipMarkup() {
+    const tips = Array.isArray(window.READER_LOADING_TIPS) ? window.READER_LOADING_TIPS : [];
+    if (!tips.length) return "";
+    const tip = tips[Math.floor(Math.random() * tips.length)];
+    return `<aside class="reader-loading-tip"><span class="reader-loading-tip-text">${escapeHTML(tip.text || "")}</span></aside>`;
+  }
+
   async function renderPDFReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
-    body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Carregando PDF…</div><progress class="reader-progress"></progress></div>`;
+    body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Carregando PDF…</div><progress class="reader-progress"></progress>${readerLoadingTipMarkup()}<div class="reader-spinner"></div></div>`;
     try {
       const pdfjs = await (window.pdfjsReady || Promise.resolve(window.pdfjsLib));
       // PDF.js 4.x via module pode não expor global em alguns navegadores.
@@ -4976,7 +4994,7 @@
 
       // Fetch the PDF data manually to have better control over errors.
       // This helps distinguish between "file not found" and "invalid file".
-      body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Abrindo arquivo PDF…</div><progress class="reader-progress"></progress></div>`;
+      body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Abrindo arquivo PDF…</div><progress class="reader-progress"></progress>${readerLoadingTipMarkup()}<div class="reader-spinner"></div></div>`;
       let pdfData;
       let pdfUrl = null;
       if (prefetchedBuffer) {
@@ -5352,6 +5370,7 @@
         progressSpinner = document.createElement("div");
         progressSpinner.className = "reader-spinner";
         progressRoot.append(progressLabel, progressBar, progressDetail, progressSpinner);
+        progressRoot.insertAdjacentHTML("beforeend", readerLoadingTipMarkup());
         body.replaceChildren(progressRoot);
       }
       progressLabel.textContent = message;
@@ -5715,6 +5734,7 @@
         cbrProgressDetail = document.createElement("div");
         cbrProgressDetail.className = "reader-loading-detail";
         cbrProgressRoot.append(cbrProgressLabel, cbrProgressBar, cbrProgressDetail);
+        cbrProgressRoot.insertAdjacentHTML("beforeend", readerLoadingTipMarkup());
         body.replaceChildren(cbrProgressRoot);
       }
       cbrProgressLabel.textContent = message;
@@ -6943,7 +6963,7 @@
     };
     const rawSource = String(url || "").trim();
     const source = legacyCoverUrls[rawSource] || rawSource;
-    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:i\.imgur\.com|(?:www\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com)\//i.test(source)) return source;
+    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:i\.imgur\.com|(?:www\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com|image\.keycollectorcomics\.com)\//i.test(source)) return source;
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
     proxy.searchParams.set("v", "3");
@@ -10055,14 +10075,26 @@
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const series = (window.DEFAULT_SERIES || []).slice().sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), "pt-BR"));
+    const sourceSeries = source => series.find(item => item.id === source.series_id) || {};
+    const filterOptions = (field, emptyLabel) => [...new Set((state.seriesLinkSources || []).map(source => String(sourceSeries(source)[field] ?? "").trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }))
+      .map(value => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join("");
     const sourceRows = () => (state.seriesLinkSources || []).map(source => {
-      const label = series.find(item => item.id === source.series_id)?.name || source.series_id;
+      const metadata = sourceSeries(source);
+      const label = metadata.year ? `${metadata.name || source.series_id} (${metadata.year})` : (metadata.name || source.series_id);
       const checked = source.enabled ? "checked" : "";
       const status = source.last_error ? `Erro: ${source.last_error}` : source.last_checked_at ? `Última verificação: ${formatCommentDate(source.last_checked_at)}` : "Ainda não verificada";
-      return `<article class="staff-activity-item series-link-source-item"><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(source.source_url)}</small><small>${escapeHTML(status)}</small></div><div class="staff-activity-actions"><label class="checkbox-inline"><input type="checkbox" data-series-source-enabled="${source.id}" ${checked}> Ativa</label><button class="small-btn" data-series-source-edit="${source.id}">Editar</button><button class="small-btn danger" data-series-source-delete="${source.id}">Excluir</button></div></article>`;
+      return `<article class="staff-activity-item series-link-source-item" data-source-publisher="${escapeHTML(metadata.publisher || "")}" data-source-imprint="${escapeHTML(metadata.imprint || "")}" data-source-year="${escapeHTML(metadata.year || "")}"><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(source.source_url)}</small><small>${escapeHTML(status)}</small></div><div class="staff-activity-actions"><label class="checkbox-inline"><input type="checkbox" data-series-source-enabled="${source.id}" ${checked}> Ativa</label><button class="small-btn" data-series-source-edit="${source.id}">Editar</button><button class="small-btn danger" data-series-source-delete="${source.id}">Excluir</button></div></article>`;
     }).join("") || '<div class="empty">Nenhuma fonte cadastrada.</div>';
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>Fontes das novas edições</h2><div class="section-subtitle">O bot verifica diariamente estas páginas e recomenda links novos para aprovação.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="series-link-source-form"><div class="form-grid"><div class="field"><label>Série</label><select name="seriesId" required>${series.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name || item.id)}</option>`).join("")}</select></div><div class="field"><label>Provedor</label><input name="provider" value="blogspot" maxlength="80"></div></div><div class="field full"><label>URL da página fonte</label><input name="sourceUrl" type="url" required placeholder="https://exemplo.blogspot.com/..." pattern="https://.+"><small class="format-hint">Use a página que contém os links dos arquivos e, se possível, a imagem da capa.</small></div><div class="modal-actions"><button type="submit" class="btn btn-danger">Adicionar fonte</button></div></form><div class="series-link-source-list">${sourceRows()}</div></div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>Fontes das novas edições</h2><div class="section-subtitle">O bot verifica diariamente estas páginas e recomenda links novos para aprovação.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="series-link-source-form"><div class="form-grid"><div class="field"><label>Série</label><select name="seriesId" required>${series.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name || item.id)}${item.year ? ` (${escapeHTML(item.year)})` : ""}</option>`).join("")}</select></div><div class="field"><label>Provedor</label><input name="provider" value="blogspot" maxlength="80"></div></div><div class="field full"><label>URL da página fonte</label><input name="sourceUrl" type="url" required placeholder="https://exemplo.blogspot.com/..." pattern="https://.+"><small class="format-hint">Use a página que contém os links dos arquivos e, se possível, a imagem da capa.</small></div><div class="modal-actions"><button type="submit" class="btn btn-danger">Adicionar fonte</button></div></form><div class="series-link-source-filters"><div class="field"><label>Editora</label><select data-source-filter="publisher"><option value="">Todas as editoras</option>${filterOptions("publisher")}</select></div><div class="field"><label>Selo</label><select data-source-filter="imprint"><option value="">Todos os selos</option>${filterOptions("imprint")}</select></div><div class="field"><label>Ano</label><select data-source-filter="year"><option value="">Todos os anos</option>${filterOptions("year")}</select></div></div><div class="series-link-source-list">${sourceRows()}</div></div>`;
     $("#modal-root").appendChild(overlay);
+    const applySourceFilters = () => {
+      const filters = Object.fromEntries($$('[data-source-filter]', overlay).map(select => [select.dataset.sourceFilter, select.value]));
+      $$(".series-link-source-item", overlay).forEach(item => {
+        item.hidden = ["publisher", "imprint", "year"].some(field => filters[field] && item.dataset[`source${field[0].toUpperCase()}${field.slice(1)}`] !== filters[field]);
+      });
+    };
+    $$('[data-source-filter]', overlay).forEach(select => select.onchange = applySourceFilters);
     const close = () => overlay.remove();
     $("[data-close]", overlay).onclick = close;
     overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
@@ -10087,12 +10119,12 @@
     $$('[data-series-source-edit]', overlay).forEach(button => button.onclick = async () => {
       const source = state.seriesLinkSources.find(item => String(item.id) === String(button.dataset.seriesSourceEdit));
       if (!source) return;
-      const nextUrl = window.prompt("URL da página fonte", source.source_url);
-      if (nextUrl === null) return;
+      const values = await askSeriesLinkSourceEdit(source);
+      if (!values) return;
+      const nextUrl = values.sourceUrl;
       if (!/^https:\/\/.+/i.test(nextUrl.trim())) return toast("A fonte precisa começar com https://.");
-      const nextProvider = window.prompt("Provedor", source.provider || "blogspot");
-      if (nextProvider === null) return;
-      const result = await sb.from("series_link_sources").update({ source_url: nextUrl.trim(), provider: nextProvider.trim() || "blogspot", updated_at: new Date().toISOString() }).eq("id", source.id);
+      const nextProvider = values.provider;
+      const result = await sb.from("series_link_sources").update({ source_url: nextUrl, provider: nextProvider, updated_at: new Date().toISOString() }).eq("id", source.id);
       if (result.error) return toast(result.error.message || "Não foi possível editar a fonte.");
       await loadStaffActivities();
       overlay.remove();
@@ -10100,13 +10132,49 @@
       toast("Fonte atualizada.");
     });
     $$('[data-series-source-delete]', overlay).forEach(button => button.onclick = async () => {
-      if (!window.confirm("Excluir esta fonte e as descobertas associadas?")) return;
+      const source = state.seriesLinkSources.find(item => String(item.id) === String(button.dataset.seriesSourceDelete));
+      const seriesLabel = source ? (series.find(item => item.id === source.series_id)?.name || source.series_id) : "esta série";
+      const confirmed = await askSeriesLinkSourceDelete(seriesLabel);
+      if (!confirmed) return;
       const result = await sb.from("series_link_sources").delete().eq("id", button.dataset.seriesSourceDelete);
       if (result.error) return toast(result.error.message || "Não foi possível excluir a fonte.");
       await loadStaffActivities();
       overlay.remove();
       openSeriesLinkSourcesPopup(parentOverlay);
       toast("Fonte removida.");
+    });
+  }
+
+  function askSeriesLinkSourceEdit(source) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal series-link-source-edit-modal"><div class="section-head"><div><div class="eyebrow">Administrador</div><h2>Editar fonte</h2><div class="section-subtitle">Atualize a página que o bot deve consultar para esta série.</div></div><button type="button" class="small-btn" data-source-edit-cancel>Cancelar</button></div><form><div class="field full"><label>URL da página fonte</label><input name="sourceUrl" type="url" required pattern="https://.+" value="${escapeHTML(source.source_url || "")}" placeholder="https://exemplo.blogspot.com/..."><small class="format-hint">A URL precisa começar com https://.</small></div><div class="field full"><label>Provedor</label><input name="provider" maxlength="80" value="${escapeHTML(source.provider || "blogspot")}"></div><div class="modal-actions"><button type="button" class="small-btn" data-source-edit-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Salvar alterações</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-source-edit-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("form", overlay).onsubmit = event => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const sourceUrl = String(data.get("sourceUrl") || "").trim();
+        if (!/^https:\/\/.+/i.test(sourceUrl)) return toast("A fonte precisa começar com https://.");
+        finish({ sourceUrl, provider: String(data.get("provider") || "blogspot").trim() || "blogspot" });
+      };
+      $("input[name=sourceUrl]", overlay).focus();
+    });
+  }
+
+  function askSeriesLinkSourceDelete(seriesLabel) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop";
+      overlay.innerHTML = `<div class="modal series-link-source-delete-modal"><div class="section-head"><div><div class="eyebrow">Administrador</div><h2>Excluir fonte?</h2><div class="section-subtitle">A fonte de <strong>${escapeHTML(seriesLabel)}</strong> e todas as descobertas associadas serão excluídas. Essa ação não pode ser desfeita.</div></div><button type="button" class="small-btn" data-source-delete-cancel>Cancelar</button></div><div class="modal-actions"><button type="button" class="small-btn" data-source-delete-cancel>Manter fonte</button><button type="button" class="btn btn-danger" data-source-delete-confirm>Excluir fonte</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-source-delete-cancel]', overlay).forEach(button => button.onclick = () => finish(false));
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+      $('[data-source-delete-confirm]', overlay).onclick = () => finish(true);
     });
   }
 

@@ -33,6 +33,15 @@ function issueFromText(value: string) {
   return match?.[1] ? String(Number(match[1])) : null;
 }
 
+function issueFromAnchor(value: string) {
+  const text = String(value || "");
+  // Never infer an issue from arbitrary URL/HTML digits: Mega keys contain them.
+  const match = text.match(/\b(?:alt|title|data-issue)=["']\s*#?\s*0*(\d{1,3})\s*["']/i)
+    || text.match(/(?:edi[^\s]*|issue|n[^\s]*)[ _.-]*#?\s*0*(\d{1,3})(?!\d)/i)
+    || text.match(/(?:^|\s)#\s*0*(\d{1,3})(?:\s|$)/i);
+  return match?.[1] ? String(Number(match[1])) : null;
+}
+
 function issueFromFilename(value: string) {
   const filename = decodeURIComponent(String(value || "").split("/").pop() || "");
   const seriesPattern = filename.match(/(?:\(|\s|[-_])0*(\d{1,3})-0{2,3}(?:[-_.\s]|$)/i);
@@ -128,8 +137,7 @@ async function extractLinks(html: string, sourceUrl: string) {
     if (!fileUrl) continue;
     const coverUrl = extractCoverUrl(match[0], sourceUrl);
     const anchor = String(match[2]).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const context = `${anchor} ${match[0]} ${url.pathname} ${url.search}`;
-    const issue = issueFromFilename(url.pathname) || issueFromText(context);
+    const issue = issueFromFilename(url.pathname) || issueFromAnchor(`${anchor} ${match[0]}`);
     found.set(fileUrl, { fileUrl, issue, anchor, coverUrl });
   }
   return [...found.values()];
@@ -203,12 +211,28 @@ async function scan(service: ReturnType<typeof createClient>) {
       const sourceIssues = new Set(links.map(link => link.issue).filter(Boolean) as string[]);
       const missing = [...sourceIssues].filter(issue => !catalogIssues.has(issue));
       if (missing.length) missingIssues[source.series_id] = missing.sort((a, b) => Number(a) - Number(b));
+      // Reconcile pending rows created by older, overly permissive extraction.
+      // This removes false recommendations on the next scan without touching
+      // genuine discoveries for issues absent from the catalog.
+      const pending = await service.from("series_link_discoveries").select("id, normalized_url, issue, status").eq("source_id", source.id).eq("status", "pending");
+      if (pending.error) throw pending.error;
+      for (const row of pending.data || []) {
+        const current = links.find(link => normalizeUrl(link.fileUrl) === row.normalized_url);
+        if (!current?.issue) continue;
+        if (catalogIssues.has(current.issue)) {
+          await service.from("series_link_discoveries").update({ status: "rejected", reviewed_by: null, reviewed_at: null, updated_at: new Date().toISOString(), metadata: { autoRejected: true, reason: "alternate-link-for-existing-issue", detectedIssue: current.issue } }).eq("id", row.id).eq("status", "pending");
+        } else if (row.issue !== current.issue) {
+          await service.from("series_link_discoveries").update({ issue: current.issue, title: `Edição ${current.issue}`, updated_at: new Date().toISOString(), metadata: { correctedByMonitor: true, detectedIssue: current.issue } }).eq("id", row.id).eq("status", "pending");
+        }
+      }
       const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
       const hashText = [...new Uint8Array(hash)].map(value => value.toString(16).padStart(2, "0")).join("");
       await service.from("series_link_sources").update({ last_checked_at: new Date().toISOString(), last_content_hash: hashText, last_error: null, updated_at: new Date().toISOString() }).eq("id", source.id);
       for (const link of links) {
         const normalized = normalizeUrl(link.fileUrl);
         if (!normalized || !link.issue || isKnown(link.fileUrl, normalized)) continue;
+        // A different mirror for an existing issue is not a new edition.
+        if (catalogIssues.has(link.issue)) continue;
         const existing = await service.from("series_link_discoveries").select("id").eq("source_id", source.id).eq("normalized_url", normalized).maybeSingle();
         if (existing.data?.id) continue;
         const identity = mediafireIdentity(link.fileUrl);
