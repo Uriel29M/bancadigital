@@ -524,6 +524,7 @@ main { min-height: calc(100vh - 150px); }
 }
 .section-title { margin: 0; font-size: 22px; }
 .section-subtitle { color: var(--muted); font-size: 13px; }
+.homepage-banner-manage { flex: 0 0 auto; }
 .link-btn {
   border: 0;
   background: transparent;

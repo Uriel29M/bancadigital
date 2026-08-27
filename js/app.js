@@ -10255,6 +10255,7 @@
         button.type = "button";
         button.className = "small-btn";
         button.dataset.repescarBanner = String(banner?.item_id || "");
+        button.dataset.repescarBannerSeries = String(banner?.series_id || "");
         button.textContent = "Repescar";
         actions.appendChild(button);
         card.querySelector(".cover-variant-review-copy")?.appendChild(actions);
@@ -10303,7 +10304,13 @@
     });
     $('[data-run-cover-variants-bot]', overlay)?.addEventListener("click", event => runCoverVariantsBot(event.currentTarget, overlay));
     $$('[data-repescar-banner]', overlay).forEach(button => button.addEventListener("click", () => {
-      const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.repescarBanner));
+      const legacyItemIds = {
+        "war-earth-3-2022-001": "war-earth-3-2022-01",
+        "war-earth-3-2022-002": "war-earth-3-2022-02"
+      };
+      const itemId = legacyItemIds[button.dataset.repescarBanner] || button.dataset.repescarBanner;
+      const item = state.db.library.find(entry => String(entry.id) === String(itemId))
+        || state.db.library.find(entry => String(entry.seriesId) === String(button.dataset.repescarBannerSeries));
       if (!item) return toast("A edição deste banner não está no catálogo atual.");
       runCoverVariantsBot(button, overlay, [item]);
     }));
@@ -10460,7 +10467,7 @@
       openFileReportsPopup(overlay);
       return;
     }
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-series-link-monitor>Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-series-link-monitor>Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
     if (staff) {
       const tabs = $(".notification-tabs", overlay);
@@ -11688,6 +11695,21 @@
       const first = state.db.library.find(item => item.seriesId === seriesId);
       if (first) openSeriesSelection(first, seriesEditions(first));
     };
+    const editorialBannerSection = $(".homepage-banner-section");
+    if (editorialBannerSection && state.profile?.plan === "admin" && !$("[data-open-homepage-banners]", editorialBannerSection)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "small-btn homepage-banner-manage";
+      button.dataset.openHomepageBanners = "true";
+      button.textContent = "Escolher banner da semana";
+      button.addEventListener("click", event => {
+        event.stopPropagation();
+        if (state.profile?.plan !== "admin") return toast("Apenas administradores podem escolher o banner da semana.");
+        state.coverVariantReviewTab = "banners";
+        openCoverVariantsReviewPopup();
+      });
+      $(".section-head", editorialBannerSection)?.appendChild(button);
+    }
     $$('[data-home-banner-series]').forEach(button => button.addEventListener("click", () => openSeriesById(button.dataset.homeBannerSeries)));
     $$('[data-view-series]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
