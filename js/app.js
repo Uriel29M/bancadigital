@@ -17,6 +17,19 @@
   ];
   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
+  // Fonte única das vantagens exibidas no banner de Lenda. Ao adicionar uma
+  // nova vantagem ao produto, inclua-a aqui para atualizar o banner também.
+  const LEGENDARY_BENEFITS = [
+    "Capas variantes",
+    "Estilos visuais de capa",
+    "Escolha de capa por s\u00e9rie",
+    "Recursos exclusivos da estante",
+    "Acesso ao chat premium",
+    "Benef\u00edcios de Lenda no ranking"
+  ];
+  function legendaryBenefitsMarkup() {
+    return LEGENDARY_BENEFITS.map(benefit => `<span>\u2713 ${escapeHTML(benefit)}</span>`).join("");
+  }
   let lazyCoverObserver = null;
   let readerIsOpen = false;
   const KNIGHT_TERRORS_VOLUME_GROUPS = [
@@ -52,6 +65,14 @@
       SERIES_FIELDS.forEach(field => {
         if (item[field] === undefined || item[field] === null || item[field] === "") merged[field] = definition[field];
       });
+      if (definition.imprint === "Black Label") {
+        const issueNumber = Number(String(merged.issue || "").match(/\d+/)?.[0] || 0);
+        const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+        merged.coverUrl = item.coverUrl || defaultItem?.coverUrl || (issueNumber === 1 ? definition.coverUrl : "");
+        if (!merged.fileUrl) {
+          if (defaultItem?.fileUrl) merged.fileUrl = defaultItem.fileUrl;
+        }
+      }
       if (merged.id === "teen-titans-academy-anuario") {
         merged.issue = "Anuário";
         merged.sortOrder = 4.5;
@@ -86,6 +107,10 @@
       }
       merged.seriesTitle = item.seriesTitle || definition.name || definition.seriesTitle;
       merged.title = item.title || merged.seriesTitle;
+      if (inferredSeriesId === "series-danger-street-2023") {
+        merged.seriesTitle = definition.name;
+        merged.title = definition.name;
+      }
       return merged;
     });
   }
@@ -159,7 +184,13 @@
           }
           const defaultsById = new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item]));
           const previousLibrary = saved.library;
+          saved.library = saved.library.map(item => {
+            if (!/^series-shazam-2023-\d{2}$/.test(String(item.id || ""))) return item;
+            return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
+          });
           saved.library = materializeSeriesItems(saved.library.map(item => ({ ...(defaultsById.get(item.id) || {}), ...item })));
+          saved.library = saved.library.filter(item => item.seriesId !== "series-danger-street-2023" || Number(item.issue) <= 4);
+          saved.library = saved.library.filter(item => item.seriesId !== "series-joker-killer-smile-2019" || Number(item.issue) <= 1);
           const hadStargirlAdvertisement = saved.library.some(item => item.id === "series-stargirl-lost-children-2022-03");
           saved.library = saved.library.filter(item => item.id !== "series-stargirl-lost-children-2022-03");
           if (hadStargirlAdvertisement) {
@@ -236,6 +267,7 @@
     favoriteAddedAt: new Map(),
     collectionSortOrders: {},
     coverVariants: new Map(),
+    homepageBanners: [],
     coverChoices: new Map(),
     previewCoverChoices: new Map(),
     coverStyles: new Map(),
@@ -289,10 +321,15 @@
     staffActivities: [],
     staffPendingCount: 0,
     fileReports: [],
+    seriesLinkDiscoveries: [],
+    seriesLinkMonitorTab: "pending",
+    seriesLinkPendingCount: 0,
     coverVariantReviewTab: "pending",
     localBoxFiles: [],
     localBoxVisible: false,
     publisherSettings: new Map(),
+    legendarySundayEnabled: true,
+    legendaryManualDate: null,
     publisherSeriesExpanded: {},
     popularPublicCollections: [],
     featuredComicCollections: [],
@@ -375,17 +412,55 @@
       return value?.user?.id ? value : null;
     } catch { return null; }
   }
+  function isLegendarySunday() {
+    return new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" }).format(new Date()) === "Sun";
+  }
+  function legendarySaoPauloDate() {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(new Date()).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+  function legendaryDayName() {
+    const name = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" }).format(new Date());
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+  function isLegendaryEventActive() {
+    return (isLegendarySunday() && state.legendarySundayEnabled !== false) || state.legendaryManualDate === legendarySaoPauloDate();
+  }
+  function effectiveSundayProfile(profile) {
+    if (!profile) return profile;
+    return profile.plan === "free" && isLegendaryEventActive()
+      ? { ...profile, plan: "premium", legendarySunday: true }
+      : { ...profile, legendarySunday: false };
+  }
+  let legendarySundayRefreshTimer = null;
+  function scheduleLegendarySundayRefresh() {
+    if (legendarySundayRefreshTimer) return;
+    const check = () => {
+      const active = isLegendaryEventActive();
+      const temporaryAccess = Boolean(state.profile?.legendarySunday);
+      const shouldRefresh = state.session?.user?.id && ((temporaryAccess && !active) || (!temporaryAccess && state.profile?.plan === "free" && active));
+      if (shouldRefresh) loadAccount();
+      legendarySundayRefreshTimer = window.setTimeout(check, 60 * 1000);
+    };
+    legendarySundayRefreshTimer = window.setTimeout(check, 60 * 1000);
+  }
+  scheduleLegendarySundayRefresh();
   function offlineProfileFor(user, profile = null, savedUsername = "") {
-    if (profile?.username) return profile;
+    if (profile?.username) return effectiveSundayProfile(profile);
     const metadata = user?.user_metadata || {};
-    return {
+    return effectiveSundayProfile({
       ...(profile || {}),
       id: profile?.id || user?.id,
       username: savedUsername || metadata.username || metadata.user_name || metadata.preferred_username || "usuario"
-    };
+    });
   }
   function normalizedPlan(profile = state.profile) {
     return String(profile?.plan || "").trim().toLowerCase();
+  }
+  function hasLegendaryAccess(profile = state.profile) {
+    return ["premium", "moderator", "admin"].includes(normalizedPlan(profile));
   }
   function isAdminProfile(profile = state.profile) {
     return normalizedPlan(profile) === "admin";
@@ -1012,7 +1087,7 @@
 
   const HOME_SECTION_ORDER = [
     "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
-    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers"
+    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner"
   ];
 
   function normalizeHomeSectionOrder(value) {
@@ -1023,12 +1098,32 @@
 
   async function loadHomepageSettings() {
     if (!sb || navigator.onLine === false) return;
-    const result = await sb.from("homepage_settings").select("section_order").eq("id", true).maybeSingle();
+    const result = await sb.from("homepage_settings").select("section_order, legendary_sunday_enabled, legendary_manual_date").eq("id", true).maybeSingle();
     if (result.error) {
       console.warn("Não foi possível carregar a ordem da página inicial:", result.error.message);
       return;
     }
     state.homeSectionOrder = normalizeHomeSectionOrder(result.data?.section_order);
+    state.legendarySundayEnabled = result.data?.legendary_sunday_enabled !== false;
+    state.legendaryManualDate = result.data?.legendary_manual_date || null;
+    if (state.profile) {
+      const baseProfile = state.profile.legendarySunday ? { ...state.profile, plan: "free" } : state.profile;
+      state.profile = effectiveSundayProfile(baseProfile);
+    }
+  }
+
+  async function loadHomepageBanners() {
+    if (!sb || navigator.onLine === false) return;
+    const result = await sb.from("homepage_banners")
+      .select("id, item_id, series_id, title, image_url, source_url, banner_key, created_at")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (result.error) {
+      console.warn("Não foi possível carregar os banners da home:", result.error.message);
+      return;
+    }
+    state.homepageBanners = result.data || [];
   }
 
   async function recordComicDownload(item) {
@@ -1776,6 +1871,9 @@
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal blog-comments-modal"><div class="section-head"><div><h2>Comentários</h2><div class="section-subtitle">${escapeHTML(post.title)}</div></div><button class="small-btn" data-close>Fechar</button></div><div class="blog-comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form" id="blog-comment-form" data-blog-comment-form><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
     $("#modal-root").appendChild(overlay);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) overlay.remove();
+    });
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     const list = $(".blog-comments-list", overlay);
     const refresh = async () => {
@@ -2246,9 +2344,9 @@
     if (!session?.user) await loadFactions();
     if (session?.user) {
       const profile = await sb.from("profiles").select("*").eq("id", session.user.id).single();
-      state.profile = profile.data;
+      saveOfflineAccount(profile.data);
+      state.profile = effectiveSundayProfile(profile.data);
       loadDownloads();
-      saveOfflineAccount(state.profile);
       state.collectionSortOrders = profile.data?.shelf_sort_orders || {};
       try { state.collectionSortOrders = { ...JSON.parse(localStorage.getItem(`bancaDigitalShelfSort:${session.user.id}`) || "{}"), ...state.collectionSortOrders }; } catch {}
       const savedPublishersResult = await sb.from("publisher_saves").select("publisher_key, publisher_name").eq("user_id", session.user.id).order("created_at", { ascending: false });
@@ -2344,7 +2442,8 @@
       state.chatRoomUnreadCounts = {};
       return;
     }
-    const result = await sb.from("notifications").select("id, actor_id, type, title, body, href, metadata, read_at, created_at").eq("user_id", state.session.user.id).order("created_at", { ascending: false }).limit(100);
+    await sb.rpc("purge_my_expired_notifications");
+    const result = await sb.from("notifications").select("id, actor_id, type, title, body, href, metadata, read_at, created_at, expires_at").eq("user_id", state.session.user.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(100);
     if (result.error) {
       if (/fetch|network|disconnected|offline/i.test(String(result.error.message || ""))) {
         state.session = { ...state.session, offline: true };
@@ -2411,10 +2510,13 @@
     state.staffActivities = [];
     state.staffPendingCount = 0;
     if (!sb || state.session?.offline || navigator.onLine === false || !["moderator", "admin"].includes(state.profile?.plan)) return;
-    const [moderation, bots, reports] = await Promise.all([
+    const [moderation, bots, reports, discoveries] = await Promise.all([
       sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
       sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
-      sb.from("file_reports").select("id, item_id, reporter_id, item_snapshot, reason, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000)
+      sb.from("file_reports").select("id, item_id, reporter_id, source, bot_name, item_snapshot, reason, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
+      state.profile?.plan === "admin"
+        ? sb.from("series_link_discoveries").select("id, source_id, series_id, issue, title, file_url, normalized_url, source_url, status, metadata, reviewed_by, reviewed_at, created_at, updated_at").order("created_at", { ascending: false }).limit(1000)
+        : { data: [], error: null }
     ]);
     const rows = moderation.data || [];
     const botReviewerIds = (bots.data || []).map(row => row.reviewed_by).filter(Boolean);
@@ -2429,8 +2531,10 @@
       ...(reports.data || []).map(row => ({ ...row, kind: "file_report", reporterName: names.get(row.reporter_id) || "usuÃ¡rio", reviewerName: names.get(row.reviewed_by) || "" }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     // Candidatas de capas têm contador próprio na tela "Examinar capas variantes".
-    state.fileReports = reports.data || [];
+    state.fileReports = (reports.data || []).map(row => ({ ...row, reporterName: names.get(row.reporter_id) || "" }));
     state.staffPendingCount = state.fileReports.filter(report => report.status === "pending").length;
+    state.seriesLinkDiscoveries = discoveries.data || [];
+    state.seriesLinkPendingCount = state.seriesLinkDiscoveries.filter(row => row.status === "pending").length;
   }
 
   function isNotificationFromOpenChat(notification) {
@@ -2753,7 +2857,7 @@
     const existingOverlay = $("#modal-root .cover-choice-modal")?.closest(".modal-backdrop");
     if (existingOverlay) return;
     if (!state.session) return openAuthPage();
-    if (!["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A escolha de capas variantes é exclusiva para usuários Lenda, moderadores e administradores.");
+    if (!hasLegendaryAccess()) return toast("A escolha de capas variantes é exclusiva para usuários Lenda, moderadores e administradores.");
     const item = state.db.library.find(entry => entry.id === itemId);
     if (!item) return;
     const isAdmin = state.profile?.plan === "admin";
@@ -2872,7 +2976,7 @@
     const options = [];
     editions.forEach(edition => {
       if (edition.coverUrl) options.push({ key: `standard:${edition.id}`, itemId: edition.id, coverUrl: edition.coverUrl, label: `${itemDisplayTitle(edition)} · Capa padrão`, isVariant: false });
-      if (["premium", "moderator", "admin"].includes(state.profile?.plan)) usableCoverVariants(edition).forEach(variant => options.push({ key: `variant:${edition.id}:${variant.variant_key}`, itemId: edition.id, coverUrl: variant.cover_url, label: `${itemDisplayTitle(edition)} · ${variant.label}`, variantKey: variant.variant_key, isVariant: true }));
+      if (hasLegendaryAccess()) usableCoverVariants(edition).forEach(variant => options.push({ key: `variant:${edition.id}:${variant.variant_key}`, itemId: edition.id, coverUrl: variant.cover_url, label: `${itemDisplayTitle(edition)} · ${variant.label}`, variantKey: variant.variant_key, isVariant: true }));
     });
     const seriesStyle = coverStyleFor({ id: seriesId });
     const seriesModalEffects = `<div class="series-cover-modal-effects"><span>Estilo da capa:</span>${coverStyleControl(seriesId, seriesStyle)}</div>`;
@@ -2880,6 +2984,9 @@
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal series-cover-choice-modal"><div class="section-head"><div><h2>Escolher capa da série</h2><div class="section-subtitle">Escolha uma capa entre as edições desta série.</div></div><button class="small-btn" data-close>Fechar</button></div>${seriesModalEffects}<form id="series-cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="seriesCoverKey" value="${escapeHTML(option.key)}" ${current?.item_id === option.itemId && Boolean(current?.is_variant) === option.isVariant && (option.isVariant ? current?.variant_key === option.variantKey : true) || (!current && option.key === `standard:${editions[0].id}`) || (current?.is_variant && !["premium", "moderator", "admin"].includes(state.profile?.plan) && option.key === `standard:${editions[0].id}`) ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.coverUrl))}" alt=""><span>${escapeHTML(option.label)}</span></label>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) overlay.remove();
+    });
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     $$('[data-cover-effect-item]', overlay).forEach(button => {
       button.addEventListener("mousedown", event => event.preventDefault());
@@ -2903,7 +3010,7 @@
 
   async function setCoverStyle(itemId, style) {
     if (!state.session) return openAuthPage();
-    if (style === "gold" && !["premium", "moderator", "admin"].includes(state.profile?.plan)) return toast("A capa dourada é exclusiva para usuários Lenda, moderadores e administradores.");
+    if (style === "gold" && !hasLegendaryAccess()) return toast("A capa dourada é exclusiva para usuários Lenda, moderadores e administradores.");
     const item = state.db.library.find(entry => entry.id === itemId) || state.db.library.find(entry => entry.seriesId === itemId);
     if (!item) return;
     const nextStyle = ["normal", "grayscale", "gold"].includes(style) ? style : "normal";
@@ -2934,7 +3041,7 @@
     });
     $$('[data-cover-style-item]').filter(element => element.dataset.coverStyleItem === itemId).forEach(element => { element.dataset.coverStyle = style; });
     $$('[data-cover-effect-item]').filter(element => element.dataset.coverEffectItem === itemId).forEach(element => {
-      const premium = ["premium", "moderator", "admin"].includes(state.profile?.plan);
+      const premium = hasLegendaryAccess();
       const nextLabel = style === "normal" ? "Aplicar preto e branco" : style === "grayscale" && premium ? "Aplicar capa dourada" : "Voltar à capa normal";
       element.classList.remove("cover-effect-normal", "cover-effect-grayscale", "cover-effect-gold");
       element.classList.add(`cover-effect-${style}`);
@@ -3121,7 +3228,10 @@
     awardAchievement("first_read");
     if (isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
     const result = await sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
-    if (!result.error && completed && !wasCompleted) await maybeAwardCharacterStickers(item);
+    if (!result.error && completed && !wasCompleted) {
+      await maybeAwardReadSticker(item);
+      await maybeAwardCharacterStickers(item);
+    }
     if (result.error) console.warn("Não foi possível salvar o progresso de leitura:", result.error.message);
     if (!result.error && completed && !wasCompleted && state.profile?.faction_id) {
       await sb.rpc("complete_faction_mandatory_read", { p_item_id: String(item.id) });
@@ -3141,21 +3251,33 @@
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   }
 
-  function stickerCharacterId(item) {
-    return `${stickerSlug(item?.publisher || "sem-editora")}::${stickerSlug(item?.character)}`;
+  function stickerCharacterId(item, characterName = characterNames(item)[0]) {
+    return `${stickerSlug(item?.publisher || "sem-editora")}::${stickerSlug(characterName)}`;
+  }
+
+  function stickerSeriesId(item) {
+    return `series::${stickerSlug(item?.publisher || "sem-editora")}::${stickerSlug(item?.seriesId || item?.seriesTitle || item?.title)}`;
   }
 
   function stickerGroups(library = state.db.library) {
     const groups = new Map();
-    library.filter(item => !item.local && String(item.character || "").trim()).forEach(item => {
-      const characterName = String(item.character).trim();
+    library.filter(item => !item.local && characterNames(item).length).forEach(item => {
       const publisherName = String(item.publisher || "Sem editora").trim() || "Sem editora";
-      const id = stickerCharacterId(item);
-      if (!groups.has(id)) groups.set(id, { id, characterName, publisherName, items: [] });
+      characterNames(item).forEach(characterName => {
+        const id = stickerCharacterId(item, characterName);
+        if (!groups.has(id)) groups.set(id, { id, kind: "character", characterName, publisherName, items: [] });
+        groups.get(id).items.push(item);
+      });
+    });
+    library.filter(item => !item.local && String(item.seriesId || "").trim()).forEach(item => {
+      const seriesName = String(item.seriesTitle || item.title || item.seriesId).trim();
+      const publisherName = String(item.publisher || "Sem editora").trim() || "Sem editora";
+      const id = stickerSeriesId(item);
+      if (!groups.has(id)) groups.set(id, { id, kind: "series", characterName: seriesName, publisherName, items: [] });
       groups.get(id).items.push(item);
     });
     return [...groups.values()].map(group => ({ ...group, items: [...new Map(group.items.map(item => [String(item.id), item])).values()] }))
-      .sort((a, b) => a.publisherName.localeCompare(b.publisherName, "pt-BR") || a.characterName.localeCompare(b.characterName, "pt-BR"));
+      .sort((a, b) => a.publisherName.localeCompare(b.publisherName, "pt-BR") || a.kind.localeCompare(b.kind) || a.characterName.localeCompare(b.characterName, "pt-BR"));
   }
 
   function stickerFingerprint(group) {
@@ -3181,7 +3303,32 @@
   }
 
   function stickerRarityLabel(rarity) {
-    return rarity === "gold" ? "Dourada" : rarity === "silver" ? "Prateada" : rarity === "creased" ? "Amassada" : rarity === "torn" ? "Rasgada" : "Comum";
+    return rarity === "gold" ? "Dourada" : rarity === "silver" ? "Prateada" : rarity === "creased" ? "Amassada" : "Comum";
+  }
+
+  async function maybeAwardReadSticker(item) {
+    if (!state.session || !sb || !item || item.local || Math.random() >= 0.25) return;
+    const group = stickerGroups().find(entry => entry.kind === "character" && entry.items.some(itemEntry => String(itemEntry.id) === String(item.id)));
+    if (!group) return;
+    const fingerprint = `read:${item.id}`;
+    const claimKey = `${group.id}:${fingerprint}`;
+    if (state.stickerAwards.some(award => award.character_id === group.id && award.edition_fingerprint === fingerprint) || state.stickerClaimKeys.has(claimKey)) return;
+    const selected = stickerCoverCandidates({ ...group, items: [item] })[0] || { itemId: item.id, url: item.coverUrl || item.cover };
+    if (!selected?.url) return;
+    const result = await sb.rpc("claim_character_sticker", {
+      p_character_id: group.id,
+      p_character_name: group.characterName,
+      p_publisher_name: group.publisherName,
+      p_edition_fingerprint: fingerprint,
+      p_edition_ids: [String(item.id)],
+      p_cover_item_id: String(selected.itemId),
+      p_cover_url: selected.url
+    });
+    if (result.error) return console.warn("NÃ£o foi possÃ­vel conceder a figurinha da leitura:", result.error.message);
+    const award = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (award && !state.stickerAwards.some(entry => entry.id === award.id)) state.stickerAwards.unshift(award);
+    state.stickerClaimKeys.add(claimKey);
+    toast(`Figurinha comum conquistada: ${group.characterName}!`);
   }
 
   async function maybeAwardCharacterStickers(item) {
@@ -3214,7 +3361,7 @@
         const award = Array.isArray(result.data) ? result.data[0] : result.data;
         if (award && !state.stickerAwards.some(entry => entry.id === award.id)) state.stickerAwards.unshift(award);
         state.stickerClaimKeys.add(claimKey);
-        toast(`Figurinha conquistada: ${group.characterName}!`);
+        toast(`Figurinha ${group.kind === "series" ? "prateada" : "dourada"} conquistada: ${group.characterName}!`);
       }
     }
   }
@@ -3377,7 +3524,7 @@
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop";
-      const rarities = ["standard", "torn", "creased", "silver", "gold"];
+      const rarities = ["standard", "creased", "silver", "gold"];
       overlay.innerHTML = `<div class="modal sticker-rarity-picker"><div class="section-head"><div><div class="eyebrow">Doação administrativa</div><h2>Escolha a raridade</h2><div class="section-subtitle">Selecione a raridade da figurinha que será adicionada ao álbum.</div></div></div><div class="sticker-rarity-picker-grid">${rarities.map(rarity => `<button type="button" class="small-btn sticker-rarity-choice rarity-${rarity}" data-admin-rarity="${rarity}">${stickerRarityLabel(rarity)}</button>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button></div></div>`;
       $("#modal-root").appendChild(overlay);
       const close = value => { overlay.remove(); resolve(value || null); };
@@ -3468,7 +3615,7 @@
     updateCompletionCards(item, row.completed);
     if (row.completed && isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
     const result = sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
-    result.then(async response => { if (!response.error && row.completed && !current?.completed) await maybeAwardCharacterStickers(item); });
+    result.then(response => { if (response.error) console.warn("NÃ£o foi possÃ­vel atualizar o status de leitura:", response.error.message); });
     const nextCompleted = row.completed;
     result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
     return nextCompleted;
@@ -3501,8 +3648,8 @@
     localStorage.setItem("readingDirection", direction);
   }
 
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+  const $ = (sel, root = document) => root?.querySelector?.(sel) || null;
+  const $$ = (sel, root = document) => root?.querySelectorAll ? [...root.querySelectorAll(sel)] : [];
 
   function escapeHTML(value = "") {
     return String(value).replace(/[&<>"']/g, c => ({
@@ -3626,9 +3773,10 @@
   }
 
   function seriesKey(value = "") {
-    return String(value).trim().toLowerCase()
+    const key = String(value).trim().toLowerCase()
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    return key === "shazam" ? "series-shazam-2023" : key;
   }
 
   function issueSortValue(item) {
@@ -3709,7 +3857,23 @@
 
   function seriesEditions(item) {
     if (!item?.seriesId) return [];
-    return state.db.library.filter(x => x.seriesId === item.seriesId)
+    const current = state.db.library.filter(x => x.seriesId === item.seriesId);
+    if (item.seriesId === "series-shazam-2023") {
+      const defaults = (window.DEFAULT_LIBRARY || []).filter(entry => entry.seriesId === item.seriesId);
+      const currentById = new Map(current.map(entry => [entry.id, entry]));
+      const reconciled = defaults.map(entry => ({ ...structuredClone(entry), ...(currentById.get(entry.id) || {}) }));
+      const extras = current.filter(entry => !defaults.some(defaultEntry => defaultEntry.id === entry.id));
+      if (reconciled.length !== current.length || reconciled.some((entry, index) => entry.id !== current[index]?.id)) {
+        state.db.library = [
+          ...state.db.library.filter(entry => entry.seriesId !== item.seriesId),
+          ...reconciled,
+          ...extras
+        ];
+        DataStore.save(state.db);
+      }
+      return [...reconciled, ...extras].sort((a, b) => issueSortValue(a) - issueSortValue(b));
+    }
+    return current
       .sort((a, b) => issueSortValue(a) - issueSortValue(b));
   }
 
@@ -4199,6 +4363,10 @@
   }
 
   function openReader(item, options = {}) {
+    if (!downloadSource(item) && item?.officialUrl) {
+      window.open(item.officialUrl, "_blank", "noopener");
+      return;
+    }
     if (!item) return;
 
     if (!item.local && navigator.onLine === false) {
@@ -4273,7 +4441,7 @@
         <button class="small-btn" data-toggle-grayscale>${readerGrayscale ? 'Cor normal' : 'Preto e branco'}</button>
         <button class="small-btn" data-reader-zoom>Zoom</button>
         ${state.session && !item.local ? `<button class="small-btn" data-toggle-read>${savedProgress?.completed ? 'Desmarcar como lida' : 'Marcar como lida'}</button>` : ''}
-        ${!state.session?.offline && item.character ? `<button class="small-btn" data-browse-character>Ver personagem</button>` : ''}
+        ${!state.session?.offline && characterNames(item)[0] ? `<button class="small-btn" data-browse-character="${escapeHTML(characterNames(item)[0])}">Ver personagem</button>` : ''}
         ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
         ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
         ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
@@ -4349,7 +4517,7 @@
       body.classList.toggle("reader-grayscale", readerGrayscale);
       event.currentTarget.textContent = readerGrayscale ? "Cor normal" : "Preto e branco";
     });
-    $("[data-browse-character]", overlay)?.addEventListener("click", () => { overlay.remove(); openEntityPage("character", item.character); });
+    $$('[data-browse-character]', overlay).forEach(button => button.addEventListener("click", () => { overlay.remove(); openEntityPage("character", button.dataset.browseCharacter); }));
     $("[data-browse-publisher]", overlay)?.addEventListener("click", () => { overlay.remove(); openEntityPage("publisher", item.publisher); });
 
     const body = $("#reader-body", overlay);
@@ -6759,7 +6927,7 @@
     };
     const rawSource = String(url || "").trim();
     const source = legacyCoverUrls[rawSource] || rawSource;
-    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:i\.imgur\.com|(?:www\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com)\//i.test(source)) return source;
+    if (!window.BANCA_SUPABASE_URL || !/^https:\/\/(?:i\.imgur\.com|(?:www\.)?imgur\.com|zonafantasmanet\.files\.wordpress\.com|static\.dc\.com)\//i.test(source)) return source;
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/image-proxy`);
     proxy.searchParams.set("url", source);
     proxy.searchParams.set("v", "2");
@@ -7008,12 +7176,13 @@
     const savedForCover = favoriteIds.has(item.id) || (seriesContext && item.seriesId && favoriteIds.has(item.seriesId));
     const collectionOwner = activeCollectionContext?.ownerId === state.session?.user?.id;
     const adminCanChooseCover = state.profile?.plan === "admin" && !activeCollectionContext?.id;
-    const canChooseCover = state.session && ["premium", "moderator", "admin"].includes(state.profile?.plan) && (collectionOwner || adminCanChooseCover || (favoriteIds === state.favoriteIds && savedForCover)) && hasCoverVariants;
+    const canChooseCover = state.session && hasLegendaryAccess() && (collectionOwner || adminCanChooseCover || (favoriteIds === state.favoriteIds && savedForCover)) && hasCoverVariants;
     const coverStyle = coverStyleFor(item, activeCollectionContext?.coverStyles || null);
     const canSetCoverStyle = collectionOwner || (Boolean(state.session) && favoriteIds === state.favoriteIds);
     const coverEffects = coverStyleControl(item.id, coverStyle, canSetCoverStyle, activeCollectionContext?.id || "");
     const authors = String(item.author || "").split(/\s*(?:\/|&|\be\b)\s*/i).map(value => value.trim()).filter(Boolean);
     const entityButton = (kind, value, label = value) => value ? `<button type="button" class="card-entity-link" data-entity-kind="${escapeHTML(kind)}" data-entity-value="${escapeHTML(value)}">${escapeHTML(label)}</button>` : "";
+    const characterButtons = entityButton("character", characterNames(item)[0]);
     const cardActions = `<div class="card-actions"><button class="card-like ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}" title="Curtir quadrinho">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="card-share" data-share-item="${escapeHTML(item.id)}" title="Compartilhar quadrinho">Compartilhar</button><button class="card-comment" data-comment-item="${escapeHTML(item.id)}" title="Ver comentarios">Comentários</button>${item.seriesId ? `<button class="card-series" data-view-series="${escapeHTML(item.seriesId)}" title="Ver serie">Série</button>` : ""}</div>`;
     return `
       <div class="card-wrap"><article class="card" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
@@ -7025,7 +7194,7 @@
         ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
         <div class="card-body">
           <div class="card-title">${escapeHTML(displayTitle)}</div>
-          <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${entityButton("character", item.character)}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
+          <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${characterButtons}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
           ${authors.length ? `<div class="card-authors">${authors.map(author => entityButton("author", author)).join(" ")}</div>` : ""}
           <div class="card-stats"><span>♥ ${Number(item.clicks || 0).toLocaleString("pt-BR")} leituras</span>${canChooseCover ? `<button type="button" class="card-cover-choice" data-cover-choice="${escapeHTML(item.id)}" ${activeCollectionContext?.id ? `data-cover-choice-collection="${escapeHTML(activeCollectionContext.id)}"` : ""} title="${activeCollectionContext?.id ? "Capa variante somente nesta coleção" : "Escolher capa"}">${state.profile?.plan === "admin" && !activeCollectionContext?.id ? "Escolher capa" : "Capa"}</button>` : hasCoverVariants ? `<span class="card-variant-info" title="Esta edição possui capas variantes">Capa variante</span>` : ""}${coverEffects}</div>
           <div class="card-actions"><button class="card-like ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}" title="Curtir quadrinho">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="card-share" data-share-item="${escapeHTML(item.id)}" title="Compartilhar quadrinho">Compartilhar</button><button class="card-comment" data-comment-item="${escapeHTML(item.id)}" title="Ver comentários">Comentários</button>${item.seriesId ? `<button class="card-series" data-view-series="${escapeHTML(item.seriesId)}" title="Ver série">Série</button>` : ""}</div>
@@ -7076,6 +7245,16 @@
       </section>`;
   }
 
+  function characterNames(item) {
+    const explicit = Array.isArray(item?.characters) ? item.characters : null;
+    const values = explicit || [item?.character, ...(Array.isArray(item?.secondaryCharacters) ? item.secondaryCharacters : [])];
+    const names = values.flatMap(value => {
+      if (value && typeof value === "object") return [value.name || value.character || ""];
+      return String(value || "").split(/\s*\/\s*/);
+    }).map(value => String(value || "").trim()).filter(Boolean);
+    return [...new Set(names)];
+  }
+
   function recommendationHash(value = "") {
     let hash = 2166136261;
     for (const character of String(value)) {
@@ -7083,6 +7262,39 @@
       hash = Math.imul(hash, 16777619);
     }
     return (hash >>> 0) / 4294967295;
+  }
+
+  function legendaryWeekKey() {
+    const [year, month, day] = legendarySaoPauloDate().split("-").map(Number);
+    const current = new Date(Date.UTC(year, month - 1, day));
+    const dayOfWeek = current.getUTCDay() || 7;
+    current.setUTCDate(current.getUTCDate() - dayOfWeek + 1);
+    return current.toISOString().slice(0, 10);
+  }
+
+  function legendaryWeeklyCovers(items, limit = 6) {
+    const candidates = items.filter(item => !item.local && coverFor(item));
+    const ordered = candidates.slice().sort((a, b) => {
+      const week = legendaryWeekKey();
+      return recommendationHash(`${week}:${a.id}`) - recommendationHash(`${week}:${b.id}`);
+    });
+    const selected = [];
+    const characters = new Set();
+    for (const item of ordered) {
+      const character = String(item.character || "").trim().toLocaleLowerCase("pt-BR");
+      if (character && characters.has(character)) continue;
+      selected.push(item);
+      if (character) characters.add(character);
+      if (selected.length >= limit) break;
+    }
+    if (selected.length < limit) {
+      for (const item of ordered) {
+        if (selected.includes(item)) continue;
+        selected.push(item);
+        if (selected.length >= limit) break;
+      }
+    }
+    return selected.map(item => `<img src="${escapeHTML(proxiedImageUrl(coverFor(item)))}" alt="${escapeHTML(item.character || item.title || "")}" loading="eager" onerror="this.onerror=null;this.src='${escapeHTML(instantCover(item))}'">`).join("");
   }
 
   function recommendationPeriodKeys(now = new Date()) {
@@ -7131,8 +7343,9 @@
 
   function characterBannerSection(lib) {
     const groups = new Map();
-    lib.filter(item => String(item.character || "").trim() && !item.local).forEach(item => {
-      const character = String(item.character).trim();
+    lib.filter(item => characterNames(item).length && !item.local).forEach(item => {
+      // O primeiro nome é o protagonista; secundários não criam banners duplicados.
+      const character = characterNames(item)[0];
       if (!groups.has(character)) groups.set(character, []);
       groups.get(character).push(item);
     });
@@ -7146,6 +7359,20 @@
     const representative = editions.slice().sort((a, b) => Number(b.clicks) - Number(a.clicks))[0] || editions[0];
     const adminHeading = state.profile?.plan === "admin" ? `<div class="section-head character-banner-admin-heading"><div><h2 class="section-title">Personagem em destaque</h2><div class="section-subtitle">Banner editorial da página inicial.</div></div><div data-home-section-controls-slot></div></div>` : "";
     return `<section class="section character-banner-home-section">${adminHeading}<div class="character-banner-section" data-entity-kind="character" data-entity-value="${escapeHTML(character)}" role="link" tabindex="0" aria-label="Ver todas as edições de ${escapeHTML(character)}"><div class="character-banner-bg" style="background-image:url('${escapeHTML(coverFor(representative, "hero"))}')"></div><div class="character-banner-overlay"></div><div class="character-banner-content"><div class="eyebrow">Personagem em destaque</div><h2>${escapeHTML(character)}</h2><p>${editions.length} ${editions.length === 1 ? "edição disponível" : "edições disponíveis"} para explorar.</p><span class="character-banner-cta">Ver todas as edições <b>→</b></span></div><div class="character-banner-spark">✦</div></div></section>`;
+  }
+
+  function homepageBannerSection(lib) {
+    const available = (state.homepageBanners || []).filter(banner => {
+      const item = lib.find(entry => String(entry.id) === String(banner.item_id));
+      return item?.seriesId && banner.image_url;
+    });
+    if (!available.length) return "";
+    const dayKey = String(Math.floor(Date.now() / 86400000));
+    const index = Math.min(available.length - 1, Math.floor(recommendationHash(`homepage-banner:${dayKey}`) * available.length));
+    const banner = available[index];
+    const item = lib.find(entry => String(entry.id) === String(banner.item_id));
+    const seriesName = itemDisplayTitle(item);
+    return `<section class="section homepage-banner-section"><div class="section-head"><div><div class="eyebrow">Destaque editorial</div><h2 class="section-title">Em destaque</h2><div class="section-subtitle">Uma recomendação especial da banca, renovada a cada 24 horas.</div></div></div><button type="button" class="homepage-banner" data-home-banner-series="${escapeHTML(item.seriesId)}" aria-label="Abrir a série ${escapeHTML(seriesName)}"><span class="homepage-banner-image" style="background-image:url('${escapeHTML(proxiedImageUrl(banner.image_url))}')"></span><span class="homepage-banner-shade"></span><span class="homepage-banner-copy"><span class="eyebrow">Capa selecionada</span><strong>${escapeHTML(seriesName)}</strong><small>Ver série <b>→</b></small></span></button></section>`;
   }
 
   function renderHome() {
@@ -7254,7 +7481,8 @@
       artist: readArtistRail,
       "random-publisher": randomPublisherRail,
       downloads: mostDownloadedRail,
-      "most-read-covers": mostReadCoverGrid
+      "most-read-covers": mostReadCoverGrid,
+      "editorial-banner": homepageBannerSection(lib)
     };
     const visibleHomeKeys = normalizeHomeSectionOrder(state.homeSectionOrder).filter(key => homeSections[key]);
     state.homeVisibleSectionKeys = visibleHomeKeys;
@@ -7356,6 +7584,7 @@
     const allItems = state.db.library.filter(item => {
       if (filter.kind === "year") return String(item.year || "") === String(filter.value || "");
       if (filter.kind === "author") return String(item.author || "").split(/\s*(?:\/|&|\be\b)\s*/i).some(author => author.trim().toLowerCase() === normalizedValue);
+      if (filter.kind === "character") return characterNames(item).some(character => character.toLowerCase() === normalizedValue);
       return String(item[filter.kind] || "").trim().toLowerCase() === normalizedValue && (filter.kind !== "publisher" || item.type === "comic");
     });
     const collectionFilter = state.collectionFilter || { field: "all", query: "" };
@@ -7650,7 +7879,7 @@
   function canOpenChatRoom(room) {
     if (room.factionId) return ["moderator", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
     return room.access === "public"
-      || (room.access === "premium" && ["premium", "admin"].includes(state.profile?.plan))
+      || (room.access === "premium" && hasLegendaryAccess())
       || (room.access === "staff" && ["moderator", "admin"].includes(state.profile?.plan));
   }
 
@@ -8966,7 +9195,7 @@
     const labels = { staff: "Moderadores", premium: "Lenda", free: "Comum" };
     const plan = labels[state.rankingCategory] ? state.rankingCategory : "free";
     const group = rankingCategoryMembers(members, plan);
-    return `<div class="content ranking-page ranking-category-page"><div class="section-head"><div><div class="eyebrow">Diretório da comunidade</div><h1 class="section-title">Usuários ${labels[plan]}</h1><div class="section-subtitle">Todos os usuários desta categoria, ordenados por nível.</div></div><button class="small-btn" data-ranking-back>Voltar ao ranking</button></div><section class="section ranking-directory"><div class="ranking-member-list ranking-member-list-full">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section></div>`;
+    return `<div class="content ranking-page ranking-category-page"><div class="section-head"><div><div class="eyebrow">Diretório da comunidade</div><h1 class="section-title">Usuários ${labels[plan]}</h1><div class="section-subtitle">Todos os usuários desta categoria, ordenados por nível.</div></div><button type="button" class="small-btn" data-ranking-back>Voltar ao ranking</button></div><section class="section ranking-directory"><div class="ranking-member-list ranking-member-list-full">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section></div>`;
   }
 
   function renderRankingPage() {
@@ -9782,8 +10011,103 @@
       const item = state.db.library.find(entry => String(entry.id) === String(report.item_id));
       const title = itemDisplayTitle(item || snapshot) || "Edição sem título";
       const status = report.status === "pending" ? "Pendente" : report.status === "resolved" ? "Resolvido" : "Ignorado";
-      return `<article class="staff-activity-item file-report-item"><header><span>⚠ Relato de @${escapeHTML(report.reporterName || "usuário")}</span><span>${escapeHTML(formatCommentDate(report.created_at))}</span></header><strong>${escapeHTML(title)}</strong><p>${escapeHTML(report.reason || "O arquivo não abriu.")}</p><small>Status: ${status}</small><div class="staff-activity-actions">${report.reporterName ? `<button class="small-btn" data-report-reporter="${escapeHTML(report.reporterName)}">Ver quem relatou</button>` : ""}${item ? `<button class="small-btn" data-report-open="${escapeHTML(item.id)}">Ver edição</button>` : ""}${report.status === "pending" ? `<button class="small-btn" data-report-status="resolved" data-report-id="${report.id}">Marcar resolvido</button><button class="small-btn danger" data-report-status="ignored" data-report-id="${report.id}">Ignorar</button>` : `<button class="small-btn" data-report-status="pending" data-report-id="${report.id}" data-report-item-id="${escapeHTML(report.item_id)}" data-report-reporter-id="${escapeHTML(report.reporter_id)}">Reabrir</button>`}</div></article>`;
+      const origin = report.source === "bot" ? `🤖 Relato automático de ${escapeHTML(report.bot_name || "bot")}` : `⚠ Relato de @${escapeHTML(report.reporterName || "usuário")}`;
+      return `<article class="staff-activity-item file-report-item"><header><span>${origin}</span><span>${escapeHTML(formatCommentDate(report.created_at))}</span></header><strong>${escapeHTML(title)}</strong><p>${escapeHTML(report.reason || "O arquivo não abriu.")}</p><small>Status: ${status}</small><div class="staff-activity-actions">${report.reporterName && report.source !== "bot" ? `<button class="small-btn" data-report-reporter="${escapeHTML(report.reporterName)}">Ver quem relatou</button>` : ""}${item ? `<button class="small-btn" data-report-open="${escapeHTML(item.id)}">Ver edição</button>` : ""}${report.status === "pending" ? `<button class="small-btn" data-report-status="resolved" data-report-id="${report.id}">Marcar resolvido</button><button class="small-btn danger" data-report-status="ignored" data-report-id="${report.id}">Ignorar</button>` : `<button class="small-btn" data-report-status="pending" data-report-id="${report.id}" data-report-item-id="${escapeHTML(report.item_id)}" data-report-reporter-id="${escapeHTML(report.reporter_id || "")}">Reabrir</button>`}</div></article>`;
     }).join("") || '<div class="empty">Nenhum relato de arquivo aguardando atenção.</div>'}</div>`;
+  }
+
+  function renderSeriesLinkDiscoveries() {
+    if (!state.session || state.profile?.plan !== "admin") return '<div class="empty">Área restrita aos administradores.</div>';
+    const selectedTab = ["pending", "approved", "rejected"].includes(state.seriesLinkMonitorTab) ? state.seriesLinkMonitorTab : "pending";
+    const rows = [...(state.seriesLinkDiscoveries || [])]
+      .filter(row => row.status === selectedTab)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const cards = rows.map(row => {
+      const series = (window.DEFAULT_SERIES || []).find(entry => entry.id === row.series_id);
+      const existing = state.db.library.find(item => item.seriesId === row.series_id && String(item.issue).trim() === String(row.issue).trim());
+      const seriesItem = state.db.library.find(item => item.seriesId === row.series_id);
+      const status = row.status === "pending" ? "Pendente" : row.status === "approved" ? "Aprovada" : "Rejeitada";
+      return `<article class="staff-activity-item series-link-discovery-item"><header><span>🔎 ${escapeHTML(series?.name || row.series_id)}</span><span>${escapeHTML(formatCommentDate(row.created_at))}</span></header><strong>${escapeHTML(row.title || `Edição ${row.issue}`)}</strong><p>${existing ? "Já existe uma edição com este número; a aprovação atualizará o link." : "Nova edição encontrada na página fonte."}</p><small>Fonte: <a href="${escapeHTML(row.source_url)}" target="_blank" rel="noopener">abrir Blogspot</a> · Status: ${status}</small><div class="staff-activity-actions"><a class="small-btn" href="${escapeHTML(row.file_url)}" target="_blank" rel="noopener">Abrir arquivo</a>${state.profile?.plan === "admin" && row.status === "pending" ? `<button class="small-btn" data-series-link-review="${row.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-series-link-review="${row.id}" data-status="rejected">Rejeitar</button>` : row.status !== "pending" ? `<button class="small-btn" data-series-link-review="${row.id}" data-status="pending">Voltar para pendentes</button>` : ""}${seriesItem ? `<button class="small-btn" data-series-link-series="${escapeHTML(row.series_id)}">Ver série</button>` : ""}</div></article>`;
+    }).join("");
+    const labels = { pending: "Pendentes", approved: "Aprovadas", rejected: "Rejeitadas" };
+    const tabs = Object.entries(labels).map(([key, label]) => `<button class="small-btn notification-tab ${selectedTab === key ? "is-active" : ""}" data-series-link-tab="${key}">${label} (${(state.seriesLinkDiscoveries || []).filter(row => row.status === key).length})</button>`).join("");
+    return `<div class="notification-tabs series-link-status-tabs">${tabs}</div><div class="staff-activity-list">${cards || `<div class="empty">Nenhuma descoberta ${selectedTab === "pending" ? "pendente" : selectedTab === "approved" ? "aprovada" : "rejeitada"}.</div>`}</div>`;
+  }
+
+  async function approveSeriesLinkDiscovery(row, button, overlay) {
+    if (!row || state.profile?.plan !== "admin") return;
+    button.disabled = true;
+    const series = (window.DEFAULT_SERIES || []).find(entry => entry.id === row.series_id) || {};
+    const existing = state.db.library.find(item => item.seriesId === row.series_id && String(item.issue).trim() === String(row.issue).trim());
+    const previousLibrary = state.db.library;
+    const item = existing || { id: `${row.series_id}-${/^\d+$/.test(String(row.issue)) ? String(row.issue).padStart(2, "0") : String(row.issue).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, seriesId: row.series_id, title: series.name || row.title, issue: row.issue, format: "cbr", coverUrl: series.coverUrl || "", clicks: 0, featured: true, randomWeight: 5, collectionIds: [] };
+    const previousFileUrl = existing?.fileUrl;
+    if (existing) existing.fileUrl = row.file_url;
+    else state.db.library = [...state.db.library, { ...item, fileUrl: row.file_url }];
+    try {
+      save();
+      const result = await sb.from("series_link_discoveries").update({ status: "approved", reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending");
+      if (result.error) throw result.error;
+      try {
+        await publishCatalog();
+      } catch (error) {
+        await sb.from("series_link_discoveries").update({ status: "pending", reviewed_by: null, reviewed_at: null, updated_at: new Date().toISOString() }).eq("id", row.id);
+        throw error;
+      }
+      await loadStaffActivities();
+      overlay.remove();
+      openSeriesLinkMonitorPopup();
+      toast(existing ? "Link da edição atualizado e catálogo publicado." : "Nova edição aprovada e catálogo publicado.");
+    } catch (error) {
+      state.db.library = previousLibrary;
+      if (existing) existing.fileUrl = previousFileUrl;
+      save();
+      button.disabled = false;
+      toast(error.message || "Não foi possível aprovar a descoberta.");
+    }
+  }
+
+  function openSeriesLinkMonitorPopup(previousOverlay = null) {
+    previousOverlay?.remove();
+    closeNotificationsPopups();
+    if (!state.session || state.profile?.plan !== "admin") return toast("Apenas administradores podem acessar este monitoramento.");
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    const tab = state.seriesLinkMonitorTab || "pending";
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>🔎 Novas edições</h2><div class="section-subtitle">Descobertas nas páginas fonte das séries, separadas do verificador de links.</div></div><div class="cover-variants-review-actions"><button class="small-btn danger" data-series-link-scan>Verificar agora</button><button class="small-btn" data-close>Fechar</button></div></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">🔎 Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes</button></div>${renderSeriesLinkDiscoveries()}</div>`;
+    $("#modal-root").appendChild(overlay);
+    $("[data-close]", overlay).onclick = () => overlay.remove();
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $("[data-notification-tab]", overlay).onclick = () => { overlay.remove(); openNotificationsPopup("staff"); };
+    $("[data-open-cover-variants]", overlay).onclick = () => openCoverVariantsReviewPopup();
+    $("[data-series-link-scan]", overlay).onclick = async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const result = await sb.functions.invoke("series-link-monitor", { body: { action: "scan" } });
+      if (result.error || result.data?.error) toast(result.error?.message || result.data?.error || "Não foi possível verificar as fontes.");
+      else toast(`${Number(result.data?.discovered || 0)} nova(s) descoberta(s).`);
+      await loadStaffActivities();
+      overlay.remove();
+      openSeriesLinkMonitorPopup();
+    };
+    $$('[data-series-link-tab]', overlay).forEach(button => button.onclick = () => { state.seriesLinkMonitorTab = button.dataset.seriesLinkTab; overlay.remove(); openSeriesLinkMonitorPopup(); });
+    $$('[data-series-link-review]', overlay).forEach(button => button.onclick = async () => {
+      const row = state.seriesLinkDiscoveries.find(entry => String(entry.id) === String(button.dataset.seriesLinkReview));
+      if (!row) return;
+      if (button.dataset.status === "approved") return approveSeriesLinkDiscovery(row, button, overlay);
+      button.disabled = true;
+      const result = await sb.from("series_link_discoveries").update({ status: button.dataset.status, reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id);
+      if (result.error) { button.disabled = false; return toast(result.error.message || "Não foi possível revisar a descoberta."); }
+      await loadStaffActivities();
+      overlay.remove();
+      openSeriesLinkMonitorPopup();
+    });
+    $$('[data-series-link-series]', overlay).forEach(button => button.onclick = () => {
+      const first = state.db.library.find(item => item.seriesId === button.dataset.seriesLinkSeries);
+      if (!first) return toast("Série ainda não encontrada no catálogo.");
+      overlay.remove();
+      openSeriesSelection(first, seriesEditions(first), true);
+    });
   }
 
   async function reportFileFailure(item, reason = "O arquivo não abriu no leitor.", options = {}) {
@@ -9843,9 +10167,10 @@
     });
   }
 
-  async function runCoverVariantsBot(button, overlay) {
+  async function runCoverVariantsBot(button, overlay, selectedItems = null) {
     button.disabled = true;
-    const items = state.db.library.map(item => ({ id: item.id, title: item.title, seriesTitle: item.seriesTitle, originalTitle: item.originalTitle, issue: item.issue, publisher: item.publisher, coverUrl: item.coverUrl }));
+    const sourceItems = Array.isArray(selectedItems) && selectedItems.length ? selectedItems : state.db.library;
+    const items = sourceItems.map(item => ({ id: item.id, title: item.title, seriesTitle: item.seriesTitle, originalTitle: item.originalTitle, seriesId: item.seriesId, issue: item.issue, publisher: item.publisher, coverUrl: item.coverUrl }));
     // The Edge Function scans the complete payload. Keep the payload small
     // enough for slow image sources while ensuring every catalog item is sent.
     const batchSize = 10;
@@ -9875,16 +10200,18 @@
     closeNotificationsPopups();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    const reviewTab = ["pending", "approved", "rejected"].includes(state.coverVariantReviewTab) ? state.coverVariantReviewTab : "pending";
+    const reviewTab = ["pending", "approved", "rejected", "banners", "manual"].includes(state.coverVariantReviewTab) ? state.coverVariantReviewTab : "pending";
     state.coverVariantReviewTab = reviewTab;
-    const candidates = coverVariantCandidates(reviewTab);
+    const candidates = ["pending", "approved", "rejected"].includes(reviewTab) ? coverVariantCandidates(reviewTab) : [];
     const reviewCounts = {
       pending: coverVariantCandidates("pending").length,
       approved: coverVariantCandidates("approved").length,
       rejected: coverVariantCandidates("rejected").length
     };
     const itemFor = candidate => state.db.library.find(item => String(item.id) === String(candidate.metadata?.item_id));
-    const cards = candidates.map(candidate => {
+    const approvedBanners = [...(state.homepageBanners || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    const bannerCards = approvedBanners.map(banner => `<article class="cover-variant-review-card approved-banner-review-card"><img src="${escapeHTML(proxiedImageUrl(banner.image_url))}" alt="Banner aprovado" loading="lazy"><div class="cover-variant-review-copy"><strong>${escapeHTML(banner.title || "Banner editorial")}</strong><span>${escapeHTML(itemDisplayTitle(state.db.library.find(item => String(item.id) === String(banner.item_id))) || banner.series_id || "Série")}</span><small>${escapeHTML(banner.image_url)}</small><small class="cover-variant-review-decision">Aprovado como banner</small></div></article>`).join("");
+    const cards = reviewTab === "banners" ? bannerCards : candidates.map(candidate => {
       const item = itemFor(candidate);
       const seriesId = item?.seriesId || "";
       const image = candidate.metadata?.cover_url || "";
@@ -9892,15 +10219,58 @@
       const decision = candidate.status === "pending"
         ? "Aguardando revisão"
         : `${candidate.status === "approved" ? "Aprovada" : "Rejeitada"} por @${candidate.reviewerName || "administrador"}${candidate.reviewed_at ? ` · ${formatCommentDate(candidate.reviewed_at)}` : ""}`;
+      const bannerAction = state.profile?.plan === "admin" && seriesId
+        ? `<button class="small-btn" data-banner-review="${candidate.id}">Aprovar como banner</button>`
+        : "";
       const historyAction = candidate.status === "approved"
-        ? `<button class="small-btn danger" data-bot-transition="${candidate.id}" data-status="rejected">Mudar de ideia</button>`
-        : `<button class="small-btn" data-bot-transition="${candidate.id}" data-status="pending">Repescar</button>`;
-      return `<article class="cover-variant-review-card"><img src="${escapeHTML(proxiedImageUrl(image))}" alt="Capa candidata" loading="lazy"><div class="cover-variant-review-copy"><strong>${escapeHTML(itemDisplayTitle(item) || candidate.title)}</strong><span>Criador: ${escapeHTML(creator)}</span><small>${escapeHTML(image)}</small><small class="cover-variant-review-decision">${escapeHTML(decision)}</small><div class="staff-activity-actions">${seriesId ? `<button class="small-btn" data-bot-series="${escapeHTML(seriesId)}">Série</button>` : ""}${candidate.status === "pending" && state.profile?.plan === "admin" ? `<button class="small-btn" data-bot-review="${candidate.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-bot-review="${candidate.id}" data-status="rejected">Rejeitar</button>` : state.profile?.plan === "admin" ? historyAction : `<span class="status-pill">${escapeHTML(candidate.status)}</span>`}</div></div></article>`;
+        ? `<button class="small-btn danger" data-bot-transition="${candidate.id}" data-status="rejected">Mudar de ideia</button>${bannerAction}`
+        : `<button class="small-btn" data-bot-transition="${candidate.id}" data-status="pending">Repescar</button>${bannerAction}`;
+      return `<article class="cover-variant-review-card"><img src="${escapeHTML(proxiedImageUrl(image))}" alt="Capa candidata" loading="lazy"><div class="cover-variant-review-copy"><strong>${escapeHTML(itemDisplayTitle(item) || candidate.title)}</strong><span>Criador: ${escapeHTML(creator)}</span><small>${escapeHTML(image)}</small><small class="cover-variant-review-decision">${escapeHTML(decision)}</small><div class="staff-activity-actions">${seriesId ? `<button class="small-btn cover-variant-series-button" data-bot-series="${escapeHTML(seriesId)}">Série</button>` : ""}${candidate.status === "pending" && state.profile?.plan === "admin" ? `<button class="small-btn" data-bot-review="${candidate.id}" data-status="approved">Aprovar capa</button>${seriesId ? `<button class="small-btn" data-banner-review="${candidate.id}">Aprovar banner</button>` : ""}<button class="small-btn danger" data-bot-review="${candidate.id}" data-status="rejected">Rejeitar</button>` : state.profile?.plan === "admin" ? historyAction : `<span class="status-pill">${escapeHTML(candidate.status)}</span>`}</div></div></article>`;
     }).join("");
     const tabLabels = { pending: "Pendentes", approved: "Aprovadas", rejected: "Rejeitadas" };
-    const tabs = Object.entries(tabLabels).map(([key, label]) => `<button type="button" class="small-btn cover-variant-review-tab ${reviewTab === key ? "is-active" : ""}" data-cover-review-tab="${key}">${label} <span>${reviewCounts[key]}</span></button>`).join("");
-    overlay.innerHTML = `<div class="modal cover-variants-review-modal"><div class="section-head"><div><h2>Examinar capas variantes</h2><div class="section-subtitle">Revise as capas encontradas antes de disponibilizá-las no catálogo.</div></div><div class="cover-variants-review-actions"><button class="small-btn danger" data-run-cover-variants-bot>Nova busca</button><button class="small-btn" data-close>Fechar</button></div></div><div class="cover-variant-review-tabs">${tabs}</div><div class="cover-variant-review-list">${cards || `<div class="empty">Nenhuma capa ${reviewTab === "pending" ? "candidata aguardando revisão" : reviewTab === "approved" ? "aprovada" : "rejeitada"}.</div>`}</div></div>`;
+    const tabs = Object.entries(tabLabels).map(([key, label]) => `<button type="button" class="small-btn cover-variant-review-tab ${reviewTab === key ? "is-active" : ""}" data-cover-review-tab="${key}">${label} <span>${reviewCounts[key]}</span></button>`).join("") + (state.profile?.plan === "admin" ? `<button type="button" class="small-btn cover-variant-review-tab ${reviewTab === "banners" ? "is-active" : ""}" data-cover-review-tab="banners">Banners aprovados <span>${approvedBanners.length}</span></button><button type="button" class="small-btn cover-variant-review-tab ${reviewTab === "manual" ? "is-active" : ""}" data-cover-review-tab="manual">+ Inserir manualmente</button>` : "");
+    const manualItems = state.db.library.filter(item => item.type === "comic").sort((a, b) => itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"));
+    const manualMarkup = state.profile?.plan === "admin" && reviewTab === "manual" ? `<section class="cover-variant-manual-section"><div class="section-head"><div><h3>Inserir capa variante manualmente</h3><div class="section-subtitle">Cadastre uma imagem por link HTTPS, de qualquer fonte.</div></div></div><form id="manual-cover-variant-form"><div class="field full"><label>Edição</label><select name="itemId" required>${manualItems.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(itemDisplayTitle(item))}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</option>`).join("")}</select></div><div class="form-grid"><div class="field"><label>Chave da variante</label><input name="variantKey" required pattern="[A-Za-z0-9_-]{1,80}" placeholder="ex.: manual-a"></div><div class="field"><label>Nome da variante</label><input name="label" required maxlength="80" placeholder="Capa variante manual"></div></div><div class="field full"><label>Link direto da imagem</label><input name="coverUrl" type="url" required pattern="https://.+" placeholder="https://exemplo.com/capa.jpg"><small class="format-hint">Aceita qualquer fonte, desde que o link comece com https://.</small></div><div class="field full"><label>Link da fonte (opcional)</label><input name="sourceUrl" type="url" placeholder="https://exemplo.com/pagina-da-capa"></div><div class="modal-actions"><button type="submit" class="btn btn-danger">Salvar capa manual</button></div></form></section>` : "";
+    overlay.innerHTML = `<div class="modal cover-variants-review-modal"><div class="section-head"><div><h2>Examinar capas variantes</h2><div class="section-subtitle">Revise as capas encontradas antes de disponibilizá-las no catálogo.</div></div><div class="cover-variants-review-actions">${reviewTab !== "manual" ? '<button class="small-btn danger" data-run-cover-variants-bot>Nova busca</button>' : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="cover-variant-review-tabs">${tabs}</div><div class="cover-variant-review-list" ${reviewTab === "manual" ? 'style="display:none"' : ""}>${cards || `<div class="empty">Nenhuma capa ${reviewTab === "pending" ? "candidata aguardando revisão" : reviewTab === "approved" ? "aprovada" : "rejeitada"}.</div>`}</div></div>`;
     $("#modal-root").appendChild(overlay);
+    if (reviewTab === "banners") {
+      $("[data-run-cover-variants-bot]", overlay)?.remove();
+      if (!approvedBanners.length) $(".cover-variant-review-list", overlay).innerHTML = '<div class="empty">Nenhum banner foi aprovado ainda.</div>';
+      $$(".approved-banner-review-card", overlay).forEach((card, index) => {
+        const banner = approvedBanners[index];
+        const actions = document.createElement("div");
+        actions.className = "staff-activity-actions";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "small-btn";
+        button.dataset.repescarBanner = String(banner?.item_id || "");
+        button.textContent = "Repescar";
+        actions.appendChild(button);
+        card.querySelector(".cover-variant-review-copy")?.appendChild(actions);
+      });
+    }
+    if (manualMarkup) $(".cover-variant-review-list", overlay)?.insertAdjacentHTML("beforebegin", manualMarkup);
+    const manualForm = $("#manual-cover-variant-form", overlay);
+    if (manualForm) {
+      manualForm.querySelector('input[name="variantKey"]')?.closest(".field")?.remove();
+      manualForm.querySelector('input[name="sourceUrl"]')?.closest(".field")?.remove();
+      const filterFields = [["publisher", "Editora"], ["imprint", "Selo"], ["character", "Personagem"], ["seriesTitle", "Série"]];
+      manualForm.insertAdjacentHTML("afterbegin", `<div class="form-grid manual-cover-variant-filters">${filterFields.map(([field, label]) => `<div class="field"><label>${label}</label><select data-manual-filter="${field}"><option value="">Todas</option></select></div>`).join("")}</div>`);
+      const editionSelect = $("select[name=itemId]", manualForm);
+      const filterSelects = $$('[data-manual-filter]', manualForm);
+      const filterValue = (item, field) => field === "character" ? String(item.character || "").trim() : String(item[field] || "").trim();
+      const valuesFor = field => [...new Set(manualItems.map(item => filterValue(item, field)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+      filterSelects.forEach(select => {
+        valuesFor(select.dataset.manualFilter).forEach(value => select.insertAdjacentHTML("beforeend", `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`));
+      });
+      const refreshManualEditions = () => {
+        const selectedItemId = editionSelect.value;
+        const filtered = manualItems.filter(item => filterSelects.every(select => !select.value || filterValue(item, select.dataset.manualFilter) === select.value));
+        editionSelect.innerHTML = filtered.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(itemDisplayTitle(item))}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</option>`).join("");
+        if (filtered.some(item => String(item.id) === selectedItemId)) editionSelect.value = selectedItemId;
+      };
+      filterSelects.forEach(select => select.addEventListener("change", refreshManualEditions));
+    }
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $$('[data-cover-review-tab]', overlay).forEach(button => button.onclick = () => {
@@ -9921,6 +10291,26 @@
       });
     });
     $('[data-run-cover-variants-bot]', overlay)?.addEventListener("click", event => runCoverVariantsBot(event.currentTarget, overlay));
+    $$('[data-repescar-banner]', overlay).forEach(button => button.addEventListener("click", () => {
+      const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.repescarBanner));
+      if (!item) return toast("A edição deste banner não está no catálogo atual.");
+      runCoverVariantsBot(button, overlay, [item]);
+    }));
+    $("#manual-cover-variant-form", overlay)?.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (state.profile?.plan !== "admin") return toast("Apenas administradores podem inserir capas manualmente.");
+      const form = new FormData(event.currentTarget);
+      const coverUrl = String(form.get("coverUrl") || "").trim();
+      if (!/^https:\/\/.+/i.test(coverUrl)) return toast("O link da capa precisa começar com https://.");
+      const payload = { item_id: String(form.get("itemId") || ""), variant_key: `manual-${Date.now()}`, label: String(form.get("label") || "").trim(), cover_url: coverUrl, source_url: null, created_at: new Date().toISOString() };
+      const result = await sb.from("comic_cover_variants").upsert(payload, { onConflict: "item_id,variant_key" });
+      if (result.error) return toast(result.error.message || "Não foi possível cadastrar a capa manual.");
+      await loadCoverCatalog();
+      event.currentTarget.reset();
+      await loadStaffActivities();
+      openCoverVariantsReviewPopup();
+      toast("Capa variante manual cadastrada.");
+    });
     $$('[data-bot-series]', overlay).forEach(button => button.onclick = () => {
       const first = state.db.library.find(item => item.seriesId === button.dataset.botSeries);
       if (!first) return toast("Série não encontrada.");
@@ -10013,6 +10403,25 @@
       }
       if (result.data?.duplicate) toast("Essa capa já existe nesta edição e foi descartada.");
     });
+
+    $$('[data-banner-review]', overlay).forEach(button => button.onclick = async () => {
+      button.disabled = true;
+      const actionId = Number(button.dataset.bannerReview);
+      const candidate = candidates.find(entry => Number(entry.id) === actionId);
+      const candidateItem = itemFor(candidate || {});
+      const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "approve_banner", action_id: actionId, series_id: candidateItem?.seriesId || "" } });
+      if (result.error) {
+        button.disabled = false;
+        let detail = result.error.message || "NÃ£o foi possÃ­vel aprovar o banner.";
+        try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
+        return toast(detail);
+      }
+      await loadHomepageBanners();
+      await loadStaffActivities();
+      overlay.remove();
+      openCoverVariantsReviewPopup();
+      toast("Banner aprovado para a pÃ¡gina inicial.");
+    });
   }
 
   function renderNotifications() {
@@ -10040,7 +10449,7 @@
       openFileReportsPopup(overlay);
       return;
     }
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento${state.staffPendingCount ? ` (${state.staffPendingCount})` : ""}</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-series-link-monitor>Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
     if (staff) {
       const tabs = $(".notification-tabs", overlay);
@@ -10053,6 +10462,8 @@
         tabs.appendChild(reportTab);
         const coverTab = $("[data-open-cover-variants]", tabs);
         if (coverTab) tabs.appendChild(coverTab);
+        const sourceTab = $("[data-open-series-link-monitor]", tabs);
+        if (sourceTab) tabs.appendChild(sourceTab);
       }
     }
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
@@ -10073,6 +10484,7 @@
       openNotificationsPopup("staff");
     });
     $('[data-open-cover-variants]', overlay)?.addEventListener("click", () => openCoverVariantsReviewPopup());
+    $('[data-open-series-link-monitor]', overlay)?.addEventListener("click", () => openSeriesLinkMonitorPopup());
     $$('[data-notification-open]', overlay).forEach(button => button.onclick = async event => {
       if (event.target.closest("[data-notification-profile]")) return;
       const notification = state.notifications.find(item => String(item.id) === String(button.dataset.notificationOpen));
@@ -10308,6 +10720,8 @@
   function bind() {
     hydrateProfileStickerHeaders();
     syncActiveNav();
+    const legendaryBenefits = $(".legendary-sunday-benefits");
+    if (legendaryBenefits) legendaryBenefits.innerHTML = legendaryBenefitsMarkup();
     $$('[data-copy-donation-pix]').forEach(button => {
       if (button.dataset.donationBound) return;
       button.dataset.donationBound = "true";
@@ -10982,6 +11396,24 @@
       });
     }
     $$('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
+    $$('[data-legendary-event-toggle]').forEach(button => button.addEventListener("click", async event => {
+      event.preventDefault();
+      if (state.profile?.plan !== "admin" || !sb) return;
+      button.disabled = true;
+      const sunday = isLegendarySunday();
+      const nextEnabled = sunday ? state.legendarySundayEnabled === false : state.legendaryManualDate !== legendarySaoPauloDate();
+      const result = await sb.rpc(sunday ? "set_legendary_sunday_enabled" : "set_legendary_event_override", { p_enabled: nextEnabled });
+      if (result.error) {
+        button.disabled = false;
+        return toast("Não foi possível alterar o Domingo lendário. Execute o schema atualizado no Supabase.");
+      }
+      if (sunday) state.legendarySundayEnabled = nextEnabled;
+      else state.legendaryManualDate = nextEnabled ? legendarySaoPauloDate() : null;
+      const baseProfile = state.profile?.legendarySunday ? { ...state.profile, plan: "free" } : state.profile;
+      state.profile = effectiveSundayProfile(baseProfile);
+      render();
+      toast(nextEnabled ? "Domingo lendário ativado." : "Domingo lendário desativado.");
+    }));
     $$('[data-publisher-series-toggle]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       const key = el.dataset.publisherSeriesToggle;
@@ -11245,6 +11677,7 @@
       const first = state.db.library.find(item => item.seriesId === seriesId);
       if (first) openSeriesSelection(first, seriesEditions(first));
     };
+    $$('[data-home-banner-series]').forEach(button => button.addEventListener("click", () => openSeriesById(button.dataset.homeBannerSeries)));
     $$('[data-view-series]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       openSeriesById(el.dataset.viewSeries);
@@ -12186,7 +12619,17 @@
     const popularCollectionsMarkup = type === "comic" && popularCollections.length ? `<section class="section popular-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções públicas mais curtidas</h2><div class="section-subtitle">Descubra listas públicas da comunidade</div></div></div><div class="feature-grid">${popularCollections.map(collection => `<div class="feature-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username)}"><div class="cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover_url || ""))}')"></div><div class="gradient"></div><div class="feature-info"><h3>${escapeHTML(collection.name)}</h3><p>${collection.likes} curtida(s) · @${escapeHTML(collection.username)}</p></div></div>`).join("")}</div></section>` : "";
     const heading = type === "manga" ? "Mangás" : type === "comic" ? "Quadrinhos" : "Catálogo";
     const catalogHeader = type === "comic" ? "" : `<div class="section-head"><div><h1 class="section-title">${heading}</h1><div class="section-subtitle">${items.length} edição(ões)</div></div></div>`;
-    return `<div class="content">${catalogHeader}${publisherPinnedCarousel}${group("Séries", series, true)}${group("Oneshots", oneshots)}${!items.length ? `<div class="empty">Nenhuma edição cadastrada.</div>` : ""}${publisherCarousel}${popularCollectionsMarkup}</div>`;
+    const legendarySundayDay = isLegendarySunday();
+    const legendarySundayEnabled = state.legendarySundayEnabled !== false;
+    const legendaryManualActive = !legendarySundayDay && state.legendaryManualDate === legendarySaoPauloDate();
+    const legendaryEventActive = (legendarySundayDay && legendarySundayEnabled) || legendaryManualActive;
+    const legendaryEventName = `${legendaryDayName()} lendária`;
+    const showLegendarySundayBanner = type === "comic" && (legendaryEventActive || isAdminProfile());
+    const legendarySundayActive = legendaryEventActive;
+    const legendarySundayCovers = legendaryWeeklyCovers(items);
+    const legendarySundayStatus = isAdminProfile() ? `<div class="legendary-sunday-status"><span>${legendarySundayDay ? (legendarySundayEnabled ? "Evento automático ativo" : "Evento automático desativado") : (legendaryManualActive ? "Evento ativo hoje" : "Evento oculto fora do dia automático")}</span><button type="button" class="small-btn" data-legendary-event-toggle>${legendarySundayDay ? (legendarySundayEnabled ? "Desativar evento" : "Ativar evento") : (legendaryManualActive ? "Desativar evento" : `Ativar ${escapeHTML(legendaryEventName)}`)}</button></div>` : "";
+    const legendarySundayBanner = showLegendarySundayBanner ? `<section class="legendary-sunday-banner ${legendarySundayActive ? "is-active" : "is-preview"}" role="status"><div class="legendary-sunday-art" aria-hidden="true">${legendarySundayCovers}</div><div class="legendary-sunday-copy"><div class="legendary-sunday-badge">★ ${escapeHTML(legendaryEventName)}</div><h1>Hoje todo membro comum é Lenda</h1><p>Aproveite o acesso liberado ${legendarySundayDay ? "durante todo o domingo" : "neste dia"}. O plano normal volta automaticamente quando o dia terminar.</p><div class="legendary-sunday-benefits"><span>✓ Capas variantes</span><span>✓ Estilos visuais de capa</span><span>✓ Escolha de capa por série</span><span>✓ Recursos exclusivos da estante</span><span>✓ Benefícios de Lenda no ranking</span></div></div></section>${legendarySundayStatus}` : "";
+    return `<div class="content">${legendarySundayBanner}${catalogHeader}${publisherPinnedCarousel}${group("Séries", series, true)}${group("Oneshots", oneshots)}${!items.length ? `<div class="empty">Nenhuma edição cadastrada.</div>` : ""}${publisherCarousel}${popularCollectionsMarkup}</div>`;
   }
 
   function seriesDefinitionFor(item) {
@@ -12350,8 +12793,11 @@
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Leituras mensais indisponíveis:", error));
   loadHomepageSettings()
-    .then(() => { if (state.section === "home") render(); })
+    .then(() => { if (state.section === "home" || state.section === "comics") render(); })
     .catch(error => console.warn("Ordem da página inicial indisponível:", error));
+  loadHomepageBanners()
+    .then(() => { if (state.section === "home") render(); })
+    .catch(error => console.warn("Banners da home indisponíveis:", error));
   sb?.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") {
       state.session = session;

@@ -85,6 +85,8 @@ O `cover-variants-bot` examina as edições enviadas pelo painel administrativo,
 
 Configure as fontes autorizadas como JSON nos secrets do Supabase. A URL pode usar `{item_id}`, `{series}`, `{issue}` e `{publisher}`:
 
+Sem esse secret, a função usa automaticamente a página correspondente do DCU Guide como fonte padrão. Se `COVER_VARIANT_SOURCES` for definido como uma lista vazia, o fallback padrão também será usado.
+
 ```text
 supabase secrets set COVER_VARIANT_SOURCES='[{"name":"Fonte autorizada","url":"https://fonte.exemplo/busca?serie={series}&edicao={issue}"}]'
 supabase functions deploy cover-variants-bot
@@ -101,3 +103,16 @@ Para a versão online, substitua o DataStore por uma API com banco de dados. Uma
 - `works`: obras/edições
 - `collections`: coletâneas
 - `submissions`: envios dos leitores
+
+## Verificação diária de links
+
+A Edge Function `link-checker-bot` lê os arquivos do catálogo publicado, testa `fileUrl`, `backupUrls` e `telegramUrl` e cria relatos automáticos em `file_reports`. Eles ficam identificados no painel como `Relato automático de link-checker-bot`.
+
+Para publicar e configurar o bot:
+
+```bash
+supabase secrets set LINK_CHECKER_SECRET=UM_SEGREDO_LONGO GITHUB_REPOSITORY=Uriel29M/banca-digital-quadrinhos-v3 GITHUB_BRANCH=main
+supabase functions deploy link-checker-bot --no-verify-jwt
+```
+
+Defina também `CATALOG_FILES` se houver outros catálogos, separados por vírgula. O arquivo `.github/workflows/link-checker.yml` já agenda a execução diária; crie no GitHub os secrets `SUPABASE_URL` e `LINK_CHECKER_SECRET`. Como alternativa, no Supabase Dashboard, crie um job diário em Database > Cron que faça `POST` para `/functions/v1/link-checker-bot` com o cabeçalho `x-link-checker-secret` igual ao segredo configurado e corpo `{}`.

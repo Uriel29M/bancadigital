@@ -17,10 +17,13 @@ const root = process.cwd();
 const outputDir = path.join(root, 'Arquivos', 'CBZ');
 const tempDir = path.join(root, 'Arquivos', '.tmp-cbz');
 const supabaseUrl = 'https://vqfmbpqurapcsuixgvql.supabase.co';
+const blackLabelMode = process.argv.includes('--black-label');
 const source = await fs.readFile(path.join(root, 'js', 'data', 'dc-comics', 'recentes.js'), 'utf8');
+const blackLabelSource = await fs.readFile(path.join(root, 'js', 'data', 'dc-comics', 'black-label.js'), 'utf8');
 const context = { window: {}, console };
 vm.createContext(context);
 vm.runInContext(source, context);
+if (blackLabelMode) vm.runInContext(blackLabelSource, context);
 Archive.init({
   getWorker: () => {
     const worker = new Worker(path.resolve(root, 'node_modules', 'libarchive.js', 'dist', 'worker-bundle-node.mjs'));
@@ -40,8 +43,13 @@ let previousManifest = [];
 try { previousManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')); } catch {}
 const retryIds = new Set(previousManifest.filter((entry) => entry.status === 'error').map((entry) => entry.id));
 const completedIds = new Set(previousManifest.filter((entry) => entry.status === 'ok' || entry.status === 'exists').map((entry) => entry.id));
-const items = context.window.DEFAULT_LIBRARY.filter((item) => !blocked.has(item.fileUrl) && (retryIds.size ? retryIds.has(item.id) : !completedIds.has(item.id)));
 const seriesById = new Map(context.window.DEFAULT_SERIES.map((series) => [series.id, series]));
+const blackLabelSeriesIds = new Set(context.window.DEFAULT_SERIES.filter((series) => series.imprint === 'Black Label').map((series) => series.id));
+const items = context.window.DEFAULT_LIBRARY.filter((item) =>
+  (!blackLabelMode || blackLabelSeriesIds.has(item.seriesId)) &&
+  !blocked.has(item.fileUrl) &&
+  (retryIds.size ? retryIds.has(item.id) : !completedIds.has(item.id))
+);
 const REBUILD_EXISTING = true;
 
 await fs.mkdir(outputDir, { recursive: true });
@@ -140,6 +148,7 @@ async function download(url, target) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
+      await fs.mkdir(path.dirname(target), { recursive: true });
       const separator = proxyUrl(url).includes('?') ? '&' : '?';
       if (new URL(url).hostname.toLowerCase().endsWith('mega.nz')) {
         try {
@@ -173,18 +182,23 @@ async function download(url, target) {
           console.error(`Mega direto falhou: ${error?.stack || error}`);
         }
       }
-      const response = await fetch(`${proxyUrl(url)}${separator}retry=${attempt}`, { signal: AbortSignal.timeout(60 * 60 * 1000) });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const handle = await fs.open(target, 'w');
+      const downloadUrl = `${proxyUrl(url)}${separator}retry=${attempt}`;
       try {
-        const reader = response.body.getReader();
-        while (true) {
-          const part = await reader.read();
-          if (part.done) break;
-          await handle.write(part.value);
+        const response = await fetch(downloadUrl, { signal: AbortSignal.timeout(60 * 60 * 1000) });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const handle = await fs.open(target, 'w');
+        try {
+          const reader = response.body.getReader();
+          while (true) {
+            const part = await reader.read();
+            if (part.done) break;
+            await handle.write(part.value);
+          }
+        } finally {
+          await handle.close();
         }
-      } finally {
-        await handle.close();
+      } catch (fetchError) {
+        await execFileAsync('curl.exe', ['-L', '--fail', '--retry', '3', '--output', target, downloadUrl], { timeout: 60 * 60 * 1000 });
       }
       return;
     } catch (error) {

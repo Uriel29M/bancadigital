@@ -13,12 +13,13 @@ create table if not exists public.sticker_awards (
   edition_fingerprint text not null,
   cover_item_id text not null,
   cover_url text not null check (cover_url ~ '^https://|^data:image/'),
-  rarity text not null default 'standard' check (rarity in ('standard', 'torn', 'creased', 'silver', 'gold')),
+  rarity text not null default 'standard' check (rarity in ('standard', 'creased', 'silver', 'gold')),
   awarded_at timestamptz not null default now(),
   unique (user_id, character_id, edition_fingerprint)
 );
 alter table public.sticker_awards drop constraint if exists sticker_awards_rarity_check;
-alter table public.sticker_awards add constraint sticker_awards_rarity_check check (rarity in ('standard', 'torn', 'creased', 'silver', 'gold'));
+update public.sticker_awards set rarity = 'standard' where rarity = 'torn';
+alter table public.sticker_awards add constraint sticker_awards_rarity_check check (rarity in ('standard', 'creased', 'silver', 'gold'));
 create index if not exists sticker_awards_user_idx on public.sticker_awards(user_id, character_name);
 create index if not exists sticker_awards_character_idx on public.sticker_awards(character_id, awarded_at desc);
 alter table public.sticker_awards add column if not exists album_section text not null default 'pasted';
@@ -179,7 +180,7 @@ begin
   insert into public.sticker_claim_history(user_id, character_id, edition_fingerprint)
   values (auth.uid(), p_character_id, p_edition_fingerprint);
   insert into public.sticker_awards(user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, album_section)
-  values (auth.uid(), p_character_id, left(trim(p_character_name), 160), left(trim(p_publisher_name), 160), left(trim(p_edition_fingerprint), 500), left(trim(v_cover_item_id), 200), left(trim(v_cover_url), 2000), case when v_roll < 2 then 'gold' when v_roll < 7 then 'silver' when v_roll < 17 then 'creased' when v_roll < 35 then 'torn' else 'standard' end, case when exists (select 1 from public.sticker_awards where user_id = auth.uid() and character_id = p_character_id and album_section = 'pasted') then 'repeated' else 'pasted' end)
+  values (auth.uid(), p_character_id, left(trim(p_character_name), 160), left(trim(p_publisher_name), 160), left(trim(p_edition_fingerprint), 500), left(trim(v_cover_item_id), 200), left(trim(v_cover_url), 2000), case when p_edition_fingerprint like 'read:%' then 'standard' when p_character_id like 'series::%' then 'silver' else 'gold' end, case when p_edition_fingerprint like 'read:%' then 'repeated' when exists (select 1 from public.sticker_awards where user_id = auth.uid() and character_id = p_character_id and album_section = 'pasted') then 'repeated' else 'pasted' end)
   returning * into v_award;
   return v_award;
 end;
@@ -543,10 +544,12 @@ declare
   v_result public.sticker_awards;
   v_existing public.sticker_awards;
   v_username text;
+  v_rarity text;
 begin
   if not public.is_admin() then raise exception 'Apenas administradores podem conceder figurinhas diretamente'; end if;
   if p_recipient_id is null or p_recipient_id = auth.uid() then raise exception 'Destinatário inválido'; end if;
-  if p_rarity not in ('standard', 'torn', 'creased', 'silver', 'gold') then raise exception 'Raridade inválida'; end if;
+  if p_rarity not in ('standard', 'creased', 'silver', 'gold') then raise exception 'Raridade inválida'; end if;
+  v_rarity := case when p_rarity = 'standard' and random() < 0.15 then 'creased' else p_rarity end;
   if nullif(trim(p_character_id), '') is null or nullif(trim(p_character_name), '') is null
     or nullif(trim(p_publisher_name), '') is null or nullif(trim(p_edition_fingerprint), '') is null
     or nullif(trim(p_cover_item_id), '') is null or nullif(trim(p_cover_url), '') is null
@@ -566,12 +569,12 @@ begin
   on conflict (user_id, character_id, edition_fingerprint) do nothing;
   if v_existing.id is not null then
     update public.sticker_awards
-    set character_name = left(trim(p_character_name), 160), publisher_name = left(trim(p_publisher_name), 160), cover_item_id = left(trim(p_cover_item_id), 200), cover_url = left(trim(p_cover_url), 2000), rarity = p_rarity, album_section = 'pasted'
+    set character_name = left(trim(p_character_name), 160), publisher_name = left(trim(p_publisher_name), 160), cover_item_id = left(trim(p_cover_item_id), 200), cover_url = left(trim(p_cover_url), 2000), rarity = v_rarity, album_section = 'pasted'
     where id = v_existing.id
     returning * into v_result;
   else
     insert into public.sticker_awards(user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, album_section)
-    values (p_recipient_id, p_character_id, left(trim(p_character_name), 160), left(trim(p_publisher_name), 160), left(trim(p_edition_fingerprint), 500), left(trim(p_cover_item_id), 200), left(trim(p_cover_url), 2000), p_rarity, 'pasted')
+    values (p_recipient_id, p_character_id, left(trim(p_character_name), 160), left(trim(p_publisher_name), 160), left(trim(p_edition_fingerprint), 500), left(trim(p_cover_item_id), 200), left(trim(p_cover_url), 2000), v_rarity, 'pasted')
     returning * into v_result;
   end if;
   perform public.create_notification(p_recipient_id, 'sticker_admin_donation', 'Você recebeu uma figurinha', 'Um administrador adicionou uma figurinha de ' || v_result.character_name || ' ao seu álbum.', auth.uid(), '?perfil=' || v_username || '&album=1', jsonb_build_object('character_id', v_result.character_id, 'rarity', v_result.rarity));
@@ -589,6 +592,7 @@ declare
   v_result public.sticker_awards;
   v_existing public.sticker_awards;
   v_recipient_username text;
+  v_rarity text;
 begin
   if auth.uid() is null or p_recipient_id is null or p_recipient_id = auth.uid() then
     raise exception 'Doação inválida';
@@ -598,6 +602,7 @@ begin
   where id = p_award_id and user_id = auth.uid()
   for update;
   if not found then raise exception 'Figurinha não encontrada'; end if;
+  v_rarity := case when v_award.rarity = 'standard' and random() < 0.15 then 'creased' else v_award.rarity end;
   select username into v_recipient_username from public.profiles where id = p_recipient_id;
   if v_recipient_username is null then raise exception 'Usuário não encontrado'; end if;
   select * into v_existing from public.sticker_awards
@@ -609,12 +614,12 @@ begin
     and (offered_award_id = v_award.id or offered_award_id_2 = v_award.id);
   delete from public.sticker_awards where id = v_award.id;
   if v_existing.id is not null then
-    update public.sticker_awards set character_name = v_award.character_name, publisher_name = v_award.publisher_name, cover_item_id = v_award.cover_item_id, cover_url = v_award.cover_url, rarity = v_award.rarity
+    update public.sticker_awards set character_name = v_award.character_name, publisher_name = v_award.publisher_name, cover_item_id = v_award.cover_item_id, cover_url = v_award.cover_url, rarity = v_rarity
     where id = v_existing.id
     returning * into v_result;
   else
     insert into public.sticker_awards(user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, album_section)
-    values (p_recipient_id, v_award.character_id, v_award.character_name, v_award.publisher_name, v_award.edition_fingerprint, v_award.cover_item_id, v_award.cover_url, v_award.rarity, case when exists (select 1 from public.sticker_awards where user_id = p_recipient_id and character_id = v_award.character_id and album_section = 'pasted') then 'repeated' else 'pasted' end)
+    values (p_recipient_id, v_award.character_id, v_award.character_name, v_award.publisher_name, v_award.edition_fingerprint, v_award.cover_item_id, v_award.cover_url, v_rarity, case when exists (select 1 from public.sticker_awards where user_id = p_recipient_id and character_id = v_award.character_id and album_section = 'pasted') then 'repeated' else 'pasted' end)
     returning * into v_result;
   end if;
   perform public.create_notification(

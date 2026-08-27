@@ -1,0 +1,20 @@
+name: Descobrir novas edições nas fontes
+
+on:
+  schedule:
+    - cron: "37 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  scan-series-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Executar series-link-monitor
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SERIES_MONITOR_SECRET: ${{ secrets.SERIES_MONITOR_SECRET }}
+        run: |
+          curl --fail-with-body --retry 3 --retry-delay 10 -X POST "$SUPABASE_URL/functions/v1/series-link-monitor" \
+            -H "x-series-monitor-secret: $SERIES_MONITOR_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{}'

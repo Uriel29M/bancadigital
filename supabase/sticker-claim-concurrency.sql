@@ -51,7 +51,7 @@ begin
   end if;
   insert into public.sticker_claim_history(user_id, character_id, edition_fingerprint) values (auth.uid(), p_character_id, p_edition_fingerprint);
   insert into public.sticker_awards(user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, album_section)
-  values (auth.uid(), p_character_id, left(trim(p_character_name),160), left(trim(p_publisher_name),160), left(trim(p_edition_fingerprint),500), left(trim(v_cover_item_id),200), left(trim(v_cover_url),2000), case when v_roll < 2 then 'gold' when v_roll < 7 then 'silver' when v_roll < 17 then 'creased' when v_roll < 35 then 'torn' else 'standard' end, case when exists (select 1 from public.sticker_awards where user_id = auth.uid() and character_id = p_character_id and album_section = 'pasted') then 'repeated' else 'pasted' end)
+  values (auth.uid(), p_character_id, left(trim(p_character_name),160), left(trim(p_publisher_name),160), left(trim(p_edition_fingerprint),500), left(trim(v_cover_item_id),200), left(trim(v_cover_url),2000), case when p_edition_fingerprint like 'read:%' then 'standard' when p_character_id like 'series::%' then 'silver' else 'gold' end, case when p_edition_fingerprint like 'read:%' then 'repeated' when exists (select 1 from public.sticker_awards where user_id = auth.uid() and character_id = p_character_id and album_section = 'pasted') then 'repeated' else 'pasted' end)
   returning * into v_award;
   return v_award;
 end;

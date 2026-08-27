@@ -117,12 +117,13 @@ create or replace function public.admin_donate_sticker(
 )
 returns public.sticker_awards language plpgsql security definer set search_path = public
 as $$
-declare v_result public.sticker_awards; v_existing public.sticker_awards; v_username text;
+declare v_result public.sticker_awards; v_existing public.sticker_awards; v_username text; v_rarity text;
 begin
   if not public.is_admin() then raise exception 'Apenas administradores podem conceder figurinhas diretamente'; end if;
   if p_recipient_id is null or p_recipient_id = auth.uid() then raise exception 'Destinatário inválido'; end if;
   if exists (select 1 from public.sticker_slot_preferences where user_id = p_recipient_id and character_id = p_character_id and blocked) then raise exception 'Este slot não aceita doações'; end if;
-  if p_rarity not in ('standard', 'torn', 'creased', 'silver', 'gold') then raise exception 'Raridade inválida'; end if;
+  if p_rarity not in ('standard', 'creased', 'silver', 'gold') then raise exception 'Raridade inválida'; end if;
+  v_rarity := case when p_rarity = 'standard' and random() < 0.15 then 'creased' else p_rarity end;
   if nullif(trim(p_character_id), '') is null or nullif(trim(p_character_name), '') is null or nullif(trim(p_publisher_name), '') is null or nullif(trim(p_edition_fingerprint), '') is null or nullif(trim(p_cover_item_id), '') is null or nullif(trim(p_cover_url), '') is null or jsonb_typeof(p_edition_ids) <> 'array' or jsonb_array_length(p_edition_ids) = 0 or p_cover_url !~ '^https://|^data:image/' then raise exception 'Dados da figurinha inválidos'; end if;
   select username into v_username from public.profiles where id = p_recipient_id;
   if v_username is null then raise exception 'Usuário não encontrado'; end if;
@@ -130,9 +131,9 @@ begin
   select * into v_existing from public.sticker_awards where user_id = p_recipient_id and character_id = p_character_id and edition_fingerprint = p_edition_fingerprint for update;
   insert into public.sticker_claim_history(user_id, character_id, edition_fingerprint) values (p_recipient_id, p_character_id, p_edition_fingerprint) on conflict do nothing;
   if v_existing.id is not null then
-    update public.sticker_awards set character_name = left(trim(p_character_name),160), publisher_name = left(trim(p_publisher_name),160), cover_item_id = left(trim(p_cover_item_id),200), cover_url = left(trim(p_cover_url),2000), rarity = p_rarity, album_section = 'pasted' where id = v_existing.id returning * into v_result;
+    update public.sticker_awards set character_name = left(trim(p_character_name),160), publisher_name = left(trim(p_publisher_name),160), cover_item_id = left(trim(p_cover_item_id),200), cover_url = left(trim(p_cover_url),2000), rarity = v_rarity, album_section = 'pasted' where id = v_existing.id returning * into v_result;
   else
-    insert into public.sticker_awards(user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, album_section) values (p_recipient_id, p_character_id, left(trim(p_character_name),160), left(trim(p_publisher_name),160), left(trim(p_edition_fingerprint),500), left(trim(p_cover_item_id),200), left(trim(p_cover_url),2000), p_rarity, 'pasted') returning * into v_result;
+    insert into public.sticker_awards(user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, album_section) values (p_recipient_id, p_character_id, left(trim(p_character_name),160), left(trim(p_publisher_name),160), left(trim(p_edition_fingerprint),500), left(trim(p_cover_item_id),200), left(trim(p_cover_url),2000), v_rarity, 'pasted') returning * into v_result;
   end if;
   perform public.create_notification(p_recipient_id, 'sticker_admin_donation', 'Você recebeu uma figurinha', 'Um administrador adicionou uma figurinha de ' || v_result.character_name || ' ao seu álbum.', auth.uid(), '?perfil=' || v_username || '&album=1', jsonb_build_object('character_id', v_result.character_id, 'rarity', v_result.rarity));
   return v_result;

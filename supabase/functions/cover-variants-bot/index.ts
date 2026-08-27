@@ -19,10 +19,14 @@ function required(name: string) {
 type Source = { name: string; url: string };
 
 function sourcesFromEnvironment(): Source[] {
-  const raw = Deno.env.get("COVER_VARIANT_SOURCES")?.trim() || "[]";
+  // A função não pode percorrer o catálogo silenciosamente sem consultar
+  // nenhuma fonte. O segredo continua permitindo substituir/expandir a lista.
+  const defaultSources = [{ name: "DCU Guide", url: "https://dcuguide.com/{series_slug}_{issue_number}" }];
+  const raw = Deno.env.get("COVER_VARIANT_SOURCES")?.trim() || JSON.stringify(defaultSources);
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) throw new Error("COVER_VARIANT_SOURCES must be a JSON array");
-  return parsed.filter(item => item && typeof item.name === "string" && typeof item.url === "string").slice(0, 10);
+  const sources = parsed.filter(item => item && typeof item.name === "string" && typeof item.url === "string").slice(0, 10);
+  return sources.length ? sources : defaultSources;
 }
 
 function expandTemplate(template: string, item: Record<string, unknown>) {
@@ -209,6 +213,39 @@ Deno.serve(async request => {
       if (updated.error) throw updated.error;
       return json({ ok: true, status: nextStatus });
     }
+    if (payload.action === "approve_banner") {
+      const actionId = Number(payload.action_id);
+      if (!Number.isInteger(actionId) || actionId < 1) return json({ error: "Invalid banner candidate" }, 400);
+      const actionResult = await service.from("bot_actions")
+        .select("id, action, status, metadata")
+        .eq("id", actionId)
+        .maybeSingle();
+      if (actionResult.error) throw actionResult.error;
+      const action = actionResult.data;
+      if (!action || action.action !== "cover_variant_candidate") return json({ error: "Banner candidate not found" }, 404);
+      if (!["pending", "approved", "rejected"].includes(String(action.status))) return json({ error: "This candidate was already reviewed" }, 409);
+      const metadata = action.metadata || {};
+      const itemId = String(metadata.item_id || "").trim();
+      const imageUrl = String(metadata.cover_url || "").trim();
+      const bannerKey = String(metadata.variant_key || `candidate-${actionId}`).trim();
+      const title = String(metadata.label || metadata.creator || `Banner ${itemId}`).trim();
+      const seriesId = String(metadata.series_id || payload.series_id || "").trim();
+      if (!itemId || !seriesId || !imageUrl.startsWith("https://")) return json({ error: "The banner needs a catalog item, series and HTTPS image" }, 400);
+      const inserted = await service.from("homepage_banners").upsert({
+        item_id: itemId,
+        series_id: seriesId,
+        title: title.slice(0, 200),
+        image_url: imageUrl,
+        source_url: String(metadata.source_url || "").trim() || null,
+        banner_key: bannerKey.slice(0, 160),
+        is_active: true,
+        approved_by: user.id,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "item_id,banner_key" }).select("id").maybeSingle();
+      if (inserted.error) throw inserted.error;
+      await service.from("bot_actions").update({ status: "approved", reviewed_by: user.id, reviewed_at: new Date().toISOString() }).eq("id", actionId);
+      return json({ ok: true, inserted: Boolean(inserted.data) });
+    }
     if (payload.action === "approve_variant") {
       const actionId = Number(payload.action_id);
       if (!Number.isInteger(actionId) || actionId < 1) return json({ error: "Invalid bot action" }, 400);
@@ -326,8 +363,8 @@ Deno.serve(async request => {
         for (const image of images) {
           const coverUrl = image.url;
           if (source.name.toLowerCase().includes("dcu guide") && !/cover[_%20-]*[b-z]/i.test(new URL(coverUrl).pathname)) continue;
-          if (!image.label) continue;
-          const candidateCreator = creatorKey(image.label);
+          const label = image.label || `${source.name} · Capa variante`;
+          const candidateCreator = creatorKey(label);
           if (!candidateCreator || knownCreators.has(`${item.id}:${candidateCreator}`)) continue;
           const checked = await verifyImage(coverUrl);
           if (!checked.ok) continue;
@@ -338,7 +375,7 @@ Deno.serve(async request => {
           known.add(`${item.id}:${variantKey}`);
           imageIdentity.forEach(key => knownImages.add(key));
           knownCreators.add(`${item.id}:${candidateCreator}`);
-          candidates.push({ item_id: item.id, variant_key: variantKey, label: image.label || `${source.name} · criador não identificado`, creator: image.label || null, cover_url: coverUrl, source_url: sourceUrl, content_type: checked.contentType });
+          candidates.push({ item_id: item.id, series_id: item.seriesId || null, variant_key: variantKey, label, creator: image.label || null, cover_url: coverUrl, source_url: sourceUrl, content_type: checked.contentType });
         }
       }
     }

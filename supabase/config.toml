@@ -12,3 +12,9 @@ verify_jwt = false
 
 [functions.cover-variants-bot]
 verify_jwt = false
+
+[functions.link-checker-bot]
+verify_jwt = false
+
+[functions.series-link-monitor]
+verify_jwt = false

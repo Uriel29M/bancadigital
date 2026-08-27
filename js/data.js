@@ -5,6 +5,6 @@
  */
 window.CATALOG_DATA_SOURCES = {
   publishers: [
-    { id: "dc-comics", name: "DC Comics", imprints: ["recentes"] }
+    { id: "dc-comics", name: "DC Comics", imprints: ["recentes", "black-label"] }
   ]
 };

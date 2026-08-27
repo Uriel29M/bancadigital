@@ -1,0 +1,20 @@
+name: Verificar links do catálogo
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Executar link-checker-bot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          LINK_CHECKER_SECRET: ${{ secrets.LINK_CHECKER_SECRET }}
+        run: |
+          curl --fail-with-body --retry 3 --retry-delay 10 -X POST "$SUPABASE_URL/functions/v1/link-checker-bot" \
+            -H "x-link-checker-secret: $LINK_CHECKER_SECRET" \
+            -H "Content-Type: application/json" \
+            --data '{}'
