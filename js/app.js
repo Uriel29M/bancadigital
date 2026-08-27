@@ -12759,7 +12759,10 @@
       [ROUTE_HISTORY_INDEX_KEY]: 0,
     }, "", window.location.href);
   }
-  const routeParts = pathParts[0]?.toLowerCase() === "banca-digital-quadrinhos-v3" ? pathParts.slice(1) : pathParts;
+  // O site pode ser servido na raiz ou por uma pasta do GitHub Pages. Essas
+  // pastas não são nomes de usuário e não devem abrir o perfil público.
+  const siteBasePaths = new Set(["banca-digital-quadrinhos-v3", "bancadigital", "banca-digital"]);
+  const routeParts = siteBasePaths.has(pathParts[0]?.toLowerCase()) ? pathParts.slice(1) : pathParts;
   const queryProfile = new URLSearchParams(window.location.search).get("perfil");
   const queryPublicCollection = new URLSearchParams(window.location.search).get("lista");
   const initialPublicUsername = queryProfile
