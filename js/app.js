@@ -2268,7 +2268,10 @@
     // offline continua restrito aos arquivos da área Downloads.
     const browserOffline = navigator.onLine === false;
     const offlineFallback = offlineAccount?.user ? { user: offlineAccount.user, offline: true } : null;
-    const session = browserOffline ? offlineFallback : (remoteSession || offlineFallback);
+    // A conta local só pode ser usada como sessão offline quando o navegador
+    // realmente está sem conexão. Se o Auth falhar online, mantenha o app
+    // online/anônimo para não prender o usuário na área Downloads.
+    const session = browserOffline ? offlineFallback : remoteSession;
     state.session = session?.user ? session : null;
     if (remoteSession?.user) {
       // Persiste a identidade assim que a sessão é reconhecida. A senha e os
@@ -2445,7 +2448,7 @@
     await sb.rpc("purge_my_expired_notifications");
     const result = await sb.from("notifications").select("id, actor_id, type, title, body, href, metadata, read_at, created_at, expires_at").eq("user_id", state.session.user.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(100);
     if (result.error) {
-      if (/fetch|network|disconnected|offline/i.test(String(result.error.message || ""))) {
+      if (navigator.onLine === false && /fetch|network|disconnected|offline/i.test(String(result.error.message || ""))) {
         state.session = { ...state.session, offline: true };
         state.notificationChannel?.unsubscribe?.();
         state.notificationChannel = null;
@@ -12806,6 +12809,7 @@
     }
   });
   let reconnecting = false;
+  let forcedOfflineDownloads = false;
   window.addEventListener("online", async () => {
     if (!state.session?.offline || reconnecting) return;
     reconnecting = true;
@@ -12822,6 +12826,10 @@
         sb.auth.startAutoRefresh?.();
         await loadAccount();
         pumpDownloadQueue();
+        if (forcedOfflineDownloads) {
+          forcedOfflineDownloads = false;
+          navigate({}, true);
+        }
       }
     } catch (error) {
       console.warn("Não foi possível retomar a sessão online:", error);
@@ -12836,6 +12844,7 @@
         activateOfflineMode();
         return;
       }
+      forcedOfflineDownloads = true;
       navigate({ pagina: "downloads" }, true);
       armOfflineHistoryGuard();
     }
