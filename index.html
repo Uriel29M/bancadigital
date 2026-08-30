@@ -7,12 +7,12 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.120">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.123">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=164", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=165", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponÃ­vel:", error));
       });
     }
@@ -29,9 +29,7 @@
       <nav class="main-nav" aria-label="Principal">
         <button data-section="home" class="nav-link active">Início</button>
         <button data-section="comics" class="nav-link">Quadrinhos</button>
-        <button data-section="ranking" class="nav-link">Ranking</button>
         <button data-section="factions" class="nav-link">Facção</button>
-        <button data-action="open-profile-page" class="nav-link">Perfil</button>
         <button data-section="surprise" class="nav-link">Surpreenda-me</button>
         <button data-section="local-box" class="nav-link local-box-nav" style="display:none">Minha caixa</button>
         <button data-section="album" class="nav-link album-nav" style="display:none">Álbum</button>
@@ -39,6 +37,7 @@
 
       <div class="top-actions">
         <button class="reader-btn downloads-header-btn" data-action="downloads" title="Downloads" aria-label="Downloads">↓<span class="download-badge" hidden></span></button>
+        <button class="reader-btn ranking-header-btn" data-section="ranking" title="Ranking" aria-label="Ranking">🏆</button>
         <button class="reader-btn messages-header-btn" data-action="messages" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></button>
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜<span class="staff-activity-badge" hidden></span></button>

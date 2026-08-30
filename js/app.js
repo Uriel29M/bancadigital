@@ -1410,6 +1410,18 @@
     return faction ? { role, faction } : null;
   }
 
+  function staffTitleForProfile(profile = {}) {
+    const plan = normalizedPlan(profile);
+    if (plan === "admin") return "ADM";
+    if (plan === "moderator") return "Moderador";
+    return "";
+  }
+
+  function staffTitleMarkup(profile = {}) {
+    const label = staffTitleForProfile(profile);
+    return label ? `<span class="profile-title profile-staff-role" data-profile-staff-title>${label}</span>` : "";
+  }
+
   function factionRoleTitleMarkup(profile = {}, includeEmblem = true) {
     const roleInfo = factionRoleForProfile(profile);
     if (!roleInfo) return "";
@@ -1422,9 +1434,18 @@
   function hydrateFactionRoleTitles(root = document) {
     const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
     const roleInfo = factionRoleForProfile(profile);
-    if (!roleInfo) return;
+    const staffLabel = staffTitleForProfile(profile);
+    if (!roleInfo && !staffLabel) return;
     $$(".profile-header > div:nth-child(2) .eyebrow", root).forEach(eyebrow => {
-      if (eyebrow.nextElementSibling?.matches("[data-faction-role-title]")) return;
+      if (eyebrow.nextElementSibling?.matches("[data-faction-role-title], [data-profile-staff-title]")) return;
+      if (!roleInfo) {
+        const badge = document.createElement("span");
+        badge.className = "profile-title profile-staff-role";
+        badge.dataset.profileStaffTitle = "true";
+        badge.textContent = staffLabel;
+        eyebrow.after(badge);
+        return;
+      }
       const badge = document.createElement("button");
       badge.type = "button";
       badge.className = "profile-title profile-faction-role";
@@ -1459,6 +1480,21 @@
         if (emblem) author.before(emblem);
         if (title) author.after(title);
       }
+    });
+  }
+
+  function hydrateStaffTitlesFromComments(root = document, comments = []) {
+    const profiles = new Map(comments.map(comment => {
+      const profile = comment.profiles || {};
+      return [String(profile.username || "").toLowerCase(), profile];
+    }).filter(([username, profile]) => username && staffTitleForProfile(profile)));
+    $$(".comment-author-info", root).forEach(info => {
+      if ($("[data-profile-staff-title]", info)) return;
+      const author = $(".comment-author", info);
+      if (!author) return;
+      const username = new URL(author.href, window.location.href).searchParams.get("perfil") || "";
+      const markup = staffTitleMarkup(profiles.get(String(username).toLowerCase()));
+      if (markup) author.insertAdjacentHTML("afterend", markup);
     });
   }
 
@@ -2378,7 +2414,7 @@
 
   async function loadProfileWallComments(profileId) {
     if (!sb || !profileId) return [];
-    let result = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id)").eq("profile_id", profileId).order("created_at", { ascending: false });
+    let result = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id, plan)").eq("profile_id", profileId).order("created_at", { ascending: false });
     if (!result.error) return result.data || [];
     let fallback = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
     if (fallback.error && /parent_id|schema cache|column/i.test(fallback.error.message || "")) {
@@ -2390,7 +2426,7 @@
       return [];
     }
     const userIds = [...new Set((fallback.data || []).map(comment => comment.user_id).filter(Boolean))];
-    const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id").in("id", userIds) : { data: [] };
+    const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan").in("id", userIds) : { data: [] };
     const byId = new Map((profiles.data || []).map(profile => [profile.id, profile]));
     return (fallback.data || []).map(comment => ({ ...comment, profiles: byId.get(comment.user_id) || {} }));
   }
@@ -4829,7 +4865,7 @@
       list.innerHTML = (result.data || []).map(comment => {
         const username = cleanUsername(comment.profiles?.username || "usuário");
         const profile = { ...(comment.profiles || {}), username };
-        return `<article class="comment"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p></article>`;
+        return `<article class="comment"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${staffTitleMarkup(profile)}${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p></article>`;
       }).join("") || '<span class="section-subtitle">Nenhum comentário ainda.</span>';
     };
     await refresh();
@@ -4872,7 +4908,7 @@
       list.innerHTML = (result.data || []).map(comment => {
         const username = cleanUsername(comment.profiles?.username || "usuário");
         const profile = { ...(comment.profiles || {}), username };
-        return `<article class="comment"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p></article>`;
+        return `<article class="comment"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${staffTitleMarkup(profile)}${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p></article>`;
       }).join("") || '<span class="section-subtitle">Nenhum comentário ainda.</span>';
     };
     await refresh();
@@ -5031,6 +5067,7 @@
       childrenByParent.get(comment.parent_id).push(comment);
     });
     list.innerHTML = (childrenByParent.get(null) || []).map(comment => commentMarkup(comment, childrenByParent, thread.likedIds, thread.counts)).join("") || '<span class="section-subtitle">Nenhum comentário ainda.</span>';
+    hydrateStaffTitlesFromComments(list, thread.comments || []);
     hydrateCommentFactionRoleTitles(list);
   }
 
@@ -8790,7 +8827,7 @@
       : profileDisplayStickersMarkup(profile, profileState.stickerAwards || [], profileState.profileDisplayStickers || []);
     const renderComment = (comment, reply = false) => {
       const author = comment.profiles || {};
-      return '<article class="profile-wall-comment"><div class="comment-author-row">' + avatarMarkup(author, "comment-avatar") + '<div class="comment-author-info"><b>' + factionDot(author) + '@' + escapeHTML(author.username || "usuário") + '</b></div><time class="comment-date">' + escapeHTML(formatCommentDate(comment.created_at)) + '</time></div><p>' + escapeHTML(comment.body) + '</p></article>';
+      return '<article class="profile-wall-comment"><div class="comment-author-row">' + avatarMarkup(author, "comment-avatar") + '<div class="comment-author-info"><b>' + factionDot(author) + '@' + escapeHTML(author.username || "usuário") + '</b>' + staffTitleMarkup(author) + '</div><time class="comment-date">' + escapeHTML(formatCommentDate(comment.created_at)) + '</time></div><p>' + escapeHTML(comment.body) + '</p></article>';
     };
     const commentMarkup = comments.map(comment => renderComment(comment, Boolean(comment.parent_id))).join("");
     return '<section class="section profile-wall"><div class="section-head"><div><h2 class="section-title">Mural</h2><div class="section-subtitle">Uma apresentação e comentários do perfil.</div></div>' + (own ? '<button class="small-btn" data-action="profile">Editar descrição</button>' : "") + '</div>' + displayStickers + '<div class="profile-wall-description">' + (profile?.wall_description ? escapeHTML(profile.wall_description) : '<span class="section-subtitle">Este perfil ainda não adicionou uma descrição.</span>') + '</div>' + (state.session ? '<form class="comment-form profile-wall-comment-form" data-profile-wall-comment-form><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>') + '<div class="section-head profile-wall-comments-head"><div><h3 class="section-title">Comentários do perfil</h3><div class="section-subtitle">' + comments.length + ' comentário(s)</div></div></div><div class="profile-wall-comments">' + (commentMarkup || '<div class="empty">Nenhum comentário neste mural.</div>') + '</div></section>';
@@ -9023,7 +9060,7 @@
     const expandButton = `<button type="button" class="chat-expand-message-action" data-chat-message-expand aria-expanded="false" hidden>Expandir</button>`;
     const replyButton = `<button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button>`;
     const pinButton = canModerateChat && options.allowPin ? `<button type="button" class="chat-pin-action" data-chat-pin="${escapeHTML(message.id || "")}" aria-label="Fixar mensagem" title="Fixar mensagem">📌</button>` : "";
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${staffTitleMarkup(profile)}${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
   }
 
   function updateChatMessageExpansionUI(messagesRoot) {

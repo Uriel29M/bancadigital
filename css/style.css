@@ -313,6 +313,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message-badge[hidden], .notification-badge[hidden] { display: none !important; }
 .messages-header-btn .message-badge { position: absolute; top: -5px; right: -5px; }
 .downloads-header-btn { position: relative; min-width: 42px; font-size: 24px; font-weight: 900; line-height: 1; -webkit-text-stroke: .55px currentColor; }
+.ranking-header-btn { min-width: 42px; font-size: 22px; line-height: 1; }
 .downloads-header-btn.is-downloaded { color: #79e68d; }
 .downloads-header-btn.is-downloading { animation: download-pulse 1s ease-in-out infinite; }
 .download-badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; border-radius: 999px; background: #8af0ad; color: #111; font-size: 9px; }
@@ -501,7 +502,7 @@ main { min-height: calc(100vh - 150px); }
 .global-recommendation-card:hover, .global-recommendation-card:focus-visible { transform: translateY(-5px); border-color: rgba(255,255,255,.42); box-shadow: 0 16px 30px rgba(0,0,0,.32); outline: none; }
 .global-recommendation-cover { position: absolute; inset: 0 0 0 30%; z-index: -2; background-position: center; background-size: cover; opacity: .72; filter: saturate(.9); transition: transform .3s ease, opacity .3s ease; }
 .global-recommendation-card:hover .global-recommendation-cover, .global-recommendation-card:focus-visible .global-recommendation-cover { transform: scale(1.06); opacity: .88; }
-.global-recommendation-glow { position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #17151d 0%, rgba(23,21,29,.94) 30%, rgba(23,21,29,.25) 100%), linear-gradient(0deg, rgba(0,0,0,.85), transparent 70%); }
+.global-recommendation-glow { position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #111116 0%, #111116 24%, rgba(17,17,22,.98) 38%, rgba(17,17,22,.72) 54%, rgba(17,17,22,.28) 76%, rgba(17,17,22,0) 100%), linear-gradient(0deg, rgba(0,0,0,.85), transparent 70%); }
 .global-recommendation-copy { width: 100%; padding: 22px 20px 20px; }
 .global-recommendation-label { display: flex; align-items: center; gap: 8px; color: #ffbd72; font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
 .global-recommendation-label i { display: block; width: 25px; height: 1px; background: currentColor; opacity: .7; }
@@ -1493,6 +1494,7 @@ main { min-height: calc(100vh - 150px); }
 .chat-message-author b { color: #ffd45c; font-size: 19px; }
 .chat-message-author em { overflow: hidden; color: var(--muted); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .chat-message > .profile-faction-role { top: -10px; margin: 0 0 6px 4px; padding: 1px 3px; font-size: 8px; line-height: 1.15; vertical-align: middle; }
+.chat-message > .profile-staff-role { top: -10px; margin: 0 0 6px 4px; padding: 1px 3px; color: #fff; border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); font-size: 8px; line-height: 1.15; vertical-align: middle; }
 .chat-message.is-mine { align-self: flex-end; border-radius: 10px 10px 3px 10px; background: #4a2027; }
 .chat-message.is-mine { max-width: 80%; }
 .chat-message-pending { opacity: .68; }
@@ -1862,6 +1864,8 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .profile-faction-role { display: inline-block; margin-left: 6px; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--faction-role-color, #ffd45c) 72%, #fff); border-radius: 5px; background: color-mix(in srgb, var(--faction-role-color, #ffd45c) 22%, #17171b); color: color-mix(in srgb, var(--faction-role-color, #ffd45c) 82%, #fff); font: inherit; font-size: 10px; font-weight: 800; line-height: 1.2; vertical-align: middle; cursor: pointer; }
 .profile-faction-role:hover, .profile-faction-role:focus-visible { border-color: var(--faction-role-color, #ffd45c); background: color-mix(in srgb, var(--faction-role-color, #ffd45c) 36%, #17171b); outline: none; }
 .comment-author-info .profile-faction-role { top: 0; margin-left: 0; padding: 1px 3px; font-size: 9px; line-height: 1.15; }
+.profile-staff-role { color: #fff; border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); }
+.comment-author-info .profile-staff-role { top: 0; margin-left: 0; padding: 1px 3px; font-size: 9px; line-height: 1.15; }
 .profile-follow-summary { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .profile-follow-link { padding: 0; border: 0; background: transparent; color: #ff8990; font: inherit; cursor: pointer; }
 .profile-follow-link:hover { color: #fff; text-decoration: underline; }
@@ -2346,7 +2350,7 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
   .featured-blog-collections .public-shelf-collection-card { min-width: 0; }
   .top-actions { margin-left: auto; }
   .staff-activity-button { display: none !important; }
-  .reader-btn:not(.messages-header-btn):not(.downloads-header-btn) { display: none; }
+  .reader-btn:not(.messages-header-btn):not(.downloads-header-btn):not(.ranking-header-btn) { display: none; }
   .messages-header-btn { display: grid; place-items: center; }
   .reader-top {
     height: auto; min-height: 58px; flex: 0 0 auto; max-height: none; flex-wrap: wrap;
