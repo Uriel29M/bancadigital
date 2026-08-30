@@ -4,7 +4,7 @@ create table if not exists public.profiles (
   username text not null unique check (username ~ '^[A-Za-z0-9_]{3,24}$'),
   account_email text unique,
   avatar_url text check (avatar_url is null or avatar_url ~* '^https?://'),
-  plan text not null default 'free' check (plan in ('free', 'premium', 'moderator', 'admin')),
+  plan text not null default 'free' check (plan in ('free', 'premium', 'moderator', 'banca', 'admin')),
   title text,
   profile_hidden boolean not null default false,
   is_banned boolean not null default false,
@@ -20,9 +20,9 @@ alter table public.profiles add column if not exists title_color text default '#
 alter table public.profiles add column if not exists profile_background_theme text;
 alter table public.profiles add column if not exists profile_accent_theme text;
 alter table public.profiles drop constraint if exists profiles_background_theme_check;
-alter table public.profiles add constraint profiles_background_theme_check check (profile_background_theme is null or profile_background_theme in ('black', 'white', 'graphite', 'night-blue', 'wine'));
+alter table public.profiles add constraint profiles_background_theme_check check (profile_background_theme is null or profile_background_theme in ('black', 'white', 'graphite', 'night-blue', 'wine', 'forest', 'plum', 'sand', 'ocean'));
 alter table public.profiles drop constraint if exists profiles_accent_theme_check;
-alter table public.profiles add constraint profiles_accent_theme_check check (profile_accent_theme is null or profile_accent_theme in ('black', 'white', 'blue', 'purple', 'green', 'orange'));
+alter table public.profiles add constraint profiles_accent_theme_check check (profile_accent_theme is null or profile_accent_theme in ('black', 'white', 'blue', 'purple', 'green', 'orange', 'pink', 'cyan', 'teal', 'yellow', 'indigo', 'crimson'));
 update public.profiles set title = left(trim(title), 10) where title is not null and char_length(title) > 10;
 alter table public.profiles drop constraint if exists profiles_title_length_check;
 alter table public.profiles add constraint profiles_title_length_check check (title is null or char_length(title) between 1 and 10);
@@ -43,6 +43,8 @@ alter table public.profiles add constraint profiles_wall_description_length_chec
 alter table public.profiles add column if not exists allow_mentions boolean not null default true;
 alter table public.profiles add column if not exists allow_messages boolean not null default true;
 alter table public.profiles add column if not exists shelf_sort_orders jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists shelf_section_order jsonb not null default '["saved", "series-saved", "read", "completed", "liked"]'::jsonb;
+alter table public.profiles add column if not exists shelf_collection_order jsonb not null default '[]'::jsonb;
 alter table public.profiles add column if not exists shelf_style text not null default 'none';
 alter table public.profiles add column if not exists shelf_styles jsonb not null default '{}'::jsonb;
 alter table public.profiles drop constraint if exists profiles_shelf_style_check;
@@ -58,7 +60,7 @@ alter table public.profiles add column if not exists level integer not null defa
 alter table public.profiles add column if not exists daily_streak integer not null default 0;
 alter table public.profiles add column if not exists last_checkin_at timestamptz;
 alter table public.profiles drop constraint if exists profiles_plan_check;
-alter table public.profiles add constraint profiles_plan_check check (plan in ('free', 'premium', 'moderator', 'admin'));
+alter table public.profiles add constraint profiles_plan_check check (plan in ('free', 'premium', 'moderator', 'banca', 'admin'));
 create unique index if not exists profiles_account_email_key on public.profiles(account_email) where account_email is not null;
 
 create table if not exists public.profile_xp_events (
@@ -378,7 +380,7 @@ create index if not exists chat_pins_room_idx on public.chat_pins(room_id, pinne
 
 create or replace function public.is_moderator()
 returns boolean language sql stable security definer set search_path = public
-as $$ select exists (select 1 from public.profiles where id = auth.uid() and plan in ('moderator', 'admin')) $$;
+as $$ select exists (select 1 from public.profiles where id = auth.uid() and plan in ('moderator', 'banca', 'admin')) $$;
 
 create or replace function public.pin_chat_message(p_room_id text, p_message_id bigint, p_duration text)
 returns public.chat_pins language plpgsql security definer set search_path = public
@@ -665,11 +667,13 @@ create table if not exists public.comic_download_counts (
 create table if not exists public.homepage_settings (
   id boolean primary key default true check (id),
   section_order jsonb not null default '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner"]'::jsonb,
+  hidden_sections jsonb not null default '[]'::jsonb,
   legendary_sunday_enabled boolean not null default true,
   legendary_manual_date date,
   updated_at timestamptz not null default now()
 );
 alter table public.homepage_settings add column if not exists section_order jsonb not null default '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner"]'::jsonb;
+alter table public.homepage_settings add column if not exists hidden_sections jsonb not null default '[]'::jsonb;
 alter table public.homepage_settings add column if not exists legendary_sunday_enabled boolean not null default true;
 alter table public.homepage_settings add column if not exists legendary_manual_date date;
 insert into public.homepage_settings (id) values (true) on conflict (id) do nothing;
@@ -791,6 +795,16 @@ create table if not exists public.shelf_collection_saves (
 create index if not exists shelf_collection_saves_user_idx on public.shelf_collection_saves(user_id, created_at desc);
 create index if not exists shelf_collection_saves_collection_idx on public.shelf_collection_saves(collection_id);
 
+create table if not exists public.shelf_collection_comments (
+  id bigint generated by default as identity primary key,
+  collection_id text not null references public.shelf_collections(id) on delete cascade,
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null check (char_length(trim(body)) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+create index if not exists shelf_collection_comments_collection_idx on public.shelf_collection_comments(collection_id, created_at asc);
+
 create table if not exists public.profile_wall_comments (
   id bigint generated by default as identity primary key,
   profile_id uuid not null references public.profiles(id) on delete cascade,
@@ -847,6 +861,8 @@ create table if not exists public.moderation_actions (
   target_id uuid not null references public.profiles(id) on delete cascade,
   action text not null,
   duration_until timestamptz,
+  reason text,
+  internal_note text,
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -984,7 +1000,7 @@ as $$
       and (
         room.access = 'public'
         or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
-        or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+        or (room.access = 'staff' and profile.plan in ('moderator', 'banca', 'admin'))
       )
   )
 $$;
@@ -1201,7 +1217,12 @@ as $$
 declare
   v_required jsonb := '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner"]'::jsonb;
 begin
-  if not public.is_admin() then raise exception 'Apenas administradores podem reorganizar a página inicial'; end if;
+  if not exists (
+    select 1 from public.profiles
+    where id = auth.uid() and plan in ('banca', 'admin')
+  ) then
+    raise exception 'Apenas usuários banca ou administradores podem reorganizar a página inicial';
+  end if;
   if jsonb_typeof(p_order) <> 'array' or jsonb_array_length(p_order) <> jsonb_array_length(v_required) then
     raise exception 'A ordem da página inicial é inválida';
   end if;
@@ -1212,6 +1233,41 @@ begin
 end;
 $$;
 grant execute on function public.update_homepage_section_order(jsonb) to authenticated;
+
+create or replace function public.update_homepage_section_visibility(p_section_key text, p_hidden boolean)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_required jsonb := '["recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series", "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner"]'::jsonb;
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and plan in ('banca', 'admin')) then
+    raise exception 'Apenas usuários banca ou administradores podem ocultar seções da página inicial';
+  end if;
+  if p_section_key is null or not (v_required @> jsonb_build_array(p_section_key)) then
+    raise exception 'Seção da página inicial inválida';
+  end if;
+  update public.homepage_settings
+  set hidden_sections = case
+    when coalesce(p_hidden, false) then (
+      select jsonb_agg(value order by value)
+      from (
+        select distinct value
+        from jsonb_array_elements_text(coalesce(hidden_sections, '[]'::jsonb))
+        union
+        select p_section_key
+      ) entries
+    )
+    else (
+      select coalesce(jsonb_agg(value order by value), '[]'::jsonb)
+      from jsonb_array_elements_text(coalesce(hidden_sections, '[]'::jsonb))
+      where value <> p_section_key
+    )
+  end,
+  updated_at = now()
+  where id = true;
+end;
+$$;
+grant execute on function public.update_homepage_section_visibility(text, boolean) to authenticated;
 
 create or replace function public.set_legendary_sunday_enabled(p_enabled boolean)
 returns void language plpgsql security definer set search_path = public
@@ -1240,7 +1296,49 @@ grant execute on function public.set_legendary_event_override(boolean) to authen
 
 create or replace function public.is_moderator()
 returns boolean language sql stable security definer set search_path = public
-as $$ select exists (select 1 from public.profiles where id = auth.uid() and plan in ('moderator', 'admin')) $$;
+as $$ select exists (select 1 from public.profiles where id = auth.uid() and plan in ('moderator', 'banca', 'admin')) $$;
+
+create schema if not exists private;
+create table if not exists private.anti_spam_events (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  channel text not null check (channel in ('comment', 'chat')),
+  body_fingerprint text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists anti_spam_events_user_channel_created_idx on private.anti_spam_events (user_id, channel, created_at desc);
+create index if not exists anti_spam_events_user_fingerprint_created_idx on private.anti_spam_events (user_id, body_fingerprint, created_at desc);
+revoke all on table private.anti_spam_events from anon, authenticated;
+alter table private.anti_spam_events enable row level security;
+
+create or replace function public.can_post_content(p_channel text, p_body text)
+returns boolean language plpgsql volatile security definer set search_path = public, private, pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid(); v_plan text; v_created_at timestamptz; v_now timestamptz := now();
+  v_fingerprint text := md5(lower(regexp_replace(coalesce(trim(p_body), ''), '\\s+', ' ', 'g')));
+  v_limit integer := case when p_channel = 'chat' then 12 else 5 end;
+  v_recent_count integer; v_duplicate_count integer; v_last_at timestamptz; v_violation_count integer; v_silence interval;
+begin
+  if v_user_id is null or p_channel not in ('comment', 'chat') or length(trim(coalesce(p_body, ''))) = 0 then return false; end if;
+  select plan, created_at into v_plan, v_created_at from public.profiles where id = v_user_id;
+  if not found or v_plan in ('moderator', 'banca', 'admin') then return found; end if;
+  if exists (select 1 from public.profiles where id = v_user_id and (is_banned or (silenced_until is not null and silenced_until > v_now))) then return false; end if;
+  select count(*), max(created_at) into v_recent_count, v_last_at from private.anti_spam_events where user_id = v_user_id and channel = p_channel and created_at > v_now - interval '1 minute';
+  select count(*) into v_duplicate_count from private.anti_spam_events where user_id = v_user_id and channel = p_channel and body_fingerprint = v_fingerprint and created_at > v_now - interval '10 minutes';
+  if v_created_at > v_now - interval '24 hours' and v_last_at is not null and v_last_at > v_now - interval '30 seconds' then return false; end if;
+  if v_duplicate_count >= 1 then return false; end if;
+  if v_recent_count >= v_limit then
+    select count(*) into v_violation_count from private.anti_spam_events where user_id = v_user_id and channel = p_channel and created_at > v_now - interval '24 hours' and (body_fingerprint = v_fingerprint or created_at > v_now - interval '1 minute');
+    v_silence := case when v_violation_count >= 40 then interval '24 hours' when v_violation_count >= 20 then interval '2 hours' when v_violation_count >= 10 then interval '30 minutes' else interval '5 minutes' end;
+    update public.profiles set silenced_until = greatest(coalesce(silenced_until, v_now), v_now + v_silence) where id = v_user_id;
+  end if;
+  insert into private.anti_spam_events(user_id, channel, body_fingerprint) values (v_user_id, p_channel, v_fingerprint);
+  return true;
+end;
+$$;
+revoke all on function public.can_post_content(text, text) from public, anon;
+grant execute on function public.can_post_content(text, text) to authenticated;
 
 create or replace function public.can_comment()
 returns boolean language sql stable security definer set search_path = public
@@ -1284,6 +1382,11 @@ begin
   insert into public.profiles (id, username, account_email, avatar_url)
   values (new.id, coalesce(new.raw_user_meta_data->>'username', 'user_' || substr(new.id::text, 1, 8)), new.email,
     'https://api.dicebear.com/9.x/thumbs/svg?seed=' || new.id::text || '&backgroundColor=f3f4f6&shapeColor=e85b68');
+  insert into public.profile_follows (follower_id, following_id)
+  select new.id, profile.id
+  from public.profiles profile
+  where profile.plan = 'banca' and profile.id <> new.id
+  on conflict (follower_id, following_id) do nothing;
   return new;
 end;
 $$;
@@ -1449,7 +1552,7 @@ create policy "moderators manage blogs" on public.blog_posts for all using (publ
 create policy "blog likes are public" on public.blog_likes for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));
 create policy "users manage own blog likes" on public.blog_likes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "blog comments are public" on public.blog_comments for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));
-create policy "users create blog comments" on public.blog_comments for insert with check (auth.uid() = user_id and public.can_comment());
+create policy "users create blog comments" on public.blog_comments for insert with check (auth.uid() = user_id and public.can_post_content('comment', body));
 create policy "users delete own blog comments" on public.blog_comments for delete using (auth.uid() = user_id or public.is_moderator());
 create policy "blog comment likes are public" on public.blog_comment_likes for select using (true);
 create policy "users manage blog comment likes" on public.blog_comment_likes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -1472,6 +1575,7 @@ create policy "participants read chat messages" on public.chat_messages for sele
 );
 create policy "users send chat messages" on public.chat_messages for insert with check (
   auth.uid() = sender_id
+  and public.can_post_content('chat', body)
   and expires_at <= now() + interval '24 hours'
   and expires_at > now()
   and (
@@ -1602,7 +1706,7 @@ with check (
   )
 );
 create policy "comments are public" on public.comments for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));
-create policy "users create own comments" on public.comments for insert with check (auth.uid() = user_id and public.can_comment());
+create policy "users create own comments" on public.comments for insert with check (auth.uid() = user_id and public.can_post_content('comment', body));
 create policy "users delete own comments" on public.comments for delete using (auth.uid() = user_id or public.is_moderator());
 create policy "comment likes are public" on public.comment_likes for select using (true);
 create policy "users manage comment likes" on public.comment_likes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -1839,28 +1943,51 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_target public.profiles%rowtype;
 begin
   if not public.is_moderator() then raise exception 'Apenas moderadores e administradores podem alterar planos'; end if;
-  if p_plan not in ('free', 'premium', 'moderator') then raise exception 'Plano inválido'; end if;
-  if p_plan = 'moderator' and not public.is_admin() then raise exception 'Apenas administradores podem promover moderadores'; end if;
+  if p_plan not in ('free', 'premium', 'moderator', 'banca') then raise exception 'Plano inválido'; end if;
+  if p_plan = 'banca' and not public.is_admin() then raise exception 'Apenas administradores podem promover integrantes da Banca'; end if;
+  if p_plan = 'moderator' and not (public.is_admin() or exists (select 1 from public.profiles where id = auth.uid() and plan = 'banca')) then raise exception 'Apenas a Banca e administradores podem promover moderadores'; end if;
   select * into v_target from public.profiles where lower(username) = lower(trim(p_username));
   if not found then raise exception 'Usuário não encontrado'; end if;
-  update public.profiles set plan = p_plan where id = v_target.id;
+  if v_target.plan = 'admin' and not public.is_admin() then raise exception 'Apenas administradores podem alterar administradores'; end if;
+  if v_target.plan = 'banca' and not public.is_admin() then raise exception 'Apenas administradores podem alterar integrantes da Banca'; end if;
+  if v_target.plan = 'moderator' and not (public.is_admin() or exists (select 1 from public.profiles where id = auth.uid() and plan = 'banca')) then raise exception 'Apenas a Banca e administradores podem alterar moderadores'; end if;
+  -- Moderadores e administradores nÃ£o participam de facÃ§Ãµes. Ao promover
+  -- um membro, remova tambÃ©m a associaÃ§Ã£o e qualquer cargo que ele possua.
+  if p_plan in ('moderator', 'banca') and v_target.faction_id is not null then
+    delete from public.faction_roles where user_id = v_target.id;
+    delete from public.faction_memberships where user_id = v_target.id;
+    update public.profiles
+    set plan = p_plan,
+        faction_id = null,
+        faction_joined_at = null,
+        faction_changed_at = null
+    where id = v_target.id;
+    perform public.ensure_faction_leadership(v_target.faction_id);
+  else
+    update public.profiles set plan = p_plan where id = v_target.id;
+  end if;
   if v_target.plan is distinct from p_plan then
-    perform public.create_notification(v_target.id, 'plan', 'Plano da conta atualizado', 'Seu plano mudou de ' || v_target.plan || ' para ' || p_plan || '.', auth.uid(), null, jsonb_build_object('old_plan', v_target.plan, 'new_plan', p_plan));
+    perform public.create_notification(v_target.id, 'plan', 'Plano da conta atualizado', 'Seu plano mudou de ' || case v_target.plan when 'premium' then 'Lenda' when 'free' then 'Comum' when 'moderator' then 'Moderador' when 'admin' then 'Administrador' else v_target.plan end || ' para ' || case p_plan when 'premium' then 'Lenda' when 'free' then 'Comum' when 'moderator' then 'Moderador' when 'admin' then 'Administrador' else p_plan end || '.', auth.uid(), null, jsonb_build_object('old_plan', v_target.plan, 'new_plan', p_plan));
   end if;
 end;
 $$;
 grant execute on function public.set_user_plan(text, text) to authenticated;
 
-create or replace function public.moderate_user(p_username text, p_action text, p_duration text default null, p_title text default null, p_title_color text default null)
+create or replace function public.moderate_user(p_username text, p_action text, p_duration text default null, p_title text default null, p_title_color text default null, p_reason text default null, p_internal_note text default null)
 returns void language plpgsql security definer set search_path = public as $$
 declare
   v_target public.profiles%rowtype;
   v_until timestamptz := null;
+  v_reason text := nullif(left(trim(coalesce(p_reason, '')), 500), '');
+  v_internal_note text := nullif(left(trim(coalesce(p_internal_note, '')), 1000), '');
 begin
   if not public.is_moderator() then raise exception 'Apenas moderadores e administradores podem moderar'; end if;
   select * into v_target from public.profiles where lower(username) = lower(trim(p_username));
   if not found then raise exception 'Usuário não encontrado'; end if;
-  if v_target.plan in ('moderator', 'admin') and not public.is_admin() then raise exception 'Moderadores não podem moderar moderadores'; end if;
+  if v_target.plan = 'admin' and not public.is_admin() then raise exception 'Apenas administradores podem moderar administradores'; end if;
+  if v_target.plan = 'banca' and not public.is_admin() then raise exception 'Apenas administradores podem moderar integrantes da Banca'; end if;
+  if v_target.plan = 'moderator' and not (public.is_admin() or exists (select 1 from public.profiles where id = auth.uid() and plan = 'banca')) then raise exception 'Apenas a Banca e administradores podem moderar moderadores'; end if;
+  if p_action in ('ban', 'hide', 'silence') and not public.is_admin() and v_reason is null then raise exception 'Informe o motivo da ação'; end if;
   if p_action = 'silence' then
     v_until := case p_duration when '24h' then now() + interval '24 hours' when '3d' then now() + interval '3 days' when '1m' then now() + interval '1 month' else now() + interval '24 hours' end;
     update public.profiles set silenced_until = v_until where id = v_target.id;
@@ -1872,11 +1999,11 @@ begin
   elsif p_action = 'title' then update public.profiles set title = nullif(left(trim(p_title), 10), ''), title_color = coalesce(nullif(p_title_color, ''), title_color) where id = v_target.id;
   else raise exception 'Ação de moderação inválida';
   end if;
-  insert into public.moderation_actions(actor_id, target_id, action, duration_until, details)
-  values (auth.uid(), v_target.id, p_action, v_until, jsonb_build_object('duration', p_duration, 'title', p_title));
+  insert into public.moderation_actions(actor_id, target_id, action, duration_until, reason, internal_note, details)
+  values (auth.uid(), v_target.id, p_action, v_until, v_reason, v_internal_note, jsonb_build_object('duration', p_duration, 'title', p_title));
 end;
 $$;
-grant execute on function public.moderate_user(text, text, text, text, text) to authenticated;
+grant execute on function public.moderate_user(text, text, text, text, text, text, text) to authenticated;
 
 -- Facções da comunidade: temporadas, filiação, XP e troca semanal.
 create table if not exists public.factions (
@@ -2553,10 +2680,14 @@ notify pgrst, 'reload schema';
 
 -- Mural de perfil e coleções públicas salvas.
 alter table public.shelf_collection_saves enable row level security;
+alter table public.shelf_collection_comments enable row level security;
 alter table public.profile_wall_comments enable row level security;
 drop policy if exists "public collection saves are visible" on public.shelf_collection_saves;
 drop policy if exists "users save public collections" on public.shelf_collection_saves;
 drop policy if exists "users unsave public collections" on public.shelf_collection_saves;
+drop policy if exists "public collection comments are visible" on public.shelf_collection_comments;
+drop policy if exists "users create collection comments" on public.shelf_collection_comments;
+drop policy if exists "users delete collection comments" on public.shelf_collection_comments;
 drop policy if exists "profile wall comments are public" on public.profile_wall_comments;
 drop policy if exists "users create profile wall comments" on public.profile_wall_comments;
 drop policy if exists "users delete profile wall comments" on public.profile_wall_comments;
@@ -2572,9 +2703,28 @@ create policy "users save public collections" on public.shelf_collection_saves f
 );
 
 create policy "users unsave public collections" on public.shelf_collection_saves for delete using (auth.uid() = user_id);
+create policy "public collection comments are visible" on public.shelf_collection_comments for select using (
+  exists (
+    select 1 from public.shelf_collections collection
+    where collection.id = shelf_collection_comments.collection_id
+      and collection.owner_id = shelf_collection_comments.owner_id
+      and collection.is_public
+      and collection.collection_type = 'comic'
+  ) and not public.is_blocked_between(user_id)
+);
+create policy "users create collection comments" on public.shelf_collection_comments for insert with check (
+  auth.uid() = user_id and public.can_post_content('comment', body) and exists (
+    select 1 from public.shelf_collections collection
+    where collection.id = shelf_collection_comments.collection_id
+      and collection.owner_id = shelf_collection_comments.owner_id
+      and collection.is_public
+      and collection.collection_type = 'comic'
+  ) and not public.is_blocked_between(owner_id)
+);
+create policy "users delete collection comments" on public.shelf_collection_comments for delete using (auth.uid() = user_id or auth.uid() = owner_id or public.is_moderator());
 create policy "profile wall comments are public" on public.profile_wall_comments for select using (auth.uid() = profile_id or not public.is_blocked_between(profile_id));
-create policy "users create profile wall comments" on public.profile_wall_comments for insert with check (auth.uid() = user_id and public.can_comment() and not public.is_blocked_between(profile_id));
-create policy "users delete profile wall comments" on public.profile_wall_comments for delete using (auth.uid() = user_id or public.is_moderator());
+create policy "users create profile wall comments" on public.profile_wall_comments for insert with check (auth.uid() = user_id and public.can_post_content('comment', body) and not public.is_blocked_between(profile_id));
+create policy "users delete profile wall comments" on public.profile_wall_comments for delete using (auth.uid() = user_id or auth.uid() = profile_id or public.is_moderator());
 
 -- Atualiza os emblemas iniciais para a nova lista visualmente distinta.
 update public.factions set emblem = case id
@@ -2726,7 +2876,7 @@ begin
   select profile.id, profile.faction_id, coalesce(profile.faction_joined_at, now()), profile.faction_changed_at
   from public.profiles profile
   where profile.faction_id = p_faction_id
-    and profile.plan not in ('moderator', 'admin')
+    and profile.plan not in ('moderator', 'banca', 'admin')
   on conflict (user_id) do update
     set faction_id = excluded.faction_id,
         changed_at = excluded.changed_at;
@@ -2753,7 +2903,7 @@ begin
         coalesce(member_profile.last_seen_at, to_timestamp(0)) as last_seen
       from public.profiles member_profile
       left join public.faction_xp_events xp on xp.user_id = member_profile.id and xp.faction_id = p_faction_id
-      where member_profile.plan not in ('moderator', 'admin')
+      where member_profile.plan not in ('moderator', 'banca', 'admin')
         and (
           member_profile.faction_id = p_faction_id
           or exists (
@@ -2783,7 +2933,7 @@ begin
           coalesce(member_profile.last_seen_at, to_timestamp(0)) as last_seen
         from public.profiles member_profile
         left join public.faction_xp_events xp on xp.user_id = member_profile.id and xp.faction_id = p_faction_id
-        where member_profile.plan not in ('moderator', 'admin')
+        where member_profile.plan not in ('moderator', 'banca', 'admin')
           and (
             member_profile.faction_id = p_faction_id
             or exists (
@@ -2842,7 +2992,7 @@ begin
     select member.user_id into v_successor
     from public.faction_memberships member
     join public.profiles profile on profile.id = member.user_id
-    where member.faction_id = v_faction and member.user_id <> v_actor.id and profile.plan not in ('moderator', 'admin')
+    where member.faction_id = v_faction and member.user_id <> v_actor.id and profile.plan not in ('moderator', 'banca', 'admin')
     order by profile.last_seen_at desc, member.user_id
     limit 1;
   end if;
@@ -2971,7 +3121,7 @@ declare
 begin
   if v_user_id is null then return; end if;
   select * into v_profile from public.profiles where id = v_user_id;
-  if not found or v_profile.plan in ('moderator', 'admin') then return; end if;
+  if not found or v_profile.plan in ('moderator', 'banca', 'admin') then return; end if;
   if v_profile.faction_id is not null then
     if p_faction_id is null or p_faction_id = v_profile.faction_id then
       select f.id, f.name, f.color, f.emblem, f.description, v_profile.faction_changed_at into v_result_faction_id, v_result_name, v_result_color, v_result_emblem, v_result_description, v_result_changed_at from public.factions f where f.id = v_profile.faction_id;
@@ -3037,7 +3187,7 @@ declare
   v_key text;
   v_total integer;
 begin
-  select profile.faction_id into v_faction from public.profiles profile where profile.id = v_user_id and profile.plan not in ('moderator', 'admin');
+  select profile.faction_id into v_faction from public.profiles profile where profile.id = v_user_id and profile.plan not in ('moderator', 'banca', 'admin');
   if v_faction is null then return 0; end if;
   v_xp := case p_event_type when 'read' then 10 when 'curated_read' then 25 when 'comment' then 5 when 'like' then 2 when 'chat' then 3 when 'follow' then 2 else 0 end;
   if v_xp <= 0 then return 0; end if;
@@ -3169,9 +3319,9 @@ as $$
     select 1 from public.chat_rooms room
     left join public.profiles profile on profile.id = auth.uid()
     where room.id = p_room_id and (
-      (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'banca', 'admin') or profile.faction_id = room.faction_id))
       or (room.access = 'premium' and profile.plan in ('premium', 'admin'))
-      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'banca', 'admin'))
     )
   )
 $$;
@@ -3183,9 +3333,9 @@ as $$
     select 1 from public.chat_rooms room
     left join public.profiles profile on profile.id = auth.uid()
     where room.id = p_room_id and profile.id = auth.uid() and (
-      (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      (room.access = 'public' and (room.faction_id is null or profile.plan in ('moderator', 'banca', 'admin') or profile.faction_id = room.faction_id))
       or (room.access = 'premium' and (profile.plan in ('premium', 'admin') or (profile.plan = 'free' and public.is_legendary_event_active())))
-      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'banca', 'admin'))
     )
   )
 $$;
@@ -3198,9 +3348,9 @@ as $$
     left join public.profiles profile on profile.id = auth.uid()
     where room.id = p_room_id and (
       (room.access = 'public' and room.faction_id is null)
-      or (room.access = 'faction' and (profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      or (room.access = 'faction' and (profile.plan in ('moderator', 'banca', 'admin') or profile.faction_id = room.faction_id))
       or (room.access = 'premium' and (profile.plan in ('premium', 'admin') or (profile.plan = 'free' and public.is_legendary_event_active())))
-      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'banca', 'admin'))
     )
   )
 $$;
@@ -3213,9 +3363,9 @@ as $$
     left join public.profiles profile on profile.id = auth.uid()
     where room.id = p_room_id and profile.id = auth.uid() and (
       (room.access = 'public' and room.faction_id is null)
-      or (room.access = 'faction' and (profile.plan in ('moderator', 'admin') or profile.faction_id = room.faction_id))
+      or (room.access = 'faction' and (profile.plan in ('moderator', 'banca', 'admin') or profile.faction_id = room.faction_id))
       or (room.access = 'premium' and (profile.plan in ('premium', 'admin') or (profile.plan = 'free' and public.is_legendary_event_active())))
-      or (room.access = 'staff' and profile.plan in ('moderator', 'admin'))
+      or (room.access = 'staff' and profile.plan in ('moderator', 'banca', 'admin'))
     )
   )
 $$;
@@ -3223,6 +3373,7 @@ $$;
 drop policy if exists "users send chat messages" on public.chat_messages;
 create policy "users send chat messages" on public.chat_messages for insert with check (
   auth.uid() = sender_id
+  and public.can_post_content('chat', body)
   and expires_at <= now() + interval '24 hours'
   and expires_at > now()
   and (

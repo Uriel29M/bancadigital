@@ -6,8 +6,18 @@
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
   const DEFAULT_AVATAR_URL = "assets/semfoto.jpg?v=1";
   const RANDOM_AVATAR_BASE_URL = "https://api.dicebear.com/9.x/thumbs/svg";
-  function randomAvatarUrl(userId, color = "#e85b68") {
-    return userId ? `${RANDOM_AVATAR_BASE_URL}?seed=${encodeURIComponent(userId)}&backgroundColor=f3f4f6&shapeColor=${encodeURIComponent(String(color).replace(/^#/, ""))}` : DEFAULT_AVATAR_URL;
+  function randomAvatarUrl(userId, characterColor = "#e85b68", backgroundColor = "#f3f4f6") {
+    const colorValue = color => encodeURIComponent(String(color).replace(/^#/, ""));
+    return userId ? `${RANDOM_AVATAR_BASE_URL}?seed=${encodeURIComponent(userId)}&backgroundColor=${colorValue(backgroundColor)}&shapeColor=${colorValue(characterColor)}` : DEFAULT_AVATAR_URL;
+  }
+  function factionColorForProfile(profile = {}) {
+    const profileId = profile?.id || profile?.user_id;
+    const factionId = profile?.faction_id || state.factionByUser.get(profileId);
+    return state.factions.find(item => item.id === factionId)?.color || "#777777";
+  }
+  function generatedAvatarForProfile(profile = {}) {
+    const profileId = profile?.id || profile?.user_id;
+    return hasLegendaryAccess(profile) ? (profile?.avatar_url || randomAvatarUrl(profileId)) : randomAvatarUrl(profileId, "#ffffff", factionColorForProfile(profile));
   }
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
@@ -20,6 +30,7 @@
     { family: "pink", label: "Rosa", light: "#e17ab3", dark: "#9b3f72" }
   ];
   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
+  const PUBLIC_COLLECTION_COLOR_OPTIONS = [["#31202b", "Ameixa"], ["#542536", "Vinho"], ["#7d2630", "Bordô"], ["#9b3d27", "Terracota"], ["#b66b2b", "Âmbar"], ["#b28a27", "Mostarda"], ["#536b2b", "Oliva"], ["#236044", "Esmeralda"], ["#1f6670", "Turquesa"], ["#28528a", "Azul"], ["#393b82", "Índigo"], ["#663b91", "Violeta"], ["#8c426f", "Framboesa"], ["#59636f", "Ardósia"], ["#76523c", "Café"], ["#b3475b", "Coral"], ["#8a5a2b", "Cobre"], ["#397052", "Musgo"], ["#315f9b", "Cobalto"], ["#7651a3", "Lavanda"]];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
   // Consolida entradas repetidas quando catálogos sobrepostos são carregados.
   window.DEFAULT_SERIES = [...new Map((window.DEFAULT_SERIES || []).map(series => [series.id, series])).values()];
@@ -325,8 +336,16 @@
     comicMonthlyReadCounts: new Map(),
     comicMonthlyReadCountsLoaded: false,
     hiddenCatalogItemIds: new Set(),
-    homeSectionOrder: null,
-    homeVisibleSectionKeys: [],
+     homeSectionOrder: null,
+     homeHiddenSectionKeys: new Set(),
+     homeVisibleSectionKeys: [],
+     comicSectionOrder: (() => {
+       try { return JSON.parse(localStorage.getItem("bancaDigitalComicSectionOrder") || "null"); } catch { return null; }
+     })(),
+     comicHiddenSectionKeys: (() => {
+       try { return new Set(JSON.parse(localStorage.getItem("bancaDigitalComicHiddenSections") || "[]")); } catch { return new Set(); }
+     })(),
+     comicVisibleSectionKeys: [],
     achievementChecks: new Set(),
     homeHeroId: null,
     homeRandomIds: [],
@@ -490,15 +509,22 @@
   function normalizedPlan(profile = state.profile) {
     return String(profile?.plan || "").trim().toLowerCase();
   }
+  function canAccessStickerAlbum(profile = state.profile) {
+    return Boolean(profile) && normalizedPlan(profile) !== "banca";
+  }
   function hasLegendaryAccess(profile = state.profile) {
-    return ["premium", "moderator", "admin"].includes(normalizedPlan(profile));
+    return ["premium", "moderator", "banca", "admin"].includes(normalizedPlan(profile));
   }
   const PROFILE_BACKGROUND_THEMES = {
     black: { label: "Preto", bg: "#000000", text: "#f5f5f5", muted: "#b5b5bd", surface: "#0d0d10", surface2: "#17171c", surface3: "#25252b", line: "#303038" },
     white: { label: "Branco", bg: "#ffffff", text: "#17171b", muted: "#5f6068", surface: "#f3f3f5", surface2: "#e9e9ed", surface3: "#dcdce1", line: "#c9c9d0" },
     graphite: { label: "Grafite", bg: "#24242a", text: "#f5f5f5", muted: "#b7b7c0", surface: "#303037", surface2: "#3b3b44", surface3: "#494952", line: "#555560" },
     "night-blue": { label: "Azul noite", bg: "#101a2b", text: "#f5f7ff", muted: "#aeb8cc", surface: "#16243a", surface2: "#1e304b", surface3: "#2a4162", line: "#385171" },
-    wine: { label: "Vinho", bg: "#2a1118", text: "#fff5f6", muted: "#d1aeb5", surface: "#351720", surface2: "#451d29", surface3: "#5a2937", line: "#713847" }
+    wine: { label: "Vinho", bg: "#2a1118", text: "#fff5f6", muted: "#d1aeb5", surface: "#351720", surface2: "#451d29", surface3: "#5a2937", line: "#713847" },
+    forest: { label: "Floresta", bg: "#0d211a", text: "#f1fff7", muted: "#a9c8b7", surface: "#143126", surface2: "#1d4433", surface3: "#285a43", line: "#397457" },
+    plum: { label: "Ameixa", bg: "#21132b", text: "#fbf4ff", muted: "#c4aecf", surface: "#2d1b3a", surface2: "#3c2550", surface3: "#513268", line: "#69427e" },
+    sand: { label: "Areia", bg: "#332818", text: "#fffaf0", muted: "#d2c09d", surface: "#463820", surface2: "#5a4829", surface3: "#705c35", line: "#8a7246" },
+    ocean: { label: "Oceano", bg: "#0c2630", text: "#effcff", muted: "#a8c8cf", surface: "#123640", surface2: "#1b4854", surface3: "#28616e", line: "#377a87" }
   };
   const PROFILE_ACCENT_THEMES = {
     black: { label: "Preto", accent: "#000000", accent2: "#333333" },
@@ -506,12 +532,58 @@
     blue: { label: "Azul", accent: "#2f80ed", accent2: "#69a7ff" },
     purple: { label: "Roxo", accent: "#8e44ad", accent2: "#c27be0" },
     green: { label: "Verde", accent: "#27ae60", accent2: "#65d995" },
-    orange: { label: "Laranja", accent: "#f2994a", accent2: "#ffc078" }
+    orange: { label: "Laranja", accent: "#f2994a", accent2: "#ffc078" },
+    pink: { label: "Rosa", accent: "#e84393", accent2: "#ff86c8" },
+    cyan: { label: "Ciano", accent: "#00a8cc", accent2: "#62d9f2" },
+    teal: { label: "Turquesa", accent: "#00a896", accent2: "#55d8c9" },
+    yellow: { label: "Amarelo", accent: "#d9a400", accent2: "#ffe071" },
+    indigo: { label: "Índigo", accent: "#5b5bd6", accent2: "#9b9bff" },
+    crimson: { label: "Carmesim", accent: "#c2185b", accent2: "#f06292" }
   };
   const SHELF_STYLE_OPTIONS = [
-    ["none", "Original"],
-    ["wood", "Madeira clássica"]
+    ["none", "Original", "", false],
+    ["sand", "Areia", "assets/prateleiras/Comum/areia.jpg", false],
+    ["sponge", "Esponja", "assets/prateleiras/Comum/esponja.jpg", false],
+    ["grass", "Grama", "assets/prateleiras/Comum/grama.jpg", false],
+    ["classic-wood", "Madeira clássica", "assets/prateleiras/Comum/madeira%20classica.jpg", false],
+    ["straw", "Palha", "assets/prateleiras/Comum/palha.jpg", false],
+    ["stones", "Pedras", "assets/prateleiras/Comum/pedras.jpg", false],
+    ["rustic", "Rústica", "assets/prateleiras/Comum/rustica.jpg", false],
+    ["bricks-1", "Tijolos 1", "assets/prateleiras/Comum/tijolos%201.jpg", false],
+    ["bricks-2", "Tijolos 2", "assets/prateleiras/Comum/tijolos%202.jpg", false],
+    ["log", "Tronco", "assets/prateleiras/Comum/tronco.jpg", false],
+    ["crumpled-1", "Amassado 1", "assets/prateleiras/Lenda/amassado%201.png", true],
+    ["crumpled-2", "Amassado 2", "assets/prateleiras/Lenda/amassado%202.jpg", true],
+    ["box", "Caixa", "assets/prateleiras/Lenda/caixa.png", true],
+    ["basket", "Cestinha", "assets/prateleiras/Lenda/cestinha.jpg", true],
+    ["comics-a", "Comics A", "assets/prateleiras/Lenda/comics%20A.jpg", true],
+    ["comics-b", "Comics B", "assets/prateleiras/Lenda/comics%20B.jpg", true],
+    ["comics-l", "Comics L", "assets/prateleiras/Lenda/comics%20L.jpg", true],
+    ["comics-m", "Comics M", "assets/prateleiras/Lenda/comics%20M.jpg", true],
+    ["comics-v", "Comics V", "assets/prateleiras/Lenda/comics%20V.jpg", true],
+    ["style-1", "Estilo 1", "assets/prateleiras/Lenda/estilos%201.jpg", true],
+    ["style-2", "Estilo 2", "assets/prateleiras/Lenda/estilos%202.jpg", true],
+    ["style-3", "Estilo 3", "assets/prateleiras/Lenda/estilos%203.jpg", true],
+    ["style-4", "Estilo 4", "assets/prateleiras/Lenda/estilos%204.jpg", true],
+    ["style-5", "Estilo 5", "assets/prateleiras/Lenda/estilos%205.png", true],
+    ["jeans", "Jeans", "assets/prateleiras/Lenda/jeans.png", true],
+    ["lego-1", "Lego 1", "assets/prateleiras/Lenda/lego%201.jpg", true],
+    ["lego-2", "Lego 2", "assets/prateleiras/Lenda/lego%202.jpg", true],
+    ["default-1", "Padrão 1", "assets/prateleiras/Lenda/padr%C3%A3o%201.jpg", true],
+    ["default-2", "Padrão 2", "assets/prateleiras/Lenda/padr%C3%A3o%202.jpg", true],
+    ["default-3", "Padrão 3", "assets/prateleiras/Lenda/padr%C3%A3o%203.jpg", true],
+    ["default-5", "Padrão 5", "assets/prateleiras/Lenda/padr%C3%A3o%205.jpg", true],
+    ["wood-floor", "Piso de madeira", "assets/prateleiras/Lenda/piso%20de%20madeira.jpg", true],
+    ["frame", "Quadro", "assets/prateleiras/Lenda/quadro.jpg", true],
+    ["trace", "Traçado", "assets/prateleiras/Lenda/tra%C3%A7ado.jpg", true],
   ];
+  function shelfStyleOptionsFor(profile = state.profile) {
+    const legendary = hasLegendaryAccess(profile);
+    return SHELF_STYLE_OPTIONS.filter(([, , , isLegendary]) => !isLegendary || legendary);
+  }
+  function shelfStyleOption(value) {
+    return SHELF_STYLE_OPTIONS.find(([optionValue]) => optionValue === value) || SHELF_STYLE_OPTIONS[0];
+  }
   function profileThemeOptions(themes, selected, defaultLabel) {
     return `<option value="" ${!selected ? "selected" : ""}>${defaultLabel}</option>${Object.entries(themes).map(([key, theme]) => `<option value="${key}" ${selected === key ? "selected" : ""}>${theme.label}</option>`).join("")}`;
   }
@@ -521,7 +593,8 @@
     const shelfStyles = profile?.shelf_styles && typeof profile.shelf_styles === "object" ? profile.shelf_styles : {};
     $$(".shelf-fixed-collection", content).forEach(section => {
       const key = $(".shelf-style-key", section)?.dataset.shelfStyleKey || "";
-      const shelfStyle = SHELF_STYLE_OPTIONS.some(([value]) => value === shelfStyles[key]) ? shelfStyles[key] : "none";
+      const shelfStyle = shelfStyleOptionsFor(profile).some(([value]) => value === shelfStyles[key]) ? shelfStyles[key] : "none";
+      const styleOption = shelfStyleOption(shelfStyle);
       section.classList.remove(...SHELF_STYLE_OPTIONS.map(([value]) => `shelf-style-${value}`));
       section.classList.add(`shelf-style-${shelfStyle}`);
     });
@@ -541,8 +614,17 @@
   function isAdminProfile(profile = state.profile) {
     return normalizedPlan(profile) === "admin";
   }
+  function canManageHomepageOrder(profile = state.profile) {
+    return ["banca", "admin"].includes(normalizedPlan(profile));
+  }
+  function canViewBancaMonitoring(profile = state.profile) {
+    return ["banca", "admin"].includes(normalizedPlan(profile));
+  }
+  function canViewHiddenHomepageSections(profile = state.profile) {
+    return isStaffProfile(profile);
+  }
   function isStaffProfile(profile = state.profile) {
-    return ["moderator", "admin"].includes(normalizedPlan(profile));
+    return ["moderator", "banca", "admin"].includes(normalizedPlan(profile));
   }
   function isHiddenCatalogItem(item) {
     return Boolean(item?.id && state.hiddenCatalogItemIds?.has(String(item.id)));
@@ -1028,6 +1110,10 @@
     return Boolean(state.profile?.faction_id);
   }
 
+  function isFactionStaff() {
+    return ["moderator", "banca", "admin"].includes(state.profile?.plan);
+  }
+
   // Identifica as entradas criadas pela SPA para que o voltar do navegador e
   // o botão físico do celular possam retornar à rota anterior sem criar uma
   // nova rota artificial.
@@ -1204,12 +1290,15 @@
 
   async function loadHomepageSettings() {
     if (!sb || navigator.onLine === false) return;
-    const result = await sb.from("homepage_settings").select("section_order, legendary_sunday_enabled, legendary_manual_date").eq("id", true).maybeSingle();
+    const result = await sb.from("homepage_settings").select("section_order, hidden_sections, legendary_sunday_enabled, legendary_manual_date").eq("id", true).maybeSingle();
     if (result.error) {
       console.warn("Não foi possível carregar a ordem da página inicial:", result.error.message);
       return;
     }
     state.homeSectionOrder = normalizeHomeSectionOrder(result.data?.section_order);
+    state.homeHiddenSectionKeys = new Set(Array.isArray(result.data?.hidden_sections)
+      ? result.data.hidden_sections.filter(key => HOME_SECTION_ORDER.includes(key))
+      : []);
     state.legendarySundayEnabled = result.data?.legendary_sunday_enabled !== false;
     state.legendaryManualDate = result.data?.legendary_manual_date || null;
     if (state.profile) {
@@ -1302,14 +1391,27 @@
     if (!sb || state.rankingLoading) return;
     state.rankingLoading = true;
     if (!silent) render();
-    const result = await sb.rpc("get_profile_ranking", { p_period: state.rankingPeriod, p_limit: 500 });
-    state.rankingMembers = result.error ? [] : (result.data || []);
-    const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
-    const factionRows = rankingIds.length ? await sb.from("profiles").select("id, faction_id").in("id", rankingIds) : { data: [] };
-    state.factionByUser = new Map((factionRows.data || []).map(row => [row.id, row.faction_id]));
-    state.rankingMembers = state.rankingMembers.map(member => ({ ...member, faction_id: state.factionByUser.get(member.user_id) || null }));
-    state.rankingLoading = false;
-    if (state.section === "ranking") render();
+    try {
+      // This RPC is public on purpose: the ranking is a community directory,
+      // so it must also work when auth.uid() is null.
+      const result = await sb.rpc("get_profile_ranking", { p_period: state.rankingPeriod, p_limit: 500 });
+      if (result.error) {
+        console.warn("Não foi possível carregar o ranking:", result.error.message);
+        state.rankingMembers = [];
+        return;
+      }
+      state.rankingMembers = result.data || [];
+      const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
+      const factionRows = rankingIds.length ? await sb.from("profiles").select("id, faction_id").in("id", rankingIds) : { data: [] };
+      state.factionByUser = new Map((factionRows.data || []).map(row => [row.id, row.faction_id]));
+      state.rankingMembers = state.rankingMembers.map(member => ({ ...member, faction_id: state.factionByUser.get(member.user_id) || null }));
+    } catch (error) {
+      console.warn("Não foi possível carregar o ranking:", error?.message || error);
+      state.rankingMembers = [];
+    } finally {
+      state.rankingLoading = false;
+      if (state.section === "ranking") render();
+    }
   }
 
   async function awardProfileXp(eventType, eventKey) {
@@ -1376,7 +1478,7 @@
     (catalogLikes.data || []).forEach(row => state.factionCatalogLikeCounts.set(String(row.catalog_id), (state.factionCatalogLikeCounts.get(String(row.catalog_id)) || 0) + 1));
     state.factionCatalogSaveIds = new Set((catalogSaves.data || []).map(row => String(row.catalog_id)));
     if (state.session?.user?.id && state.factions.length) {
-      const factionsToRepair = ["moderator", "admin"].includes(state.profile?.plan) ? state.factions : state.factions.filter(faction => faction.id === state.profile?.faction_id);
+      const factionsToRepair = ["moderator", "banca", "admin"].includes(state.profile?.plan) ? state.factions : state.factions.filter(faction => faction.id === state.profile?.faction_id);
       await Promise.all(factionsToRepair.map(faction => sb.rpc("ensure_faction_leadership", { p_faction_id: faction.id })));
     }
     const roles = await sb.from("faction_roles").select("user_id, faction_id, role, slot");
@@ -1423,7 +1525,7 @@
   }
 
   async function joinFaction(factionId) {
-    if (!sb || !state.session?.user?.id || !factionId || ["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || !state.session?.user?.id || !factionId || ["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const result = await sb.rpc("choose_faction", { p_faction_id: factionId });
     if (result.error) return toast(result.error.message || "Não foi possível entrar nesta facção.");
     const selected = result.data?.[0];
@@ -1449,16 +1551,16 @@
   }
 
   function factionRoleForProfile(profile = {}) {
-    const role = state.factionRoles.find(item => String(item.user_id) === String(profile.id));
+    const profileId = profile?.id;
+    const role = state.factionRoles.find(item => item && String(item.user_id) === String(profileId));
     if (!role || !["leader", "curator"].includes(role.role)) return null;
-    const faction = state.factions.find(item => item.id === role.faction_id) || state.factions.find(item => item.id === profile.faction_id);
+    const faction = state.factions.find(item => item?.id === role.faction_id) || state.factions.find(item => item?.id === profile?.faction_id);
     return faction ? { role, faction } : null;
   }
 
   function staffTitleForProfile(profile = {}) {
     const plan = normalizedPlan(profile);
-    if (plan === "admin") return "ADM";
-    if (plan === "moderator") return "Moderador";
+    if (["moderator", "banca"].includes(plan)) return "ADM";
     return "";
   }
 
@@ -1613,7 +1715,7 @@
 
   function factionOverviewNoticeMarkup() {
     if (!state.session) return '<div class="notice faction-access-notice">Você não tem uma facção. Faça login ou crie uma conta para entrar em uma.</div>';
-    if (["moderator", "admin"].includes(state.profile?.plan)) return '<div class="notice faction-access-notice">Moderadores e administradores não podem participar de facções.</div>';
+    if (["moderator", "banca", "admin"].includes(state.profile?.plan)) return '<div class="notice faction-access-notice">Moderadores e administradores não podem participar de facções.</div>';
     if (!state.profile?.faction_id) return '<div class="notice faction-access-notice">Você ainda não tem uma facção. Escolha uma para participar da disputa.</div>';
     return "";
   }
@@ -1768,7 +1870,7 @@
   }
 
   function openFactionChoice() {
-    if (!state.session || !state.profile || ["moderator", "admin"].includes(state.profile.plan) || state.factionChoiceOpen || !state.factions.length) return;
+    if (!state.session || !state.profile || ["moderator", "banca", "admin"].includes(state.profile.plan) || state.factionChoiceOpen || !state.factions.length) return;
     state.factionChoiceOpen = true;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop faction-choice-backdrop";
@@ -1984,7 +2086,7 @@
     const button = $("button[type=submit]", form);
     if (button) button.disabled = true;
     try {
-      const staff = ["moderator", "admin"].includes(state.profile?.plan);
+      const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
       const result = await sb.from("blog_posts").insert({
         author_id: state.session.user.id,
         title,
@@ -2010,7 +2112,7 @@
   }
 
   async function toggleBlogFeatured(id, featured) {
-    if (!["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const result = await sb.from("blog_posts").update({ is_featured: !featured }).eq("id", id);
     if (result.error) return toast("Não foi possível atualizar o destaque.");
     await loadBlogPosts();
@@ -2025,11 +2127,15 @@
     if (!state.session) return openAuthPage();
     const post = findBlogPost(id);
     if (!post) return;
-    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
     const isAuthor = post.author_id === state.session.user.id;
     if (!staff && !isAuthor) return toast("Você não pode apagar este blog.");
-    if (!window.confirm(`Apagar o blog "${post.title}"? Esta ação não pode ser desfeita.`)) return;
-    const result = await sb.from("blog_posts").delete().eq("id", id);
+    if (!await openSiteConfirm(`Apagar o blog "${post.title}"? Esta ação não pode ser desfeita.`, { title: "Apagar blog?", confirmLabel: "Apagar blog" })) return;
+    const audit = staff && !isAuthor ? await askModerationReason("delete_blog") : { reason: null, internalNote: null };
+    if (!audit) return;
+    const result = staff && !isAuthor
+      ? await sb.rpc("delete_moderated_blog", { p_blog_id: id, p_reason: audit.reason, p_internal_note: audit.internalNote })
+      : await sb.from("blog_posts").delete().eq("id", id);
     if (result.error) return toast(result.error.message || "Não foi possível apagar o blog.");
     state.blogOpenId = null;
     await loadBlogPosts();
@@ -2112,7 +2218,7 @@
 
   function blogCard(post, featured = false) {
     const author = post.author || {};
-    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
     const canDelete = staff || state.session?.user?.id === post.author_id;
     const coverOnly = (!post.image_2_url && !post.image_3_url) || (post.cover_url && post.image_2_url === post.cover_url && post.image_3_url === post.cover_url);
     return `<article class="blog-card ${featured ? "is-featured" : ""}" data-blog-open="${escapeHTML(post.id)}"><div class="blog-card-images ${coverOnly ? "is-cover-only" : ""}"><div class="blog-card-cover ${post.cover_url ? "has-image" : ""}" ${blogImageStyle(post.cover_url)}></div><div class="blog-card-side"><div class="blog-card-side-image ${post.image_2_url ? "has-image" : ""}" ${blogImageStyle(post.image_2_url)}></div><div class="blog-card-side-image ${post.image_3_url ? "has-image" : ""}" ${blogImageStyle(post.image_3_url)}></div></div></div><div class="blog-card-body"><div class="eyebrow">${post.is_featured ? "Destaque" : "Blog"}</div><h3>${escapeHTML(post.title)}</h3><p>${escapeHTML(post.excerpt || "Confira esta publicação na Banca Digital.")}</p><div class="blog-card-meta">@${escapeHTML(author.username || "usuário")} · ${escapeHTML(blogDate(post.published_at || post.created_at))}</div><div class="blog-card-actions"><button class="small-btn" data-blog-read="${escapeHTML(post.id)}">Ler artigo</button>${staff ? `<button class="small-btn" data-blog-feature="${escapeHTML(post.id)}" data-blog-featured="${post.is_featured ? "true" : "false"}">${post.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}${canDelete ? `<button class="small-btn danger" data-blog-delete="${escapeHTML(post.id)}">Apagar</button>` : ""}</div>${blogEngagementMarkup(post)}</div></article>`;
@@ -2159,7 +2265,7 @@
     const profile = { ...(comment.profiles || {}), username };
     const children = childrenByParent.get(comment.id) || [];
     const replies = children.map(child => blogCommentMarkup(child, childrenByParent, likedIds, likeCounts)).join("");
-    const canDelete = state.session?.user?.id === comment.user_id || ["moderator", "admin"].includes(state.profile?.plan);
+    const canDelete = state.session?.user?.id === comment.user_id || ["moderator", "banca", "admin"].includes(state.profile?.plan);
     return `<article class="comment blog-comment" data-blog-comment-id="${comment.id}"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p><div class="comment-actions"><button class="comment-action ${likedIds.has(comment.id) ? "is-liked" : ""}" data-blog-comment-like="${comment.id}">♥ ${likeCounts.get(comment.id) || 0}</button><button class="comment-action" data-blog-comment-reply="${comment.id}">Responder</button>${children.length ? `<button class="comment-action" data-blog-comment-toggle="${comment.id}">Ver ${children.length} resposta${children.length === 1 ? "" : "s"}</button>` : ""}${canDelete ? `<button class="comment-action comment-delete-action" data-blog-comment-delete="${comment.id}">Excluir</button>` : ""}<time class="comment-date" datetime="${escapeHTML(comment.created_at)}">${escapeHTML(formatCommentDate(comment.created_at))}</time></div><div class="comment-replies" data-blog-comment-replies="${comment.id}" hidden>${replies}</div></article>`;
   }
 
@@ -2195,8 +2301,13 @@
       const deleteButton = event.target.closest("[data-blog-comment-delete]");
       if (deleteButton) {
         event.preventDefault();
-        if (!window.confirm("Excluir este comentário e suas respostas?")) return;
-        const result = await sb.from("blog_comments").delete().eq("id", deleteButton.dataset.blogCommentDelete);
+        if (!await openSiteConfirm("Excluir este comentário e suas respostas?", { title: "Excluir comentário?", confirmLabel: "Excluir comentário" })) return;
+        const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
+        const audit = staff ? await askModerationReason("delete_comment") : { reason: null, internalNote: null };
+        if (!audit) return;
+        const result = staff
+          ? await sb.rpc("delete_moderated_blog_comment", { p_comment_id: Number(deleteButton.dataset.blogCommentDelete), p_reason: audit.reason, p_internal_note: audit.internalNote })
+          : await sb.from("blog_comments").delete().eq("id", deleteButton.dataset.blogCommentDelete);
         if (result.error) return toast("Não foi possível excluir o comentário.");
         await refresh();
         return;
@@ -2252,13 +2363,13 @@
 
   function renderBlogEditor() {
     if (!state.session) return `<div class="notice">Entre na sua conta para escrever e publicar um blog.</div><button class="btn btn-danger" data-action="open-auth">Entrar</button>`;
-    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
     return `<form id="blog-form" class="blog-editor-form"><div class="field"><label>Título</label><input name="title" maxlength="140" required placeholder="Título da sua publicação"></div><div class="field"><label>Resumo</label><textarea name="excerpt" maxlength="500" rows="3" placeholder="Uma chamada curta para os cards da aba Blogs"></textarea></div><div class="blog-image-fields"><div class="field"><label>Capa principal</label><input name="cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><div class="field"><label>Imagem lateral 1</label><input name="image2" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><div class="field"><label>Imagem lateral 2</label><input name="image3" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div></div><div class="field"><label>Conteúdo</label><div class="blog-toolbar"><button type="button" data-blog-command="bold"><b>B</b></button><button type="button" data-blog-command="italic"><i>I</i></button><button type="button" data-blog-command="underline"><u>U</u></button><button type="button" data-blog-command="formatBlock" data-blog-value="h2">Título</button><button type="button" data-blog-command="formatBlock" data-blog-value="blockquote">Citação</button><button type="button" data-blog-command="insertUnorderedList">Lista</button><button type="button" data-blog-command="createLink">Link</button></div><div id="blog-editor" class="blog-editor" contenteditable="true" data-placeholder="Escreva sua notícia, análise ou história..."></div></div>${staff ? `<label class="checkbox-inline"><input name="isFeatured" type="checkbox"> Destacar na aba Blogs</label>` : ""}<div class="modal-actions"><button type="submit" class="btn btn-danger">Publicar blog</button></div></form>`;
   }
 
   function renderBlogPostPage(post) {
     const author = post.author || {};
-    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
     const canDelete = staff || state.session?.user?.id === post.author_id;
     return `<div class="content blog-post-page"><div class="section-head"><div><div class="eyebrow">${post.is_featured ? "Blog em destaque" : "Blog"}</div><h1 class="section-title">${escapeHTML(post.title)}</h1><div class="section-subtitle">@${escapeHTML(author.username || "usuário")} · ${escapeHTML(blogDate(post.published_at || post.created_at))}</div></div><button class="small-btn" data-blog-back>Voltar aos blogs</button></div><div class="blog-post-gallery"><div class="blog-post-cover ${post.cover_url ? "has-image" : ""}" ${blogImageStyle(post.cover_url)}></div><div class="blog-post-side"><div class="blog-post-side-image ${post.image_2_url ? "has-image" : ""}" ${blogImageStyle(post.image_2_url)}></div><div class="blog-post-side-image ${post.image_3_url ? "has-image" : ""}" ${blogImageStyle(post.image_3_url)}></div></div></div>${post.excerpt ? `<p class="blog-post-excerpt">${escapeHTML(post.excerpt)}</p>` : ""}<article class="blog-post-content">${safeBlogHtml(post.content_html)}</article><div class="blog-post-actions">${blogEngagementMarkup(post, false)}${staff ? `<button class="small-btn" data-blog-feature="${escapeHTML(post.id)}" data-blog-featured="${post.is_featured ? "true" : "false"}">${post.is_featured ? "Remover destaque" : "Destacar blog"}</button>` : ""}${canDelete ? `<button class="small-btn danger blog-delete-button" data-blog-delete="${escapeHTML(post.id)}">Apagar blog</button>` : ""}</div>${blogAuthorMarkup(post)}</div>`;
   }
@@ -2297,10 +2408,11 @@
     const profileId = profile?.id || profile?.user_id;
     const factionId = profile?.faction_id || state.factionByUser.get(profileId);
     const faction = state.factions.find(item => item.id === factionId);
-    const staff = ["moderator", "admin"].includes(profile?.plan);
+    const staff = ["moderator", "banca", "admin"].includes(profile?.plan);
     const avatarClass = staff ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
     const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
-    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (profile?.avatar_url || randomAvatarUrl(profileId));
+    const isGeneratedAvatar = String(profile?.avatar_url || "").startsWith(RANDOM_AVATAR_BASE_URL);
+    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (isGeneratedAvatar ? generatedAvatarForProfile(profile) : (profile?.avatar_url || generatedAvatarForProfile(profile)));
     return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(avatarUrl)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
@@ -2382,7 +2494,7 @@
     if (!headerAvatar) return;
     headerAvatar.innerHTML = avatarMarkup(state.profile, "top-avatar-img");
     headerAvatar.title = state.session ? "Abrir minha estante" : "Entrar ou abrir minha estante";
-    headerAvatar.classList.toggle("avatar-staff", ["moderator", "admin"].includes(state.profile?.plan));
+    headerAvatar.classList.toggle("avatar-staff", ["moderator", "banca", "admin"].includes(state.profile?.plan));
   }
 
   function appAssetUrl(path) {
@@ -2460,11 +2572,11 @@
 
   async function loadProfileWallComments(profileId) {
     if (!sb || !profileId) return [];
-    let result = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id, plan)").eq("profile_id", profileId).order("created_at", { ascending: false });
+    let result = await sb.from("profile_wall_comments").select("id, profile_id, user_id, parent_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id, plan)").eq("profile_id", profileId).order("created_at", { ascending: false });
     if (!result.error) return result.data || [];
-    let fallback = await sb.from("profile_wall_comments").select("id, user_id, parent_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
+    let fallback = await sb.from("profile_wall_comments").select("id, profile_id, user_id, parent_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
     if (fallback.error && /parent_id|schema cache|column/i.test(fallback.error.message || "")) {
-      const legacy = await sb.from("profile_wall_comments").select("id, user_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
+      const legacy = await sb.from("profile_wall_comments").select("id, profile_id, user_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
       fallback = { ...legacy, data: (legacy.data || []).map(comment => ({ ...comment, parent_id: null })) };
     }
     if (fallback.error) {
@@ -2508,6 +2620,9 @@
     // online/anônimo para não prender o usuário na área Downloads.
     const session = browserOffline ? offlineFallback : remoteSession;
     state.session = session?.user ? session : null;
+    // O ranking é público e não deve depender da conclusão do carregamento da
+    // conta/estante. Inicie-o logo para visitantes sem sessão também.
+    if (state.section === "ranking") loadRankingData();
     if (remoteSession?.user) {
       // Persiste a identidade assim que a sessão é reconhecida. A senha e os
       // tokens continuam sob responsabilidade do Supabase Auth.
@@ -2611,7 +2726,7 @@
       const ownFollowing = await sb.from("profile_follows").select("following_id").eq("follower_id", session.user.id);
       state.followerCount = (ownFollowers.data || []).length;
       state.followingCount = (ownFollowing.data || []).length;
-      if (state.profile?.is_banned && !["moderator", "admin"].includes(state.profile.plan)) {
+      if (state.profile?.is_banned && !["moderator", "banca", "admin"].includes(state.profile.plan)) {
         await sb.auth.signOut();
         state.session = null;
         state.profile = null;
@@ -2680,7 +2795,7 @@
     state.authReady = true;
     syncTopAvatar();
     if (state.section === "factions" && !state.factionPageId && !canAccessFactions()) {
-      navigate({}, true);
+      navigate(isFactionStaff() ? { pagina: "ranking", secao: "faccoes" } : {}, true);
       return;
     }
     render();
@@ -2690,7 +2805,7 @@
     if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["SÃ©rie Mensal", "Recentes", "VÃ¡rios autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
     }
-    if (state.session && state.profile && !["moderator", "admin"].includes(state.profile.plan) && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
+    if (state.session && state.profile && !["moderator", "banca", "admin"].includes(state.profile.plan) && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
     if (state.section === "ranking") loadRankingData();
   }
 
@@ -2771,9 +2886,9 @@
   async function loadStaffActivities() {
     state.staffActivities = [];
     state.staffPendingCount = 0;
-    if (!sb || state.session?.offline || navigator.onLine === false || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || state.session?.offline || navigator.onLine === false || !canViewBancaMonitoring()) return;
     const [moderation, bots, reports, discoveries, sources] = await Promise.all([
-      sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, details, created_at").order("created_at", { ascending: false }).limit(100),
+      sb.from("moderation_actions").select("id, actor_id, target_id, action, duration_until, reason, internal_note, details, created_at").order("created_at", { ascending: false }).limit(100),
       sb.from("bot_actions").select("id, bot_name, action, title, body, metadata, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
       sb.from("file_reports").select("id, item_id, reporter_id, source, bot_name, item_snapshot, reason, status, reviewed_by, reviewed_at, created_at").order("created_at", { ascending: false }).limit(1000),
       state.profile?.plan === "admin"
@@ -2882,7 +2997,7 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_section_order, shelf_collection_order, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
       profile = await sb.from("profiles").select("id, username, avatar_url, profile_sticker_award_id, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
@@ -2944,10 +3059,10 @@
       sb.from("shelf_collection_likes").select("collection_id, user_id").eq("owner_id", profile.data.id),
       sb.from("profile_follows").select("follower_id").eq("following_id", profile.data.id),
       sb.from("profile_follows").select("following_id").eq("follower_id", profile.data.id),
-      ["moderator", "admin"].includes(state.profile?.plan)
-        ? sb.from("moderation_actions").select("id, actor_id, action, duration_until, details, created_at").eq("target_id", profile.data.id).order("created_at", { ascending: false })
+      ["moderator", "banca", "admin"].includes(state.profile?.plan)
+        ? sb.from("moderation_actions").select("id, actor_id, action, duration_until, reason, internal_note, details, created_at").eq("target_id", profile.data.id).order("created_at", { ascending: false })
         : { data: [] },
-      ["premium", "moderator", "admin"].includes(profile.data.plan)
+      ["premium", "moderator", "banca", "admin"].includes(profile.data.plan)
         ? sb.from("user_cover_choices").select("item_id, variant_key, label, cover_url").eq("user_id", profile.data.id)
         : { data: [] },
       sb.from("user_cover_styles").select("item_id, style").eq("user_id", profile.data.id),
@@ -3037,6 +3152,34 @@
     state.notifications = [];
     state.notificationUnreadCount = 0;
     state.section = "home"; render(); toast("Você saiu da conta.");
+  }
+
+  function askDeleteAccountConfirmation() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop account-delete-confirm-backdrop";
+      overlay.innerHTML = `<div class="modal account-delete-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="account-delete-title"><div class="section-head"><div><div class="eyebrow">Configurações da conta</div><h2 id="account-delete-title">Excluir conta?</h2><div class="section-subtitle">Excluir sua conta permanentemente? Seus dados, coleções e interações serão removidos e essa ação não pode ser desfeita.</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-delete-cancel>Cancelar</button><button type="button" class="btn btn-danger" data-delete-confirm>Excluir conta</button></div></div>`;
+      const finish = value => { overlay.remove(); resolve(value); };
+      $("[data-delete-cancel]", overlay).addEventListener("click", () => finish(false));
+      $("[data-delete-confirm]", overlay).addEventListener("click", () => finish(true));
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+      $("#modal-root").appendChild(overlay);
+    });
+  }
+
+  async function deleteAccount() {
+    if (!state.session?.user?.id || state.session.offline) return toast("A exclusão de conta exige uma sessão online.");
+    if (!await askDeleteAccountConfirmation()) return;
+    const button = $("[data-delete-account]", $("#profile-form") || document);
+    if (button) { button.disabled = true; button.textContent = "Excluindo..."; }
+    const result = await sb.functions.invoke("delete-account");
+    if (result.error) {
+      if (button) { button.disabled = false; button.textContent = "Excluir conta"; }
+      return toast(result.error.message || "Não foi possível excluir a conta.");
+    }
+    $("#profile-form")?.closest(".modal-backdrop")?.remove();
+    await signOut();
+    toast("Conta excluída.");
   }
 
   function clearLocalBox() {
@@ -3262,7 +3405,7 @@
     const seriesModalEffects = `<div class="series-cover-modal-effects"><span>Estilo da capa:</span>${coverStyleControl(seriesId, seriesStyle)}</div>`;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal series-cover-choice-modal"><div class="section-head"><div><h2>Escolher capa da série</h2><div class="section-subtitle">Escolha uma capa entre as edições desta série.</div></div><button class="small-btn" data-close>Fechar</button></div>${seriesModalEffects}<form id="series-cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="seriesCoverKey" value="${escapeHTML(option.key)}" ${current?.item_id === option.itemId && Boolean(current?.is_variant) === option.isVariant && (option.isVariant ? current?.variant_key === option.variantKey : true) || (!current && option.key === `standard:${editions[0].id}`) || (current?.is_variant && !["premium", "moderator", "admin"].includes(state.profile?.plan) && option.key === `standard:${editions[0].id}`) ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.coverUrl))}" alt=""><span>${escapeHTML(option.label)}</span></label>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal series-cover-choice-modal"><div class="section-head"><div><h2>Escolher capa da série</h2><div class="section-subtitle">Escolha uma capa entre as edições desta série.</div></div><button class="small-btn" data-close>Fechar</button></div>${seriesModalEffects}<form id="series-cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="seriesCoverKey" value="${escapeHTML(option.key)}" ${current?.item_id === option.itemId && Boolean(current?.is_variant) === option.isVariant && (option.isVariant ? current?.variant_key === option.variantKey : true) || (!current && option.key === `standard:${editions[0].id}`) || (current?.is_variant && !["premium", "moderator", "banca", "admin"].includes(state.profile?.plan) && option.key === `standard:${editions[0].id}`) ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.coverUrl))}" alt=""><span>${escapeHTML(option.label)}</span></label>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
     overlay.addEventListener("click", event => {
       if (event.target === overlay) overlay.remove();
@@ -3434,7 +3577,7 @@
       if (navigator.share) await navigator.share({ title: item.title || "Quadrinho", text: `Leia ${item.title || "este quadrinho"} na Banca Digital`, url: link });
       else { await navigator.clipboard.writeText(link); toast("Link do quadrinho copiado."); }
     } catch (error) {
-      if (error?.name !== "AbortError") window.prompt("Copie o link do quadrinho:", link);
+      if (error?.name !== "AbortError") await openSitePrompt("Copie o link do quadrinho:", link, { title: "Compartilhar quadrinho", label: "Link" });
     }
   }
 
@@ -3531,6 +3674,43 @@
       await awardProfileXp("curated_read", `curated-read:${item.id}`);
       toast("Leitura concluída: +25 XP de curadoria!");
     }
+  }
+
+  function openSiteConfirm(message, options = {}) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop site-dialog-backdrop";
+      const title = options.title || "Confirmar ação";
+      const confirmLabel = options.confirmLabel || "Confirmar";
+      overlay.innerHTML = `<div class="modal site-dialog-modal" role="alertdialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-site-dialog-cancel>Cancelar</button></div><div class="modal-actions"><button type="button" class="small-btn" data-site-dialog-cancel>Cancelar</button><button type="button" class="btn btn-danger" data-site-dialog-confirm>${escapeHTML(confirmLabel)}</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-site-dialog-cancel]', overlay).forEach(button => button.onclick = () => finish(false));
+      $("[data-site-dialog-confirm]", overlay).onclick = () => finish(true);
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(false); });
+    });
+  }
+
+  function openSitePrompt(message, defaultValue = "", options = {}) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop site-dialog-backdrop";
+      const title = options.title || "Informação";
+      overlay.innerHTML = `<div class="modal site-dialog-modal" role="dialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-site-dialog-cancel>Fechar</button></div><form data-site-dialog-form><label class="field"><span>${escapeHTML(options.label || "Valor")}</span><textarea name="value" rows="3" ${options.editable ? "" : "readonly"}>${escapeHTML(defaultValue)}</textarea></label><div class="modal-actions">${options.editable ? "" : '<button type="button" class="small-btn" data-site-dialog-copy>Copiar</button>'}<button type="button" class="small-btn" data-site-dialog-cancel>${options.editable ? "Cancelar" : "Fechar"}</button>${options.editable ? '<button type="button" class="btn btn-danger" data-site-dialog-submit>Inserir</button>' : ""}</div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-site-dialog-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      $("[data-site-dialog-copy]", overlay).onclick = async () => {
+        try { await navigator.clipboard.writeText(defaultValue); toast("Texto copiado."); } catch { $("[name=value]", overlay)?.select(); }
+      };
+      $("[data-site-dialog-submit]", overlay)?.addEventListener("click", () => finish($("[name=value]", overlay).value.trim()));
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=value]", overlay)?.select();
+    });
+  }
+
+  function openSiteInput(message, defaultValue = "", options = {}) {
+    return openSitePrompt(message, defaultValue, { ...options, editable: true });
   }
 
   function stickerSlug(value) {
@@ -4060,6 +4240,15 @@
 
   function weightedRandom(items) {
     return items[Math.floor(Math.random() * items.length)];
+  }
+
+  function openRandomCatalogItem() {
+    const candidates = visibleCatalogItems().filter(item => !item.local);
+    if (!candidates.length) {
+      toast("Ainda não há quadrinhos disponíveis para sortear.");
+      return;
+    }
+    openReader(weightedRandom(candidates));
   }
 
   function seriesKey(value = "") {
@@ -5098,13 +5287,19 @@
     const profile = { ...(comment.profiles || {}), username };
     const children = childrenByParent.get(comment.id) || [];
     const replies = children.map(child => commentMarkup(child, childrenByParent, likedIds, likeCounts)).join("");
-    const canDelete = state.session?.user?.id === comment.user_id || ["moderator", "admin"].includes(state.profile?.plan);
+    const canDelete = state.session?.user?.id === comment.user_id || ["moderator", "banca", "admin"].includes(state.profile?.plan);
     return `<article class="comment" data-comment-id="${comment.id}"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p><div class="comment-actions"><button class="comment-action ${likedIds.has(comment.id) ? "is-liked" : ""}" data-comment-like="${comment.id}">♥ ${likeCounts.get(comment.id) || 0}</button><button class="comment-action" data-comment-reply="${comment.id}">Responder</button>${children.length ? `<button class="comment-action" data-comment-toggle="${comment.id}">Ver ${children.length} resposta${children.length === 1 ? "" : "s"}</button>` : ""}${canDelete ? `<button class="comment-action comment-delete-action" data-comment-delete="${comment.id}">Excluir</button>` : ""}<time class="comment-date" datetime="${escapeHTML(comment.created_at)}">${escapeHTML(formatCommentDate(comment.created_at))}</time></div><div class="comment-replies" data-comment-replies="${comment.id}" hidden>${replies}</div></article>`;
   }
 
   async function deleteComment(commentId, root, refresh) {
-    if (!state.session?.user?.id || !window.confirm("Excluir este comentário e suas respostas?")) return;
-    const result = await sb.from("comments").delete().eq("id", commentId);
+    if (!state.session?.user?.id) return;
+    if (!await openSiteConfirm("Excluir este comentário e suas respostas?", { title: "Excluir comentário?", confirmLabel: "Excluir comentário" })) return;
+    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
+    const audit = staff ? await askModerationReason("delete_comment") : { reason: null, internalNote: null };
+    if (!audit) return;
+    const result = staff
+      ? await sb.rpc("delete_moderated_comment", { p_comment_id: commentId, p_reason: audit.reason, p_internal_note: audit.internalNote })
+      : await sb.from("comments").delete().eq("id", commentId);
     if (result.error) return toast("Não foi possível excluir o comentário.");
     await refresh();
   }
@@ -5204,6 +5399,13 @@
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label><label class="checkbox-inline"><input name="shelfCompletedPublic" type="checkbox" ${state.profile?.shelf_completed_public !== false ? "checked" : ""}> Mostrar coleção Concluídos</label><label class="checkbox-inline"><input name="shelfLikedPublic" type="checkbox" ${state.profile?.shelf_liked_public !== false ? "checked" : ""}> Mostrar coleção Curtidos</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> Mostrar Mural do perfil / Figurinhas em destaque</label></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    const deleteAccountButton = document.createElement("button");
+    deleteAccountButton.type = "button";
+    deleteAccountButton.className = "small-btn danger";
+    deleteAccountButton.textContent = "Excluir conta";
+    deleteAccountButton.dataset.deleteAccount = "true";
+    $("#profile-form .modal-actions", overlay)?.prepend(deleteAccountButton);
+    deleteAccountButton.addEventListener("click", deleteAccount);
     const legacyAvatarField = $("[name=avatar]", overlay);
     if (legacyAvatarField) {
       legacyAvatarField.type = "url";
@@ -5211,13 +5413,15 @@
       legacyAvatarField.accept = "";
       legacyAvatarField.value = state.profile?.avatar_url || "";
       const currentAvatar = String(state.profile?.avatar_url || "");
-      const currentColor = (() => { try { const params = new URL(currentAvatar).searchParams; const color = params.get("shapeColor") || "e85b68"; return `#${color.replace(/^#/, "").slice(0, 6)}`; } catch { return "#e85b68"; } })();
-      legacyAvatarField.insertAdjacentHTML("afterend", `<label class="avatar-color-control">Cor do personagem <input name="avatarColor" type="color" value="${currentColor}"></label>`);
+      if (hasLegendaryAccess(state.profile)) {
+        const avatarColors = (() => { try { const params = new URL(currentAvatar).searchParams; const shape = params.get("shapeColor") || "e85b68"; const background = params.get("backgroundColor") || "f3f4f6"; return { shape: `#${shape.replace(/^#/, "").slice(0, 6)}`, background: `#${background.replace(/^#/, "").slice(0, 6)}` }; } catch { return { shape: "#e85b68", background: "#f3f4f6" }; } })();
+        legacyAvatarField.insertAdjacentHTML("afterend", `<span class="avatar-color-controls"><label class="avatar-color-control">Cor do personagem <input name="avatarColor" type="color" value="${avatarColors.shape}"></label><label class="avatar-color-control">Cor do fundo <input name="avatarBackgroundColor" type="color" value="${avatarColors.background}"></label><small class="format-hint avatar-color-hint">Disponível apenas para contas do tipo Lenda.</small></span>`);
+      }
       legacyAvatarField.previousElementSibling.textContent = "Foto de perfil (link)";
       legacyAvatarField.insertAdjacentHTML("afterend", '<small class="format-hint">Cole um link público de imagem. Se deixar vazio, será usado seu avatar aleatório.</small>');
     }
     const profileForm = $("#profile-form", overlay);
-    profileForm?.addEventListener("submit", () => { const value = String(legacyAvatarField?.value || "").trim(); const isGeneratedAvatar = value.startsWith(RANDOM_AVATAR_BASE_URL); const avatar_url = !value || isGeneratedAvatar ? randomAvatarUrl(state.session?.user?.id, $("[name=avatarColor]", profileForm)?.value) : value; if (!value || /^https?:\/\//i.test(value)) state.profile = { ...state.profile, avatar_url }; });
+    profileForm?.addEventListener("submit", () => { const value = String(legacyAvatarField?.value || "").trim(); const isGeneratedAvatar = value.startsWith(RANDOM_AVATAR_BASE_URL); const customized = hasLegendaryAccess(state.profile); const avatar_url = !value || isGeneratedAvatar ? randomAvatarUrl(state.session?.user?.id, customized ? $("[name=avatarColor]", profileForm)?.value : "#ffffff", customized ? $("[name=avatarBackgroundColor]", profileForm)?.value : factionColorForProfile(state.profile)) : value; if (!value || /^https?:\/\//i.test(value)) state.profile = { ...state.profile, avatar_url }; });
     const bannerField = document.createElement("div");
     bannerField.className = "field full profile-banner-field";
     bannerField.innerHTML = `<label>Imagem de fundo da estante</label><input name="profileBannerUrl" type="url" value="${escapeHTML(state.profile?.profile_banner_url || "")}" placeholder="https://.../banner.jpg"><small class="format-hint">Opcional. Sem link, será usada a imagem padrão da estante.</small>`;
@@ -5241,10 +5445,10 @@
     });
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
-    if (!["admin", "moderator", "premium"].includes(state.profile?.plan)) $(".form-grid", overlay)?.insertAdjacentHTML("beforeend", `<div class="field full"><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas no perfil público</label></div>`);
+    if (!["admin", "moderator", "banca", "premium"].includes(state.profile?.plan)) $(".form-grid", overlay)?.insertAdjacentHTML("beforeend", `<div class="field full"><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas no perfil público</label></div>`);
     const shelfVisibilityField = $$(".field.full", overlay).find(field => field.textContent.includes("Visibilidade"));
     profileForm.addEventListener("submit", async event => {
-      if (!["admin", "moderator", "premium"].includes(state.profile?.plan)) return;
+      if (!["admin", "moderator", "banca", "premium"].includes(state.profile?.plan)) return;
       const formData = new FormData(event.currentTarget);
       const visibility = { shelf_completed_public: formData.get("shelfCompletedPublic") === "on", shelf_liked_public: formData.has("shelfLikedPublic") ? formData.get("shelfLikedPublic") === "on" : state.profile?.shelf_liked_public !== false };
       const likedVisibility = await sb.from("profiles").update(visibility).eq("id", state.session.user.id);
@@ -5455,6 +5659,7 @@
     overlay.innerHTML = `
       <div class="reader-top">
         <button class="small-btn" data-close-reader>← Voltar</button>
+        <button class="small-btn" data-reader-home>Início</button>
         <div class="reader-title">${escapeHTML(itemDisplayTitle(item))}</div>
         ${showModeSelector ? `
           <select class="small-btn" id="reading-mode-select" disabled>
@@ -5489,6 +5694,8 @@
     document.body.appendChild(overlay);
 
     const closeReaderButton = $("[data-close-reader]", overlay);
+    const readerHomeButton = $("[data-reader-home]", overlay);
+    let readerExitToHome = false;
     let removeReaderSwipeListeners = () => {};
     const cleanupReader = () => {
       if (activeReaderCleanup === cleanupReader) activeReaderCleanup = null;
@@ -5517,11 +5724,20 @@
     };
     closeReaderButton.onclick = () => {
       cleanupReader();
+      if (readerExitToHome) {
+        readerExitToHome = false;
+        navigate({ pagina: state.session?.offline ? "downloads" : "" }, true);
+        return;
+      }
       // A rota do leitor já foi adicionada ao histórico ao abrir o gibi.
       // Voltar de fato uma entrada evita que o botão Voltar gere um novo
       // histórico e depois reabra o leitor ao ser pressionado novamente.
       if (currentRouteHistoryIndex() > 0) window.history.back();
       else navigate({ pagina: state.session?.offline ? "downloads" : "" }, true);
+    };
+    readerHomeButton.onclick = () => {
+      readerExitToHome = true;
+      closeReaderButton.click();
     };
     $("[data-like-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(item.id); });
     $("[data-share-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); shareComic(item.id); });
@@ -6262,12 +6478,12 @@
     }
   }
 
-  async function showCBZProgressivePreview(item, url, body, controls, skipCover, resumePage) {
+  async function showCBZProgressivePreview(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
     // A resposta sem fim do mega-proxy pode ser interrompida pelo HTTP/3
     // depois de retornar 200. O leitor por Range do zip.js não consegue
     // recuperar esse erro; o download por faixas abaixo consegue.
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
-    if (item.local || isMega || !/^https?:\/\//i.test(url) || !window.zipJsReady) return false;
+    if (item.local || isMega || state.readingMode !== "single-page" || !/^https?:\/\//i.test(url) || !window.zipJsReady) return false;
     try {
       const zipjs = await window.zipJsReady;
       if (!zipjs?.ZipReader || !zipjs?.HttpReader || !zipjs?.BlobWriter) return false;
@@ -6276,13 +6492,26 @@
         .filter(entry => !entry.directory && /\.(jpg|jpeg|png|webp|gif)$/i.test(entry.filename))
         .sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true }));
       if (!entries.length) { await reader.close(); return false; }
-      const entryIndex = Math.max(0, Math.min((resumePage || (skipCover ? 2 : 1)) - 1, entries.length - 1));
-      const blob = await entries[entryIndex].getData(new zipjs.BlobWriter());
-      const imageUrl = URL.createObjectURL(blob);
-      body.innerHTML = `<img class="reader-image" src="${imageUrl}" alt="Página ${entryIndex + 1}">`;
-      controls.innerHTML = `<span class="reader-page">${entryIndex + 1} / ${entries.length} · carregando arquivo</span>`;
-      body.querySelector("img")?.addEventListener("load", () => URL.revokeObjectURL(imageUrl), { once: true });
-      await reader.close();
+      const pages = getReaderPages(entries.length, skipCover).map(page => page - 1);
+      let page = pages.includes((resumePage || 1) - 1) ? (resumePage - 1) : pages[0];
+      const img = document.createElement("img");
+      img.className = "reader-image";
+      img.alt = `Página ${page + 1}`;
+      body.replaceChildren(img);
+      let imageUrl = null;
+      const draw = async () => {
+        const blob = await entries[page].getData(new zipjs.BlobWriter());
+        if (imageUrl) URL.revokeObjectURL(imageUrl);
+        imageUrl = URL.createObjectURL(blob);
+        img.src = imageUrl;
+        img.alt = `Página ${page + 1}`;
+        controls.innerHTML = `<button data-prev ${page <= pages[0] ? "disabled" : ""}>‹</button><span class="reader-page">${page + 1} / ${entries.length}</span><button data-next ${page >= pages[pages.length - 1] ? "disabled" : ""}>›</button>`;
+        $(`[data-prev]`, controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position > 0) { page = pages[position - 1]; await draw(); } });
+        $(`[data-next]`, controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position < pages.length - 1) { page = pages[position + 1]; await draw(); } });
+        onPageChange?.(item, page + 1, entries.length);
+      };
+      await draw();
+      $("[data-close-reader]", overlay)?.addEventListener("click", async () => { if (imageUrl) URL.revokeObjectURL(imageUrl); await reader.close(); }, { once: true });
       return true;
     } catch (error) {
       if (!isInvalidZipError(error)) console.warn("Prévia progressiva do CBZ indisponível:", error);
@@ -6403,7 +6632,8 @@
         if (!archive) throw new Error("Nenhum leitor ZIP está disponível.");
         return archive;
       } };
-      progressivePreview = await showCBZProgressivePreview(item, url, body, controls, skipCover, resumePage);
+      progressivePreview = await showCBZProgressivePreview(item, url, body, controls, overlay, skipCover, resumePage, onPageChange);
+      if (progressivePreview) return;
       if (await renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange)) return;
       if (!JSZipLib) throw new Error("JSZip não carregou.");
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
@@ -7583,7 +7813,7 @@
 
   function coverStyleControl(itemId, currentStyle, canUse = true, collectionId = "") {
     if (!canUse) return "";
-    const premium = ["premium", "moderator", "admin"].includes(state.profile?.plan);
+    const premium = ["premium", "moderator", "banca", "admin"].includes(state.profile?.plan);
     const nextLabel = currentStyle === "normal" ? "Aplicar preto e branco" : currentStyle === "grayscale" && premium ? "Aplicar capa dourada" : "Voltar à capa normal";
     return `<span class="cover-effect-controls" aria-label="Efeito da capa"><button type="button" class="cover-effect-dot cover-effect-${escapeHTML(currentStyle)} ${currentStyle !== "normal" ? "is-active" : ""}" data-cover-effect-item="${escapeHTML(itemId)}" ${collectionId ? `data-cover-effect-collection="${escapeHTML(collectionId)}"` : ""} title="${nextLabel}${collectionId ? " (somente nesta coleção)" : ""}" aria-label="${nextLabel}${collectionId ? " (somente nesta coleção)" : ""}"></button></span>`;
   }
@@ -7591,7 +7821,7 @@
   function cycleCoverStyle(itemId, collectionId = "") {
     if (collectionId) return setCollectionCoverStyle(collectionId, itemId);
     const currentStyle = coverStyleFor({ id: itemId });
-    const premium = ["premium", "moderator", "admin"].includes(state.profile?.plan);
+    const premium = ["premium", "moderator", "banca", "admin"].includes(state.profile?.plan);
     const nextStyle = currentStyle === "normal" ? "grayscale" : currentStyle === "grayscale" && premium ? "gold" : "normal";
     return setCoverStyle(itemId, nextStyle);
   }
@@ -7602,13 +7832,27 @@
     if (!collection) return;
     const styles = { ...(collection.coverStyles || {}) };
     const currentStyle = styles[itemId] || "normal";
-    const premium = ["premium", "moderator", "admin"].includes(state.profile?.plan);
+    const premium = ["premium", "moderator", "banca", "admin"].includes(state.profile?.plan);
     const nextStyle = currentStyle === "normal" ? "grayscale" : currentStyle === "grayscale" && premium ? "gold" : "normal";
     if (nextStyle === "normal") delete styles[itemId];
     else styles[itemId] = nextStyle;
     const result = await sb.from("shelf_collections").update({ cover_styles: styles }).eq("id", collectionId).eq("owner_id", state.session.user.id);
     if (result.error) return toast(result.error.message);
     await loadPublicProfile(state.publicProfile.profile.username, collectionId);
+  }
+
+  async function setPublicCollectionColor(collectionId, color) {
+    if (!state.session || state.publicProfile?.profile?.id !== state.session.user.id) return toast("Somente o criador pode alterar esta coleção.");
+    if (!/^#[0-9a-f]{6}$/i.test(String(color || ""))) return;
+    const collection = state.publicProfile?.collections?.find(entry => String(entry.id) === String(collectionId));
+    if (!collection) return;
+    const coverStyles = { ...(collection.coverStyles || {}), __themeColor: color };
+    const result = await sb.from("shelf_collections").update({ cover_styles: coverStyles }).eq("id", collectionId).eq("owner_id", state.session.user.id);
+    if (result.error) return toast(result.error.message || "Não foi possível mudar a cor da coleção.");
+    collection.coverStyles = coverStyles;
+    const hero = $(".public-collection-hero");
+    hero?.style.setProperty("--public-collection-color", color);
+    toast("Cor da coleção atualizada.");
   }
 
   function seriesCoverFor(item, seriesCoverChoices = null) {
@@ -8566,7 +8810,8 @@
       "most-read-covers": mostReadCoverGrid,
       "editorial-banner": homepageBannerSection(lib)
     };
-    const visibleHomeKeys = normalizeHomeSectionOrder(state.homeSectionOrder).filter(key => homeSections[key]);
+    const visibleHomeKeys = normalizeHomeSectionOrder(state.homeSectionOrder)
+      .filter(key => homeSections[key] && (canViewHiddenHomepageSections() || !state.homeHiddenSectionKeys.has(key)));
     state.homeVisibleSectionKeys = visibleHomeKeys;
     const orderedSections = visibleHomeKeys
       .map((key, index, visible) => decorateHomepageSection(key, homeSections[key], index, visible.length))
@@ -8589,10 +8834,13 @@
   }
 
   function decorateHomepageSection(key, markup, index, total) {
-    if (!markup || state.profile?.plan !== "admin") return markup;
+    if (!markup || !canManageHomepageOrder()) return markup;
     const movableKeys = state.homeVisibleSectionKeys;
     const movableIndex = movableKeys.indexOf(key);
-    const controls = `<div class="homepage-section-order-controls"><button type="button" class="small-btn" data-home-section-move="up" data-home-section-key="${escapeHTML(key)}" ${movableIndex <= 0 ? "disabled" : ""} title="Mover seção para cima" aria-label="Mover seção para cima">↑</button><button type="button" class="small-btn" data-home-section-move="down" data-home-section-key="${escapeHTML(key)}" ${movableIndex < 0 || movableIndex === movableKeys.length - 1 ? "disabled" : ""} title="Mover seção para baixo" aria-label="Mover seção para baixo">↓</button></div>`;
+    const visibilityControl = canManageHomepageOrder()
+      ? `<button type="button" class="small-btn" data-home-section-visibility="${state.homeHiddenSectionKeys.has(key) ? "show" : "hide"}" data-home-section-key="${escapeHTML(key)}" title="${state.homeHiddenSectionKeys.has(key) ? "Mostrar seção para usuários comuns" : "Ocultar seção para usuários comuns"}" aria-label="${state.homeHiddenSectionKeys.has(key) ? "Mostrar seção para usuários comuns" : "Ocultar seção para usuários comuns"}">${state.homeHiddenSectionKeys.has(key) ? "◉" : "⊘"}</button>`
+      : "";
+    const controls = `<div class="homepage-section-order-controls"><button type="button" class="small-btn" data-home-section-move="up" data-home-section-key="${escapeHTML(key)}" ${movableIndex <= 0 ? "disabled" : ""} title="Mover seção para cima" aria-label="Mover seção para cima">↑</button><button type="button" class="small-btn" data-home-section-move="down" data-home-section-key="${escapeHTML(key)}" ${movableIndex < 0 || movableIndex === movableKeys.length - 1 ? "disabled" : ""} title="Mover seção para baixo" aria-label="Mover seção para baixo">↓</button>${visibilityControl}</div>`;
     if (markup.includes("data-home-section-controls-slot")) return markup.replace('<div data-home-section-controls-slot></div>', controls);
     const headStart = markup.indexOf('<div class="section-head">');
     if (headStart >= 0) {
@@ -8617,7 +8865,7 @@
   }
 
   async function moveHomepageSection(key, direction) {
-    if (!sb || state.profile?.plan !== "admin") return;
+    if (!sb || !canManageHomepageOrder()) return;
     const order = normalizeHomeSectionOrder(state.homeSectionOrder);
     const movableKeys = state.homeVisibleSectionKeys;
     const visibleIndex = movableKeys.indexOf(key);
@@ -8692,7 +8940,7 @@
       const imprintKey = publisherKey(filter.value);
       const setting = state.imprintSettings.get(imprintKey);
       const saved = state.savedImprintKeys.has(imprintKey);
-      const canManage = ["moderator", "admin"].includes(state.profile?.plan);
+      const canManage = ["moderator", "banca", "admin"].includes(state.profile?.plan);
       const entityCards = uniqueCatalogItems(items).map(item => item.seriesId ? seriesCard(item) : card(item)).join("");
       return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section></div>`;
     }
@@ -8702,7 +8950,7 @@
         const characterName = String(filter.value || "").trim();
         const characterKey = publisherKey(characterName);
         const saved = state.savedCharacterKeys.has(characterKey);
-        const canManage = ["moderator", "admin"].includes(state.profile?.plan);
+        const canManage = ["moderator", "banca", "admin"].includes(state.profile?.plan);
         const actions = `<div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-character="${escapeHTML(characterName)}">${saved ? "★ Personagem salvo" : "☆ Salvar personagem"}</button>${canManage ? `<button class="small-btn" data-character-settings="${escapeHTML(characterName)}">Configurar personagem</button>` : ""}</div>`;
         const seriesCount = new Set(filteredItems.filter(item => item.seriesId).map(item => item.seriesId)).size;
         const characterCount = `${seriesCount} série(s) · ${filteredItems.length} edição(ões)`;
@@ -8712,7 +8960,7 @@
       return `<div class="content"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · ${escapeHTML(title)}</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${countLabel}</div></div><button class="small-btn" data-section="home">Voltar ao início</button></div>${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || `<div class="empty">Nenhuma edição encontrada.</div>`}</div></section></div>`;
     }
     const setting = state.publisherSettings.get(publisherKey(filter.value));
-    const canManage = ["moderator", "admin"].includes(state.profile?.plan);
+    const canManage = ["moderator", "banca", "admin"].includes(state.profile?.plan);
     const grouped = new Map();
     const initialFor = item => { const initial = String(item.seriesTitle || item.title || "").trim().charAt(0).toUpperCase(); return /[0-9]/.test(initial) ? "0-9" : /^[A-Z]$/.test(initial) ? initial : "#"; };
     items.forEach(item => {
@@ -8767,7 +9015,7 @@
       }
     }, 0);
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Alterar tipo de conta</h2><div class="section-subtitle">Defina o nível de acesso da conta.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="account-plan-form"><div class="form-grid"><div class="field full"><label>@ do usuário</label><input name="username" required placeholder="usuario"></div><div class="field full"><label>Novo tipo de conta</label><select name="plan"><option value="free">Comum</option><option value="premium">Lenda</option><option value="moderator">Moderador</option></select></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar alteração</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Alterar tipo de conta</h2><div class="section-subtitle">Defina o nível de acesso da conta.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="account-plan-form"><div class="form-grid"><div class="field full"><label>@ do usuário</label><input name="username" required placeholder="usuario"></div><div class="field full"><label>Novo tipo de conta</label><select name="plan"><option value="free">Comum</option><option value="premium">Lenda</option><option value="moderator">Moderador</option><option value="banca">Banca</option><option value="admin">ADM</option></select></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar alteração</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     $("#account-plan-form", overlay).onsubmit = async event => {
@@ -8777,9 +9025,15 @@
       const plan = String(form.get("plan") || "free");
       let result = await sb.rpc("set_user_plan", { p_username: username, p_plan: plan });
       if (result.error && /set_user_plan|schema cache|function/i.test(result.error.message)) {
-        const profile = await sb.from("profiles").select("id").eq("username", username).maybeSingle();
+        const profile = await sb.from("profiles").select("id, faction_id").eq("username", username).maybeSingle();
         if (!profile.data) return toast("Usuário não encontrado.");
-        result = await sb.from("profiles").update({ plan }).eq("id", profile.data.id);
+        if (["moderator", "banca"].includes(plan) && profile.data.faction_id) {
+          await sb.from("faction_roles").delete().eq("user_id", profile.data.id);
+          await sb.from("faction_memberships").delete().eq("user_id", profile.data.id);
+          result = await sb.from("profiles").update({ plan, faction_id: null, faction_joined_at: null, faction_changed_at: null }).eq("id", profile.data.id);
+        } else {
+          result = await sb.from("profiles").update({ plan }).eq("id", profile.data.id);
+        }
       }
       if (result.error) return toast(result.error.message);
       overlay.remove(); toast("Tipo de conta atualizado.");
@@ -8856,12 +9110,221 @@
     return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}"${disabled}>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
   }
 
+  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "collections"];
+
+  const FIXED_SHELF_SECTION_ORDER = ["saved", "series-saved", "read", "completed", "liked"];
+
+  function normalizeFixedShelfSectionOrder(value) {
+    const saved = Array.isArray(value) ? value.filter(key => FIXED_SHELF_SECTION_ORDER.includes(key)) : [];
+    const unique = [...new Set(saved)];
+    return [...unique, ...FIXED_SHELF_SECTION_ORDER.filter(key => !unique.includes(key))];
+  }
+
+  function shelfSectionOrderForProfile(profile = {}) {
+    if (Array.isArray(profile.shelf_section_order)) return profile.shelf_section_order;
+    try { return JSON.parse(localStorage.getItem(`bancaDigitalShelfSectionOrder:${profile.id}`) || "null"); } catch { return null; }
+  }
+
+  function shelfCollectionOrderForProfile(profile = {}) {
+    if (Array.isArray(profile.shelf_collection_order)) return profile.shelf_collection_order;
+    try { return JSON.parse(localStorage.getItem(`bancaDigitalShelfCollectionOrder:${profile.id}`) || "null"); } catch { return null; }
+  }
+
+  function isOwnShelfProfile() {
+    return state.section === "shelf"
+      || (state.section === "public-profile" && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || ""));
+  }
+
+  function moveFixedShelfSection(key, direction) {
+    if (!isOwnShelfProfile() || !FIXED_SHELF_SECTION_ORDER.includes(key)) return;
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const visibleKeys = FIXED_SHELF_SECTION_ORDER.filter(sectionKey => {
+      if (sectionKey === "saved" || sectionKey === "read") return true;
+      if (sectionKey === "series-saved") return profile?.shelf_series_public !== false;
+      if (sectionKey === "completed") return profile?.shelf_completed_public !== false;
+      return state.section === "public-profile";
+    });
+    const visibleIndex = visibleKeys.indexOf(key);
+    const targetKey = visibleKeys[visibleIndex + direction];
+    if (visibleIndex < 0 || !targetKey) return;
+    const order = normalizeFixedShelfSectionOrder(shelfSectionOrderForProfile(profile));
+    const index = order.indexOf(key);
+    const target = order.indexOf(targetKey);
+    if (index < 0 || target < 0) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    if (state.section === "public-profile") state.publicProfile.profile = { ...profile, shelf_section_order: order };
+    state.profile = { ...state.profile, shelf_section_order: order };
+    try { localStorage.setItem(`bancaDigitalShelfSectionOrder:${state.session.user.id}`, JSON.stringify(order)); } catch {}
+    render();
+    sb?.from("profiles").update({ shelf_section_order: order }).eq("id", state.session.user.id).then(result => {
+      if (result?.error) toast("A ordem foi aplicada nesta sessão, mas não pôde ser salva.");
+    });
+  }
+
+  function fixedShelfSectionControls(key, canMove) {
+    if (!canMove || !FIXED_SHELF_SECTION_ORDER.includes(key)) return "";
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const order = normalizeFixedShelfSectionOrder(shelfSectionOrderForProfile(profile));
+    const index = order.indexOf(key);
+    return `<div class="homepage-section-order-controls shelf-section-order-controls"><button type="button" class="small-btn" data-shelf-section-move="up" data-shelf-section-key="${escapeHTML(key)}" ${index <= 0 ? "disabled" : ""} title="Mover coleção para cima" aria-label="Mover coleção para cima">↑</button><button type="button" class="small-btn" data-shelf-section-move="down" data-shelf-section-key="${escapeHTML(key)}" ${index === order.length - 1 ? "disabled" : ""} title="Mover coleção para baixo" aria-label="Mover coleção para baixo">↓</button></div>`;
+  }
+
+  function normalizePersonalCollectionOrder(value, categories = []) {
+    const ids = categories.map(category => String(category.id));
+    const saved = Array.isArray(value) ? value.map(String).filter(id => ids.includes(id)) : [];
+    const unique = [...new Set(saved)];
+    return [...unique, ...ids.filter(id => !unique.includes(id))];
+  }
+
+  function movePersonalCollection(id, direction) {
+    if (!isOwnShelfProfile()) return;
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const categories = state.section === "public-profile" ? (state.publicProfile?.collections || []) : (state.shelfCategories || []);
+    const order = normalizePersonalCollectionOrder(shelfCollectionOrderForProfile(profile), categories);
+    const index = order.indexOf(String(id));
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    state.profile = { ...state.profile, shelf_collection_order: order };
+    if (state.section === "public-profile") state.publicProfile.profile = { ...profile, shelf_collection_order: order };
+    try { localStorage.setItem(`bancaDigitalShelfCollectionOrder:${state.session.user.id}`, JSON.stringify(order)); } catch {}
+    render();
+    sb?.from("profiles").update({ shelf_collection_order: order }).eq("id", state.session.user.id).then(result => {
+      if (result?.error) toast("A ordem foi aplicada nesta sessão, mas não pôde ser salva.");
+    });
+  }
+
+  function personalCollectionControls(id, categories, canMove) {
+    if (!canMove) return "";
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const order = normalizePersonalCollectionOrder(shelfCollectionOrderForProfile(profile), categories);
+    const index = order.indexOf(String(id));
+    return `<div class="homepage-section-order-controls shelf-section-order-controls"><button type="button" class="small-btn" data-shelf-category-move="up" data-shelf-category-key="${escapeHTML(id)}" ${index <= 0 ? "disabled" : ""} title="Mover coleção para cima" aria-label="Mover coleção para cima">↑</button><button type="button" class="small-btn" data-shelf-category-move="down" data-shelf-category-key="${escapeHTML(id)}" ${index === order.length - 1 ? "disabled" : ""} title="Mover coleção para baixo" aria-label="Mover coleção para baixo">↓</button></div>`;
+  }
+
+  function bindFixedShelfSectionControls() {
+    if (!(state.section === "shelf" || state.section === "public-profile")) return;
+    const content = $("#main .content");
+    if (!content) return;
+    const keyFor = section => $("[data-shelf-section-key]", section)?.dataset.shelfSectionKey;
+    const sections = [...content.children]
+      .filter(element => element.matches(".shelf-fixed-collection"))
+      .filter(element => FIXED_SHELF_SECTION_ORDER.includes(keyFor(element)));
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const order = normalizeFixedShelfSectionOrder(shelfSectionOrderForProfile(profile));
+    if (sections.length) {
+      sections.sort((a, b) => order.indexOf(keyFor(a)) - order.indexOf(keyFor(b)));
+      const personalCollections = $(".shelf-categories", content);
+      sections.forEach(section => personalCollections
+        ? content.insertBefore(section, personalCollections)
+        : content.appendChild(section));
+    }
+    $$('[data-shelf-section-move]', content).forEach(button => button.addEventListener("click", () => moveFixedShelfSection(button.dataset.shelfSectionKey, button.dataset.shelfSectionMove === "up" ? -1 : 1)));
+    $$('[data-shelf-category-move]', content).forEach(button => button.addEventListener("click", () => movePersonalCollection(button.dataset.shelfCategoryKey, button.dataset.shelfCategoryMove === "up" ? -1 : 1)));
+  }
+
+  function normalizeComicSectionOrder(value) {
+    const saved = Array.isArray(value) ? value.filter(key => COMIC_SECTION_ORDER.includes(key)) : [];
+    const unique = [...new Set(saved)];
+    return [...unique, ...COMIC_SECTION_ORDER.filter(key => !unique.includes(key))];
+  }
+
+  function moveComicSection(key, direction) {
+    if (!canManageHomepageOrder()) return;
+    const order = normalizeComicSectionOrder(state.comicSectionOrder);
+    const visibleIndex = state.comicVisibleSectionKeys.indexOf(key);
+    const targetKey = state.comicVisibleSectionKeys[visibleIndex + direction];
+    if (visibleIndex < 0 || !targetKey) return;
+    const index = order.indexOf(key);
+    const target = order.indexOf(targetKey);
+    if (index < 0 || target < 0) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    state.comicSectionOrder = order;
+    localStorage.setItem("bancaDigitalComicSectionOrder", JSON.stringify(order));
+    render();
+  }
+
+  function toggleComicSectionVisibility(key, hidden) {
+    if (!canManageHomepageOrder() || !COMIC_SECTION_ORDER.includes(key)) return;
+    const nextHidden = new Set(state.comicHiddenSectionKeys);
+    if (hidden) nextHidden.add(key);
+    else nextHidden.delete(key);
+    state.comicHiddenSectionKeys = nextHidden;
+    localStorage.setItem("bancaDigitalComicHiddenSections", JSON.stringify([...nextHidden]));
+    render();
+  }
+
+  function bindComicSectionControls() {
+    if (state.section !== "comic") return;
+    const content = $("#main .content");
+    if (!content) return;
+    const legendaryBanner = $(".legendary-sunday-banner", content);
+    const legendaryStatus = $(".legendary-sunday-status", content);
+    if (legendaryBanner && legendaryStatus && legendaryBanner.parentElement === content && legendaryStatus.parentElement === content) {
+      const legendaryGroup = document.createElement("div");
+      legendaryGroup.className = "comic-legendary-section-group";
+      content.insertBefore(legendaryGroup, legendaryBanner);
+      legendaryGroup.append(legendaryBanner, legendaryStatus);
+    }
+    const sections = [...content.children].filter(element => element.matches(".section, .comic-legendary-section-group, .legendary-sunday-banner"));
+    const sectionKeyFor = element => {
+      if (element.classList.contains("comic-legendary-section-group") || element.classList.contains("legendary-sunday-banner")) return "legendary";
+      const title = ($( ".section-title", element)?.textContent?.trim().toLocaleLowerCase("pt-BR") || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (title === "selos") return "imprints";
+      if (title === "series") return "series";
+      if (title === "oneshots") return "oneshots";
+      if (title === "editoras") return "publishers";
+      if (title.includes("personagens")) return "characters";
+      if (title.includes("colecoes")) return "collections";
+      return null;
+    };
+    const keyedSections = sections.map(element => ({ element, key: sectionKeyFor(element) })).filter(entry => entry.key);
+    const order = normalizeComicSectionOrder(state.comicSectionOrder);
+    state.comicVisibleSectionKeys = order.filter(key => keyedSections.some(entry => entry.key === key));
+    keyedSections.forEach(({ element, key }) => {
+      element.hidden = state.comicHiddenSectionKeys.has(key) && !canViewHiddenHomepageSections();
+    });
+    if (!canManageHomepageOrder()) return;
+    keyedSections.forEach(({ element, key }) => {
+      const index = state.comicVisibleSectionKeys.indexOf(key);
+      const isHidden = state.comicHiddenSectionKeys.has(key);
+      const controlsMarkup = `<div class="homepage-section-order-controls"><button type="button" class="small-btn" data-comic-section-move="up" data-comic-section-key="${escapeHTML(key)}" ${index <= 0 ? "disabled" : ""} title="Mover seção para cima" aria-label="Mover seção para cima">↑</button><button type="button" class="small-btn" data-comic-section-move="down" data-comic-section-key="${escapeHTML(key)}" ${index < 0 || index === state.comicVisibleSectionKeys.length - 1 ? "disabled" : ""} title="Mover seção para baixo" aria-label="Mover seção para baixo">↓</button><button type="button" class="small-btn" data-comic-section-visibility="${isHidden ? "show" : "hide"}" data-comic-section-key="${escapeHTML(key)}" title="${isHidden ? "Mostrar seção para usuários comuns" : "Ocultar seção para usuários comuns"}" aria-label="${isHidden ? "Mostrar seção para usuários comuns" : "Ocultar seção para usuários comuns"}">${isHidden ? "◉" : "⊘"}</button></div>`;
+      const sectionHead = $(".section-head", element);
+      const legendaryStatusHost = key === "legendary" ? $(".legendary-sunday-status", element) : null;
+      if (legendaryStatusHost) legendaryStatusHost.insertAdjacentHTML("beforeend", controlsMarkup);
+      else if (sectionHead) sectionHead.insertAdjacentHTML("beforeend", controlsMarkup);
+      else element.insertAdjacentHTML("afterbegin", `<div class="homepage-section-admin">${controlsMarkup}</div>`);
+    });
+    state.comicVisibleSectionKeys.forEach(key => {
+      const entry = keyedSections.find(item => item.key === key);
+      if (entry) content.appendChild(entry.element);
+    });
+    $$('[data-comic-section-move]', content).forEach(button => button.addEventListener("click", () => moveComicSection(button.dataset.comicSectionKey, button.dataset.comicSectionMove === "up" ? -1 : 1)));
+    $$('[data-comic-section-visibility]', content).forEach(button => button.addEventListener("click", () => toggleComicSectionVisibility(button.dataset.comicSectionKey, button.dataset.comicSectionVisibility === "hide")));
+  }
+
+  async function toggleHomepageSectionVisibility(key, hidden) {
+    if (!sb || !canManageHomepageOrder() || !HOME_SECTION_ORDER.includes(key)) return;
+    const nextHidden = new Set(state.homeHiddenSectionKeys);
+    if (hidden) nextHidden.add(key);
+    else nextHidden.delete(key);
+    state.homeHiddenSectionKeys = nextHidden;
+    render();
+    const result = await sb.rpc("update_homepage_section_visibility", { p_section_key: key, p_hidden: hidden });
+    if (result.error) {
+      console.error("Não foi possível persistir a visibilidade da seção da home:", result.error);
+      return toast(result.error.message || "A visibilidade foi aplicada nesta sessão, mas não pôde ser salva.");
+    }
+  }
+
   function shelfStyleMarkup(selected, key) {
     const isOwnPublicProfile = state.section === "public-profile"
       && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || "");
     if ((!(["shelf", "public-profile"].includes(state.section)) || (state.section === "public-profile" && !isOwnPublicProfile)) || !state.session) return "";
-    const current = SHELF_STYLE_OPTIONS.some(([value]) => value === selected) ? selected : "none";
-    return `<div class="shelf-style-picker"><button type="button" class="small-btn" data-shelf-style-toggle aria-expanded="false">✦ Estilo</button><div class="shelf-style-menu" hidden><span class="shelf-style-menu-title">Estilo das prateleiras</span>${SHELF_STYLE_OPTIONS.map(([value, label]) => `<button type="button" class="shelf-style-option${current === value ? " is-selected" : ""}" data-shelf-style="${value}">${label}</button>`).join("")}</div></div>`;
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const options = shelfStyleOptionsFor(profile);
+    const current = options.some(([value]) => value === selected) ? selected : "none";
+    return `<div class="shelf-style-picker"><button type="button" class="small-btn" data-shelf-style-toggle aria-expanded="false">✦ Estilo</button><div class="shelf-style-menu" hidden><span class="shelf-style-menu-title">Estilo das prateleiras</span>${options.map(([value, label]) => `<button type="button" class="shelf-style-option${current === value ? " is-selected" : ""}" data-shelf-style="${value}">${label}</button>`).join("")}</div></div>`;
   }
 
   function shelfCollectionMarkup(title, items, key, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, actions = "", coverChoices = null, renderSeriesCards = false) {
@@ -8887,9 +9350,10 @@
     const publicCategory = publicCategoryId ? state.publicProfile?.collections?.find(category => category.id === publicCategoryId) : null;
     const shelfStyleProfile = publicState?.profile || state.profile;
     const shelfStyles = shelfStyleProfile?.shelf_styles && typeof shelfStyleProfile.shelf_styles === "object" ? shelfStyleProfile.shelf_styles : {};
-    const shelfStyle = SHELF_STYLE_OPTIONS.some(([value]) => value === shelfStyles[key]) ? shelfStyles[key] : "none";
+    const shelfStyle = shelfStyleOptionsFor(shelfStyleProfile).some(([value]) => value === shelfStyles[key]) ? shelfStyles[key] : "none";
     const shelfStyleKeyMarker = fixedCollection ? `<span class="shelf-style-key" data-shelf-style-key="${escapeHTML(key)}" hidden></span>` : "";
-    const featureAction = shelfStyleKeyMarker + shelfStyleMarkup(shelfStyle, key) + shelfSortSelectMarkup(key, sortOrder) + (publicCategory && ["moderator", "admin"].includes(state.profile?.plan)
+    const sectionKey = key.replace(/^public-/, "");
+    const featureAction = shelfStyleKeyMarker + shelfStyleMarkup(shelfStyle, key) + shelfSortSelectMarkup(key, sortOrder) + fixedShelfSectionControls(sectionKey, isOwnShelfProfile()) + (publicCategory && ["moderator", "banca", "admin"].includes(state.profile?.plan)
       ? `<button class="small-btn" data-collection-feature="${escapeHTML(publicCategory.id)}" data-collection-featured="${publicCategory.is_featured ? "true" : "false"}">${publicCategory.is_featured ? "Remover destaque" : "Destacar"}</button>`
       : "");
     return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>${likedCollection}`;
@@ -9037,6 +9501,7 @@
     overlay.innerHTML = `<div class="modal follow-list-modal"><div class="section-head"><div><h2>${title}</h2><div class="section-subtitle">${ids.length} perfil(is)</div></div><button class="small-btn" data-close>Fechar</button></div><div class="follow-list">${ids.map(id => { const profile = byId.get(id); return profile ? `<a class="follow-list-item" href="${escapeHTML(publicProfileHref(profile.username))}">${avatarMarkup(profile, "follow-list-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b>${profile.title ? `<small>${escapeHTML(profile.title)}</small>` : ""}</span></a>` : ""; }).join("") || '<div class="empty">Nenhum perfil nesta lista.</div>'}</div></div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
   }
 
   const CHAT_ROOMS = [
@@ -9056,10 +9521,10 @@
   const factionChatSheriffIds = room => new Set((state.factionRoles || []).filter(role => role.faction_id === room?.factionId && ["leader", "curator"].includes(role.role)).map(role => String(role.user_id)));
 
   function canOpenChatRoom(room) {
-    if (room.factionId) return ["moderator", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
+    if (room.factionId) return ["moderator", "banca", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
     return room.access === "public"
       || (room.access === "premium" && hasLegendaryAccess())
-      || (room.access === "staff" && ["moderator", "admin"].includes(state.profile?.plan));
+      || (room.access === "staff" && ["moderator", "banca", "admin"].includes(state.profile?.plan));
   }
 
   function chatRoomLabel(room) {
@@ -9153,7 +9618,7 @@
     const title = String(profile.title || "").trim();
     const reply = message.metadata?.reply_to;
     const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
-    const canModerateChat = options.canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
+    const canModerateChat = options.canModerate ?? ["moderator", "banca", "admin"].includes(state.profile?.plan);
     const isSheriff = (options.sheriffId && String(options.sheriffId) === String(message.sender_id)) || options.sheriffIds?.has(String(message.sender_id));
     const messageAvatar = isSheriff ? sheriffAvatarMarkup({ ...profile, username }, "chat-message-avatar") : avatarMarkup({ ...profile, username }, "chat-message-avatar");
     const moderationButton = canModerateChat ? `<button type="button" class="chat-delete-action" data-chat-delete="${escapeHTML(message.id || "")}" aria-label="Excluir mensagem" title="Excluir mensagem"><span class="chat-delete-glyph">×</span></button>` : "";
@@ -9252,9 +9717,38 @@
   }
 
   function setupChatModerationUI({ messagesRoot, getMessage, renderMessages, roomId = null, pinsRoot = null, canModerate = null }) {
-    const canModerateChat = canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
+    const canModerateChat = canModerate ?? ["moderator", "banca", "admin"].includes(state.profile?.plan);
     if (!messagesRoot || !canModerateChat) return;
     messagesRoot.addEventListener("click", async event => {
+      const reportButton = event.target.closest?.("[data-chat-report]");
+      if (reportButton) {
+        event.preventDefault(); event.stopPropagation();
+        const message = getMessage(reportButton.dataset.chatReport);
+        const reason = message && await askChatReportReason();
+        if (!message || !reason) return;
+        reportButton.disabled = true;
+        const result = await sb.from("chat_message_reports").insert({ message_id: message.id, room_id: roomId, reporter_id: state.session.user.id, target_id: message.sender_id, message_body: String(message.body || "").slice(0, 2000), reason });
+        reportButton.disabled = false;
+        if (result.error) return toast(/duplicate|unique/i.test(result.error.message || "") ? "Você já denunciou esta mensagem." : (result.error.message || "Não foi possível denunciar a mensagem."));
+        toast("Denúncia enviada aos moderadores.");
+        return;
+      }
+      const userButton = event.target.closest?.("[data-chat-user-moderate]");
+      if (userButton && roomId) {
+        event.preventDefault(); event.stopPropagation();
+        const action = await askChatModerationAction(userButton.dataset.chatUsername);
+        if (!action || !["mute", "unmute", "clear_recent"].includes(action)) return toast("Ação inválida.");
+        const duration = action === "mute" ? (await askChatMuteDuration() || "1h") : "1h";
+        const audit = ["mute", "clear_recent"].includes(action) ? await askModerationReason(action === "mute" ? "silence" : "delete_message") : { reason: null, internalNote: null };
+        if (!audit) return;
+        userButton.disabled = true;
+        const result = await sb.rpc("moderate_chat_user", { p_room_id: roomId, p_username: userButton.dataset.chatUsername, p_action: action, p_duration: duration, p_reason: audit.reason || "", p_internal_note: audit.internalNote || "" });
+        userButton.disabled = false;
+        if (result.error) return toast(result.error.message || "Não foi possível aplicar a moderação.");
+        toast(action === "mute" ? "Usuário silenciado nesta sala." : action === "unmute" ? "Silenciamento removido." : "Mensagens recentes removidas.");
+        await renderMessages();
+        return;
+      }
       const pinButton = event.target.closest?.("[data-chat-pin]");
       if (pinButton && roomId) {
         event.preventDefault();
@@ -9281,7 +9775,15 @@
         button.disabled = false;
         return;
       }
-      const result = await sb.from("chat_messages").delete().eq("id", message.id);
+      const moderatedDelete = chatCanModerate && message.sender_id !== state.session?.user?.id;
+      const audit = moderatedDelete ? await askModerationReason("delete_message") : { reason: null, internalNote: null };
+      if (!audit) {
+        button.disabled = false;
+        return;
+      }
+      const result = moderatedDelete
+        ? await sb.rpc("delete_moderated_chat_message", { p_message_id: message.id, p_reason: audit.reason, p_internal_note: audit.internalNote })
+        : await sb.from("chat_messages").delete().eq("id", message.id);
       if (result.error) {
         button.disabled = false;
         return toast(result.error.message || "Não foi possível excluir a mensagem.");
@@ -9338,6 +9840,92 @@
     });
   }
 
+  function askChatSlowMode(currentSeconds = 0) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop chat-slow-mode-backdrop";
+      overlay.innerHTML = `<div class="modal chat-slow-mode-modal"><div class="section-head"><div><div class="eyebrow">Moderação</div><h2>Slow mode</h2><div class="section-subtitle">Defina o intervalo mínimo entre mensagens na sala.</div></div><button type="button" class="small-btn" data-chat-slow-mode-cancel>Cancelar</button></div><form data-chat-slow-mode-form><label class="field"><span>Slow mode em segundos</span><input name="seconds" type="number" min="0" max="300" step="1" inputmode="numeric" value="${Math.max(0, Math.min(300, Number(currentSeconds) || 0))}" required><small class="format-hint">0 desativa · máximo 300 segundos</small></label><div class="modal-actions"><button type="button" class="small-btn" data-chat-slow-mode-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Salvar</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-chat-slow-mode-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      $("[data-chat-slow-mode-form]", overlay).onsubmit = event => {
+        event.preventDefault();
+        const input = $("[name=seconds]", overlay);
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value < 0 || value > 300 || !Number.isInteger(value)) return input.reportValidity();
+        finish(value);
+      };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=seconds]", overlay)?.focus();
+    });
+  }
+
+  function askChatReportReason() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop chat-report-reason-backdrop";
+      overlay.innerHTML = `<div class="modal chat-report-reason-modal"><div class="section-head"><div><div class="eyebrow">Denúncia</div><h2>Motivo da denúncia</h2><div class="section-subtitle">Explique brevemente por que esta mensagem deve ser analisada.</div></div><button type="button" class="small-btn" data-chat-report-cancel>Cancelar</button></div><form data-chat-report-form><label class="field"><span>Motivo</span><textarea name="reason" rows="4" maxlength="500" required placeholder="Descreva o motivo da denúncia"></textarea></label><div class="modal-actions"><button type="button" class="small-btn" data-chat-report-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Enviar denúncia</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-chat-report-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      $("[data-chat-report-form]", overlay).onsubmit = event => {
+        event.preventDefault();
+        const reason = $("[name=reason]", overlay).value.trim();
+        if (!reason) return $("[name=reason]", overlay).reportValidity();
+        finish(reason);
+      };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=reason]", overlay)?.focus();
+    });
+  }
+
+  function askChatModerationReason() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop chat-moderation-reason-backdrop";
+      overlay.innerHTML = `<div class="modal chat-moderation-reason-modal"><div class="section-head"><div><div class="eyebrow">Moderação</div><h2>Motivo da ação</h2><div class="section-subtitle">Informe o motivo, se desejar. Este campo é opcional.</div></div><button type="button" class="small-btn" data-chat-reason-cancel>Cancelar</button></div><form data-chat-reason-form><label class="field"><span>Motivo (opcional)</span><textarea name="reason" rows="4" maxlength="500" placeholder="Descreva o motivo da ação"></textarea></label><div class="modal-actions"><button type="button" class="small-btn" data-chat-reason-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Continuar</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-chat-reason-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      $("[data-chat-reason-form]", overlay).onsubmit = event => {
+        event.preventDefault();
+        finish($("[name=reason]", overlay).value.trim());
+      };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=reason]", overlay)?.focus();
+    });
+  }
+
+  function askChatMuteDuration() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop chat-mute-duration-backdrop";
+      overlay.innerHTML = `<div class="modal chat-mute-duration-modal"><div class="section-head"><div><div class="eyebrow">Moderação</div><h2>Duração do silenciamento</h2><div class="section-subtitle">Escolha por quanto tempo o usuário ficará impedido de enviar mensagens.</div></div><button type="button" class="small-btn" data-chat-mute-duration-cancel>Cancelar</button></div><div class="chat-mute-duration-options"><button type="button" class="small-btn" data-chat-mute-duration="10m">10 minutos</button><button type="button" class="small-btn" data-chat-mute-duration="1h">1 hora</button><button type="button" class="small-btn" data-chat-mute-duration="24h">24 horas</button><button type="button" class="small-btn" data-chat-mute-duration="7d">7 dias</button></div></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-chat-mute-duration]', overlay).forEach(button => button.onclick = () => finish(button.dataset.chatMuteDuration));
+      $("[data-chat-mute-duration-cancel]", overlay).onclick = () => finish(null);
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+    });
+  }
+
+  function askChatModerationAction(username) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop chat-moderation-action-backdrop";
+      overlay.innerHTML = `<div class="modal chat-moderation-action-modal"><div class="section-head"><div><div class="eyebrow">Moderação</div><h2>Ação para @${escapeHTML(username)}</h2><div class="section-subtitle">Escolha a ação que será aplicada nesta sala.</div></div><button type="button" class="small-btn" data-chat-action-cancel>Cancelar</button></div><form data-chat-action-form><label class="field"><span>Ação</span><select name="action" required><option value="mute">Silenciar</option><option value="unmute">Remover silenciamento</option><option value="clear_recent">Apagar mensagens recentes</option></select></label><div class="modal-actions"><button type="button" class="small-btn" data-chat-action-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Continuar</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-chat-action-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      $("[data-chat-action-form]", overlay).onsubmit = event => {
+        event.preventDefault();
+        finish($("[name=action]", overlay).value);
+      };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=action]", overlay)?.focus();
+    });
+  }
+
   function chatPinDurationLabel(pin) {
     if (!pin.expires_at) return "Até ser desfixada";
     const remaining = new Date(pin.expires_at).getTime() - Date.now();
@@ -9347,7 +9935,7 @@
   }
 
   function chatPinsMarkup(pins, canModerate = null) {
-    const canModerateChat = canModerate ?? ["moderator", "admin"].includes(state.profile?.plan);
+    const canModerateChat = canModerate ?? ["moderator", "banca", "admin"].includes(state.profile?.plan);
     return `<div class="chat-pins-inner">${pins.map((pin, index) => `<article class="chat-pin-slide${index === 0 ? " is-active" : ""}" data-chat-pin-slide="${index}"><div class="chat-pin-heading"><span>📌 Mensagem fixada</span><small>${escapeHTML(chatPinDurationLabel(pin))}</small><div class="chat-pin-carousel-actions"><button type="button" class="chat-pin-carousel-button" data-chat-pin-prev aria-label="Mensagem fixada anterior" title="Anterior">‹</button><button type="button" class="chat-pin-carousel-button" data-chat-pin-toggle aria-label="Pausar carrossel" title="Pausar carrossel">⏸</button><button type="button" class="chat-pin-carousel-button" data-chat-pin-next aria-label="Próxima mensagem fixada" title="Próxima">›</button></div></div><div class="chat-pin-body"><div class="chat-pin-copy">${chatBodyMarkup(pin.body, pin.metadata)}</div></div><div class="chat-pin-footer"><span>— @${escapeHTML(cleanUsername(pin.sender_username || "usuario"))}</span><div class="chat-pin-actions"><button type="button" class="small-btn chat-expand-action" data-chat-pin-expand aria-expanded="false" hidden>Expandir</button>${canModerateChat ? `<button type="button" class="small-btn chat-unpin-action" data-chat-unpin="${escapeHTML(String(pin.message_id))}">Desfixar</button>` : ""}</div></div></article>`).join("")}<div class="chat-pin-dots" role="tablist" aria-label="Mensagens fixadas">${pins.map((pin, index) => `<button type="button" class="chat-pin-dot${index === 0 ? " is-active" : ""}" data-chat-pin-index="${index}" role="tab" aria-label="Mensagem fixada ${index + 1}" aria-selected="${index === 0 ? "true" : "false"}"></button>`).join("")}</div></div>`;
   }
 
@@ -9432,7 +10020,7 @@
   }
 
   async function openChatSheriffManager(room) {
-    if (!isSheriffRoom(room) || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!isSheriffRoom(room) || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const currentResult = await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id });
     const current = currentResult.data?.[0] || null;
     const overlay = document.createElement("div");
@@ -9463,7 +10051,7 @@
   async function openChatRoom(room) {
     const sheriffResult = isSheriffRoom(room) && sb ? await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id }) : { data: [] };
     const sheriff = sheriffResult.data?.[0] || null;
-    const chatCanModerate = ["moderator", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id) || isFactionChatSheriff(room, state.session?.user?.id);
+    const chatCanModerate = ["moderator", "banca", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id) || isFactionChatSheriff(room, state.session?.user?.id);
     const factionSheriffIds = factionChatSheriffIds(room);
     removeLegacyChatScrollControls();
     await markChatMentionsRead(room?.id);
@@ -9474,7 +10062,25 @@
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal chat-modal chat-conversation-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
     $("#modal-root").appendChild(overlay);
-    if (isSheriffRoom(room) && ["moderator", "admin"].includes(state.profile?.plan)) {
+    if (chatCanModerate) {
+      const toolsButton = document.createElement("button");
+      toolsButton.className = "small-btn"; toolsButton.type = "button"; toolsButton.textContent = "⚙ Moderação";
+      toolsButton.onclick = async () => {
+        const current = await sb.from("chat_room_settings").select("slow_mode_seconds").eq("room_id", room.id).maybeSingle();
+        const value = await askChatSlowMode(current.data?.slow_mode_seconds || 0);
+        if (value !== null) {
+          const result = await sb.rpc("set_chat_room_slow_mode", { p_room_id: room.id, p_seconds: Math.max(0, Math.min(300, Number(value) || 0)) });
+          if (result.error) toast(result.error.message || "Não foi possível atualizar o slow mode."); else toast("Slow mode atualizado.");
+        }
+        const history = await sb.rpc("get_chat_moderation_history", { p_room_id: room.id, p_limit: 20 });
+        if (!history.error && history.data?.length) {
+          const summary = history.data.map(item => `${new Date(item.created_at).toLocaleString("pt-BR")} · ${item.action}${item.duration_until ? ` até ${new Date(item.duration_until).toLocaleString("pt-BR")}` : ""}`).join("\n");
+          window.alert(`Histórico de moderação\n\n${summary}`);
+        }
+      };
+      $(".chat-modal-actions", overlay)?.prepend(toolsButton);
+    }
+    if (isSheriffRoom(room) && ["moderator", "banca", "admin"].includes(state.profile?.plan)) {
       const sheriffButton = document.createElement("button");
       sheriffButton.className = "small-btn";
       sheriffButton.type = "button";
@@ -9483,7 +10089,7 @@
       sheriffButton.onclick = () => openChatSheriffManager(room);
       $(".chat-modal-actions", overlay)?.prepend(sheriffButton);
     }
-    if (room.factionId && ["moderator", "admin"].includes(state.profile?.plan)) $("#chat-room-compose", overlay)?.remove();
+    if (room.factionId && ["moderator", "banca", "admin"].includes(state.profile?.plan)) $("#chat-room-compose", overlay)?.remove();
     const pinsRoot = $("[data-chat-pins]", overlay);
     let closed = false;
     let channel = null;
@@ -9515,6 +10121,21 @@
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
       messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true, canModerate: chatCanModerate, sheriffId: sheriff?.user_id, sheriffIds: factionSheriffIds })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      $$('[data-chat-message-id]', messagesRoot).forEach(node => {
+        const message = chatMessagesById.get(String(node.dataset.chatMessageId));
+        if (!message) return;
+        const actions = $(".chat-message-actions", node);
+        if (message.sender_id !== state.session?.user?.id) {
+          const report = document.createElement("button");
+          report.type = "button"; report.className = "chat-report-action"; report.dataset.chatReport = String(message.id); report.textContent = "⚑"; report.title = "Denunciar mensagem";
+          actions?.prepend(report);
+        }
+        if (chatCanModerate && actions) {
+          const moderate = document.createElement("button");
+          moderate.type = "button"; moderate.className = "chat-report-action"; moderate.dataset.chatUserModerate = String(message.id); moderate.dataset.chatUsername = cleanUsername(message.profiles?.username || "usuario"); moderate.textContent = "⚙"; moderate.title = "Moderar usuário";
+          actions.prepend(moderate);
+        }
+      });
       hydrateChatFactionRoleTitles(messagesRoot);
       updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
@@ -9740,7 +10361,7 @@
   }
 
   async function saveShelfStyle(key, style) {
-    if (!state.session || !SHELF_STYLE_OPTIONS.some(([value]) => value === style)) return;
+    if (!state.session || !shelfStyleOptionsFor(state.profile).some(([value]) => value === style)) return;
     const shelfStyles = { ...(state.profile?.shelf_styles || {}), [key]: style };
     const update = await sb?.from("profiles").update({ shelf_styles: shelfStyles }).eq("id", state.session.user.id);
     if (update?.error) {
@@ -9761,7 +10382,7 @@
       await navigator.clipboard.writeText(link);
       toast("Link da coleção copiado.");
     } catch {
-      window.prompt("Copie o link da coleção:", link);
+      await openSitePrompt("Copie o link da coleção:", link, { title: "Compartilhar coleção", label: "Link" });
     }
   }
 
@@ -9850,7 +10471,7 @@
 
   function blogShelfCollectionMarkup(collection, posts, editable = false) {
     const items = (collection.blogIds || []).map(id => posts.find(post => String(post.id) === String(id))).filter(Boolean);
-    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
     const profileUsername = state.publicProfile?.profile?.username || state.profile?.username || "";
     return `<section class="section shelf-collection blog-shelf-collection"><div class="section-head"><div><h2 class="section-title">${escapeHTML(collection.name)}</h2><div class="section-subtitle">${items.length} blog(s)</div></div><div class="shelf-section-actions">${collection.isPublic !== false ? `<span class="shelf-visibility is-public">${collection.is_featured ? "Destaque · " : ""}Pública</span><button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(profileUsername)}">Compartilhar</button>${!editable && profileUsername ? `<a class="small-btn" href="${escapeHTML(publicProfileHref(profileUsername, collection.id))}">Abrir</a>` : ""}` : '<span class="shelf-visibility is-private">Privada</span>'}${staff && collection.isPublic !== false ? `<button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}${editable ? `<button class="small-btn" data-blog-shelf-edit="${escapeHTML(collection.id)}">Editar</button><button class="small-btn danger" data-blog-shelf-delete="${escapeHTML(collection.id)}">Excluir</button>` : ""}</div></div><div class="blog-shelf-grid">${items.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog nesta coleção.</div>'}</div></section>`;
   }
@@ -9903,7 +10524,7 @@
   }
 
   async function toggleShelfCollectionFeatured(id, featured) {
-    if (!["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const result = await sb.from("shelf_collections").update({ is_featured: !featured }).eq("id", id);
     if (result.error) return toast("Não foi possível atualizar o destaque da coleção.");
     if (state.section === "public-profile" && state.publicProfile?.profile) await loadPublicProfile(state.publicProfile.profile.username, state.publicProfile.collectionId || null);
@@ -9911,6 +10532,9 @@
   }
 
   function profileXpProgressMarkup(profile, compact = false) {
+    if (normalizedPlan(profile) === "banca") {
+      return `<div class="profile-xp-progress profile-xp-unavailable ${compact ? "is-compact" : ""}"><div class="profile-xp-head"><strong>Precisa de ajuda?</strong></div><small>Envie uma mensagem se tiver algum problema ou precisar de ajuda.</small></div>`;
+    }
     const xp = Math.max(0, Number(profile?.xp) || 0);
     const level = Math.max(1, Number(profile?.level) || 1);
     const currentFloor = Math.pow(level - 1, 2) * 100;
@@ -9941,17 +10565,24 @@
   }
 
   function renderShelfLikePage({ profile, own, savedItems, savedSeries, readItems, completedItems, likedItems, categories = [], profileState = null, profileActions = "" }) {
+    const canEditPersonalCollections = own || isOwnShelfProfile();
     const actions = own
       ? '<button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button>'
       : profileActions;
     const publicPrefix = own ? "" : "public-";
-    let categoryMarkup = categories.map(category => {
+    const personalCollectionOrder = normalizePersonalCollectionOrder(shelfCollectionOrderForProfile(profile), categories);
+    const orderedCategories = categories.slice().sort((a, b) => personalCollectionOrder.indexOf(String(a.id)) - personalCollectionOrder.indexOf(String(b.id)));
+    let categoryMarkup = orderedCategories.map(category => {
       const items = own ? shelfItemsByIds(category.itemIds) : publicCollectionItems(category, profileState);
       const liked = !own && profileState?.collectionLikes?.has(category.id);
       const likes = !own ? profileState?.collectionLikeCounts?.get(category.id) || 0 : 0;
-      const extra = own
+      let extra = canEditPersonalCollections
         ? `<span class="shelf-visibility ${category.isPublic !== false ? "is-public" : "is-private"}">${category.isPublic !== false ? "Pública" : "Privada"}</span>${category.isPublic !== false ? `<button class="small-btn" data-copy-collection="${escapeHTML(category.id)}">Compartilhar</button>` : ""}<button class="small-btn" data-shelf-edit-category="${escapeHTML(category.id)}">Editar</button><button class="small-btn danger" data-shelf-delete-category="${escapeHTML(category.id)}">Excluir</button>`
         : `<span class="shelf-visibility is-public">Pública</span><button class="small-btn ${liked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${liked ? "♥" : "♡"} ${likes}</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username, category.id))}">Abrir coleção</a><button class="small-btn" data-copy-collection="${escapeHTML(category.id)}" data-copy-username="${escapeHTML(profile.username)}">Compartilhar</button>`;
+      if (!own && canEditPersonalCollections) {
+        extra += `<button class="small-btn ${liked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${liked ? "♥" : "♡"} ${likes}</button>`;
+      }
+      extra += personalCollectionControls(category.id, categories, isOwnShelfProfile());
       return shelfCollectionMarkup(category.name, items, `${publicPrefix}category:${category.id}`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, extra, null, category.isSeries === true);
     }).join("");
     if (categories.length) categoryMarkup = `<section class="section shelf-categories"><div class="section-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div>${own ? '<button class="small-btn" data-shelf-new-category>+ Nova coleção</button>' : ""}</div>${categoryMarkup}</section>`;
@@ -9965,7 +10596,7 @@
     const savedSeries = shelfItemsByIds([...snapshot.saved].filter(isSeriesId), true);
     const readItems = shelfItemsByIds([...snapshot.read]);
     const completedItems = completedSeriesItems(state.readingProgress);
-    const canCustomize = ["admin", "moderator", "premium"].includes(state.profile?.plan);
+    const canCustomize = Boolean(state.profile);
     const categories = state.shelfCategories.map(category => ({ ...category, itemIds: (category.itemIds || []).filter(id => snapshot.saved.has(id)) }));
     return renderShelfLikePage({ profile: state.profile, own: true, savedItems, savedSeries, readItems, completedItems, likedItems: { items: [], visible: false }, categories: canCustomize ? categories.map(category => ({ ...category, isSeries: false })) : [] });
     return `<div class="content"><div class="profile-header">${avatarMarkup(state.profile)}<div><div class="eyebrow">@${escapeHTML(state.profile?.username || "")}</div>${state.profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(state.profile.title_color)}">${escapeHTML(state.profile.title)}</div>` : ""}${trophyRoom(state.achievements)}</div><div class="profile-actions"><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button></div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div><button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button></div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${shelfCollectionMarkup("Salvos", savedItems, "saved")}${state.profile?.shelf_series_public !== false ? shelfCollectionMarkup("Séries salvas", savedSeries, "series-saved", state.readingProgress, state.favoriteIds, "", null, true) : ""}${shelfCollectionMarkup("Lidos", readItems, "read")}${state.profile?.shelf_completed_public !== false ? shelfCollectionMarkup("Concluídos", completedItems, "completed", state.readingProgress, state.favoriteIds, "", null, true) : ""}${canCustomize ? `<section class="section shelf-categories"><div class="section-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div><button class="small-btn" data-shelf-new-category>+ Nova coleção</button></div>${categories.map(category => shelfCollectionMarkup(category.name, shelfItemsByIds(category.itemIds), `category:${category.id}`, state.readingProgress, state.favoriteIds, `<span class="shelf-visibility ${category.isPublic !== false ? "is-public" : "is-private"}">${category.isPublic !== false ? "Pública" : "Privada"}</span>${category.isPublic !== false ? `<button class="small-btn" data-copy-collection="${escapeHTML(category.id)}">Compartilhar</button>` : ""}<button class="small-btn" data-shelf-edit-category="${escapeHTML(category.id)}">Editar</button><button class="small-btn danger" data-shelf-delete-category="${escapeHTML(category.id)}">Excluir</button>`)).join("") || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>` : ""}</div>`;
@@ -9980,8 +10611,12 @@
     const items = sortShelfItems(filteredItems, sortOrder, null, publicState.readingProgress);
     const isLiked = publicState.collectionLikes?.has(category.id);
     const likes = publicState.collectionLikeCounts?.get(category.id) || 0;
+    const isOwner = String(state.session?.user?.id || "") === String(profile.id || "");
+    const storedColor = category.coverStyles?.__themeColor;
+    const collectionColor = /^#[0-9a-f]{6}$/i.test(String(storedColor || "")) ? storedColor : "#31202b";
     const cover = category.coverUrl ? `style="background-image:url('${escapeHTML(proxiedImageUrl(category.coverUrl))}')"` : "";
-    return `<div class="content public-collection-page"><div class="public-collection-hero"><div class="public-collection-icon ${category.coverUrl ? "has-cover" : ""}" ${cover}>${category.coverUrl ? "" : "▣"}</div><div><div class="eyebrow">Coleção pública</div><h1 class="section-title">${escapeHTML(category.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${allItems.length} item(ns)</div></div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(category.name)}</h2><div class="section-subtitle">Uma coleção compartilhada da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn ${isLiked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${isLiked ? "♥ Curtida" : "♡ Curtir"} · ${likes}</button><button class="small-btn" data-copy-collection="${escapeHTML(category.id)}" data-copy-username="${escapeHTML(profile.username)}">Copiar link</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><form class="collection-filter" data-collection-filter-form><select name="field"><option value="all" ${filter.field === "all" ? "selected" : ""}>Filtrar por qualquer campo</option><option value="author" ${filter.field === "author" ? "selected" : ""}>Autor</option><option value="publisher" ${filter.field === "publisher" ? "selected" : ""}>Editora</option><option value="character" ${filter.field === "character" ? "selected" : ""}>Personagem</option><option value="tag" ${filter.field === "tag" ? "selected" : ""}>Gênero / tag</option><option value="seriesTitle" ${filter.field === "seriesTitle" ? "selected" : ""}>Série</option><option value="title" ${filter.field === "title" ? "selected" : ""}>Título</option></select><input name="query" value="${escapeHTML(filter.query)}" placeholder="Digite para filtrar a coleção"><button class="small-btn">Filtrar</button></form><div class="collection-results-meta">${items.length} de ${allItems.length} item(ns)</div><div class="results-grid">${items.map(item => card(item, publicState.readingProgress, publicState.favoriteIds)).join("") || '<div class="empty">Nenhum quadrinho corresponde ao filtro.</div>'}</div></div>`;
+    const colorControl = isOwner ? `<div class="public-collection-color-control"><span>Mudar cor</span><div class="public-collection-color-palette" role="group" aria-label="Cores da coleção">${PUBLIC_COLLECTION_COLOR_OPTIONS.map(([color, label]) => `<button type="button" class="public-collection-color-swatch ${color.toLowerCase() === String(collectionColor).toLowerCase() ? "is-selected" : ""}" style="--swatch-color:${color}" data-public-collection-color="${escapeHTML(category.id)}" data-public-collection-color-value="${color}" aria-label="${label}" title="${label}"></button>`).join("")}</div></div>` : "";
+    return `<div class="content public-collection-page"><div class="public-collection-hero" style="--public-collection-color:${escapeHTML(collectionColor)}"><div class="public-collection-icon ${category.coverUrl ? "has-cover" : ""}" ${cover}>${category.coverUrl ? "" : "▣"}</div><div><div class="eyebrow">Coleção pública</div><h1 class="section-title">${escapeHTML(category.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${allItems.length} item(ns)</div>${colorControl}</div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(category.name)}</h2><div class="section-subtitle">Uma coleção compartilhada da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn ${isLiked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${isLiked ? "♥ Curtida" : "♡ Curtir"} · ${likes}</button><button class="small-btn" data-copy-collection="${escapeHTML(category.id)}" data-copy-username="${escapeHTML(profile.username)}">Copiar link</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><form class="collection-filter" data-collection-filter-form><select name="field"><option value="all" ${filter.field === "all" ? "selected" : ""}>Filtrar por qualquer campo</option><option value="author" ${filter.field === "author" ? "selected" : ""}>Autor</option><option value="publisher" ${filter.field === "publisher" ? "selected" : ""}>Editora</option><option value="character" ${filter.field === "character" ? "selected" : ""}>Personagem</option><option value="tag" ${filter.field === "tag" ? "selected" : ""}>Gênero / tag</option><option value="seriesTitle" ${filter.field === "seriesTitle" ? "selected" : ""}>Série</option><option value="title" ${filter.field === "title" ? "selected" : ""}>Título</option></select><input name="query" value="${escapeHTML(filter.query)}" placeholder="Digite para filtrar a coleção"><button class="small-btn">Filtrar</button></form><div class="collection-results-meta">${items.length} de ${allItems.length} item(ns)</div><div class="results-grid">${items.map(item => card(item, publicState.readingProgress, publicState.favoriteIds)).join("") || '<div class="empty">Nenhum quadrinho corresponde ao filtro.</div>'}</div></div>`;
   }
 
   function renderPublicBlogCollectionPage(publicState, collection) {
@@ -10021,13 +10656,100 @@
     render();
   }
 
-  async function runModerationAction(target, action, duration = null, title = null, titleColor = null) {
+  async function openCollectionCommentsPopup(collection, ownerProfile) {
+    if (!sb || !collection?.id || !ownerProfile?.id) return toast("Os comentários ainda não estão disponíveis.");
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop comments-modal-backdrop";
+    overlay.innerHTML = `<div class="modal comments-modal"><div class="section-head"><div><h2>Comentários da coleção</h2><div class="section-subtitle">${escapeHTML(collection.name || "Coleção")}</div></div><button class="small-btn" data-close>Fechar</button></div><div class="comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form"><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
+    $("#modal-root").appendChild(overlay);
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $("[data-close]", overlay).onclick = () => overlay.remove();
+    const list = $(".comments-list", overlay);
+    const refresh = async () => {
+      let result = await sb.from("shelf_collection_comments").select("id, collection_id, owner_id, user_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id, plan)").eq("collection_id", collection.id).order("created_at", { ascending: true });
+      if (result.error && /profiles|schema cache|relationship/i.test(result.error.message || "")) {
+        result = await sb.from("shelf_collection_comments").select("id, collection_id, owner_id, user_id, body, created_at").eq("collection_id", collection.id).order("created_at", { ascending: true });
+      }
+      if (result.error) {
+        list.innerHTML = `<span class="section-subtitle">${escapeHTML(result.error.message || "Não foi possível carregar os comentários.")}</span>`;
+        return;
+      }
+      list.innerHTML = (result.data || []).map(comment => {
+        const profile = { ...(comment.profiles || {}), username: cleanUsername(comment.profiles?.username || "usuário") };
+        const canDelete = comment.user_id === state.session?.user?.id || comment.owner_id === state.session?.user?.id || ["moderator", "banca", "admin"].includes(state.profile?.plan);
+        return `<article class="comment"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${escapeHTML(publicProfileHref(profile.username))}" target="_blank" rel="noopener">@${escapeHTML(profile.username)}</a>${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p><div class="comment-actions">${canDelete ? `<button class="comment-action comment-delete-action" data-collection-comment-delete="${escapeHTML(comment.id)}">Excluir</button>` : ""}<time class="comment-date" datetime="${escapeHTML(comment.created_at)}">${escapeHTML(formatCommentDate(comment.created_at))}</time></div></article>`;
+      }).join("") || '<span class="section-subtitle">Nenhum comentário ainda.</span>';
+      $$('[data-collection-comment-delete]', overlay).forEach(button => button.onclick = async () => {
+        const result = await sb.from("shelf_collection_comments").delete().eq("id", button.dataset.collectionCommentDelete);
+        if (result.error) return toast(result.error.message || "Não foi possível excluir o comentário.");
+        await refresh();
+      });
+    };
+    await refresh();
+    $(".comment-form", overlay)?.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!state.session?.user?.id) return openAuthPage();
+      const form = event.currentTarget;
+      const body = String(new FormData(form).get("body") || "").trim();
+      if (!body) return;
+      const button = $("button", form);
+      button.disabled = true;
+      const result = await sb.from("shelf_collection_comments").insert({ collection_id: collection.id, owner_id: ownerProfile.id, user_id: state.session.user.id, body });
+      if (result.error) {
+        const silencedUntil = state.profile?.silenced_until && new Date(state.profile.silenced_until) > new Date();
+        toast(silencedUntil
+          ? `Sua conta está silenciada até ${formatCommentDate(state.profile.silenced_until)}.`
+          : "Não foi possível publicar. Sua conta pode estar temporariamente limitada por anti-spam ou impedida de comentar.");
+      }
+      else { awardProfileXp("comment", `collection-comment:${collection.id}:${Date.now()}`); form.reset(); await refresh(); }
+      button.disabled = false;
+    });
+  }
+
+  function moderationActionNeedsReason(action) {
+    return ["ban", "hide", "silence", "delete_comment", "delete_blog", "delete_message"].includes(action);
+  }
+
+  function askModerationReason(action) {
+    const required = state.profile?.plan !== "admin";
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop moderation-reason-backdrop";
+      overlay.innerHTML = `<div class="modal moderation-reason-modal"><div class="section-head"><div><div class="eyebrow">Auditoria de moderação</div><h2>Motivo da ação</h2><div class="section-subtitle">${required ? "Informe o motivo para registrar esta ação." : "O motivo é opcional para administradores."}</div></div><button type="button" class="small-btn" data-reason-cancel>Cancelar</button></div><form data-reason-form><label class="field"><span>Motivo${required ? " *" : ""}</span><textarea name="reason" rows="4" maxlength="500" ${required ? "required" : ""} placeholder="Descreva o motivo da ação"></textarea></label><label class="field"><span>Observação interna</span><textarea name="internalNote" rows="3" maxlength="1000" placeholder="Informação visível apenas para a equipe (opcional)"></textarea></label><div class="modal-actions"><button type="button" class="small-btn" data-reason-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Confirmar ação</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $$('[data-reason-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
+      $("[data-reason-form]", overlay).onsubmit = event => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const reason = String(form.get("reason") || "").trim();
+        if (required && !reason) return $("[name=reason]", overlay).reportValidity();
+        finish({ reason: reason || null, internalNote: String(form.get("internalNote") || "").trim() || null });
+      };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=reason]", overlay)?.focus();
+    });
+  }
+
+  async function runModerationAction(target, action, duration = null, title = null, titleColor = null, reason = null, internalNote = null) {
     if (!sb || !target?.username) return;
+    if (!canModerateProfile(target)) {
+      return toast("Moderadores não podem alterar integrantes da equipe.");
+    }
     if (action === "title") title = profileTitle(title);
-    const result = await sb.rpc("moderate_user", { p_username: target.username, p_action: action, p_duration: duration, p_title: title, p_title_color: titleColor });
+    const result = await sb.rpc("moderate_user", { p_username: target.username, p_action: action, p_duration: duration, p_title: title, p_title_color: titleColor, p_reason: reason, p_internal_note: internalNote });
     if (result.error) return toast(result.error.message || "Não foi possível aplicar a moderação.");
     toast("Ação de moderação aplicada.");
     await loadPublicProfile(target.username, state.publicProfile?.collectionId || null);
+  }
+
+  function canModerateProfile(target) {
+    const actorPlan = state.profile?.plan;
+    const targetPlan = target?.plan;
+    if (!["moderator", "banca", "admin"].includes(actorPlan)) return false;
+    if (["banca", "admin"].includes(targetPlan)) return actorPlan === "admin";
+    if (targetPlan === "moderator") return ["banca", "admin"].includes(actorPlan);
+    return true;
   }
 
   function applyModerationTitleColors(overlay) {
@@ -10047,19 +10769,48 @@
   }
 
   function attachPlanControl(overlay, target) {
-    if (!overlay || !target || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!overlay || !target || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
+    const locked = !canModerateProfile(target);
+    if (locked) return;
     const historySection = $(".moderation-history", overlay)?.closest(".moderation-section");
     if (!historySection) return;
     const planSection = document.createElement("section");
     planSection.className = "moderation-section";
-    planSection.innerHTML = `<h3>Tipo de conta</h3><form id="moderation-plan-form"><div class="moderation-plan-row"><select name="plan"><option value="free" ${target.plan === "free" ? "selected" : ""}>Comum</option><option value="premium" ${target.plan === "premium" ? "selected" : ""}>Lenda</option></select><button class="small-btn" type="submit">Salvar tipo</button></div></form>`;
+    planSection.innerHTML = `<h3>Tipo de conta</h3><form id="moderation-plan-form"><div class="moderation-plan-row"><select name="plan" ${locked ? "disabled" : ""}><option value="free" ${target.plan === "free" ? "selected" : ""}>Comum</option><option value="premium" ${target.plan === "premium" ? "selected" : ""}>Lenda</option></select><button class="small-btn" type="submit" ${locked ? "disabled" : ""}>Salvar tipo</button></div></form>`;
+    if (locked) {
+      const currentOption = document.createElement("option");
+      currentOption.value = target.plan;
+      currentOption.textContent = target.plan === "admin" ? "Administrador" : target.plan === "banca" ? "Banca" : "Moderador";
+      currentOption.selected = true;
+      $("select[name=plan]", planSection)?.appendChild(currentOption);
+    }
     if (state.profile?.plan === "admin") {
       const planSelect = $("select[name=plan]", planSection);
       const moderatorOption = document.createElement("option");
       moderatorOption.value = "moderator";
       moderatorOption.textContent = "Moderador";
       planSelect?.appendChild(moderatorOption);
+      const bancaOption = document.createElement("option");
+      bancaOption.value = "banca";
+      bancaOption.textContent = "Banca";
+      planSelect?.appendChild(bancaOption);
       if (target.plan === "moderator") planSelect.value = "moderator";
+      if (target.plan === "banca") planSelect.value = "banca";
+    } else if (state.profile?.plan === "banca") {
+      const planSelect = $("select[name=plan]", planSection);
+      const moderatorOption = document.createElement("option");
+      moderatorOption.value = "moderator";
+      moderatorOption.textContent = "Moderador";
+      planSelect?.appendChild(moderatorOption);
+      if (target.plan === "moderator") planSelect.value = "moderator";
+    }
+    const planSelect = $("select[name=plan]", planSection);
+    if (target.plan && ![...planSelect.options].some(option => option.value === target.plan)) {
+      const currentOption = document.createElement("option");
+      currentOption.value = target.plan;
+      currentOption.textContent = target.plan === "banca" ? "Banca" : target.plan;
+      currentOption.selected = true;
+      planSelect.appendChild(currentOption);
     }
     historySection.before(planSection);
     $("#moderation-plan-form", planSection).onsubmit = async event => {
@@ -10074,20 +10825,31 @@
   }
 
   function openModerationPanel(target) {
-    if (!target || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!target || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const history = state.publicProfile?.moderationHistory || [];
     overlay.innerHTML = `<div class="modal moderation-modal"><div class="section-head"><div><h2>Moderação de @${escapeHTML(target.username)}</h2><div class="section-subtitle">Disponível para moderadores e administradores</div></div><button class="small-btn" data-close>Fechar</button></div><div class="admin-actions moderation-actions"><button class="small-btn danger" data-moderation="ban">Banir usuário</button><button class="small-btn" data-moderation="hide">Ocultar perfil</button><button class="small-btn" data-moderation="unban">Remover banimento</button><button class="small-btn" data-moderation="unhide">Mostrar perfil</button><button class="small-btn" data-moderation="unsilence">Remover silêncio</button></div><div class="field"><label>Silenciar comentários</label><div class="admin-actions"><button class="small-btn" data-silence="24h">24 horas</button><button class="small-btn" data-silence="3d">3 dias</button><button class="small-btn" data-silence="1m">1 mês</button></div></div><form id="moderation-title-form"><div class="field"><label>Título do perfil</label><input name="title" value="${escapeHTML(target.title || "")}" maxlength="80"></div><div class="field"><label>Cor do título</label><input name="titleColor" type="color" value="${escapeHTML(safeTitleColor(target.title_color))}"></div><button class="small-btn" type="submit">Salvar título</button></form><h3>Histórico de moderação</h3><div class="moderation-history">${history.map(entry => `<div class="moderation-history-item"><b>${escapeHTML(entry.action)}</b><span>@${escapeHTML(entry.actor_username || "moderador")} · ${escapeHTML(formatCommentDate(entry.created_at))}</span></div>`).join("") || '<span class="section-subtitle">Nenhuma ação registrada.</span>'}</div></div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
-    $$('[data-moderation]', overlay).forEach(button => button.onclick = async () => { await runModerationAction(target, button.dataset.moderation); overlay.remove(); });
-    $$('[data-silence]', overlay).forEach(button => button.onclick = async () => { await runModerationAction(target, "silence", button.dataset.silence); overlay.remove(); });
+    $$('[data-moderation]', overlay).forEach(button => button.onclick = async () => {
+      const action = button.dataset.moderation;
+      const audit = moderationActionNeedsReason(action) ? await askModerationReason(action) : { reason: null, internalNote: null };
+      if (!audit) return;
+      await runModerationAction(target, action, null, null, null, audit.reason, audit.internalNote);
+      overlay.remove();
+    });
+    $$('[data-silence]', overlay).forEach(button => button.onclick = async () => {
+      const audit = await askModerationReason("silence");
+      if (!audit) return;
+      await runModerationAction(target, "silence", button.dataset.silence, null, null, audit.reason, audit.internalNote);
+      overlay.remove();
+    });
     $("#moderation-title-form", overlay).onsubmit = async event => { event.preventDefault(); const form = new FormData(event.currentTarget); await runModerationAction(target, "title", null, String(form.get("title") || ""), String(form.get("titleColor") || "#ffd45c")); overlay.remove(); };
   }
 
   function openModerationPanel(target) {
-    if (!target || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!target || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const history = state.publicProfile?.moderationHistory || [];
@@ -10097,16 +10859,38 @@
     const banAction = target.is_banned ? "unban" : "ban";
     const banLabel = target.is_banned ? "Remover banimento" : "Banir usuário";
     const silenceLabel = target.silenced_until ? `Silenciado até ${formatCommentDate(target.silenced_until)}` : "Usuário pode comentar";
+    const targetIsStaff = ["moderator", "admin"].includes(target.plan);
+    const canModerateTarget = canModerateProfile(target);
+    const restrictedNotice = targetIsStaff && !canModerateTarget
+      ? '<div class="notice">Moderadores não podem alterar o acesso, o perfil, os comentários ou o tipo de conta de outros integrantes da equipe.</div>'
+      : "";
     overlay.innerHTML = `<div class="modal moderation-modal"><div class="section-head moderation-header"><div><div class="eyebrow">Painel de moderação</div><h2>@${escapeHTML(target.username)}</h2><div class="section-subtitle">Ações registradas no histórico do perfil</div></div><button class="small-btn" data-close>Fechar</button></div><div class="moderation-status">${target.profile_hidden ? "Perfil oculto" : "Perfil público"} · ${target.is_banned ? "Banido" : "Conta ativa"} · ${escapeHTML(silenceLabel)}</div><div class="moderation-grid"><section class="moderation-section"><h3>Perfil e acesso</h3><div class="moderation-button-grid"><button class="small-btn" data-moderation="${visibilityAction}">${visibilityLabel}</button><button class="small-btn danger" data-moderation="${banAction}">${banLabel}</button></div></section><section class="moderation-section"><h3>Comentários</h3><div class="admin-actions"><button class="small-btn" data-silence="24h">Silenciar 24 horas</button><button class="small-btn" data-silence="3d">Silenciar 3 dias</button><button class="small-btn" data-silence="1m">Silenciar 1 mês</button><button class="small-btn" data-moderation="unsilence">Remover silêncio</button></div></section></div><section class="moderation-section"><h3>Título do perfil</h3><form id="moderation-title-form"><div class="moderation-title-fields"><div class="field"><label>Texto</label><input name="title" value="${escapeHTML(target.title || "")}" maxlength="80" placeholder="Título do usuário"></div><div class="field"><label>Cor</label><input name="titleColor" type="color" value="${escapeHTML(safeTitleColor(target.title_color))}"></div></div><button class="small-btn" type="submit">Salvar título</button></form></section><section class="moderation-section"><h3>Histórico</h3><div class="moderation-history">${history.map(entry => `<div class="moderation-history-item"><b>${escapeHTML(entry.action)}</b><span>@${escapeHTML(entry.actor_username || "moderador")} · ${escapeHTML(formatCommentDate(entry.created_at))}</span></div>`).join("") || '<span class="section-subtitle">Nenhuma ação registrada.</span>'}</div></section></div>`;
+    if (!canModerateTarget) {
+      const moderationGrid = $(".moderation-grid", overlay);
+      moderationGrid?.insertAdjacentHTML("beforebegin", restrictedNotice);
+      moderationGrid?.remove();
+      $$('input[name=title], input[name=titleColor], #moderation-title-form button', overlay).forEach(field => { field.disabled = true; });
+    }
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
-    $$('[data-moderation]', overlay).forEach(button => button.onclick = async () => { await runModerationAction(target, button.dataset.moderation); overlay.remove(); });
-    $$('[data-silence]', overlay).forEach(button => button.onclick = async () => { await runModerationAction(target, "silence", button.dataset.silence); overlay.remove(); });
+    $$('[data-moderation]', overlay).forEach(button => button.onclick = async () => {
+      const action = button.dataset.moderation;
+      const audit = moderationActionNeedsReason(action) ? await askModerationReason(action) : { reason: null, internalNote: null };
+      if (!audit) return;
+      await runModerationAction(target, action, null, null, null, audit.reason, audit.internalNote);
+      overlay.remove();
+    });
+    $$('[data-silence]', overlay).forEach(button => button.onclick = async () => {
+      const audit = await askModerationReason("silence");
+      if (!audit) return;
+      await runModerationAction(target, "silence", button.dataset.silence, null, null, audit.reason, audit.internalNote);
+      overlay.remove();
+    });
     $("#moderation-title-form", overlay).onsubmit = async event => { event.preventDefault(); const form = new FormData(event.currentTarget); await runModerationAction(target, "title", null, String(form.get("title") || ""), String(form.get("titleColor") || "#ffd45c")); overlay.remove(); };
   }
 
   async function deletePublicCollection(ownerId, collectionId) {
-    if (!["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const result = await sb.from("shelf_collections").delete().eq("owner_id", ownerId).eq("id", collectionId);
     if (result.error) return toast("Não foi possível excluir a coleção.");
     toast("Coleção pública excluída.");
@@ -10180,19 +10964,22 @@
     const selectedBlogCollection = publicBlogCollections.find(collection => collection.id === publicState.collectionId);
     if (publicState.collectionId && selectedCategory) return renderPublicCollectionPage(publicState, selectedCategory);
     if (publicState.collectionId && selectedBlogCollection) return renderPublicBlogCollectionPage(publicState, selectedBlogCollection);
+    if (publicState.album && !canAccessStickerAlbum(profile)) {
+      return '<div class="content"><div class="empty">O álbum não está disponível para usuários Banca.</div></div>';
+    }
     if (publicState.album) {
       const isOwnAlbum = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
       return stickerAlbumMarkup(profile, publicState.stickerAwards || [], { isOwn: isOwnAlbum, progressMap: publicState.readingProgress });
     }
     if (publicState.collectionId && !selectedCategory && !selectedBlogCollection) return `<div class="content"><div class="empty">Esta coleção não existe ou é privada.</div><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a></div>`;
-    const canModerate = ["moderator", "admin"].includes(state.profile?.plan) && !["moderator", "admin"].includes(profile.plan);
     const canFollow = Boolean(state.session?.user?.id && state.session.user.id !== profile.id);
     const canBlock = canFollow;
     const isOwnProfile = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
+    const canModerate = !isOwnProfile && canModerateProfile(profile);
     const publicProfileActions = isOwnProfile
       ? '<button class="small-btn" data-profile-sticker-choose>Figurinha</button><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button>'
       : `${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}`;
-    return renderShelfLikePage({ profile, own: false, savedItems: { items: savedItems, visible: savedVisible }, savedSeries: { items: savedSeries, visible: seriesVisible }, readItems: { items: readItems, visible: readVisible }, completedItems: { items: completedItems, visible: completedVisible }, likedItems: { items: likedItems, visible: likedVisible }, categories: publicCategories, profileState: publicState, profileActions: publicProfileActions });
+    return renderShelfLikePage({ profile, own: false, savedItems: { items: savedItems, visible: savedVisible }, savedSeries: { items: savedSeries, visible: seriesVisible }, readItems: { items: readItems, visible: readVisible }, completedItems: { items: completedItems, visible: completedVisible }, likedItems: { items: likedItems, visible: likedVisible }, categories: isOwnProfile ? (publicState.collections || []) : publicCategories, profileState: publicState, profileActions: publicProfileActions });
     const publicShelfMarkup = renderShelfLikePage({ profile, own: false, savedItems: { items: savedItems, visible: savedVisible }, savedSeries: { items: savedSeries, visible: seriesVisible }, readItems: { items: readItems, visible: readVisible }, completedItems: { items: completedItems, visible: completedVisible }, likedItems: { items: likedItems, visible: likedVisible }, categories: publicCategories, profileState: publicState });
     const profileActions = `${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}`;
     if (false) {
@@ -10601,22 +11388,29 @@
   function rankingMemberMarkup(member, showRank = false) {
     const online = member.is_online === true;
     const current = state.session?.user?.id === member.user_id;
-    const staff = ["moderator", "admin"].includes(member.plan);
+    const staff = ["moderator", "banca", "admin"].includes(member.plan);
     const faction = state.factions.find(item => item.id === member.faction_id);
     const lineColor = staff ? "#ffffff" : faction?.color || "#ffffff";
     const rank = showRank && member.ranking ? `<span class="ranking-position">${member.ranking}º</span>` : "";
     const title = member.title ? `<span class="ranking-title" style="--title-bg:${safeTitleColor(member.title_color)}">${escapeHTML(member.title)}</span>` : "";
-    return `<a class="ranking-member ${current ? "is-current" : ""}" style="--member-faction-color:${escapeHTML(lineColor)}" href="${escapeHTML(publicProfileHref(member.username))}">${rank}<span class="ranking-avatar-wrap ${online ? "is-online" : ""}">${avatarMarkup({ ...member, id: member.user_id }, "ranking-avatar")}<span class="ranking-online-dot" aria-label="Online"></span></span><span class="ranking-member-copy"><strong>${factionDot({ faction_id: member.faction_id })}@${escapeHTML(member.username)}</strong>${title}<small>Nível ${member.level} · ${Number(member.xp || 0).toLocaleString("pt-BR")} XP</small></span><span class="ranking-period-xp">+${Number(member.period_xp || 0).toLocaleString("pt-BR")} XP</span></a>`;
+    const levelMarkup = member.plan === "banca"
+      ? "<small>Envie uma mensagem se tiver algum problema ou precisar de ajuda.</small>"
+      : `<small>Nível ${member.level} · ${Number(member.xp || 0).toLocaleString("pt-BR")} XP</small>`;
+    const periodXpMarkup = member.plan === "banca" ? "" : `<span class="ranking-period-xp">+${Number(member.period_xp || 0).toLocaleString("pt-BR")} XP</span>`;
+    return `<a class="ranking-member ${current ? "is-current" : ""}" style="--member-faction-color:${escapeHTML(lineColor)}" href="${escapeHTML(publicProfileHref(member.username))}">${rank}<span class="ranking-avatar-wrap ${online ? "is-online" : ""}">${avatarMarkup({ ...member, id: member.user_id }, "ranking-avatar")}<span class="ranking-online-dot" aria-label="Online"></span></span><span class="ranking-member-copy"><strong>${factionDot({ faction_id: member.faction_id })}@${escapeHTML(member.username)}</strong>${title}${levelMarkup}</span>${periodXpMarkup}</a>`;
   }
 
   function rankingCategoryMembers(members, plan) {
-    return members.filter(member => plan === "staff" ? ["moderator", "admin"].includes(member.plan) : member.plan === plan)
-      .sort((a, b) => Number(b.level || 1) - Number(a.level || 1) || Number(b.xp || 0) - Number(a.xp || 0) || String(a.username).localeCompare(String(b.username), "pt-BR"));
+    return members.filter(member => plan === "staff" ? ["banca", "moderator"].includes(member.plan) : member.plan === plan)
+      .sort((a, b) => (plan === "staff" ? (a.plan === "banca" ? 0 : 1) - (b.plan === "banca" ? 0 : 1) : 0)
+        || Number(b.level || 1) - Number(a.level || 1)
+        || Number(b.xp || 0) - Number(a.xp || 0)
+        || String(a.username).localeCompare(String(b.username), "pt-BR"));
   }
 
   function renderRankingCategoryPage(members) {
     const labels = { staff: "Moderadores", premium: "Lenda", free: "Comum" };
-    const plan = labels[state.rankingCategory] ? state.rankingCategory : "free";
+    const plan = state.rankingCategory === "banca" ? "staff" : (labels[state.rankingCategory] ? state.rankingCategory : "free");
     const group = rankingCategoryMembers(members, plan);
     return `<div class="content ranking-page ranking-category-page"><div class="section-head"><div><div class="eyebrow">Diretório da comunidade</div><h1 class="section-title">Usuários ${labels[plan]}</h1><div class="section-subtitle">Todos os usuários desta categoria, ordenados por nível.</div></div><button type="button" class="small-btn" data-ranking-back>Voltar ao ranking</button></div><section class="section ranking-directory"><div class="ranking-member-list ranking-member-list-full">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section></div>`;
   }
@@ -10632,7 +11426,12 @@
       ["premium", "Lenda"],
       ["free", "Comum"]
     ];
-    return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${state.profile ? `<div class="ranking-self"><strong>Nível ${state.profile.level || 1}</strong><span>${Number(state.profile.xp || 0).toLocaleString("pt-BR")} XP · Check-in: 🔥 ${state.profile.daily_streak || 0} dia(s)</span></div>` : ""}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Comum</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Lenda</strong><p>Todos os benefícios Comum, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Lenda, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div><div class="ranking-faction-tabs"><button class="small-btn ${!state.rankingFaction ? "is-active" : ""}" data-ranking-faction="">Todas as facções</button>${state.factions.map(faction => `<button class="small-btn ${state.rankingFaction === faction.id ? "is-active" : ""}" data-ranking-faction="${escapeHTML(faction.id)}" style="--faction-filter-color:${escapeHTML(faction.color)}"><span class="faction-dot" style="--faction-color:${escapeHTML(faction.color)}"></span>${escapeHTML(faction.name)}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Comum ou Lenda nesta seleção.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = plan === "staff" ? members.filter(member => ["moderator", "admin"].includes(member.plan)) : members.filter(member => member.plan === plan && (!state.rankingFaction || member.faction_id === state.rankingFaction)); const sectionFactionId = state.profile?.faction_id; const sectionColor = state.factions.find(faction => faction.id === sectionFactionId)?.color || "#ffffff"; return `<section class="ranking-group ranking-group-abafac linhafac" style="--ranking-section-color:${escapeHTML(sectionColor)}"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
+    const rankingSelf = state.profile
+      ? normalizedPlan(state.profile) === "banca"
+        ? `<div class="ranking-self ranking-self-unavailable"><strong>Precisa de ajuda?</strong><span>Envie uma mensagem se tiver algum problema ou precisar de ajuda.</span></div>`
+        : `<div class="ranking-self"><strong>Nível ${state.profile.level || 1}</strong><span>${Number(state.profile.xp || 0).toLocaleString("pt-BR")} XP · Check-in: 🔥 ${state.profile.daily_streak || 0} dia(s)</span></div>`
+      : "";
+    return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${rankingSelf}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Comum</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Lenda</strong><p>Todos os benefícios Comum, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Lenda, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div><div class="ranking-faction-tabs"><button class="small-btn ${!state.rankingFaction ? "is-active" : ""}" data-ranking-faction="">Todas as facções</button>${state.factions.map(faction => `<button class="small-btn ${state.rankingFaction === faction.id ? "is-active" : ""}" data-ranking-faction="${escapeHTML(faction.id)}" style="--faction-filter-color:${escapeHTML(faction.color)}"><span class="faction-dot" style="--faction-color:${escapeHTML(faction.color)}"></span>${escapeHTML(faction.name)}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Comum ou Lenda nesta seleção.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = rankingCategoryMembers(members, plan).filter(member => plan === "staff" || !state.rankingFaction || member.faction_id === state.rankingFaction); const sectionFactionId = state.profile?.faction_id; const sectionColor = state.factions.find(faction => faction.id === sectionFactionId)?.color || "#ffffff"; return `<section class="ranking-group ranking-group-abafac linhafac" style="--ranking-section-color:${escapeHTML(sectionColor)}"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
   }
 
   function legacyFactionLeadershipMarkup(factionId) {
@@ -11091,7 +11890,7 @@
         const catalogActions = $(".shelf-section-actions", section);
         if (catalogPageHead && backButton && catalogActions) {
           backButton.replaceWith(catalogActions);
-          if (["moderator", "admin"].includes(state.profile?.plan) && !$("[data-faction-catalog-feature]", catalogActions)) {
+          if (["moderator", "banca", "admin"].includes(state.profile?.plan) && !$("[data-faction-catalog-feature]", catalogActions)) {
             const catalog = state.factionCatalogs.find(item => `faction-catalog:${item.id}` === key);
             if (catalog) {
               const featureButton = document.createElement("button");
@@ -11140,7 +11939,7 @@
     });
     $$('[data-faction-catalog-share]', page).forEach(button => button.onclick = async () => {
       const link = new URL(`?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(factionId))}&catalogo=${encodeURIComponent(button.dataset.factionCatalogShare)}`, window.location.href).href;
-      try { await navigator.clipboard.writeText(link); toast("Link da facção copiado."); } catch { window.prompt("Copie o link da facção:", link); }
+      try { await navigator.clipboard.writeText(link); toast("Link da facção copiado."); } catch { await openSitePrompt("Copie o link da facção:", link, { title: "Compartilhar facção", label: "Link" }); }
     });
     $$('[data-faction-catalog-like]', page).forEach(button => button.onclick = event => {
       event.stopPropagation();
@@ -11174,7 +11973,7 @@
       render();
     });
     $$('[data-faction-catalog-delete]', page).forEach(button => button.onclick = async () => {
-      if (!window.confirm("Excluir este catálogo da facção?")) return;
+      if (!await openSiteConfirm("Excluir este catálogo da facção?", { title: "Excluir catálogo?", confirmLabel: "Excluir catálogo" })) return;
       const result = await sb.rpc("delete_faction_catalog", { p_catalog_id: button.dataset.factionCatalogDelete });
       if (result.error) return toast(result.error.message || "Não foi possível excluir o catálogo.");
       await loadFactions();
@@ -11411,11 +12210,11 @@
       const stats = state.factionStats.get(selected.id) || { members: 0, xp: 0 };
       return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats"><span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionExtraAbafacsMarkup(selected, stats)}${factionCatalogMarkup(selected)}${factionOwnedCatalogMarkup(selected)}</div>`;
     }
-    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
+    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "banca", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
   }
 
   function renderStaffActivities() {
-    if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
+    if (!state.session || !canViewBancaMonitoring()) return '<div class="empty">Área restrita à equipe de moderação.</div>';
     const items = state.staffActivities.filter(item => !["bot", "file_report"].includes(item.kind)).map(item => item.kind === "bot"
       ? ""
       : `<article class="staff-activity-item"><header><span>⚖ ${escapeHTML(item.actorName)}</span><span>${escapeHTML(formatCommentDate(item.created_at))}</span></header><strong>${escapeHTML(item.action)}</strong><p>Alvo: @${escapeHTML(item.targetName)}</p>${item.duration_until ? `<small>Até ${escapeHTML(formatCommentDate(item.duration_until))}</small>` : ""}</article>`).join("");
@@ -11423,7 +12222,7 @@
   }
 
   function renderFileReports() {
-    if (!state.session || !["moderator", "admin"].includes(state.profile?.plan)) return '<div class="empty">Área restrita à equipe de moderação.</div>';
+    if (!state.session || !canViewBancaMonitoring()) return '<div class="empty">Área restrita à equipe de moderação.</div>';
     const selectedTab = ["pending", "ignored", "resolved"].includes(state.fileReportsTab) ? state.fileReportsTab : "pending";
     const reports = [...(state.fileReports || [])].filter(report => report.status === selectedTab).sort((a, b) => {
       const order = { pending: 0, ignored: 1, resolved: 2 };
@@ -11768,6 +12567,7 @@
   }
 
   function openCoverVariantsReviewPopup() {
+    if (!state.session || !canViewBancaMonitoring()) return toast("Apenas a Banca e administradores podem acessar este monitoramento.");
     closeNotificationsPopups();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
@@ -12020,6 +12820,9 @@
 
   function renderNotifications() {
     if (!state.session) return renderLoginPage();
+    state.notifications = state.notifications.map(notification => notification.type === "plan"
+      ? { ...notification, body: String(notification.body || "").replace(/\bpremium\b/gi, "Lenda").replace(/\bfree\b/gi, "Comum") }
+      : notification);
     return `<div class="content notifications-page"><div class="section-head"><div><div class="eyebrow">Central da conta</div><h1 class="section-title">Notificações</h1><div class="section-subtitle">${state.notificationUnreadCount} não lida(s)</div></div><button class="small-btn" data-mark-all-notifications>Marcar todas como lidas</button></div><div class="notification-list">${state.notifications.map(notification => { const actor = notification.actor; const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "A Banca Digital"; const actorMarkup = actor?.username ? `<a class="notification-actor" href="${escapeHTML(publicProfileHref(actor.username))}" data-notification-profile="${escapeHTML(actor.username)}">${avatarMarkup(actor, "notification-actor-avatar")}<span><b>${actorName}</b>${actor.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(actor.title)}</small>` : ""}</span></a>` : `<span class="notification-system-actor"><span class="notification-icon">${notificationIcon(notification.type)}</span><b>${actorName}</b></span>`; return `<div class="notification-item ${notification.read_at ? "" : "is-unread"}" role="button" tabindex="0" data-notification-open="${escapeHTML(notification.id)}"><span class="notification-icon">${notificationIcon(notification.type)}</span><span class="notification-copy">${actorMarkup}<strong>${escapeHTML(notification.title)}</strong><span>${escapeHTML(notification.body)}</span><small>${escapeHTML(formatCommentDate(notification.created_at))}</small></span></div>`; }).join("") || '<div class="empty">Você ainda não recebeu notificações.</div>'}</div></div>`;
   }
 
@@ -12038,12 +12841,13 @@
     closeNotificationsPopups();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    const staff = ["moderator", "admin"].includes(state.profile?.plan);
+    const staff = canViewBancaMonitoring();
+    if (!staff && ["staff", "file-reports"].includes(tab)) tab = "notifications";
     if (staff && tab === "file-reports") {
       openFileReportsPopup(overlay);
       return;
     }
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-series-link-monitor>Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button><button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-series-link-monitor>Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button>` : ""}${canViewBancaMonitoring() ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
     if (staff) {
       const tabs = $(".notification-tabs", overlay);
@@ -12136,7 +12940,7 @@
     const isBlogTheme = state.section === "blog";
     document.querySelector(".topbar")?.classList.toggle("is-offline", Boolean(state.session?.offline));
     const factionsNav = document.querySelector('.nav-link[data-section="factions"]');
-    if (factionsNav) factionsNav.style.display = canAccessFactions() ? "" : "none";
+    if (factionsNav) factionsNav.style.display = "";
     document.body.classList.toggle("blogs-theme", isBlogTheme);
     const brandLogo = document.querySelector(".brand-logo");
     const brandName = document.querySelector(".brand > span:last-child");
@@ -12150,7 +12954,7 @@
     if (footerTitle) footerTitle.textContent = isBlogTheme ? "Bobojaco" : "Banca Digital";
     if (footerDescription) footerDescription.textContent = isBlogTheme
       ? "Um espaço para publicar, descobrir e conversar sobre histórias."
-      : "Uma banca de quadrinhos feita para a era digital.";
+      : "Uma biblioteca de quadrinhos feita para a era digital.";
     document.title = isBlogTheme ? "Bobojaco — Blogs" : "Banca Digital — Quadrinhos & Mangás";
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) metaDescription.content = isBlogTheme
@@ -12177,7 +12981,7 @@
     else if (state.section === "shelf") markup = renderShelfPage();
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
-    else if (state.section === "album") markup = stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true });
+    else if (state.section === "album") markup = canAccessStickerAlbum() ? stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true }) : '<div class="content"><div class="empty">É preciso criar uma conta para usar o álbum.</div></div>';
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
     if (state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
@@ -12195,7 +12999,10 @@
       toggleWikiQuick(button);
     }));
     bind();
+    bindFixedShelfSectionControls();
     $$('[data-home-section-move]', main).forEach(button => button.addEventListener("click", () => moveHomepageSection(button.dataset.homeSectionKey, button.dataset.homeSectionMove === "up" ? -1 : 1)));
+    $$('[data-home-section-visibility]', main).forEach(button => button.addEventListener("click", () => toggleHomepageSectionVisibility(button.dataset.homeSectionKey, button.dataset.homeSectionVisibility === "hide")));
+    bindComicSectionControls();
     hydrateHomeCovers();
     prepareLazyImages(main);
     decorateFactionNames(main);
@@ -12216,7 +13023,7 @@
     overlay.className = "modal-backdrop";
     const reportTabLabels = { pending: "Pendentes", ignored: "Ignorados", resolved: "Resolvidos" };
     const reportTabButtons = Object.entries(reportTabLabels).map(([key, label]) => `<button class="small-btn notification-tab ${state.fileReportsTab === key || (!state.fileReportsTab && key === "pending") ? "is-active" : ""}" data-file-reports-tab="${key}">${label} (${(state.fileReports || []).filter(report => report.status === key).length})</button>`).join("");
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>⚠ Relatos de arquivos</h2><div class="section-subtitle">Edições que usuários relataram como impossíveis de abrir</div></div><button class="small-btn" data-close>Fechar</button></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">⚠ Arquivos com problema</button>${["moderator", "admin"].includes(state.profile?.plan) ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div><div class="notification-tabs file-reports-status-tabs">${reportTabButtons}</div>${renderFileReports()}</div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>⚠ Relatos de arquivos</h2><div class="section-subtitle">Edições que usuários relataram como impossíveis de abrir</div></div><button class="small-btn" data-close>Fechar</button></div><div class="notification-tabs"><button class="small-btn notification-tab" data-notification-tab="staff">📜 Monitoramento</button><button class="small-btn notification-tab is-active">⚠ Arquivos com problema</button>${canViewBancaMonitoring() ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div><div class="notification-tabs file-reports-status-tabs">${reportTabButtons}</div>${renderFileReports()}</div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
@@ -12272,7 +13079,7 @@
   }
 
   function openPublisherSettings(name) {
-    if (!sb || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
     const setting = state.publisherSettings.get(key) || {};
     const overlay = document.createElement("div");
@@ -12326,7 +13133,7 @@
   }
 
   function openImprintSettings(name) {
-    if (!sb || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
     const setting = state.imprintSettings.get(key) || {};
     const isAdmin = state.profile?.plan === "admin";
@@ -12360,7 +13167,7 @@
   }
 
   function openCharacterSettings(name) {
-    if (!sb || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
     const setting = state.characterSettings.get(key) || {};
     const isAdmin = state.profile?.plan === "admin";
@@ -12515,7 +13322,9 @@
         $$(".ranking-group", rankingPage).forEach(groupElement => {
           const list = $(".ranking-member-list", groupElement);
           if (!list) return;
+          const isStaffGroup = $("h3", groupElement)?.firstChild?.textContent?.trim() === "Moderadores";
           const cards = $$('a.ranking-member', list).sort((a, b) => {
+            if (isStaffGroup) return 0;
             const aNumbers = (($("small", a)?.textContent || "").match(/\d+/g) || []).map(Number);
             const bNumbers = (($("small", b)?.textContent || "").match(/\d+/g) || []).map(Number);
             return (bNumbers[0] || 1) - (aNumbers[0] || 1) || (bNumbers[1] || 0) - (aNumbers[1] || 0);
@@ -12634,6 +13443,7 @@
       if (publicHeading) publicHeading.textContent = "Minha estante";
       if (publicSummary) publicSummary.textContent = "Coleções fixas para organizar seus quadrinhos e séries";
       const publicHead = $(".public-profile-page > .section-head");
+      const publicAlbumAvailable = canAccessStickerAlbum(publicProfile);
       if (publicHead && !$("[data-public-album-link]")) publicHead.querySelector(".profile-actions")?.insertAdjacentHTML("afterbegin", `<a class="small-btn" data-public-album-link href="${escapeHTML(publicProfileHref(publicProfile.username, "", true))}">Álbum</a>`);
       if (publicHead && !publicHead.classList.contains("public-profile-actions-head") && !$(".public-shelf-media-tabs")) {
         publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Públicas salvas</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
@@ -12643,8 +13453,12 @@
         $(".public-shelf-media-tabs").parentElement?.insertAdjacentHTML("beforeend", `<div class="shelf-tab-panel public-activity-panel" data-public-shelf-tab-panel="activity">${publicProfileActivityMarkup(state.publicProfile)}</div>`);
       }
       let publicAlbumLink = $("[data-public-album-link]");
+      if (!publicAlbumAvailable) {
+        publicAlbumLink?.remove();
+        publicAlbumLink = null;
+      }
        const publicShelfMediaTabs = $(".public-shelf-media-tabs");
-       if (!publicAlbumLink && publicShelfMediaTabs) {
+       if (!publicAlbumLink && publicShelfMediaTabs && publicAlbumAvailable) {
          publicAlbumLink = document.createElement("a");
          publicAlbumLink.className = "small-btn";
          publicAlbumLink.dataset.publicAlbumLink = "true";
@@ -12753,13 +13567,13 @@
       }
     });
     $$('.staff-activity-button').forEach(button => {
-      const visible = state.session && ["moderator", "admin"].includes(state.profile?.plan);
+      const visible = state.session && canViewBancaMonitoring();
       button.style.display = visible ? "" : "none";
       const badge = $(".staff-activity-badge", button);
       if (badge) badge.hidden = true;
     });
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
-    $$('.album-nav').forEach(button => { button.style.display = state.session ? "" : "none"; });
+    $$('.album-nav').forEach(button => { button.style.display = ""; });
     const downloadsSortHead = $(".downloads-completed .section-head");
     if (downloadsSortHead && !$("[data-download-sort]", downloadsSortHead)) {
       const completedCount = [...state.downloads.values()].filter(entry => entry.status === "completed").length;
@@ -12961,7 +13775,7 @@
         navigate(ownFactionId ? { pagina: "faccoes", faccao: factionRouteKey(ownFactionId) } : {});
       };
     }
-    if (state.section === "factions" && state.factionPageId && state.profile && !["moderator", "admin"].includes(state.profile.plan) && state.profile.faction_id !== state.factionPageId && !$("[data-faction-join]")) {
+    if (state.section === "factions" && state.factionPageId && state.profile && !["moderator", "banca", "admin"].includes(state.profile.plan) && state.profile.faction_id !== state.factionPageId && !$("[data-faction-join]")) {
       const joinButton = document.createElement("button");
       joinButton.type = "button";
       joinButton.className = "small-btn faction-join-button";
@@ -13117,10 +13931,10 @@
       editor.focus();
       document.execCommand("insertHTML", false, "<p><br></p>");
     });
-    $('[data-blog-image]')?.addEventListener("click", () => {
+    $('[data-blog-image]')?.addEventListener("click", async () => {
       const selection = window.getSelection();
       state.blogEditorRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-      const url = normalizeBlogImageUrl(window.prompt("Cole a URL da imagem para inserir no artigo:") || "");
+      const url = normalizeBlogImageUrl(await openSiteInput("Cole a URL da imagem para inserir no artigo:", "", { title: "Inserir imagem", label: "URL da imagem" }) || "");
       if (url === false) return toast("Informe uma URL de imagem vÃ¡lida.");
       if (!url) return;
       const editor = $("#blog-editor");
@@ -13203,8 +14017,25 @@
       button.onclick = event => { event.preventDefault(); event.stopPropagation(); collection.is_faction_catalog ? toggleFactionCatalogSave(collection.catalog_id) : toggleSavePublicCollection(button); };
     });
     if (state.section === "public-profile" && state.publicProfile?.collectionId) {
+      const collectionPage = $(".public-collection-page");
+      const collectionFilter = $(".collection-filter", collectionPage);
+      const collectionActions = $(".public-collection-page > .section-head .shelf-section-actions");
+      if (collectionPage && collectionFilter && collectionActions && !$(".collection-toolbar", collectionPage)) {
+        const toolbar = document.createElement("div");
+        toolbar.className = "collection-toolbar";
+        collectionFilter.before(toolbar);
+        toolbar.append(collectionFilter, collectionActions);
+      }
       const category = state.publicProfile.collections?.find(item => item.id === state.publicProfile.collectionId);
       const actions = $(".public-collection-page .shelf-section-actions");
+      if (category && actions && !$("[data-collection-comments]", actions)) {
+        const button = document.createElement("button");
+        button.className = "small-btn";
+        button.dataset.collectionComments = category.id;
+        button.textContent = "Comentários";
+        actions.appendChild(button);
+        button.onclick = event => { event.preventDefault(); event.stopPropagation(); openCollectionCommentsPopup(category, state.publicProfile.profile); };
+      }
       if (category && actions && state.session && state.publicProfile.profile.id !== state.session.user.id && !$("[data-save-public-collection]", actions)) {
         const saved = state.savedPublicCollections?.some(item => item.id === category.id);
         const button = document.createElement("button");
@@ -13273,11 +14104,12 @@
       if (!body || !profileId) return;
       const result = await sb.from("profile_wall_comments").insert({ profile_id: profileId, user_id: state.session.user.id, body });
       if (result.error) return toast(result.error.message || "Não foi possível publicar o comentário.");
-      const newComment = { id: `wall-local-${Date.now()}`, user_id: state.session.user.id, body, created_at: new Date().toISOString(), profiles: { ...state.profile } };
+      const newComment = { id: `wall-local-${Date.now()}`, profile_id: profileId, user_id: state.session.user.id, body, created_at: new Date().toISOString(), profiles: { ...state.profile } };
       if (state.section === "public-profile") state.publicProfile.wallComments = [newComment, ...(state.publicProfile.wallComments || [])];
       else state.wallComments = [newComment, ...(state.wallComments || [])];
       render();
     });
+    const wallProfileId = state.section === "public-profile" ? state.publicProfile?.profile?.id : state.session?.user?.id;
     const visibleWallComments = state.section === "public-profile" ? (state.publicProfile?.wallComments || []) : (state.wallComments || []);
     const wallArticles = $$(".profile-wall-comment");
     const wallCommentById = new Map();
@@ -13335,14 +14167,14 @@
           const profileId = state.section === "public-profile" ? state.publicProfile?.profile?.id : state.session.user.id;
           const result = await sb.from("profile_wall_comments").insert({ profile_id: profileId, user_id: state.session.user.id, parent_id: comment.id, body });
           if (result.error) return toast(result.error.message || "Não foi possível publicar a resposta.");
-          const newComment = { id: `wall-local-${Date.now()}`, user_id: state.session.user.id, parent_id: comment.id, body, created_at: new Date().toISOString(), profiles: { ...state.profile } };
+          const newComment = { id: `wall-local-${Date.now()}`, profile_id: profileId, user_id: state.session.user.id, parent_id: comment.id, body, created_at: new Date().toISOString(), profiles: { ...state.profile } };
           if (state.section === "public-profile") state.publicProfile.wallComments = [...(state.publicProfile.wallComments || []), newComment];
           else state.wallComments = [...(state.wallComments || []), newComment];
           render();
         };
       };
       actions.appendChild(reply);
-      if (comment.user_id === state.session?.user?.id || ["moderator", "admin"].includes(state.profile?.plan)) {
+      if (comment.user_id === state.session?.user?.id || comment.profile_id === wallProfileId || ["moderator", "banca", "admin"].includes(state.profile?.plan)) {
         const remove = document.createElement("button");
         remove.className = "comment-action comment-delete-action";
         remove.textContent = "Excluir";
@@ -13353,7 +14185,13 @@
           else state.wallComments = (state.wallComments || []).filter(filterLocal);
           return render();
         }
-        const result = await sb.from("profile_wall_comments").delete().eq("id", comment.id);
+        const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
+        const moderatedDelete = staff && comment.user_id !== state.session?.user?.id && comment.profile_id !== state.session?.user?.id;
+        const audit = moderatedDelete ? await askModerationReason("delete_comment") : { reason: null, internalNote: null };
+        if (!audit) return;
+        const result = moderatedDelete
+          ? await sb.rpc("delete_moderated_wall_comment", { p_comment_id: Number(comment.id), p_reason: audit.reason, p_internal_note: audit.internalNote })
+          : await sb.from("profile_wall_comments").delete().eq("id", comment.id);
           if (result.error) return toast(result.error.message || "Não foi possível excluir o comentário.");
           const filter = entry => String(entry.id) !== String(comment.id) && String(entry.parent_id || "") !== String(comment.id);
           if (state.section === "public-profile") state.publicProfile.wallComments = (state.publicProfile.wallComments || []).filter(filter);
@@ -13371,7 +14209,7 @@
     $('[data-blog-shelf-new]')?.addEventListener("click", openBlogShelfCollectionForm);
     $$('[data-blog-shelf-edit]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openBlogShelfCollectionForm(el.dataset.blogShelfEdit); }));
     $$('[data-blog-shelf-delete]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteBlogShelfCollection(el.dataset.blogShelfDelete); }));
-    if (["moderator", "admin"].includes(state.profile?.plan)) {
+    if (["moderator", "banca", "admin"].includes(state.profile?.plan)) {
       $$('[data-shelf-edit-category]').forEach(edit => {
         const category = state.shelfCategories.find(item => item.id === edit.dataset.shelfEditCategory);
         const alreadyFeaturedButton = [...edit.parentElement.querySelectorAll("[data-collection-feature]")].some(button => button.dataset.collectionFeature === category?.id);
@@ -13406,7 +14244,7 @@
       }
       el.addEventListener("click", event => { event.stopPropagation(); copyCollectionLink(el.dataset.copyCollection, el.dataset.copyUsername || state.profile?.username); });
     });
-    if (state.section === "public-profile" && state.publicProfile?.collectionId && ["moderator", "admin"].includes(state.profile?.plan)) {
+    if (state.section === "public-profile" && state.publicProfile?.collectionId && ["moderator", "banca", "admin"].includes(state.profile?.plan)) {
       const actions = $(".public-collection-page .shelf-section-actions");
       const category = state.publicProfile.collections?.find(item => item.id === state.publicProfile.collectionId);
       if (actions && category && category.isPublic !== false && !$("[data-staff-collection-actions]", actions)) {
@@ -13427,6 +14265,10 @@
       }
     }
     $$('[data-like-collection]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleCollectionLike(el.dataset.likeOwner, el.dataset.likeCollection); }));
+    $$('[data-public-collection-color]').forEach(el => el.addEventListener("click", event => {
+      event.stopPropagation();
+      setPublicCollectionColor(el.dataset.publicCollectionColor, el.dataset.publicCollectionColorValue);
+    }));
     $('[data-open-moderation]')?.addEventListener("click", () => {
       const target = state.publicProfile?.profile;
       openModerationPanel(target);
@@ -13491,9 +14333,12 @@
       el.addEventListener("click", () => {
       const s = el.dataset.section;
       if (s === "factions") {
+        if (!state.session) return openAuthPage();
+        if (isFactionStaff()) return navigate({ pagina: "ranking", secao: "faccoes" });
         if (!canAccessFactions()) return navigate({}, true);
         return navigate({ pagina: "faccoes", faccao: factionRouteKey(state.profile.faction_id) });
       }
+      if (s === "album" && !state.session) return openAuthPage();
       setSection(s === "comics" ? "comic" : s);
       });
     });
@@ -13503,7 +14348,7 @@
       el.addEventListener("click", () => {
       const a = el.dataset.action;
       if (a === "home") setSection("home");
-      if (a === "random") openReader(weightedRandom(state.db.library));
+      if (a === "random") openRandomCatalogItem();
       if (a === "focus-search") { setSection("search"); setTimeout(() => $("#search-input")?.focus(), 30); }
       if (a === "do-search") { state.search = $("#search-input")?.value || ""; navigate({ pagina: "pesquisar", q: state.search }); }
       if (a === "open-admin") { if (isAdminProfile()) openAdmin(); }
@@ -13517,7 +14362,7 @@
       if (a === "messages") openChat();
       if (a === "downloads") setSection("downloads");
       if (a === "notifications-popup") openNotificationsPopup();
-      if (a === "staff-activity") { if (["moderator", "admin"].includes(state.profile?.plan)) openNotificationsPopup("staff"); }
+      if (a === "staff-activity") { if (canViewBancaMonitoring()) openNotificationsPopup("staff"); }
       if (a === "logout") signOut();
       if (a === "profile") openProfileSettings();
       if (a === "submit") { if (isAdminProfile()) openSubmission(); else toast("O envio de quadrinhos é exclusivo para administradores."); }
@@ -14045,7 +14890,7 @@
   }
 
   function openCoverVariantsAdmin() {
-    if (!sb || !["moderator", "admin"].includes(state.profile?.plan)) return;
+    if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const items = state.db.library.filter(item => item.type === "comic").sort((a, b) => itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"));
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
