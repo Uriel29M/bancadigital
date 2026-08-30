@@ -3,7 +3,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text not null unique check (username ~ '^[A-Za-z0-9_]{3,24}$'),
   account_email text unique,
-  avatar_url text,
+  avatar_url text check (avatar_url is null or avatar_url ~* '^https?://'),
   plan text not null default 'free' check (plan in ('free', 'premium', 'moderator', 'admin')),
   title text,
   profile_hidden boolean not null default false,
@@ -14,7 +14,15 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles add column if not exists account_email text;
+alter table public.profiles drop constraint if exists profiles_avatar_url_check;
+alter table public.profiles add constraint profiles_avatar_url_check check (avatar_url is null or avatar_url ~* '^https?://');
 alter table public.profiles add column if not exists title_color text default '#ffd45c';
+alter table public.profiles add column if not exists profile_background_theme text;
+alter table public.profiles add column if not exists profile_accent_theme text;
+alter table public.profiles drop constraint if exists profiles_background_theme_check;
+alter table public.profiles add constraint profiles_background_theme_check check (profile_background_theme is null or profile_background_theme in ('black', 'white', 'graphite', 'night-blue', 'wine'));
+alter table public.profiles drop constraint if exists profiles_accent_theme_check;
+alter table public.profiles add constraint profiles_accent_theme_check check (profile_accent_theme is null or profile_accent_theme in ('black', 'white', 'blue', 'purple', 'green', 'orange'));
 update public.profiles set title = left(trim(title), 10) where title is not null and char_length(title) > 10;
 alter table public.profiles drop constraint if exists profiles_title_length_check;
 alter table public.profiles add constraint profiles_title_length_check check (title is null or char_length(title) between 1 and 10);
@@ -35,6 +43,11 @@ alter table public.profiles add constraint profiles_wall_description_length_chec
 alter table public.profiles add column if not exists allow_mentions boolean not null default true;
 alter table public.profiles add column if not exists allow_messages boolean not null default true;
 alter table public.profiles add column if not exists shelf_sort_orders jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists shelf_style text not null default 'none';
+alter table public.profiles add column if not exists shelf_styles jsonb not null default '{}'::jsonb;
+alter table public.profiles drop constraint if exists profiles_shelf_style_check;
+alter table public.profiles add constraint profiles_shelf_style_check check (shelf_style in ('none', 'wood', 'retro', 'neon', 'comic', 'minimal'));
+notify pgrst, 'reload schema';
 alter table public.profiles add column if not exists notifications_enabled boolean not null default true;
 alter table public.profiles add column if not exists shelf_blogs_public boolean not null default true;
 alter table public.profiles add column if not exists profile_wall_public boolean not null default true;
@@ -1141,26 +1154,19 @@ begin
 end;
 $$;
 
-insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('publisher-covers', 'publisher-covers', true) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('faction-abafac', 'faction-abafac', true) on conflict (id) do nothing;
 drop policy if exists "publisher covers are public" on storage.objects;
 drop policy if exists "moderators upload publisher covers" on storage.objects;
 drop policy if exists "moderators update publisher covers" on storage.objects;
-drop policy if exists "avatars are public" on storage.objects;
 drop policy if exists "blog images are public" on storage.objects;
 drop policy if exists "users upload blog images" on storage.objects;
 drop policy if exists "users update own blog images" on storage.objects;
 drop policy if exists "users delete own blog images" on storage.objects;
-drop policy if exists "users upload own avatar" on storage.objects;
-drop policy if exists "users update own avatar" on storage.objects;
-create policy "avatars are public" on storage.objects for select using (bucket_id = 'avatars');
 create policy "blog images are public" on storage.objects for select using (bucket_id = 'blog-images');
 create policy "users upload blog images" on storage.objects for insert with check (bucket_id = 'blog-images' and auth.uid()::text = (storage.foldername(name))[1]);
 create policy "users update own blog images" on storage.objects for update using (bucket_id = 'blog-images' and auth.uid()::text = (storage.foldername(name))[1]);
 create policy "users delete own blog images" on storage.objects for delete using (bucket_id = 'blog-images' and auth.uid()::text = (storage.foldername(name))[1]);
-create policy "users upload own avatar" on storage.objects for insert with check (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
-create policy "users update own avatar" on storage.objects for update using (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public
@@ -1275,8 +1281,9 @@ create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, username, account_email)
-  values (new.id, coalesce(new.raw_user_meta_data->>'username', 'user_' || substr(new.id::text, 1, 8)), new.email);
+  insert into public.profiles (id, username, account_email, avatar_url)
+  values (new.id, coalesce(new.raw_user_meta_data->>'username', 'user_' || substr(new.id::text, 1, 8)), new.email,
+    'https://api.dicebear.com/9.x/thumbs/svg?seed=' || new.id::text || '&backgroundColor=f3f4f6&shapeColor=e85b68');
   return new;
 end;
 $$;
@@ -2126,7 +2133,7 @@ create table if not exists public.faction_achievements (
   name text not null,
   description text not null,
   icon text not null default '★',
-  metric text not null check (metric in ('xp', 'members', 'read', 'comment', 'like', 'chat', 'follow', 'mandatory_readers')),
+  metric text not null check (metric in ('xp', 'members', 'read', 'comment', 'like', 'chat', 'follow', 'mandatory_readers', 'sticker', 'sticker_donate', 'sticker_trade')),
   threshold integer not null check (threshold > 0),
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
@@ -3093,6 +3100,13 @@ create policy "faction moderation is visible to staff" on public.faction_moderat
 create policy "faction xp adjustments are visible to staff" on public.faction_xp_adjustments for select using (public.is_moderator());
 create policy "faction achievements are public" on public.faction_achievements for select using (true);
 create policy "faction achievement awards are public" on public.faction_achievement_awards for select using (true);
+
+-- Conquistas de figurinhas (a lógica dos eventos está na migration correspondente).
+insert into public.faction_achievements (achievement_key, name, description, icon, metric, threshold, sort_order) values
+  ('faction_sticker_collectors', 'Álbum compartilhado', 'A facção precisa conquistar 100 figurinhas na temporada. Vale obter por leitura, sorte, doação ou troca.', '🎴', 'sticker', 100, 10),
+  ('faction_sticker_donors', 'Mãos generosas', 'Membros da facção precisam realizar 25 doações de figurinhas na temporada.', '🎁', 'sticker_donate', 25, 11),
+  ('faction_sticker_traders', 'Mercadores da banca', 'Membros da facção precisam concluir 25 trocas de figurinhas na temporada.', '🔄', 'sticker_trade', 25, 12)
+on conflict (achievement_key) do update set name = excluded.name, description = excluded.description, icon = excluded.icon, metric = excluded.metric, threshold = excluded.threshold, sort_order = excluded.sort_order;
 create policy "faction catalogs are public" on public.faction_catalogs for select using (true);
 create policy "faction catalog likes are public" on public.faction_catalog_likes for select using (true);
 create policy "users manage faction catalog likes" on public.faction_catalog_likes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

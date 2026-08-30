@@ -5,6 +5,10 @@
   // --- Fim da Inicialização ---
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
   const DEFAULT_AVATAR_URL = "assets/semfoto.jpg?v=1";
+  const RANDOM_AVATAR_BASE_URL = "https://api.dicebear.com/9.x/thumbs/svg";
+  function randomAvatarUrl(userId, color = "#e85b68") {
+    return userId ? `${RANDOM_AVATAR_BASE_URL}?seed=${encodeURIComponent(userId)}&backgroundColor=f3f4f6&shapeColor=${encodeURIComponent(String(color).replace(/^#/, ""))}` : DEFAULT_AVATAR_URL;
+  }
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
@@ -303,6 +307,7 @@
     savedPublicCollections: [],
     savedPublisherKeys: new Set(),
     savedPublishers: [],
+    publisherFans: { key: "", users: [], loading: false, loaded: false },
     savedImprintKeys: new Set(),
     savedImprints: [],
     savedCharacterKeys: new Set(),
@@ -487,6 +492,51 @@
   }
   function hasLegendaryAccess(profile = state.profile) {
     return ["premium", "moderator", "admin"].includes(normalizedPlan(profile));
+  }
+  const PROFILE_BACKGROUND_THEMES = {
+    black: { label: "Preto", bg: "#000000", text: "#f5f5f5", muted: "#b5b5bd", surface: "#0d0d10", surface2: "#17171c", surface3: "#25252b", line: "#303038" },
+    white: { label: "Branco", bg: "#ffffff", text: "#17171b", muted: "#5f6068", surface: "#f3f3f5", surface2: "#e9e9ed", surface3: "#dcdce1", line: "#c9c9d0" },
+    graphite: { label: "Grafite", bg: "#24242a", text: "#f5f5f5", muted: "#b7b7c0", surface: "#303037", surface2: "#3b3b44", surface3: "#494952", line: "#555560" },
+    "night-blue": { label: "Azul noite", bg: "#101a2b", text: "#f5f7ff", muted: "#aeb8cc", surface: "#16243a", surface2: "#1e304b", surface3: "#2a4162", line: "#385171" },
+    wine: { label: "Vinho", bg: "#2a1118", text: "#fff5f6", muted: "#d1aeb5", surface: "#351720", surface2: "#451d29", surface3: "#5a2937", line: "#713847" }
+  };
+  const PROFILE_ACCENT_THEMES = {
+    black: { label: "Preto", accent: "#000000", accent2: "#333333" },
+    white: { label: "Branco", accent: "#ffffff", accent2: "#d8d8d8" },
+    blue: { label: "Azul", accent: "#2f80ed", accent2: "#69a7ff" },
+    purple: { label: "Roxo", accent: "#8e44ad", accent2: "#c27be0" },
+    green: { label: "Verde", accent: "#27ae60", accent2: "#65d995" },
+    orange: { label: "Laranja", accent: "#f2994a", accent2: "#ffc078" }
+  };
+  const SHELF_STYLE_OPTIONS = [
+    ["none", "Original"],
+    ["wood", "Madeira clássica"]
+  ];
+  function profileThemeOptions(themes, selected, defaultLabel) {
+    return `<option value="" ${!selected ? "selected" : ""}>${defaultLabel}</option>${Object.entries(themes).map(([key, theme]) => `<option value="${key}" ${selected === key ? "selected" : ""}>${theme.label}</option>`).join("")}`;
+  }
+  function applyProfileTheme(profile = null) {
+    const content = $(".content");
+    if (!content) return;
+    const shelfStyles = profile?.shelf_styles && typeof profile.shelf_styles === "object" ? profile.shelf_styles : {};
+    $$(".shelf-fixed-collection", content).forEach(section => {
+      const key = $(".shelf-style-key", section)?.dataset.shelfStyleKey || "";
+      const shelfStyle = SHELF_STYLE_OPTIONS.some(([value]) => value === shelfStyles[key]) ? shelfStyles[key] : "none";
+      section.classList.remove(...SHELF_STYLE_OPTIONS.map(([value]) => `shelf-style-${value}`));
+      section.classList.add(`shelf-style-${shelfStyle}`);
+    });
+    const background = PROFILE_BACKGROUND_THEMES[profile?.profile_background_theme];
+    const accent = PROFILE_ACCENT_THEMES[profile?.profile_accent_theme];
+    content.classList.toggle("profile-themed-content", Boolean(background || accent));
+    ["--profile-bg", "--text", "--muted", "--surface", "--surface-2", "--surface-3", "--line", "--accent", "--accent-2"].forEach(name => content.style.removeProperty(name));
+    if (background) {
+      content.style.setProperty("--profile-bg", background.bg);
+      ["text", "muted", "surface", "surface2", "surface3", "line"].forEach(key => content.style.setProperty(`--${key.replace("surface2", "surface-2").replace("surface3", "surface-3")}`, background[key]));
+    }
+    if (accent) {
+      content.style.setProperty("--accent", accent.accent);
+      content.style.setProperty("--accent-2", accent.accent2);
+    }
   }
   function isAdminProfile(profile = state.profile) {
     return normalizedPlan(profile) === "admin";
@@ -966,7 +1016,6 @@
     collections: "colecoes",
     search: "pesquisar",
     shelf: "estante",
-    surprise: "surpreenda-me",
     downloads: "downloads",
     "local-box": "caixa",
     album: "album",
@@ -1094,10 +1143,6 @@
       if (section === "search") state.search = params.get("q") || "";
       if (section === "entity") state.entityFilter = { kind: params.get("tipo") || "character", value: params.get("valor") || "" };
       render();
-      if (section === "surprise" && previousSection !== "surprise" && previousSection !== "reader") {
-        const randomItem = weightedRandom(state.db.library.filter(entry => !entry.local));
-        if (randomItem) setTimeout(() => openReader(randomItem), 0);
-      }
       if (section === "blog" && !state.blogPosts.length) loadBlogPosts();
       if (section === "ranking" && state.authReady) loadRankingData();
       if (section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -2249,12 +2294,13 @@
   }
 
   function avatarMarkup(profile, className = "profile-avatar") {
-    const factionId = profile?.faction_id || state.factionByUser.get(profile?.id);
+    const profileId = profile?.id || profile?.user_id;
+    const factionId = profile?.faction_id || state.factionByUser.get(profileId);
     const faction = state.factions.find(item => item.id === factionId);
     const staff = ["moderator", "admin"].includes(profile?.plan);
     const avatarClass = staff ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
     const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
-    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (profile?.avatar_url || DEFAULT_AVATAR_URL);
+    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (profile?.avatar_url || randomAvatarUrl(profileId));
     return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(avatarUrl)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
@@ -2836,7 +2882,7 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
       profile = await sb.from("profiles").select("id, username, avatar_url, profile_sticker_award_id, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
     }
@@ -5158,11 +5204,34 @@
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label><label class="checkbox-inline"><input name="shelfCompletedPublic" type="checkbox" ${state.profile?.shelf_completed_public !== false ? "checked" : ""}> Mostrar coleção Concluídos</label><label class="checkbox-inline"><input name="shelfLikedPublic" type="checkbox" ${state.profile?.shelf_liked_public !== false ? "checked" : ""}> Mostrar coleção Curtidos</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> Mostrar Mural do perfil / Figurinhas em destaque</label></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+    const legacyAvatarField = $("[name=avatar]", overlay);
+    if (legacyAvatarField) {
+      legacyAvatarField.type = "url";
+      legacyAvatarField.name = "avatarUrl";
+      legacyAvatarField.accept = "";
+      legacyAvatarField.value = state.profile?.avatar_url || "";
+      const currentAvatar = String(state.profile?.avatar_url || "");
+      const currentColor = (() => { try { const params = new URL(currentAvatar).searchParams; const color = params.get("shapeColor") || "e85b68"; return `#${color.replace(/^#/, "").slice(0, 6)}`; } catch { return "#e85b68"; } })();
+      legacyAvatarField.insertAdjacentHTML("afterend", `<label class="avatar-color-control">Cor do personagem <input name="avatarColor" type="color" value="${currentColor}"></label>`);
+      legacyAvatarField.previousElementSibling.textContent = "Foto de perfil (link)";
+      legacyAvatarField.insertAdjacentHTML("afterend", '<small class="format-hint">Cole um link público de imagem. Se deixar vazio, será usado seu avatar aleatório.</small>');
+    }
     const profileForm = $("#profile-form", overlay);
+    profileForm?.addEventListener("submit", () => { const value = String(legacyAvatarField?.value || "").trim(); const isGeneratedAvatar = value.startsWith(RANDOM_AVATAR_BASE_URL); const avatar_url = !value || isGeneratedAvatar ? randomAvatarUrl(state.session?.user?.id, $("[name=avatarColor]", profileForm)?.value) : value; if (!value || /^https?:\/\//i.test(value)) state.profile = { ...state.profile, avatar_url }; });
     const bannerField = document.createElement("div");
     bannerField.className = "field full profile-banner-field";
     bannerField.innerHTML = `<label>Imagem de fundo da estante</label><input name="profileBannerUrl" type="url" value="${escapeHTML(state.profile?.profile_banner_url || "")}" placeholder="https://.../banner.jpg"><small class="format-hint">Opcional. Sem link, será usada a imagem padrão da estante.</small>`;
     $(".form-grid", profileForm).appendChild(bannerField);
+    if (hasLegendaryAccess()) {
+      const themeField = document.createElement("div");
+      themeField.className = "field full profile-theme-settings";
+      themeField.innerHTML = `<label>Aparência do perfil</label><small class="format-hint">Disponível para Lendas, moderadores e administradores. As cores ficam restritas ao perfil público.</small><div class="profile-theme-grid"><label>Fundo<select name="profileBackgroundTheme">${profileThemeOptions(PROFILE_BACKGROUND_THEMES, state.profile?.profile_background_theme, "Padrão")}</select></label><label>Cor de destaque<select name="profileAccentTheme"><option value="" ${!state.profile?.profile_accent_theme ? "selected" : ""}>Padrão (vermelho)</option>${Object.entries(PROFILE_ACCENT_THEMES).map(([key, theme]) => `<option value="${key}" ${state.profile?.profile_accent_theme === key ? "selected" : ""}>${theme.label}</option>`).join("")}</select></label></div><button type="button" class="small-btn profile-theme-reset" data-profile-theme-reset>Voltar ao padrão</button>`;
+      $(".form-grid", profileForm).appendChild(themeField);
+      $("[data-profile-theme-reset]", themeField).onclick = () => {
+        $("[name=profileBackgroundTheme]", themeField).value = "";
+        $("[name=profileAccentTheme]", themeField).value = "";
+      };
+    }
     profileForm.addEventListener("submit", async event => {
       const bannerUrl = String(new FormData(event.currentTarget).get("profileBannerUrl") || "").trim();
       if (bannerUrl && !/^https?:\/\//i.test(bannerUrl)) return toast("Informe um link http(s) válido para o banner.");
@@ -5218,7 +5287,7 @@
       state.profile = { ...state.profile, ...privacy };
       await originalProfileSubmit(event);
     });
-    $("#profile-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); if (!/^[a-z0-9_]{3,24}$/.test(username)) return toast("@ inválido."); let avatar_url = state.profile?.avatar_url || null; const file = fd.get("avatar"); if (file?.size) { const path = `${state.session.user.id}/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, "_")}`; const upload = await sb.storage.from("avatars").upload(path, file, { upsert: true }); if (upload.error) return toast(upload.error.message); avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl; } const preferences = { shelf_saved_public: fd.get("shelfSavedPublic") === "on", shelf_series_public: fd.get("shelfSeriesPublic") === "on", shelf_read_public: fd.get("shelfReadPublic") === "on", shelf_completed_public: fd.get("shelfCompletedPublic") === "on", shelf_liked_public: fd.get("shelfLikedPublic") === "on", shelf_blogs_public: state.profile?.shelf_blogs_public !== false }; const update = await sb.from("profiles").update({ username, avatar_url, ...preferences }).eq("id", state.session.user.id); if (update.error) return toast(update.error.message.includes("duplicate") ? "Esse @ já está em uso." : update.error.message); state.profile = { ...state.profile, username, avatar_url, ...preferences }; overlay.remove(); render(); toast("Perfil atualizado."); };
+    $("#profile-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); if (!/^[a-z0-9_]{3,24}$/.test(username)) return toast("@ inválido."); let avatar_url = state.profile?.avatar_url || null; const file = fd.get("avatar"); if (file?.size) { const path = `${state.session.user.id}/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, "_")}`; const upload = await sb.storage.from("avatars").upload(path, file, { upsert: true }); if (upload.error) return toast(upload.error.message); avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl; } const preferences = { shelf_saved_public: fd.get("shelfSavedPublic") === "on", shelf_series_public: fd.get("shelfSeriesPublic") === "on", shelf_read_public: fd.get("shelfReadPublic") === "on", shelf_completed_public: fd.get("shelfCompletedPublic") === "on", shelf_liked_public: fd.get("shelfLikedPublic") === "on", shelf_blogs_public: state.profile?.shelf_blogs_public !== false, profile_background_theme: hasLegendaryAccess() ? (PROFILE_BACKGROUND_THEMES[fd.get("profileBackgroundTheme")] ? fd.get("profileBackgroundTheme") : null) : (state.profile?.profile_background_theme || null), profile_accent_theme: hasLegendaryAccess() ? (PROFILE_ACCENT_THEMES[fd.get("profileAccentTheme")] ? fd.get("profileAccentTheme") : null) : (state.profile?.profile_accent_theme || null) }; const update = await sb.from("profiles").update({ username, avatar_url, ...preferences }).eq("id", state.session.user.id); if (update.error) return toast(update.error.message.includes("duplicate") ? "Esse @ já está em uso." : update.error.message); state.profile = { ...state.profile, username, avatar_url, ...preferences }; if (state.publicProfile?.profile?.id === state.session.user.id) state.publicProfile.profile = { ...state.publicProfile.profile, username, avatar_url, ...preferences }; overlay.remove(); render(); toast("Perfil atualizado."); };
     $("#profile-form", overlay).addEventListener("submit", async event => {
       const email = String(new FormData(event.currentTarget).get("email") || "").trim().toLowerCase();
       if (!email) return;
@@ -8681,7 +8750,8 @@
         .join("");
     };
     const imprintMarkup = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR")).map(([imprint, initials]) => `<section class="search-imprint publisher-imprint"><div class="section-head"><div><h2 class="section-title">${escapeHTML(imprint)}</h2><div class="section-subtitle">Selo</div></div></div>${initialOrder.filter(initial => initials.has(initial)).map(initial => `<section class="search-initial"><h3 class="search-initial-title">${initial}</h3><div class="results-grid publisher-initial-grid">${publisherGroupMarkup(initials.get(initial))}</div></section>`).join("")}</section>`).join("");
-    return `<div class="content publisher-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Editora</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) da editora</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button>${canManage ? `<button class="small-btn" data-publisher-settings="${escapeHTML(filter.value)}">Configurar editora</button>` : ""}</div></div>${wikiMarkup}${setting?.is_pinned ? '<div class="publisher-pin-badge">★ Editora fixada no carrossel</div>' : ""}${imprintMarkup || '<div class="empty">Nenhuma edição encontrada.</div>'}</div>`;
+    const publisherCharacters = publisherCharacterMarkup(allItems);
+    return `<div class="content publisher-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Editora</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) da editora</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button>${canManage ? `<button class="small-btn" data-publisher-settings="${escapeHTML(filter.value)}">Configurar editora</button>` : ""}</div></div>${wikiMarkup}${setting?.is_pinned ? '<div class="publisher-pin-badge">★ Editora fixada no carrossel</div>' : ""}${imprintMarkup || '<div class="empty">Nenhuma edição encontrada.</div>'}${publisherCharacters}${publisherFansMarkup(filter.value)}</div>`;
   }
 
   function renderLoginPage() {
@@ -8786,6 +8856,14 @@
     return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}"${disabled}>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
   }
 
+  function shelfStyleMarkup(selected, key) {
+    const isOwnPublicProfile = state.section === "public-profile"
+      && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || "");
+    if ((!(["shelf", "public-profile"].includes(state.section)) || (state.section === "public-profile" && !isOwnPublicProfile)) || !state.session) return "";
+    const current = SHELF_STYLE_OPTIONS.some(([value]) => value === selected) ? selected : "none";
+    return `<div class="shelf-style-picker"><button type="button" class="small-btn" data-shelf-style-toggle aria-expanded="false">✦ Estilo</button><div class="shelf-style-menu" hidden><span class="shelf-style-menu-title">Estilo das prateleiras</span>${SHELF_STYLE_OPTIONS.map(([value, label]) => `<button type="button" class="shelf-style-option${current === value ? " is-selected" : ""}" data-shelf-style="${value}">${label}</button>`).join("")}</div></div>`;
+  }
+
   function shelfCollectionMarkup(title, items, key, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, actions = "", coverChoices = null, renderSeriesCards = false) {
     const expanded = Boolean(state.shelfExpanded[key]);
     const fixedCollection = ["saved", "series-saved", "read", "completed", "liked", "public-saved", "public-series-saved", "public-read", "public-completed", "public-liked"].includes(key)
@@ -8807,7 +8885,11 @@
     const directOpen = state.section === "shelf" || (state.section === "public-profile" && state.publicProfile?.collectionId);
     const publicCategoryId = key.startsWith("public-category:") ? key.slice("public-category:".length) : "";
     const publicCategory = publicCategoryId ? state.publicProfile?.collections?.find(category => category.id === publicCategoryId) : null;
-    const featureAction = shelfSortSelectMarkup(key, sortOrder) + (publicCategory && ["moderator", "admin"].includes(state.profile?.plan)
+    const shelfStyleProfile = publicState?.profile || state.profile;
+    const shelfStyles = shelfStyleProfile?.shelf_styles && typeof shelfStyleProfile.shelf_styles === "object" ? shelfStyleProfile.shelf_styles : {};
+    const shelfStyle = SHELF_STYLE_OPTIONS.some(([value]) => value === shelfStyles[key]) ? shelfStyles[key] : "none";
+    const shelfStyleKeyMarker = fixedCollection ? `<span class="shelf-style-key" data-shelf-style-key="${escapeHTML(key)}" hidden></span>` : "";
+    const featureAction = shelfStyleKeyMarker + shelfStyleMarkup(shelfStyle, key) + shelfSortSelectMarkup(key, sortOrder) + (publicCategory && ["moderator", "admin"].includes(state.profile?.plan)
       ? `<button class="small-btn" data-collection-feature="${escapeHTML(publicCategory.id)}" data-collection-featured="${publicCategory.is_featured ? "true" : "false"}">${publicCategory.is_featured ? "Remover destaque" : "Destacar"}</button>`
       : "");
     return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>${likedCollection}`;
@@ -9428,7 +9510,7 @@
       chatInput.style.height = `${chatInput.scrollHeight}px`;
     };
     const renderMessages = async () => {
-      const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at, profiles!chat_messages_sender_id_fkey(username, avatar_url, title, title_color, plan, faction_id)").eq("room_id", room.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: true }).limit(200);
+      const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at, profiles!chat_messages_sender_id_fkey(id, username, avatar_url, title, title_color, plan, faction_id)").eq("room_id", room.id).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: true }).limit(200);
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
@@ -9657,6 +9739,21 @@
     render();
   }
 
+  async function saveShelfStyle(key, style) {
+    if (!state.session || !SHELF_STYLE_OPTIONS.some(([value]) => value === style)) return;
+    const shelfStyles = { ...(state.profile?.shelf_styles || {}), [key]: style };
+    const update = await sb?.from("profiles").update({ shelf_styles: shelfStyles }).eq("id", state.session.user.id);
+    if (update?.error) {
+      const message = String(update.error.message || "");
+      if (/shelf_style|column|schema cache/i.test(message)) return toast("Execute a migraÃ§Ã£o add_shelf_style.sql no Supabase para ativar os estilos.");
+      return toast(`NÃ£o foi possÃ­vel salvar: ${message}`);
+    }
+    state.profile = { ...state.profile, shelf_styles: shelfStyles };
+    if (state.publicProfile?.profile?.id === state.session.user.id) state.publicProfile.profile = { ...state.publicProfile.profile, shelf_styles: shelfStyles };
+    render();
+    toast("Estilo das prateleiras atualizado.");
+  }
+
   async function copyCollectionLink(categoryId, username = state.profile?.username) {
     if (!username || !categoryId) return;
     const link = new URL(publicProfileHref(username, categoryId), window.location.href).href;
@@ -9872,20 +9969,6 @@
     const categories = state.shelfCategories.map(category => ({ ...category, itemIds: (category.itemIds || []).filter(id => snapshot.saved.has(id)) }));
     return renderShelfLikePage({ profile: state.profile, own: true, savedItems, savedSeries, readItems, completedItems, likedItems: { items: [], visible: false }, categories: canCustomize ? categories.map(category => ({ ...category, isSeries: false })) : [] });
     return `<div class="content"><div class="profile-header">${avatarMarkup(state.profile)}<div><div class="eyebrow">@${escapeHTML(state.profile?.username || "")}</div>${state.profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(state.profile.title_color)}">${escapeHTML(state.profile.title)}</div>` : ""}${trophyRoom(state.achievements)}</div><div class="profile-actions"><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button></div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div><button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button></div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${shelfCollectionMarkup("Salvos", savedItems, "saved")}${state.profile?.shelf_series_public !== false ? shelfCollectionMarkup("Séries salvas", savedSeries, "series-saved", state.readingProgress, state.favoriteIds, "", null, true) : ""}${shelfCollectionMarkup("Lidos", readItems, "read")}${state.profile?.shelf_completed_public !== false ? shelfCollectionMarkup("Concluídos", completedItems, "completed", state.readingProgress, state.favoriteIds, "", null, true) : ""}${canCustomize ? `<section class="section shelf-categories"><div class="section-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div><button class="small-btn" data-shelf-new-category>+ Nova coleção</button></div>${categories.map(category => shelfCollectionMarkup(category.name, shelfItemsByIds(category.itemIds), `category:${category.id}`, state.readingProgress, state.favoriteIds, `<span class="shelf-visibility ${category.isPublic !== false ? "is-public" : "is-private"}">${category.isPublic !== false ? "Pública" : "Privada"}</span>${category.isPublic !== false ? `<button class="small-btn" data-copy-collection="${escapeHTML(category.id)}">Compartilhar</button>` : ""}<button class="small-btn" data-shelf-edit-category="${escapeHTML(category.id)}">Editar</button><button class="small-btn danger" data-shelf-delete-category="${escapeHTML(category.id)}">Excluir</button>`)).join("") || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>` : ""}</div>`;
-  }
-
-  function renderSurprisePage() {
-    const lib = state.db.library;
-    let randomItems = state.homeRandomIds.map(id => lib.find(item => item.id === id)).filter(Boolean).slice(0, 6);
-    if (randomItems.length < 6) {
-      randomItems = uniqueCatalogItems([...lib].sort(() => Math.random() - .5).slice(0, 6));
-      state.homeRandomIds = randomItems.map(item => item.id);
-    }
-    const personalized = personalizedRecommendations(lib);
-    const tips = state.session && personalized.length
-      ? `<section class="section personalized-recommendations"><div class="section-head"><div><h2 class="section-title">Dicas para você</h2><div class="section-subtitle">Sugestões baseadas nos quadrinhos que você salvou e curtiu.</div></div></div><div class="rail-viewport"><div class="rail">${personalized.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div></section>`
-      : "";
-    return `<div class="content surprise-page"><div class="section-head"><div><div class="eyebrow">Descoberta</div><h1 class="section-title">Surpreenda-me</h1><div class="section-subtitle">Uma história aleatória será aberta automaticamente.</div></div><button class="btn btn-danger" data-action="random">Sortear outra</button></div><div class="notice">Escolha outra história sempre que quiser uma nova surpresa.</div>${globalRecommendationsSection(lib)}${rail("Escolha aleatória", randomItems, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true, true, "random-choice-section")}${tips}</div>`;
   }
 
   function renderPublicCollectionPage(publicState, category) {
@@ -10122,6 +10205,7 @@
           <div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)}</div>
           ${profile.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : '<div class="section-subtitle">Perfil público</div>'}
           ${trophyRoom(publicState.achievements)}
+          ${followSummary(profile.id, publicState.followerCount, publicState.followingCount)}
         </div>
       </div>
       <div class="section-head"><div><h1 class="section-title">Estante de @${escapeHTML(profile.username)}</h1><div class="section-subtitle">${publicState.followerCount || 0} seguidores · ${publicState.followingCount || 0} seguindo · Coleções públicas do perfil</div></div><div class="profile-actions">${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}</div></div>
@@ -10167,6 +10251,53 @@
     const cards = entries.map(cardMarkup).join("");
     const repeated = `${cards}${cards}`;
     return `<section class="section wiki-character-carousel-section"><div class="section-head"><div><h2 class="section-title">Personagens</h2><div class="section-subtitle">Explore os personagens presentes nos quadrinhos.</div></div></div><div class="wiki-character-carousel"><div class="wiki-character-track">${repeated}</div></div></section>`;
+  }
+
+  function publisherCharacterMarkup(items) {
+    const characters = new Map();
+    items.forEach(item => {
+      const storyKey = String(item.seriesId || item.id || "");
+      characterNames(item).forEach(name => {
+        const character = String(name || "").trim();
+        const key = character.toLocaleLowerCase("pt-BR");
+        if (!character) return;
+        if (!characters.has(key)) characters.set(key, { name: character, stories: new Set() });
+        if (storyKey) characters.get(key).stories.add(storyKey);
+      });
+    });
+    const entries = [...characters.values()].sort((a, b) => b.stories.size - a.stories.size || a.name.localeCompare(b.name, "pt-BR"));
+    if (!entries.length) return "";
+    const cards = entries.map(({ name, stories }) => {
+      const setting = state.characterSettings.get(publisherKey(name)) || {};
+      const image = setting.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg";
+      return `<button type="button" class="wiki-character-card publisher-character-card" data-wiki-character="${escapeHTML(name)}" aria-label="Ver personagem ${escapeHTML(name)}"><span class="wiki-character-image"><img src="${escapeHTML(image)}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"></span><strong>${escapeHTML(name)}</strong><small>${stories.size} ${stories.size === 1 ? "história" : "histórias"}</small></button>`;
+    }).join("");
+    return `<section class="section publisher-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens da editora</h2><div class="section-subtitle">Ordenados pelos que aparecem em mais histórias desta editora.</div></div></div><div class="publisher-character-carousel"><div class="publisher-character-track">${cards}</div></div></section>`;
+  }
+
+  function publisherFansMarkup(publisherName) {
+    const key = publisherKey(publisherName);
+    const fans = state.publisherFans.key === key ? state.publisherFans.users : [];
+    const cards = fans.map(profile => `<a class="publisher-fan-card" href="${escapeHTML(publicProfileHref(profile.username))}" aria-label="Ver perfil de @${escapeHTML(profile.username)}">${avatarMarkup(profile, "publisher-fan-avatar")}<strong>@${escapeHTML(profile.username)}</strong></a>`).join("");
+    const content = cards || (state.publisherFans.loading || state.publisherFans.key !== key
+      ? '<div class="publisher-fans-status">Carregando fãs…</div>'
+      : '<div class="publisher-fans-status">Ninguém salvou esta editora ainda.</div>');
+    return `<section class="section publisher-fans-section"><div class="section-head"><div><h2 class="section-title">Fãs da editora</h2><div class="section-subtitle">Quem salvou esta editora para acompanhar.</div></div></div><div class="publisher-fan-carousel"><div class="publisher-fan-track">${content}</div></div></section>`;
+  }
+
+  async function loadPublisherFans(publisherName) {
+    if (!sb) return;
+    const key = publisherKey(publisherName);
+    if (state.publisherFans.key === key && (state.publisherFans.loading || state.publisherFans.loaded)) return;
+    state.publisherFans = { key, users: [], loading: true, loaded: false };
+    const saves = await sb.from("publisher_saves").select("user_id, created_at").eq("publisher_key", key).order("created_at", { ascending: false });
+    const userIds = (saves.data || []).map(row => row.user_id).filter(Boolean);
+    const profiles = userIds.length
+      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, profile_hidden").in("id", userIds)
+      : { data: [] };
+    const profilesById = new Map((profiles.data || []).filter(profile => profile.profile_hidden !== true).map(profile => [profile.id, profile]));
+    state.publisherFans = { key, users: userIds.map(id => profilesById.get(id)).filter(Boolean), loading: false, loaded: true };
+    if (state.section === "entity" && state.entityFilter?.kind === "publisher" && publisherKey(state.entityFilter.value) === key) render();
   }
 
   async function loadCharacterWikiCarousel() {
@@ -10475,7 +10606,7 @@
     const lineColor = staff ? "#ffffff" : faction?.color || "#ffffff";
     const rank = showRank && member.ranking ? `<span class="ranking-position">${member.ranking}º</span>` : "";
     const title = member.title ? `<span class="ranking-title" style="--title-bg:${safeTitleColor(member.title_color)}">${escapeHTML(member.title)}</span>` : "";
-    return `<a class="ranking-member ${current ? "is-current" : ""}" style="--member-faction-color:${escapeHTML(lineColor)}" href="${escapeHTML(publicProfileHref(member.username))}">${rank}<span class="ranking-avatar-wrap ${online ? "is-online" : ""}">${avatarMarkup(member, "ranking-avatar")}<span class="ranking-online-dot" aria-label="Online"></span></span><span class="ranking-member-copy"><strong>${factionDot({ faction_id: member.faction_id })}@${escapeHTML(member.username)}</strong>${title}<small>Nível ${member.level} · ${Number(member.xp || 0).toLocaleString("pt-BR")} XP</small></span><span class="ranking-period-xp">+${Number(member.period_xp || 0).toLocaleString("pt-BR")} XP</span></a>`;
+    return `<a class="ranking-member ${current ? "is-current" : ""}" style="--member-faction-color:${escapeHTML(lineColor)}" href="${escapeHTML(publicProfileHref(member.username))}">${rank}<span class="ranking-avatar-wrap ${online ? "is-online" : ""}">${avatarMarkup({ ...member, id: member.user_id }, "ranking-avatar")}<span class="ranking-online-dot" aria-label="Online"></span></span><span class="ranking-member-copy"><strong>${factionDot({ faction_id: member.faction_id })}@${escapeHTML(member.username)}</strong>${title}<small>Nível ${member.level} · ${Number(member.xp || 0).toLocaleString("pt-BR")} XP</small></span><span class="ranking-period-xp">+${Number(member.period_xp || 0).toLocaleString("pt-BR")} XP</span></a>`;
   }
 
   function rankingCategoryMembers(members, plan) {
@@ -12044,18 +12175,19 @@
     else if (state.section === "login") markup = renderLoginPage();
     else if (state.section === "signup") markup = renderSignupPage();
     else if (state.section === "shelf") markup = renderShelfPage();
-    else if (state.section === "surprise") markup = renderSurprisePage();
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
     else if (state.section === "album") markup = stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true });
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
     if (state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
+    applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : ["shelf", "album"].includes(state.section) ? state.profile : null);
     if (main.innerHTML === markup) {
       syncActiveNav();
       return;
     }
     main.innerHTML = markup;
+    applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : ["shelf", "album"].includes(state.section) ? state.profile : null);
     $$('[data-wiki-character]', main).forEach(button => button.addEventListener("click", () => openEntityPage("character", button.dataset.wikiCharacter)));
     $$('[data-wiki-toggle]', main).forEach(button => button.addEventListener("click", event => {
       event.preventDefault();
@@ -12071,6 +12203,7 @@
     if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["Série Mensal", "Recentes", "Vários autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
     }
+    if (state.section === "entity" && state.entityFilter?.kind === "publisher") loadPublisherFans(state.entityFilter.value);
     // Aguarda as configurações remotas dos personagens para que uma imagem
     // personalizada nunca seja substituída momentaneamente pela Wikipédia.
     if (state.section === "comic" && state.authReady) loadCharacterWikiCarousel();
@@ -12490,7 +12623,7 @@
       const wallVisible = publicProfile.profile_wall_public !== false;
       const savedPublicCollectionsVisible = publicProfile.shelf_saved_public_collections !== false;
       const activityVisible = publicProfile.profile_activity_public !== false;
-      const publicProfileInfo = $(".public-profile-page .profile-header > div:nth-child(2)");
+      const publicProfileInfo = $(".public-profile-page .profile-header > div:nth-last-child(2)");
       if (publicProfileInfo && !$(".profile-follow-summary", publicProfileInfo)) publicProfileInfo.insertAdjacentHTML("beforeend", followSummary(state.publicProfile.profile.id, state.publicProfile.followerCount, state.publicProfile.followingCount));
       if (!$(".public-profile-page .profile-xp-progress") && $(".public-profile-page .profile-header")) $(".public-profile-page .profile-header").insertAdjacentHTML("afterend", profileXpProgressMarkup(state.publicProfile.profile));
       const publicBanner = $(".public-profile-page .profile-banner");
@@ -13248,6 +13381,17 @@
     $$('[data-collection-feature]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleShelfCollectionFeatured(el.dataset.collectionFeature, el.dataset.collectionFeatured === "true"); }));
     $('[data-shelf-new-category]')?.addEventListener("click", () => openShelfCategoryForm());
     $$('[data-shelf-sort]').forEach(select => select.addEventListener("change", event => saveShelfSortOrder(event.currentTarget.dataset.shelfSort, event.currentTarget.value)));
+    $$('[data-shelf-style-toggle]').forEach(button => button.addEventListener("click", event => {
+      const picker = event.currentTarget.closest(".shelf-style-picker");
+      const menu = $(".shelf-style-menu", picker);
+      const open = menu?.hasAttribute("hidden");
+      if (menu) menu.toggleAttribute("hidden", !open);
+      event.currentTarget.setAttribute("aria-expanded", String(Boolean(open)));
+    }));
+    $$('[data-shelf-style]').forEach(button => button.addEventListener("click", event => {
+      const key = event.currentTarget.closest(".shelf-fixed-collection")?.querySelector(".shelf-style-key")?.dataset.shelfStyleKey;
+      saveShelfStyle(key, event.currentTarget.dataset.shelfStyle);
+    }));
     $$('[data-shelf-edit-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openShelfCategoryForm(el.dataset.shelfEditCategory); }));
     $$('[data-shelf-delete-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteShelfCategory(el.dataset.shelfDeleteCategory); }));
     if (state.section === "shelf") $$('[data-copy-collection]', $(".blog-shelf-panel-mount") || document).forEach(el => { delete el.dataset.copyUsername; });

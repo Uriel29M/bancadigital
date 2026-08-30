@@ -5,11 +5,13 @@ create table if not exists public.faction_achievements (
   name text not null,
   description text not null,
   icon text not null default '★',
-  metric text not null check (metric in ('xp', 'members', 'read', 'comment', 'like', 'chat', 'follow')),
+  metric text not null check (metric in ('xp', 'members', 'read', 'comment', 'like', 'chat', 'follow', 'mandatory_readers', 'sticker', 'sticker_donate', 'sticker_trade')),
   threshold integer not null check (threshold > 0),
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
+alter table public.faction_achievements drop constraint if exists faction_achievements_metric_check;
+alter table public.faction_achievements add constraint faction_achievements_metric_check check (metric in ('xp', 'members', 'read', 'comment', 'like', 'chat', 'follow', 'mandatory_readers', 'sticker', 'sticker_donate', 'sticker_trade'));
 alter table public.faction_achievements add column if not exists created_at timestamptz not null default now();
 create table if not exists public.faction_achievement_awards (
   faction_id text not null references public.factions(id) on delete cascade,
@@ -71,4 +73,11 @@ drop policy if exists "faction achievements are public" on public.faction_achiev
 drop policy if exists "faction achievement awards are public" on public.faction_achievement_awards;
 create policy "faction achievements are public" on public.faction_achievements for select using (true);
 create policy "faction achievement awards are public" on public.faction_achievement_awards for select using (true);
+
+-- Conquistas de figurinhas: os eventos são registrados pela migration de triggers.
+insert into public.faction_achievements (achievement_key, name, description, icon, metric, threshold, sort_order) values
+  ('faction_sticker_collectors', 'Álbum compartilhado', 'A facção precisa conquistar 100 figurinhas na temporada. Vale obter por leitura, sorte, doação ou troca.', '🎴', 'sticker', 100, 10),
+  ('faction_sticker_donors', 'Mãos generosas', 'Membros da facção precisam realizar 25 doações de figurinhas na temporada.', '🎁', 'sticker_donate', 25, 11),
+  ('faction_sticker_traders', 'Mercadores da banca', 'Membros da facção precisam concluir 25 trocas de figurinhas na temporada.', '🔄', 'sticker_trade', 25, 12)
+on conflict (achievement_key) do update set name = excluded.name, description = excluded.description, icon = excluded.icon, metric = excluded.metric, threshold = excluded.threshold, sort_order = excluded.sort_order;
 notify pgrst, 'reload schema';

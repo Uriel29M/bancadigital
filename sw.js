@@ -1,11 +1,11 @@
-const CACHE_VERSION = "banca-digital-shell-v374";
+const CACHE_VERSION = "banca-digital-shell-v402";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=2.2.10.123",
-  "./js/app.js?v=2.2.10.307",
+  "./css/style.css?v=2.2.10.150",
+  "./js/app.js?v=2.2.10.312",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
   "./js/supabase.js",
@@ -62,7 +62,7 @@ self.addEventListener("fetch", event => {
 
   // O app muda com frequência; tente sempre a versão publicada antes
   // de recorrer ao cache offline.
-  if (url.pathname.endsWith("/js/app.js")) {
+  if (url.pathname.endsWith("/js/app.js") || url.pathname.endsWith("/css/style.css")) {
     event.respondWith((async () => {
       try {
         const response = await fetch(request, { cache: "no-store" });
