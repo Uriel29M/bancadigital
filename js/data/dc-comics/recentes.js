@@ -286,7 +286,7 @@ window.DEFAULT_SERIES = [
     "coverUrl": "",
     "telegramUrl": "",
     "author": "Becky Cloonan / Michael W. Conrad / Jorge Corona",
-    "character": "Batgirls",
+    "character": "Batgirl",
     "tags": [
       "Batgirls",
       "Barbara Gordon",
@@ -3952,6 +3952,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://imgur.com/Fl8Y7JR.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "1",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/zyjqffnbh0dafq8/Batgirls_001_%25282022%2529_%2528SQ_e_ZF%2529.cbr/file",
@@ -3968,6 +3969,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://i.postimg.cc/nLsSw-pf4/000.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "2",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/dfezvxjspqpd3bh/Batgirls_%252302_%25282022%2529_%2528SQ%2529.cbr/file",
@@ -3984,6 +3986,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://i.postimg.cc/Y9WVjkXr/000.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "3",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/p10dyqs0svprkrk/Batgirls_%252303_%25282022%2529_%2528SQ%2529.cbr/file",
@@ -4000,6 +4003,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://i.postimg.cc/Bb1JHs5k/000.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "4",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/ioohy4snr5lkq31/Batgirls_%252304_%25282022%2529_%2528SQ%2529.cbr/file",
@@ -4016,6 +4020,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://i.postimg.cc/KYvkLk1W/000.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "5",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/79195nn16nawutk/Batgirls_%252305_%25282022%2529_%2528SQ%2529.cbr/file",
@@ -4032,6 +4037,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://i.postimg.cc/SxmJF2fK/000.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "6",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/7d21drby9cbcg2v/Batgirls_%252306_%25282022%2529_%2528SQ%2529.cbr/file",
@@ -4048,6 +4054,7 @@ window.DEFAULT_LIBRARY = [
     "type": "comic",
     "coverUrl": "https://i.postimg.cc/wMzgwXRK/000.jpg",
     "seriesId": "series-batgirls-2022",
+    "character": "Batgirl",
     "issue": "7",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/ej6nueemgmnpb7s/Batgirls_%252307_%25282022%2529_%2528SQ%2529.cbr/file",
@@ -13184,11 +13191,7 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/4c5hz8d96ygmbxe",
-<<<<<<< HEAD
-    "clicks": 0,
-=======
     "clicks": 712,
->>>>>>> c2c1a476c6a9db536749e74bf695093c38427ba4
     "featured": true,
     "randomWeight": 5,
     "collectionIds": [],
@@ -13220,11 +13223,7 @@ window.DEFAULT_LIBRARY = [
     "issue": "4",
     "format": "cbr",
     "fileUrl": "https://www.mediafire.com/file/ott0zs5u6wo55q7/Shzm%2521_004_%25282023%2529_%2528ZonaFantasma%2529.cbr/file",
-<<<<<<< HEAD
-    "clicks": 0,
-=======
     "clicks": 65,
->>>>>>> c2c1a476c6a9db536749e74bf695093c38427ba4
     "featured": true,
     "randomWeight": 5,
     "collectionIds": [],

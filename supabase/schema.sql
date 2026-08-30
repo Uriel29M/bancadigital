@@ -628,6 +628,15 @@ create table if not exists public.comic_monthly_read_counts (
   updated_at timestamptz not null default now(),
   primary key (item_id, month_start)
 );
+
+-- Edições ocultadas do catálogo público. Moderadores ainda conseguem visualizá-las.
+create table if not exists public.catalog_item_visibility (
+  item_id text primary key,
+  is_hidden boolean not null default true,
+  updated_by uuid references public.profiles(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+create index if not exists catalog_item_visibility_hidden_idx on public.catalog_item_visibility(is_hidden);
 create index if not exists comic_monthly_read_counts_idx on public.comic_monthly_read_counts(month_start, clicks desc);
 
 create table if not exists public.comic_download_counts (
@@ -681,6 +690,79 @@ create table if not exists public.publisher_saves (
   primary key (user_id, publisher_key)
 );
 create index if not exists publisher_saves_user_idx on public.publisher_saves(user_id, created_at desc);
+
+create table if not exists public.imprint_settings (
+  imprint_key text primary key,
+  imprint_name text not null,
+  cover_url text,
+  wikipedia_url text,
+  is_pinned boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create or replace function public.prevent_non_admin_imprint_wiki_url()
+returns trigger language plpgsql as $$
+begin
+  if (tg_op = 'INSERT' and new.wikipedia_url is not null)
+    or (tg_op = 'UPDATE' and new.wikipedia_url is distinct from old.wikipedia_url) then
+    if not public.is_admin() then
+      raise exception 'Apenas administradores podem alterar o link da Wikipédia do selo';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_non_admin_imprint_wiki_url_trigger on public.imprint_settings;
+create trigger prevent_non_admin_imprint_wiki_url_trigger
+before insert or update on public.imprint_settings
+for each row execute function public.prevent_non_admin_imprint_wiki_url();
+create table if not exists public.imprint_saves (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  imprint_key text not null,
+  imprint_name text not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, imprint_key)
+);
+create index if not exists imprint_saves_user_idx on public.imprint_saves(user_id, created_at desc);
+
+create table if not exists public.character_settings (
+  character_key text primary key,
+  character_name text not null,
+  cover_url text,
+  wikipedia_url text,
+  authored_text text,
+  is_pinned boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create or replace function public.prevent_non_admin_character_wiki_url()
+returns trigger language plpgsql as $$
+begin
+  if (tg_op = 'INSERT' and new.wikipedia_url is not null)
+    or (tg_op = 'UPDATE' and new.wikipedia_url is distinct from old.wikipedia_url) then
+    if not public.is_admin() then
+      raise exception 'Apenas administradores podem alterar o link da Wikipédia do personagem';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_non_admin_character_wiki_url_trigger on public.character_settings;
+create trigger prevent_non_admin_character_wiki_url_trigger
+before insert or update on public.character_settings
+for each row execute function public.prevent_non_admin_character_wiki_url();
+create table if not exists public.character_saves (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  character_key text not null,
+  character_name text not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, character_key)
+);
+create index if not exists character_saves_user_idx on public.character_saves(user_id, created_at desc);
 
 create table if not exists public.shelf_collection_saves (
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -1222,7 +1304,12 @@ alter table public.chat_room_sheriffs enable row level security;
 alter table public.chat_rooms enable row level security;
 alter table public.favorites enable row level security;
 alter table public.publisher_saves enable row level security;
+alter table public.imprint_settings enable row level security;
+alter table public.imprint_saves enable row level security;
+alter table public.character_settings enable row level security;
+alter table public.character_saves enable row level security;
 alter table public.comic_cover_variants enable row level security;
+alter table public.catalog_item_visibility enable row level security;
 alter table public.user_cover_choices enable row level security;
 alter table public.user_cover_styles enable row level security;
 alter table public.user_series_cover_choices enable row level security;
@@ -1243,6 +1330,12 @@ alter table public.user_achievements enable row level security;
 alter table public.profile_xp_events enable row level security;
 
 drop policy if exists "profiles are public" on public.profiles;
+drop policy if exists "catalog item visibility is public" on public.catalog_item_visibility;
+drop policy if exists "admins manage catalog item visibility" on public.catalog_item_visibility;
+create policy "catalog item visibility is public" on public.catalog_item_visibility for select using (true);
+create policy "admins manage catalog item visibility" on public.catalog_item_visibility for all using (public.is_admin()) with check (public.is_admin());
+grant select on public.catalog_item_visibility to anon, authenticated;
+grant insert, update, delete on public.catalog_item_visibility to authenticated;
 drop policy if exists "publisher settings are public" on public.publisher_settings;
 drop policy if exists "moderators manage publisher settings" on public.publisher_settings;
 drop policy if exists "homepage settings are public" on public.homepage_settings;
@@ -1279,6 +1372,14 @@ drop policy if exists "favorites are public" on public.favorites;
 drop policy if exists "users manage own favorites" on public.favorites;
 drop policy if exists "publisher saves are public" on public.publisher_saves;
 drop policy if exists "users manage own publisher saves" on public.publisher_saves;
+drop policy if exists "imprint settings are public" on public.imprint_settings;
+drop policy if exists "moderators manage imprint settings" on public.imprint_settings;
+drop policy if exists "imprint saves are public" on public.imprint_saves;
+drop policy if exists "users manage own imprint saves" on public.imprint_saves;
+drop policy if exists "character settings are public" on public.character_settings;
+drop policy if exists "moderators manage character settings" on public.character_settings;
+drop policy if exists "character saves are public" on public.character_saves;
+drop policy if exists "users manage own character saves" on public.character_saves;
 drop policy if exists "cover variants are public" on public.comic_cover_variants;
 drop policy if exists "admins manage cover variants" on public.comic_cover_variants;
 drop policy if exists "cover choices are public" on public.user_cover_choices;
@@ -1381,6 +1482,17 @@ create policy "favorites are public" on public.favorites for select using (
 create policy "users manage own favorites" on public.favorites for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "publisher saves are public" on public.publisher_saves for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));
 create policy "users manage own publisher saves" on public.publisher_saves for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "imprint settings are public" on public.imprint_settings for select using (true);
+create policy "moderators manage imprint settings" on public.imprint_settings for all using (public.is_moderator()) with check (public.is_moderator());
+create policy "imprint saves are public" on public.imprint_saves for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));
+create policy "users manage own imprint saves" on public.imprint_saves for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "character settings are public" on public.character_settings for select using (true);
+create policy "moderators manage character settings" on public.character_settings for all using (public.is_moderator()) with check (public.is_moderator());
+create policy "character saves are public" on public.character_saves for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));
+create policy "users manage own character saves" on public.character_saves for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+grant select on public.character_settings to anon, authenticated;
+grant select, insert, update, delete on public.character_settings to authenticated;
+grant select, insert, update, delete on public.character_saves to authenticated;
 create policy "cover variants are public" on public.comic_cover_variants for select using (true);
 create policy "admins manage cover variants" on public.comic_cover_variants for all using (public.is_admin()) with check (public.is_admin());
 create policy "cover choices are public" on public.user_cover_choices for select using (auth.uid() = user_id or not public.is_blocked_between(user_id));

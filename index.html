@@ -3,17 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" href="assets/barracabrancaicon.png?v=1">
+  <link rel="icon" type="image/png" href="assets/barracavermelhaicon.png?v=2">
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
-  <link rel="modulepreload" href="libarchive/libarchive.js">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.97">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.120">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=110", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=164", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponÃ­vel:", error));
       });
     }
@@ -32,7 +31,7 @@
         <button data-section="comics" class="nav-link">Quadrinhos</button>
         <button data-section="ranking" class="nav-link">Ranking</button>
         <button data-section="factions" class="nav-link">Facção</button>
-        <button data-section="shelf" class="nav-link">Minha estante</button>
+        <button data-action="open-profile-page" class="nav-link">Perfil</button>
         <button data-section="surprise" class="nav-link">Surpreenda-me</button>
         <button data-section="local-box" class="nav-link local-box-nav" style="display:none">Minha caixa</button>
         <button data-section="album" class="nav-link album-nav" style="display:none">Álbum</button>
@@ -44,7 +43,7 @@
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜<span class="staff-activity-badge" hidden></span></button>
         <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
-        <button class="avatar" data-action="open-auth" title="Entrar ou abrir minha estante"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
+        <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
       </div>
     </header>
 
@@ -132,10 +131,10 @@
   <script src="js/supabase.js"></script>
   <script src="js/data.js?v=2.2.7.39"></script>
   <!-- Catálogos por editora/selo. -->
-  <script src="js/data/dc-comics/recentes.js?v=2.2.7.41"></script>
+  <script src="js/data/dc-comics/recentes.js?v=2.2.7.43"></script>
   <script src="js/data/dc-comics/black-label.js?v=1.0.14"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-  <script src="js/app.js?v=2.2.10.210"></script>
+  <script src="js/app.js?v=2.2.10.307"></script>
 </body>
 </html>
 
