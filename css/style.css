@@ -1492,6 +1492,9 @@ main { min-height: calc(100vh - 150px); }
   opacity: .58;
 }
 .shelf-categories { border-top: 1px solid var(--line); padding-top: 25px; }
+.shelf-categories-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.shelf-categories-head > div:first-child { flex: 1 1 auto; min-width: 0; }
+.shelf-categories-head > .small-btn { grid-column: 2; justify-self: end; white-space: nowrap; }
 .shelf-categories > .shelf-collection { margin-left: 18px; }
 .shelf-section-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .shelf-sort-control { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
