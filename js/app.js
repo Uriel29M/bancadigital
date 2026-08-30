@@ -4114,7 +4114,7 @@
      const repeatedPage = repeatedAwards.length ? `<section class="section sticker-repeated-panel"><div class="section-head"><div><div class="eyebrow">Álbum · Repetidas</div><h2 class="section-title">Figurinhas repetidas</h2><div class="section-subtitle">${isOwn ? "Estas figurinhas são privadas e só aparecem para você." : "Área visível apenas para administradores."} Você pode colá-las no álbum principal ou oferecê-las em uma troca.</div></div><strong>${repeatedAwards.length} figurinha${repeatedAwards.length === 1 ? "" : "s"}</strong></div><div class="sticker-repeated-grid">${repeatedAwards.map(award => `<article class="sticker-slot has-sticker rarity-${escapeHTML(award.rarity || "standard")}"><div class="sticker-slot-art"><img src="${escapeHTML(proxiedImageUrl(award.cover_url))}" alt="Figurinha de ${escapeHTML(award.character_name)}" loading="lazy"><span class="sticker-rarity">${stickerRarityLabel(award.rarity)}</span></div><strong>${escapeHTML(award.character_name)}</strong><small>${escapeHTML(award.publisher_name || "")}</small>${isOwn ? `<div class="sticker-slot-actions"><button class="small-btn" data-sticker-move="${award.id}" data-sticker-section="pasted">Colar no álbum</button><button class="small-btn danger" data-sticker-discard="${award.id}">Descartar</button></div>` : state.profile?.plan === "admin" ? `<div class="sticker-slot-actions"><button class="small-btn danger" data-admin-sticker-discard="${award.id}">Descartar</button></div>` : ""}</article>`).join("")}</div></section>` : '<section class="section sticker-repeated-panel"><div class="empty">Não há figurinhas repetidas para exibir.</div></section>';
     const viewTabs = canSeeRepeated ? `<div class="sticker-album-tabs"><button class="small-btn ${albumView === "pasted" ? "is-active" : ""}" data-sticker-album-view="pasted">Coladas</button><button class="small-btn ${albumView === "repeated" ? "is-active" : ""}" data-sticker-album-view="repeated">Repetidas${repeatedAwards.length ? ` (${repeatedAwards.length})` : ""}</button></div>` : "";
     const albumContent = albumView === "repeated" && canSeeRepeated ? repeatedPage : (pages || '<div class="empty">Ainda não há personagens cadastrados no catálogo.</div>');
-    const requestPanel = isOwn ? `<section class="section sticker-requests-panel"><div class="section-head"><div><h2 class="section-title">Pedidos de figurinhas</h2><div class="section-subtitle">Você decide se quer doar ou trocar.</div></div><label class="checkbox-inline"><input type="checkbox" data-sticker-requests-toggle ${profile?.allow_sticker_requests !== false ? "checked" : ""}> Aceitar pedidos</label></div>${stickerRequestsMarkup(profile.id)}</section>` : "";
+    const requestPanel = isOwn ? `<section class="section sticker-requests-panel"><div class="section-head"><div><h2 class="section-title">Pedidos de figurinhas</h2><div class="section-subtitle">Você decide se quer doar ou trocar.</div></div></div>${stickerRequestsMarkup(profile.id)}</section>` : "";
     return `<div class="content sticker-album-page"><div class="section-head"><div><div class="eyebrow">Coleção de figurinhas</div><h1 class="section-title">Álbum de ${isOwn ? "@" : "@"}${escapeHTML(profile?.username || "")}</h1><div class="section-subtitle">Personagens em ordem alfabética, separados por editora. Cada personagem recebe uma figurinha quando todas as edições atuais forem lidas.</div></div><div class="profile-actions">${isOwn ? `<button class="small-btn" data-action="open-profile-page">Perfil</button>` : `<a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a>`}</div></div>${viewTabs}${requestPanel}${albumContent}</div>`;
   }
 
@@ -5578,7 +5578,7 @@
     if (!state.session) return openAuthPage();
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label><label class="checkbox-inline"><input name="shelfCompletedPublic" type="checkbox" ${state.profile?.shelf_completed_public !== false ? "checked" : ""}> Mostrar coleção Concluídos</label><label class="checkbox-inline"><input name="shelfLikedPublic" type="checkbox" ${state.profile?.shelf_liked_public !== false ? "checked" : ""}> Mostrar coleção Curtidos</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> Mostrar Mural do perfil / Figurinhas em destaque</label></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
-    $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => closeProfileSettings());
     const deleteAccountButton = document.createElement("button");
     deleteAccountButton.type = "button";
     deleteAccountButton.className = "small-btn danger";
@@ -5600,8 +5600,54 @@
       legacyAvatarField.previousElementSibling.textContent = "Foto de perfil (link)";
       legacyAvatarField.insertAdjacentHTML("afterend", '<small class="format-hint">Cole um link público de imagem. Se deixar vazio, será usado seu avatar aleatório.</small>');
     }
-    const profileForm = $("#profile-form", overlay);
-    profileForm?.addEventListener("submit", () => { const value = String(legacyAvatarField?.value || "").trim(); const isGeneratedAvatar = value.startsWith(RANDOM_AVATAR_BASE_URL); const customized = hasLegendaryAccess(state.profile); const avatar_url = !value || isGeneratedAvatar ? randomAvatarUrl(state.session?.user?.id, customized ? $("[name=avatarColor]", profileForm)?.value : "#ffffff", customized ? $("[name=avatarBackgroundColor]", profileForm)?.value : factionColorForProfile(state.profile)) : value; if (!value || /^https?:\/\//i.test(value)) state.profile = { ...state.profile, avatar_url }; });
+     const profileForm = $("#profile-form", overlay);
+     $(".form-grid", profileForm).insertAdjacentHTML("beforeend", '<div class="field full"><label>Descrição do perfil</label><textarea name="wallDescription" maxlength="500" rows="5" placeholder="Escreva uma breve apresentação...">' + escapeHTML(state.profile?.wall_description || "") + '</textarea><small class="format-hint">Essa descrição aparece no seu mural. Máximo de 500 caracteres.</small></div>');
+     const wallDescriptionField = $('[name="wallDescription"]', profileForm);
+     let wallDescriptionTimer = null;
+     let wallDescriptionSaveVersion = 0;
+     const saveWallDescriptionAutomatically = async () => {
+       const wall_description = String(wallDescriptionField?.value || "").trim().slice(0, 500);
+       const version = ++wallDescriptionSaveVersion;
+       state.profile = { ...state.profile, wall_description };
+       if (state.publicProfile?.profile?.id === state.session.user.id) {
+         state.publicProfile.profile = { ...state.publicProfile.profile, wall_description };
+       }
+       const wallDescriptionDisplay = $(".profile-wall-description");
+       if (wallDescriptionDisplay) wallDescriptionDisplay.textContent = wall_description || "Este perfil ainda não adicionou uma descrição.";
+       const result = await sb.from("profiles").update({ wall_description }).eq("id", state.session.user.id);
+       if (result.error && version === wallDescriptionSaveVersion) toast(result.error.message);
+     };
+     wallDescriptionField?.addEventListener("input", () => {
+       clearTimeout(wallDescriptionTimer);
+       wallDescriptionTimer = setTimeout(saveWallDescriptionAutomatically, 500);
+     });
+     wallDescriptionField?.addEventListener("blur", () => {
+       clearTimeout(wallDescriptionTimer);
+       saveWallDescriptionAutomatically();
+     });
+     const closeProfileSettings = () => {
+       clearTimeout(wallDescriptionTimer);
+       if (wallDescriptionField) {
+         const wall_description = String(wallDescriptionField.value || "").trim().slice(0, 500);
+         state.profile = { ...state.profile, wall_description };
+         sb.from("profiles").update({ wall_description }).eq("id", state.session.user.id);
+         const wallDescriptionDisplay = $(".profile-wall-description");
+         if (wallDescriptionDisplay) wallDescriptionDisplay.textContent = wall_description || "Este perfil ainda não adicionou uma descrição.";
+       }
+       overlay.remove();
+       const main = $("#main");
+       if (main) main.innerHTML = "";
+       render();
+     };
+     profileForm.addEventListener("submit", () => {
+       setTimeout(() => {
+         if (overlay.isConnected) return;
+         const main = $("#main");
+         if (main) main.innerHTML = "";
+         render();
+       }, 0);
+     });
+     profileForm?.addEventListener("submit", () => { const value = String(legacyAvatarField?.value || "").trim(); const isGeneratedAvatar = value.startsWith(RANDOM_AVATAR_BASE_URL); const customized = hasLegendaryAccess(state.profile); const avatar_url = !value || isGeneratedAvatar ? randomAvatarUrl(state.session?.user?.id, customized ? $("[name=avatarColor]", profileForm)?.value : "#ffffff", customized ? $("[name=avatarBackgroundColor]", profileForm)?.value : factionColorForProfile(state.profile)) : value; if (!value || /^https?:\/\//i.test(value)) state.profile = { ...state.profile, avatar_url }; });
     const bannerField = document.createElement("div");
     bannerField.className = "field full profile-banner-field";
     bannerField.innerHTML = `<label>Imagem de fundo da estante</label><input name="profileBannerUrl" type="url" value="${escapeHTML(state.profile?.profile_banner_url || "")}" placeholder="https://.../banner.jpg"><small class="format-hint">Opcional. Sem link, será usada a imagem padrão da estante.</small>`;
@@ -5623,7 +5669,7 @@
       if (bannerUpdate.error) return toast(bannerUpdate.error.message);
       state.profile = { ...state.profile, profile_banner_url: bannerUrl || null };
     });
-    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+     overlay.addEventListener("click", event => { if (event.target === overlay) closeProfileSettings(); });
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
     if (!["admin", "moderator", "banca", "premium"].includes(state.profile?.plan)) $(".form-grid", overlay)?.insertAdjacentHTML("beforeend", `<div class="field full"><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas no perfil público</label></div>`);
     const shelfVisibilityField = $$(".field.full", overlay).find(field => field.textContent.includes("Visibilidade"));
@@ -5653,8 +5699,8 @@
     profileSectionsPrivacy.innerHTML = `<label>Seções do perfil público</label><label class="checkbox-inline"><input name="savedPublicCollectionsPublic" type="checkbox" ${state.profile?.shelf_saved_public_collections !== false ? "checked" : ""}> Mostrar Públicas salvas</label><label class="checkbox-inline"><input name="activityPublic" type="checkbox" ${state.profile?.profile_activity_public !== false ? "checked" : ""}> Mostrar Histórico</label>`;
     $(".form-grid", profileForm).appendChild(profileSectionsPrivacy);
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
-    const originalProfileSubmit = async () => {};
-    const shelfBlogsCheckbox = $("[name=shelfBlogsPublic]", overlay);
+     const originalProfileSubmit = async () => {};
+     const shelfBlogsCheckbox = $("[name=shelfBlogsPublic]", overlay);
     if (shelfBlogsCheckbox) {
       shelfBlogsCheckbox.closest("label")?.remove();
       shelfVisibilityField?.insertAdjacentHTML("beforeend", `<input type="hidden" name="shelfBlogsPublic" value="${state.profile?.shelf_blogs_public !== false ? "on" : "off"}">`);
@@ -10285,7 +10331,7 @@
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal chat-conversation-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem ou marque alguém com @usuario"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
+    overlay.innerHTML = `<div class="modal chat-modal chat-conversation-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
     $("#modal-root").appendChild(overlay);
     if (chatCanModerate) {
       const toolsButton = document.createElement("button");
@@ -14974,10 +15020,7 @@
       }
       article.appendChild(actions);
     });
-    $$('.profile-wall [data-action="profile"]').forEach(button => {
-      button.removeAttribute("data-action");
-      button.addEventListener("click", openWallDescriptionEditor);
-    });
+     // A descrição agora é editada dentro de “Editar perfil”.
     $('[data-blog-shelf-new]')?.addEventListener("click", openBlogShelfCollectionForm);
     $$('[data-blog-shelf-edit]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openBlogShelfCollectionForm(el.dataset.blogShelfEdit); }));
     $$('[data-blog-shelf-delete]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteBlogShelfCollection(el.dataset.blogShelfDelete); }));
@@ -15442,11 +15485,6 @@
         button.disabled = false;
       }
     }));
-    $('[data-sticker-requests-toggle]')?.addEventListener('change', async event => {
-      const result = await sb.rpc('set_sticker_request_preference', { p_allowed: event.currentTarget.checked });
-      if (result.error) { event.currentTarget.checked = !event.currentTarget.checked; toast(result.error.message); }
-      else if (state.profile) state.profile.allow_sticker_requests = event.currentTarget.checked;
-    });
     $("#search-input")?.addEventListener("keydown", e => {
       if (e.key === "Enter") { state.search = e.target.value; render(); $("#search-input")?.focus(); }
     });
@@ -15599,11 +15637,6 @@
       else { toast(button.dataset.stickerResponse === 'accepted' ? 'Pedido concluído.' : 'Pedido recusado.'); await loadAccount(); }
       button.disabled = false;
     }));
-    $('[data-sticker-requests-toggle]')?.addEventListener('change', async event => {
-      const result = await sb.rpc('set_sticker_request_preference', { p_allowed: event.currentTarget.checked });
-      if (result.error) { event.currentTarget.checked = !event.currentTarget.checked; toast(result.error.message); }
-      else if (state.profile) state.profile.allow_sticker_requests = event.currentTarget.checked;
-    });
     $$('[data-entity-kind]', overlay).forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
