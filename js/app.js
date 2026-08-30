@@ -406,9 +406,15 @@
     ,factionAchievements: new Map()
     ,factionRoles: []
     ,factionRoleMembers: []
+    ,factionElections: new Map()
     ,factionMembers: []
     ,factionAbafacImages: []
     ,factionAbafacCatalogs: new Map()
+    ,factionPinnedImprints: new Map()
+    ,factionPinnedCharacters: new Map()
+    ,factionPinnedCollections: new Map()
+    ,factionPinnedPublicCollections: new Map()
+    ,factionPublicPinnedCollectionDetails: new Map()
     ,factionCatalogs: []
     ,factionCatalogLikeIds: new Set()
     ,factionCatalogLikeCounts: new Map()
@@ -1111,8 +1117,16 @@
     entity: "entidade"
   };
 
+  function currentFactionId(profile = state.profile) {
+    if (profile?.faction_id) return profile.faction_id;
+    if (!["free", "premium"].includes(normalizedPlan(profile))) return null;
+    const userId = profile?.id || state.session?.user?.id;
+    if (!userId) return null;
+    return (state.factionMembers || []).find(member => String(member.user_id) === String(userId))?.faction_id || null;
+  }
+
   function canAccessFactions() {
-    return Boolean(state.profile?.faction_id);
+    return Boolean(currentFactionId());
   }
 
   function requireAuthenticatedSection() {
@@ -1479,6 +1493,20 @@
     state.factionAbafacImages = abafacImages.error ? [] : (abafacImages.data || []);
     const factionCatalogs = await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, sort_order, created_by, created_at, updated_at").order("updated_at", { ascending: false });
     state.factionCatalogs = factionCatalogs.error ? [] : (factionCatalogs.data || []);
+    const pinnedImprints = await sb.from("faction_pinned_imprints").select("faction_id, imprint_key, imprint_name");
+    state.factionPinnedImprints = new Map((pinnedImprints.data || []).map(row => [`${row.faction_id}:${row.imprint_key}`, row]));
+    const pinnedCharacters = await sb.from("faction_pinned_characters").select("faction_id, character_key, character_name");
+    state.factionPinnedCharacters = new Map((pinnedCharacters.data || []).map(row => [`${row.faction_id}:${row.character_key}`, row]));
+    const pinnedCollections = await sb.from("faction_pinned_collections").select("faction_id, catalog_id");
+    state.factionPinnedCollections = new Map((pinnedCollections.data || []).map(row => [`${row.faction_id}:${row.catalog_id}`, row]));
+    const pinnedPublicCollections = await sb.from("faction_pinned_public_collections").select("faction_id, collection_id");
+    state.factionPinnedPublicCollections = new Map((pinnedPublicCollections.data || []).map(row => [`${row.faction_id}:${row.collection_id}`, row]));
+    const pinnedPublicIds = [...new Set((pinnedPublicCollections.data || []).map(row => String(row.collection_id)))];
+    const publicPinnedDetails = pinnedPublicIds.length ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_public").in("id", pinnedPublicIds).eq("is_public", true).eq("collection_type", "comic") : { data: [] };
+    const publicPinnedOwnerIds = [...new Set((publicPinnedDetails.data || []).map(collection => collection.owner_id).filter(Boolean))];
+    const publicPinnedOwners = publicPinnedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", publicPinnedOwnerIds) : { data: [] };
+    const publicPinnedOwnerNames = new Map((publicPinnedOwners.data || []).map(profile => [profile.id, profile.username]));
+    state.factionPublicPinnedCollectionDetails = new Map((publicPinnedDetails.data || []).map(collection => [String(collection.id), { ...collection, username: publicPinnedOwnerNames.get(collection.owner_id) || "" }]));
     const catalogIds = state.factionCatalogs.map(catalog => catalog.id);
     const [catalogLikes, catalogSaves] = await Promise.all([
       catalogIds.length ? sb.from("faction_catalog_likes").select("catalog_id, user_id").in("catalog_id", catalogIds) : { data: [] },
@@ -1491,6 +1519,12 @@
     if (state.session?.user?.id && state.factions.length) {
       const factionsToRepair = ["moderator", "banca", "admin"].includes(state.profile?.plan) ? state.factions : state.factions.filter(faction => faction.id === state.profile?.faction_id);
       await Promise.all(factionsToRepair.map(faction => sb.rpc("ensure_faction_leadership", { p_faction_id: faction.id })));
+    }
+    state.factionElections = new Map();
+    const electionFactionId = state.factionPageId || state.profile?.faction_id;
+    if (state.session?.user?.id && electionFactionId) {
+      const election = await sb.rpc("get_faction_election", { p_faction_id: electionFactionId });
+      if (!election.error && election.data) state.factionElections.set(electionFactionId, election.data);
     }
     const roles = await sb.from("faction_roles").select("user_id, faction_id, role, slot");
     state.factionRoles = roles.error ? [] : (roles.data || []);
@@ -1754,6 +1788,8 @@
       const usedFamilies = new Set(FACTION_COLOR_OPTIONS.filter(option => otherColors.has(option.light) || otherColors.has(option.dark)).map(option => option.family));
       const blockedLabels = FACTION_COLOR_OPTIONS.filter(option => usedFamilies.has(option.family)).map(option => option.label);
       const otherEmblems = new Set(state.factions.filter(item => item.id !== faction?.id).map(item => item.emblem).filter(Boolean));
+      const usedPublishers = new Set(state.factions.filter(item => item.id !== faction?.id).map(item => String(item.publisher_name || "").trim().toLocaleLowerCase("pt-BR")).filter(Boolean));
+      const publisherNames = [...new Set(state.db.library.map(item => String(item.publisher || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
       let colorChoices = FACTION_COLOR_OPTIONS.map(option => [
         { tone: "claro", value: option.light },
         { tone: "escuro", value: option.dark }
@@ -1775,6 +1811,25 @@
       const finish = value => { overlay.remove(); resolve(value); };
       const modal = $(".faction-modal", overlay);
       const form = $(".faction-identity-form", overlay);
+      const continueOption = document.createElement("span");
+      continueOption.hidden = true;
+      continueOption.innerHTML = '<span>Abafac de leitura</span><label><input name="continueReading" type="checkbox"> Continue de onde parou</label><small class="faction-identity-help">Mostra, dentro da facção, as edições que cada membro ainda não terminou.</small>';
+      form.prepend(continueOption);
+      form.addEventListener("submit", event => {
+        if (!$("[name=continueReading]", form)?.checked) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finish({ catalogUrl: "", imageUrl: "", imageLink: "", continueReading: true });
+      }, true);
+      const descriptionField = $('[name="description"]', form)?.closest(".field");
+      if (descriptionField) {
+        const publisherOptions = [`<option value="">Nenhuma editora</option>`, ...publisherNames.map(name => {
+          const selected = String(faction?.publisher_name || "").trim() === name;
+          const unavailable = !selected && usedPublishers.has(name.toLocaleLowerCase("pt-BR"));
+          return `<option value="${escapeHTML(name)}" ${selected ? "selected" : ""} ${unavailable ? "disabled" : ""}>${escapeHTML(name)}${unavailable ? " (já definida por outra facção)" : ""}</option>`;
+        })].join("");
+        descriptionField.insertAdjacentHTML("beforebegin", `<label class="field"><span>Editora da facção</span><select name="publisherName">${publisherOptions}</select><small class="faction-identity-help">Cada editora pode ser definida por apenas uma facção.</small></label>`);
+      }
       $$('[data-color]', form).forEach(button => button.addEventListener("click", () => {
         const value = button.dataset.color;
         $('[name=color]', form).value = value;
@@ -1785,7 +1840,7 @@
         $('[name=emblem]', form).value = button.dataset.emblem;
         $$('[data-emblem]', form).forEach(item => item.classList.toggle("is-selected", item === button));
       }));
-      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ name: String(data.get("name") || "").trim(), color: String(data.get("color") || "").trim(), emblem: String(data.get("emblem") || "").trim(), description: String(data.get("description") || "").trim() }); });
+      form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); finish({ name: String(data.get("name") || "").trim(), color: String(data.get("color") || "").trim(), emblem: String(data.get("emblem") || "").trim(), publisherName: String(data.get("publisherName") || "").trim(), description: String(data.get("description") || "").trim() }); });
       overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
       $("[data-faction-modal-close]", overlay).onclick = () => finish(null);
       $("[data-faction-modal-cancel]", overlay).onclick = () => finish(null);
@@ -1801,6 +1856,112 @@
       overlay.innerHTML = `<div class="modal faction-modal faction-abafac-add-modal"><div class="section-head"><div><div class="eyebrow">Abafac da facção</div><h2>Adicionar abafac</h2><div class="section-subtitle">Adicione um catálogo público ou uma imagem por link.</div></div><button type="button" class="small-btn" data-faction-modal-close>Fechar</button></div><form class="faction-identity-form"><label class="field"><span>Catálogo público como abafac (opcional)</span><input name="catalogUrl" type="text" maxlength="500" placeholder="?perfil=usuario&lista=id"><small class="faction-identity-help">Cole o link de uma coleção pública de quadrinhos deste site. Deixe vazio para não adicionar catálogo.</small></label><label class="field"><span>Link da imagem abafac</span><input name="abafacImageUrl" type="url" maxlength="2000" placeholder="https://exemplo.com/imagem.jpg"><small class="faction-identity-help">Cole uma URL HTTPS direta para a imagem. Nenhum arquivo será enviado para o site.</small></label><label class="field"><span>Link interno da imagem (opcional)</span><input name="abafacLink" type="text" maxlength="500" placeholder="?pagina=ranking"><small class="faction-identity-help">Aceita somente destinos dentro deste site. O link será aplicado ao card inteiro.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-faction-modal-cancel>Cancelar</button><button type="submit" class="small-btn faction-modal-primary">Adicionar</button></div></form></div>`;
       const finish = value => { overlay.remove(); resolve(value); };
       const form = $(".faction-identity-form", overlay);
+      const addContinueOption = document.createElement("label");
+      addContinueOption.className = "field faction-abafac-option";
+      addContinueOption.innerHTML = '<span>Abafac de leitura</span><label><input name="continueReading" type="checkbox"> Continue de onde parou</label><small class="faction-identity-help">Mostra, dentro da facção, as edições que cada membro ainda não terminou.</small>';
+      form.prepend(addContinueOption);
+      const addRecentlyAddedOption = document.createElement("label");
+      addRecentlyAddedOption.className = "field faction-abafac-option";
+      addRecentlyAddedOption.innerHTML = '<span>Abafac de catálogo</span><label><input name="recentlyAdded" type="checkbox"> Adicionados recentemente</label><small class="faction-identity-help">Mostra as edições mais novas disponíveis na banca.</small>';
+      form.prepend(addRecentlyAddedOption);
+      const addFeaturedCharacterOption = document.createElement("label");
+      addFeaturedCharacterOption.className = "field faction-abafac-option";
+      addFeaturedCharacterOption.innerHTML = '<span>Abafac editorial</span><label><input name="featuredCharacter" type="checkbox"> Personagem em destaque</label><small class="faction-identity-help">Destaca um personagem da editora da facção.</small>';
+      form.prepend(addFeaturedCharacterOption);
+      const addNewSeriesOption = document.createElement("label");
+      addNewSeriesOption.className = "field faction-abafac-option";
+      addNewSeriesOption.innerHTML = '<span>Abafac de catálogo</span><label><input name="newSeries" type="checkbox"> Séries novas</label><small class="faction-identity-help">Mostra as séries adicionadas mais recentemente à banca.</small>';
+      form.prepend(addNewSeriesOption);
+      const addMostReadOption = document.createElement("label");
+      addMostReadOption.className = "field faction-abafac-option";
+      addMostReadOption.innerHTML = '<span>Abafac de catálogo</span><label><input name="mostReadMonth" type="checkbox"> Mais lidos do mês</label><small class="faction-identity-help">Mostra as edições mais lidas no mês atual.</small>';
+      form.prepend(addMostReadOption);
+      const addBestSeriesOption = document.createElement("label");
+      addBestSeriesOption.className = "field faction-abafac-option";
+      addBestSeriesOption.innerHTML = '<span>Abafac de popularidade</span><label><input name="bestSeries" type="checkbox"> Melhores séries</label><small class="faction-identity-help">Mostra as séries com mais curtidas na banca.</small>';
+      form.prepend(addBestSeriesOption);
+      const addTipsOption = document.createElement("label");
+      addTipsOption.className = "field faction-abafac-option";
+      addTipsOption.innerHTML = '<span>Abafac personalizada</span><label><input name="tips" type="checkbox"> Dicas para você</label><small class="faction-identity-help">Sugere edições com base nos seus salvos e curtidos.</small>';
+      form.prepend(addTipsOption);
+      const addRandomOption = document.createElement("label");
+      addRandomOption.className = "field faction-abafac-option";
+      addRandomOption.innerHTML = '<span>Abafac de descoberta</span><label><input name="randomChoice" type="checkbox"> Escolha aleatória</label><small class="faction-identity-help">Sorteia edições para descobrir algo novo na banca.</small>';
+      form.prepend(addRandomOption);
+      const addArtistOption = document.createElement("label");
+      addArtistOption.className = "field faction-abafac-option";
+      addArtistOption.innerHTML = '<span>Abafac personalizada</span><label><input name="artist" type="checkbox"> Do mesmo artista de</label><small class="faction-identity-help">Sugere séries de artistas das suas leituras concluídas.</small>';
+      form.prepend(addArtistOption);
+      const addRecommendationsOption = document.createElement("label");
+      addRecommendationsOption.className = "field faction-abafac-option";
+      addRecommendationsOption.innerHTML = '<span>Curadoria global</span><label><input name="recommendations" type="checkbox"> Escolhas da banca</label><small class="faction-identity-help">Exibe as recomendações globais do dia, da semana e do mês.</small>';
+      form.prepend(addRecommendationsOption);
+      const addRandomPublisherOption = document.createElement("label");
+      addRandomPublisherOption.className = "field faction-abafac-option";
+      addRandomPublisherOption.innerHTML = '<span>Abafac de descoberta</span><label><input name="randomPublisher" type="checkbox"> Uma editora escolhida aleatoriamente</label><small class="faction-identity-help">Sorteia uma editora e mostra suas edições.</small>';
+      form.prepend(addRandomPublisherOption);
+      const addDownloadsOption = document.createElement("label");
+      addDownloadsOption.className = "field faction-abafac-option";
+      addDownloadsOption.innerHTML = '<span>Abafac de popularidade</span><label><input name="downloads" type="checkbox"> Mais baixados</label><small class="faction-identity-help">Mostra as edições com mais downloads.</small>';
+      form.prepend(addDownloadsOption);
+      const addPinnedImprintsOption = document.createElement("label");
+      addPinnedImprintsOption.className = "field faction-abafac-option";
+      addPinnedImprintsOption.innerHTML = '<span>Abafac de curadoria</span><label><input name="pinnedImprints" type="checkbox"> Selos fixados</label><small class="faction-identity-help">Mostra os selos destacados pelos líderes e curadores.</small>';
+      form.prepend(addPinnedImprintsOption);
+      const addPinnedCharactersOption = document.createElement("label");
+      addPinnedCharactersOption.className = "field faction-abafac-option";
+      addPinnedCharactersOption.innerHTML = '<span>Abafac de curadoria</span><label><input name="pinnedCharacters" type="checkbox"> Personagens em destaque</label><small class="faction-identity-help">Mostra os personagens destacados pelos lideres e curadores.</small>';
+      form.prepend(addPinnedCharactersOption);
+      const addPinnedCollectionsOption = document.createElement("label");
+      addPinnedCollectionsOption.className = "field faction-abafac-option";
+      addPinnedCollectionsOption.innerHTML = '<span>Abafac de curadoria</span><label><input name="pinnedCollections" type="checkbox"> Coleções de quadrinhos em destaque</label><small class="faction-identity-help">Mostra as coleções destacadas pelos lideres e curadores.</small>';
+      form.prepend(addPinnedCollectionsOption);
+      const addMostReadAllOption = document.createElement("label");
+      addMostReadAllOption.className = "field faction-abafac-option";
+      addMostReadAllOption.innerHTML = '<span>Abafac de popularidade</span><label><input name="mostRead" type="checkbox"> Mais lidos</label><small class="faction-identity-help">Mostra as edições mais lidas no catálogo.</small>';
+      form.prepend(addMostReadAllOption);
+      $$(".faction-abafac-option", form).forEach(option => {
+        const cleanOption = document.createElement("div");
+        cleanOption.className = "field faction-abafac-option";
+        const choice = $("label", option);
+        if (choice) cleanOption.appendChild(choice);
+        option.replaceWith(cleanOption);
+      });
+      $$(".faction-abafac-option", form).forEach(option => option.remove());
+      form.addEventListener("submit", event => {
+        const continueReading = $('[name="continueReading"]', form)?.checked;
+        const recentlyAdded = $('[name="recentlyAdded"]', form)?.checked;
+        const featuredCharacter = $('[name="featuredCharacter"]', form)?.checked;
+        const newSeries = $('[name="newSeries"]', form)?.checked;
+        const mostReadMonth = $('[name="mostReadMonth"]', form)?.checked;
+        const bestSeries = $('[name="bestSeries"]', form)?.checked;
+        const tips = $('[name="tips"]', form)?.checked;
+        const randomChoice = $('[name="randomChoice"]', form)?.checked;
+        const artist = $('[name="artist"]', form)?.checked;
+        const recommendations = $('[name="recommendations"]', form)?.checked;
+        const randomPublisher = $('[name="randomPublisher"]', form)?.checked;
+        const downloads = $('[name="downloads"]', form)?.checked;
+        const mostRead = $('[name="mostRead"]', form)?.checked;
+        const pinnedImprints = $('[name="pinnedImprints"]', form)?.checked;
+        const pinnedCharacters = $('[name="pinnedCharacters"]', form)?.checked;
+        const pinnedCollections = $('[name="pinnedCollections"]', form)?.checked;
+        if (pinnedCollections) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          finish({ catalogUrl: "", imageUrl: "", imageLink: "", continueReading, recentlyAdded, featuredCharacter, newSeries, mostReadMonth, bestSeries, tips, randomChoice, artist, recommendations, randomPublisher, downloads, mostRead, pinnedImprints, pinnedCharacters, pinnedCollections });
+          return;
+        }
+        if (pinnedCharacters) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          finish({ catalogUrl: "", imageUrl: "", imageLink: "", continueReading, recentlyAdded, featuredCharacter, newSeries, mostReadMonth, bestSeries, tips, randomChoice, artist, recommendations, randomPublisher, downloads, mostRead, pinnedImprints, pinnedCharacters });
+          return;
+        }
+        if (!continueReading && !recentlyAdded && !featuredCharacter && !newSeries && !mostReadMonth && !bestSeries && !tips && !randomChoice && !artist && !recommendations && !randomPublisher && !downloads && !mostRead && !pinnedImprints && !pinnedCharacters) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finish({ catalogUrl: "", imageUrl: "", imageLink: "", continueReading, recentlyAdded, featuredCharacter, newSeries, mostReadMonth, bestSeries, tips, randomChoice, artist, recommendations, randomPublisher, downloads, mostRead, pinnedImprints, pinnedCharacters });
+      }, true);
       form.insertAdjacentHTML("afterbegin", '<button type="button" class="small-btn" data-create-faction-catalog>Criar catálogo da facção</button>');
       $("[data-create-faction-catalog]", form).onclick = () => finish({ createFactionCatalog: true });
       form.addEventListener("submit", event => { event.preventDefault(); const data = new FormData(form); const catalogUrl = String(data.get("catalogUrl") || "").trim(); const imageUrl = String(data.get("abafacImageUrl") || "").trim(); if (!catalogUrl && !imageUrl) return toast("Adicione um catálogo ou uma imagem por link."); finish({ catalogUrl, imageUrl, imageLink: String(data.get("abafacLink") || "").trim() }); });
@@ -8960,8 +9121,13 @@
       const setting = state.imprintSettings.get(imprintKey);
       const saved = state.savedImprintKeys.has(imprintKey);
       const canManage = ["moderator", "banca", "admin"].includes(state.profile?.plan);
+      const factionId = currentFactionId();
+      const factionRole = state.factionRoles.find(role => role.faction_id === factionId && role.user_id === state.session?.user?.id);
+      const canFeatureInFaction = Boolean(factionId && ["leader", "curator"].includes(factionRole?.role));
+      const isFactionPinned = canFeatureInFaction && state.factionPinnedImprints.has(`${factionId}:${imprintKey}`);
       const entityCards = uniqueCatalogItems(items).map(item => item.seriesId ? seriesCard(item) : card(item)).join("");
-      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section></div>`;
+      const factionPinButton = canFeatureInFaction ? `<button class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-imprint-pin="${escapeHTML(filter.value)}" data-faction-imprint-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "★ Fixado na facção" : "☆ Fixar na facção"}</button>` : "";
+      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section></div>`;
     }
     if (filter.kind !== "publisher") {
       const entityCards = uniqueCatalogItems(items).map(item => filter.kind === "character" && item.seriesId ? seriesCard(item) : card(item)).join("");
@@ -9521,6 +9687,46 @@
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+  }
+
+  async function toggleFactionImprintPin(button) {
+    const factionId = currentFactionId();
+    const imprintName = String(button.dataset.factionImprintPin || "").trim();
+    if (!factionId || !imprintName || !state.session?.user?.id) return;
+    const key = publisherKey(imprintName);
+    const pinned = button.dataset.factionImprintPinned === "true";
+    const result = await sb.rpc("toggle_faction_imprint_pin", { p_faction_id: factionId, p_imprint_key: key, p_imprint_name: imprintName, p_pinned: !pinned });
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar o destaque do selo.");
+    const mapKey = `${factionId}:${key}`;
+    if (pinned) state.factionPinnedImprints.delete(mapKey);
+    else state.factionPinnedImprints.set(mapKey, { faction_id: factionId, imprint_key: key, imprint_name: imprintName });
+    render();
+  }
+
+  async function toggleFactionCharacterPin(button) {
+    const factionId = currentFactionId();
+    const characterName = String(button.dataset.factionCharacterPin || "").trim();
+    if (!factionId || !characterName || !state.session?.user?.id) return;
+    const key = publisherKey(characterName);
+    const pinned = button.dataset.factionCharacterPinned === "true";
+    const result = await sb.rpc("toggle_faction_character_pin", { p_faction_id: factionId, p_character_key: key, p_character_name: characterName, p_pinned: !pinned });
+    if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque do personagem.");
+    const mapKey = `${factionId}:${key}`;
+    if (pinned) state.factionPinnedCharacters.delete(mapKey);
+    else state.factionPinnedCharacters.set(mapKey, { faction_id: factionId, character_key: key, character_name: characterName });
+    render();
+  }
+
+  async function toggleFactionPublicCollectionPin(button, factionId = currentFactionId()) {
+    const collectionId = String(button.dataset.factionPublicCatalogPin || "");
+    if (!factionId || !collectionId || !state.session?.user?.id) return;
+    const pinned = button.dataset.factionPublicCatalogPinned === "true";
+    const result = await sb.rpc("toggle_faction_public_collection_pin", { p_faction_id: factionId, p_collection_id: collectionId, p_pinned: !pinned });
+    if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque da coleÃ§Ã£o pÃºblica.");
+    const mapKey = `${factionId}:${collectionId}`;
+    if (pinned) state.factionPinnedPublicCollections.delete(mapKey);
+    else state.factionPinnedPublicCollections.set(mapKey, { faction_id: factionId, collection_id: collectionId });
+    render();
   }
 
   const CHAT_ROOMS = [
@@ -11465,6 +11671,40 @@
     return `<section class="section faction-leadership-tools"><div class="section-head"><div><h2 class="section-title">Cargos da facção</h2><div class="section-subtitle">Líder: ${person(leader)} · Curadores: ${curators.length}/3</div></div></div><div class="faction-role-list"><div><small>Líder</small>${person(leader)}</div><div><small>Curadores</small>${[1, 2, 3].map(slot => person(curators.find(item => item.slot === slot))).join("")}</div></div>${role ? `<p class="faction-management-note">Você é ${currentRole}. ${role.role === "leader" ? "O líder pode editar a identidade, promover curadores ou desistir do cargo." : "Os curadores organizam a página e os eventos em conjunto."}</p>${role.role === "leader" ? '<div class="faction-leader-actions"><button class="small-btn" data-faction-edit-identity>Editar identidade</button><button class="small-btn" data-faction-resign>Desistir da liderança</button></div>' : ""}` : '<p class="faction-management-note">Os cargos são preenchidos automaticamente conforme a atividade dos membros.</p>'}</section>`;
   }
 
+  function factionElectionMarkup(factionId) {
+    const election = state.factionElections.get(factionId);
+    if (!election || !state.session?.user?.id) return "";
+    const faction = state.factions.find(item => item.id === factionId);
+    const factionColor = faction?.color || "#e85b68";
+    const canParticipate = state.profile?.faction_id === factionId && ["free", "premium"].includes(normalizedPlan(state.profile));
+    if (canParticipate && !["candidacy", "curator_vote", "leader_vote"].includes(election.phase)) return "";
+    const candidates = Array.isArray(election.candidates) ? election.candidates : [];
+    const profileFor = id => state.factionMembers.find(member => String(member.user_id) === String(id))?.profile || state.factionRoleMembers.find(member => String(member.user_id) === String(id))?.profile;
+    const candidateCard = (candidate, office, selected) => {
+      const profile = profileFor(candidate.user_id);
+      const name = profile?.username ? `@${profile.username}` : "Membro da facção";
+      return `<button type="button" class="small-btn faction-election-candidate ${selected ? "is-active" : ""}" data-faction-election-vote="${escapeHTML(office)}" data-faction-election-candidate="${escapeHTML(candidate.user_id)}"><strong>${escapeHTML(name)}</strong>${candidate.pitch ? `<span>${escapeHTML(candidate.pitch)}</span>` : ""}${selected ? " · Seu voto" : ""}</button>`;
+    };
+    const labels = { candidacy: "Candidaturas abertas", curator_vote: "Votação de curadores", leader_vote: "Votação de líder", held: "Gestão mantida", completed: "Eleição concluída" };
+    let body = `<p class="faction-management-note">${labels[election.phase] || "Eleição mensal"}. O mandato acompanha a temporada atual.</p>`;
+    if (election.phase === "candidacy") {
+      if (!canParticipate) return `<section class="section faction-election-section" data-faction-election-section style="--faction-election-color:${escapeHTML(factionColor)}"><div class="section-head"><div><div class="eyebrow">Temporada mensal</div><h2 class="section-title">Eleição da facção</h2><div class="section-subtitle">Acompanhamento da eleição em modo informativo.</div></div></div>${body}</section>`;
+      const mine = candidates.some(candidate => candidate.office === "curator" && String(candidate.user_id) === String(state.session.user.id));
+      body += `<div class="faction-election-candidates">${candidates.filter(candidate => candidate.office === "curator").map(candidate => candidateCard(candidate, "curator", false)).join("") || '<span class="empty">Ainda não há candidaturas.</span>'}</div>`;
+      body += mine ? '<p class="faction-management-note">Sua candidatura está registrada. Você pode editar a proposta enviando novamente.</p>' : `<form class="faction-election-candidacy"><label class="field"><span>Por que você seria um bom curador?</span><textarea name="pitch" maxlength="500" rows="3" placeholder="Escreva uma proposta curta para sua facção"></textarea></label><button type="submit" class="small-btn">Candidatar-me a curador</button></form>`;
+    } else if (election.phase === "curator_vote") {
+      body += `<p class="section-subtitle">Escolha os membros que vão cuidar da facção. Você pode trocar seu voto enquanto a votação estiver aberta.</p><div class="faction-election-candidates">${candidates.filter(candidate => candidate.office === "curator").map(candidate => candidateCard(candidate, "curator", String(candidate.user_id) === String(election.my_curator_vote))).join("") || '<span class="empty">Nenhum candidato disponível.</span>'}</div>`;
+    } else if (election.phase === "leader_vote") {
+      const isCurator = state.factionRoles.some(item => item.faction_id === factionId && item.user_id === state.session.user.id && item.role === "curator");
+      body += `<p class="section-subtitle">O colégio de curadores escolhe quem liderará a próxima temporada.</p>${isCurator ? `<div class="faction-election-candidates">${candidates.filter(candidate => candidate.office === "leader").map(candidate => candidateCard(candidate, "leader", String(candidate.user_id) === String(election.my_leader_vote))).join("")}</div>` : '<p class="faction-management-note">A votação de líder é restrita aos curadores.</p>'}`;
+    } else if (election.phase === "held") {
+      body += `<div class="notice">${escapeHTML(election.held_reason || "Não houve participantes suficientes. A gestão atual continua.")}</div>`;
+    } else {
+      body += '<div class="notice">A eleição desta temporada foi encerrada. Confira os cargos acima.</div>';
+    }
+    return `<section class="section faction-election-section" data-faction-election-section style="--faction-election-color:${escapeHTML(factionColor)}"><div class="section-head"><div><div class="eyebrow">Temporada mensal</div><h2 class="section-title">Eleição da facção</h2><div class="section-subtitle">Voto secreto, uma escolha por cargo e apuração automática.</div></div></div>${body}</section>`;
+  }
+
   function factionLeadershipMarkup(factionId) {
     const role = state.factionRoles.find(item => item.faction_id === factionId && item.user_id === state.session?.user?.id);
     const roles = state.factionRoleMembers.filter(item => item.faction_id === factionId);
@@ -11486,12 +11726,11 @@
     const catalogKeys = [...state.factionAbafacCatalogs.entries()].filter(([, catalog]) => catalog.faction_id === factionId).map(([key]) => key);
     const factionCatalogKeys = state.factionCatalogs.filter(catalog => catalog.faction_id === factionId).map(catalog => `faction-catalog:${catalog.id}`);
     const legacyCatalogKey = faction?.abafac_catalog_url && !catalogKeys.length ? ["catalog"] : [];
-    const allowed = ["stats", "manifest", "mural", "missions", "mandatory-reads", "achievements", "hall", "report", ...catalogKeys, ...factionCatalogKeys, ...legacyCatalogKey, "leadership", "members", ...state.factionAbafacImages.filter(image => image.faction_id === factionId).map(image => `image:${image.id}`)];
+    const allowed = ["stats", "manifest", "mural", "missions", "mandatory-reads", "faction-chat", "continue-reading", "recently-added", "featured-character", "new-series", "most-read-month", "best-series", "tips", "random", "artist", "recommendations", "random-publisher", "downloads", "most-read", "pinned-imprints", "pinned-characters", "pinned-collections", "achievements", "hall", "report", ...catalogKeys, ...factionCatalogKeys, ...legacyCatalogKey, "leadership", "members", ...state.factionAbafacImages.filter(image => image.faction_id === factionId).map(image => `image:${image.id}`)];
     if (!Array.isArray(saved)) return allowed;
     const migratedCatalogKey = catalogKeys[0];
     const order = [...new Set(saved.map(key => key === "catalog" && migratedCatalogKey ? migratedCatalogKey : key).filter(key => allowed.includes(key)))];
     if (!order.includes("stats")) order.unshift("stats");
-    if (!order.includes("mandatory-reads")) order.push("mandatory-reads");
     return order;
   }
 
@@ -11827,6 +12066,23 @@
     state.factionAbafacCatalogs.forEach((catalog, key) => { if (catalog.faction_id === factionId) labels[key] = `Catálogo: ${catalog.name}`; });
     state.factionCatalogs.filter(catalog => catalog.faction_id === factionId).forEach(catalog => { labels[`faction-catalog:${catalog.id}`] = `Catálogo da facção: ${catalog.name}`; });
     if (state.factions.find(item => item.id === factionId)?.abafac_catalog_url && !labels.catalog) labels.catalog = "Catálogo legado";
+    labels["continue-reading"] = "Continue de onde parou";
+    labels["recently-added"] = "Adicionados recentemente";
+    labels["featured-character"] = "Personagem em destaque";
+    labels["new-series"] = "Séries novas";
+    labels["most-read-month"] = "Mais lidos do mês";
+    labels["best-series"] = "Melhores séries";
+    labels.tips = "Dicas para você";
+    labels.random = "Escolha aleatória";
+    labels.artist = "Do mesmo artista de";
+    labels.recommendations = "Curadoria global · Escolhas da banca";
+    labels["random-publisher"] = "Uma editora escolhida aleatoriamente";
+    labels.downloads = "Mais baixados";
+    labels["most-read"] = "Mais lidos";
+    labels["pinned-imprints"] = "Selos fixados";
+    labels["pinned-characters"] = "Personagens em destaque";
+    labels["pinned-collections"] = "Coleções de quadrinhos em destaque";
+    labels["faction-chat"] = "Chat exclusivo da facção";
     state.factionAbafacImages.filter(image => image.faction_id === factionId).forEach(image => { labels[`image:${image.id}`] = "Imagem abafac"; });
     const active = new Set(factionAbafacOrder(factionId));
     const overlay = document.createElement("div");
@@ -11848,6 +12104,20 @@
   function applyFactionAbafacOrder(factionId) {
     const page = $(".faction-detail-page");
     if (!page) return;
+    const pinnedCollectionsSection = $(".faction-pinned-collections-abafac", page);
+    if (pinnedCollectionsSection) {
+      $(".section-title", pinnedCollectionsSection).textContent = "Cole\u00e7\u00f5es de quadrinhos em destaque";
+      $(".section-subtitle", pinnedCollectionsSection).textContent = "Cole\u00e7\u00f5es com edi\u00e7\u00f5es da editora configurada na fac\u00e7\u00e3o.";
+      $$('span', pinnedCollectionsSection).forEach(element => {
+        const count = String(element.textContent || "").match(/^\d+/)?.[0];
+        if (count) element.textContent = `${count} edi\u00e7\u00e3o(\u00f5es)`;
+      });
+    }
+    const pinnedCharactersSection = $(".faction-pinned-characters-abafac", page);
+    if (pinnedCharactersSection) $$('span', pinnedCharactersSection).forEach(element => {
+      const count = String(element.textContent || "").match(/^\d+/)?.[0];
+      if (count) element.textContent = `${count} edi\u00e7\u00e3o(\u00f5es)`;
+    });
     const catalogSections = Object.fromEntries($$(".faction-catalog-abafac", page).map(section => [section.dataset.factionAbafac, section]));
     const sections = {
       stats: $(".faction-stats-abafac", page),
@@ -11860,8 +12130,42 @@
       report: $(".faction-report-abafac", page),
       leadership: $(".faction-leadership-tools", page),
       members: $(".faction-members-section", page),
+      "mandatory-reads": $(".faction-mandatory-reads-abafac", page),
+      "continue-reading": $(".faction-continue-reading-abafac", page),
+      "recently-added": $(".faction-recently-added-abafac", page),
+      "featured-character": $(".faction-featured-character-abafac", page),
+      "new-series": $(".faction-new-series-abafac", page),
+      "most-read-month": $(".faction-most-read-month-abafac", page),
+      "best-series": $(".faction-best-series-abafac", page),
+      tips: $(".faction-tips-abafac", page),
+      random: $(".faction-random-abafac", page),
+      artist: $(".faction-artist-abafac", page),
+      recommendations: $(".faction-recommendations-abafac", page),
+      "random-publisher": $(".faction-random-publisher-abafac", page),
+      downloads: $(".faction-downloads-abafac", page),
+      "most-read": $(".faction-most-read-abafac", page),
+      "pinned-imprints": $(".faction-pinned-imprints-abafac", page),
+      "pinned-characters": $(".faction-pinned-characters-abafac", page),
+      "pinned-collections": $(".faction-pinned-collections-abafac", page),
+      "faction-chat": $(".faction-chat-abafac", page),
       ...catalogSections
     };
+    const factionRole = state.factionRoles.find(role => role.faction_id === factionId && role.user_id === state.session?.user?.id);
+    if (["leader", "curator"].includes(factionRole?.role)) {
+      Object.entries(catalogSections).forEach(([key, section]) => {
+        const catalog = state.factionAbafacCatalogs.get(key);
+        const head = $(".section-head", section);
+        if (!catalog || !head || $("[data-faction-public-catalog-pin]", head)) return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "small-btn";
+        const pinned = state.factionPinnedPublicCollections.has(`${factionId}:${catalog.id}`);
+        button.dataset.factionPublicCatalogPin = catalog.id;
+        button.dataset.factionPublicCatalogPinned = pinned ? "true" : "false";
+        button.textContent = pinned ? "★ Destaque da facção" : "☆ Destacar na facção";
+        head.appendChild(button);
+      });
+    }
     if (sections.hall) {
       const hallHead = $(".section-head", sections.hall);
       sections.hall.innerHTML = `${hallHead?.outerHTML || ""}${factionHallMarkup(factionId)}`;
@@ -11934,7 +12238,7 @@
         }
       }
       if ((!canManage && key !== "members") || $("[data-faction-abafac-controls]", section)) return;
-      const head = $(".section-head", section);
+      const head = $(".section-head", section) || $(".global-recommendations-heading", section);
       if (!key.startsWith("image:") && key !== "stats" && !head) return;
       const controls = document.createElement("div");
       controls.className = "faction-abafac-controls";
@@ -11945,7 +12249,7 @@
         $$('[data-faction-abafac-move], [data-faction-abafac-remove]', controls).forEach(button => button.remove());
       }
       if (key === "mandatory-reads") {
-        $(".faction-mandatory-reads-note", section)?.after(controls);
+        head.appendChild(controls);
       } else if (key.startsWith("image:")) {
         $(".faction-abafac-image-layout", section)?.appendChild(controls);
       } else if (key === "stats") {
@@ -11969,6 +12273,35 @@
     $$('[data-faction-catalog-save]', page).forEach(button => button.onclick = event => {
       event.stopPropagation();
       toggleFactionCatalogSave(button.dataset.factionCatalogSave);
+    });
+    $$('[data-faction-catalog-pin]', page).forEach(button => button.onclick = async event => {
+      event.stopPropagation();
+      const factionId = currentFactionId();
+      const catalogId = String(button.dataset.factionCatalogPin || "");
+      const pinned = button.dataset.factionCatalogPinned === "true";
+      const result = await sb.rpc("toggle_faction_collection_pin", { p_faction_id: factionId, p_catalog_id: catalogId, p_pinned: !pinned });
+      if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque da coleÃ§Ã£o.");
+      const mapKey = `${factionId}:${catalogId}`;
+      if (pinned) state.factionPinnedCollections.delete(mapKey);
+      else state.factionPinnedCollections.set(mapKey, { faction_id: factionId, catalog_id: catalogId });
+      render();
+    });
+    $$('[data-faction-public-catalog-pin]', page).forEach(button => button.onclick = async event => {
+      event.stopPropagation();
+      const pinned = button.dataset.factionPublicCatalogPinned === "true";
+      const collectionId = String(button.dataset.factionPublicCatalogPin || "");
+      const result = await sb.rpc("toggle_faction_public_collection_pin", { p_faction_id: factionId, p_collection_id: collectionId, p_pinned: !pinned });
+      if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque da coleÃ§Ã£o pÃºblica.");
+      const mapKey = `${factionId}:${collectionId}`;
+      if (pinned) state.factionPinnedPublicCollections.delete(mapKey);
+      else state.factionPinnedPublicCollections.set(mapKey, { faction_id: factionId, collection_id: collectionId });
+      render();
+    });
+    $$('[data-faction-chat-open]', page).forEach(button => button.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const room = CHAT_ROOMS.find(item => item.id === button.dataset.factionChatOpen);
+      if (room) openChatRoom(room);
     });
     $$('[data-faction-catalog-feature]', page).forEach(button => button.onclick = async event => {
       event.stopPropagation();
@@ -12081,6 +12414,102 @@
             await loadFactions();
             return render();
           }
+          if (values.continueReading) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("continue-reading")) order.push("continue-reading");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de leitura.");
+          }
+          if (values.recentlyAdded) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("recently-added")) order.push("recently-added");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de novidades.");
+          }
+          if (values.featuredCharacter) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("featured-character")) order.push("featured-character");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de personagem.");
+          }
+          if (values.newSeries) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("new-series")) order.push("new-series");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de séries novas.");
+          }
+          if (values.mostReadMonth) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("most-read-month")) order.push("most-read-month");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de mais lidos.");
+          }
+          if (values.bestSeries) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("best-series")) order.push("best-series");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de melhores séries.");
+          }
+          if (values.tips) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("tips")) order.push("tips");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de dicas.");
+          }
+          if (values.randomChoice) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("random")) order.push("random");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de escolha aleatória.");
+          }
+          if (values.artist) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("artist")) order.push("artist");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de artista.");
+          }
+          if (values.recommendations) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("recommendations")) order.push("recommendations");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de curadoria global.");
+          }
+          if (values.randomPublisher) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("random-publisher")) order.push("random-publisher");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de editora aleatória.");
+          }
+          if (values.downloads) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("downloads")) order.push("downloads");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de downloads.");
+          }
+          if (values.mostRead) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("most-read")) order.push("most-read");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de mais lidos.");
+          }
+          if (values.pinnedImprints) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("pinned-imprints")) order.push("pinned-imprints");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de selos fixados.");
+          }
+          if (values.pinnedCharacters) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("pinned-characters")) order.push("pinned-characters");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "NÃ£o foi possÃ­vel ativar a abafac de personagens em destaque.");
+          }
+          if (values.pinnedCollections) {
+            const order = factionAbafacOrder(factionId);
+            if (!order.includes("pinned-collections")) order.push("pinned-collections");
+            const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
+            if (orderResult.error) return toast(orderResult.error.message || "NÃ£o foi possÃ­vel ativar a abafac de coleÃ§Ãµes em destaque.");
+          }
           const catalogUrl = await validatePublicCatalogLink(values.catalogUrl);
           if (catalogUrl === false) return toast("Informe o link de uma coleção pública de quadrinhos deste site.");
           let catalogKey = null;
@@ -12140,7 +12569,8 @@
       const factionHref = `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`;
       const role = state.factionRoles.find(item => item.faction_id === faction.id && item.user_id === state.session?.user?.id);
       const canManage = ["leader", "curator"].includes(role?.role);
-      const manageActions = canManage ? `<button type="button" class="small-btn" data-faction-catalog-edit-inline="${catalog.id}">Editar</button><button type="button" class="small-btn danger" data-faction-catalog-delete="${catalog.id}">Excluir</button><label class="shelf-sort-control"><span>Ordenar</span><select data-faction-catalog-sort="${catalog.id}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${catalog.sort_order === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>` : "";
+      const isFactionPinned = state.factionPinnedCollections.has(`${faction.id}:${catalog.id}`);
+      const manageActions = canManage ? `<button type="button" class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-catalog-pin="${catalog.id}" data-faction-catalog-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "â˜… Destaque da facÃ§Ã£o" : "â˜† Destacar na facÃ§Ã£o"}</button><button type="button" class="small-btn" data-faction-catalog-edit-inline="${catalog.id}">Editar</button><button type="button" class="small-btn danger" data-faction-catalog-delete="${catalog.id}">Excluir</button><label class="shelf-sort-control"><span>Ordenar</span><select data-faction-catalog-sort="${catalog.id}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${catalog.sort_order === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>` : "";
       const catalogKey = String(catalog.id);
       const isLiked = state.factionCatalogLikeIds.has(catalogKey);
       const likes = state.factionCatalogLikeCounts.get(catalogKey) || 0;
@@ -12182,6 +12612,233 @@
     return `<div class="content faction-page faction-members-directory" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">${escapeHTML(faction.emblem)} ${escapeHTML(faction.name)}</div><h1 class="section-title">Todos os membros</h1><div class="section-subtitle">${total} membro(s) · os mais recentes aparecem primeiro.</div></div><button class="small-btn" data-faction-members-back>Voltar à facção</button></div><section class="section"><label class="ranking-user-search-wrap"><span>Pesquisar membro</span><input id="faction-member-search-input" class="ranking-user-search" type="search" data-faction-members-search value="${escapeHTML(state.factionMemberSearch)}" placeholder="Nome ou título..." autocomplete="off"></label><div class="faction-member-directory-grid" data-faction-member-results>${factionMembersResultsMarkup(faction.id, state.factionMemberSearch)}</div></section></div>`;
   }
 
+  function factionContinueReadingMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const progressRecentIds = [...state.readingProgress.entries()].filter(([, progress]) => progress?.updated_at && !progress.completed).sort(([, a], [, b]) => new Date(b.updated_at) - new Date(a.updated_at)).map(([itemId]) => String(itemId));
+    const ids = [...new Set([...state.recentlyOpenedIds, ...progressRecentIds])];
+    const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(item => item && !state.readingProgress.get(item.id)?.completed && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).slice(0, 6);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Você ainda não tem uma leitura em andamento nesta facção.</div>';
+    const subtitle = publisher ? `Suas leituras em andamento da editora ${escapeHTML(faction.publisher_name)}.` : "Suas leituras em andamento, dentro da facção.";
+    return `<section class="section faction-extra-abafac faction-continue-reading-abafac" data-faction-abafac="continue-reading" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Leitura</div><h2 class="section-title">Continue de onde parou</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionRecentlyAddedMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const items = state.db.library
+      .filter(item => !publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)
+      .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
+      .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
+      .slice(0, 6)
+      .map(entry => entry.item);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Nenhuma edição recente disponível para esta facção.</div>';
+    const subtitle = publisher ? `As edições mais novas da editora ${escapeHTML(faction.publisher_name)}.` : "As edições mais novas disponíveis na banca.";
+    return `<section class="section faction-extra-abafac faction-recently-added-abafac" data-faction-abafac="recently-added" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo</div><h2 class="section-title">Adicionados recentemente</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionFeaturedCharacterMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const groups = new Map();
+    state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher) && characterNames(item).length).forEach(item => {
+      const character = characterNames(item)[0];
+      if (!groups.has(character)) groups.set(character, []);
+      groups.get(character).push(item);
+    });
+    const characters = [...groups.keys()];
+    if (!characters.length) return '<section class="section faction-extra-abafac faction-featured-character-abafac" data-faction-abafac="featured-character"><div class="empty">Nenhum personagem disponível para destacar.</div></section>';
+    state.factionFeaturedCharacters ||= {};
+    if (!characters.includes(state.factionFeaturedCharacters[faction.id])) state.factionFeaturedCharacters[faction.id] = weightedRandom(characters);
+    const character = state.factionFeaturedCharacters[faction.id];
+    const editions = groups.get(character) || [];
+    const representative = editions.slice().sort((a, b) => Number(b.clicks) - Number(a.clicks))[0] || editions[0];
+    const subtitle = publisher ? `Explore as edições de ${escapeHTML(character)} publicadas por ${escapeHTML(faction.publisher_name)}.` : `Explore as edições de ${escapeHTML(character)} disponíveis na banca.`;
+    return `<section class="section faction-extra-abafac faction-featured-character-abafac" data-faction-abafac="featured-character" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Personagem em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div><div class="character-banner-section" data-entity-kind="character" data-entity-value="${escapeHTML(character)}" role="link" tabindex="0" aria-label="Ver todas as edições de ${escapeHTML(character)}"><div class="character-banner-bg" style="background-image:url('${escapeHTML(coverFor(representative, "hero"))}')"></div><div class="character-banner-overlay"></div><div class="character-banner-content"><div class="eyebrow">Personagem em destaque</div><h2>${escapeHTML(character)}</h2><p>${editions.length} ${editions.length === 1 ? "edição disponível" : "edições disponíveis"} para explorar.</p><span class="character-banner-cta">Ver todas as edições <b>→</b></span></div><div class="character-banner-spark">✦</div></div></section>`;
+  }
+
+  function factionNewSeriesMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const series = new Map();
+    state.db.library.filter(item => item.seriesId && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach((item, index) => {
+      const current = series.get(item.seriesId);
+      const addedAt = Date.parse(item.addedAt || item.createdAt || "") || 0;
+      if (!current || addedAt > current.addedAt) series.set(item.seriesId, { item, addedAt, index });
+    });
+    const items = [...series.values()].sort((a, b) => b.addedAt - a.addedAt || a.index - b.index).slice(0, 6).map(entry => entry.item);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => seriesCard(item)).join("")}</div></div>` : '<div class="empty">Nenhuma série nova disponível para esta facção.</div>';
+    const subtitle = publisher ? `As séries adicionadas mais recentemente da editora ${escapeHTML(faction.publisher_name)}.` : "As séries adicionadas mais recentemente à banca.";
+    return `<section class="section faction-extra-abafac faction-new-series-abafac" data-faction-abafac="new-series" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo</div><h2 class="section-title">Séries novas</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionMostReadMonthMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const monthlyReadCount = item => state.comicMonthlyReadCounts.get(String(item.id)) || 0;
+    const items = state.db.library.filter(item => !publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher).sort((a, b) => monthlyReadCount(b) - monthlyReadCount(a) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR")).slice(0, 10);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Nenhuma edição disponível para esta facção.</div>';
+    const subtitle = publisher ? `As edições mais lidas neste mês da editora ${escapeHTML(faction.publisher_name)}.` : "As edições mais lidas neste mês na banca.";
+    return `<section class="section faction-extra-abafac faction-most-read-month-abafac" data-faction-abafac="most-read-month" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Popularidade</div><h2 class="section-title">Mais lidos do mês</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionBestSeriesMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const groups = new Map();
+    state.db.library.filter(item => item.seriesId && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach(item => {
+      if (!groups.has(item.seriesId)) groups.set(item.seriesId, []);
+      groups.get(item.seriesId).push(item);
+    });
+    const items = [...groups.values()].map(editions => ({
+      item: editions[0],
+      likes: editions.reduce((total, edition) => total + (state.comicLikeCounts.get(String(edition.id)) || 0), 0)
+    })).sort((a, b) => b.likes - a.likes || itemDisplayTitle(a.item).localeCompare(itemDisplayTitle(b.item), "pt-BR")).slice(0, 6).map(entry => entry.item);
+    const body = items.length ? `<div class="rail-viewport faction-best-series-carousel"><div class="rail faction-best-series-rail">${items.map(item => seriesCard(item)).join("")}</div></div>` : '<div class="empty">Nenhuma série disponível para esta facção.</div>';
+    const subtitle = publisher ? `As séries mais curtidas da editora ${escapeHTML(faction.publisher_name)}.` : "As séries mais curtidas na banca.";
+    return `<section class="section faction-extra-abafac faction-best-series-abafac" data-faction-abafac="best-series" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Popularidade</div><h2 class="section-title">Melhores séries</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionTipsMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const library = state.db.library.filter(item => !publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher);
+    const items = personalizedRecommendations(library);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Ainda não há dados suficientes para personalizar suas dicas nesta facção.</div>';
+    const subtitle = publisher ? `Sugestões baseadas nos seus salvos e curtidos da editora ${escapeHTML(faction.publisher_name)}.` : "Sugestões baseadas nos seus salvos e curtidos.";
+    return `<section class="section faction-extra-abafac faction-tips-abafac" data-faction-abafac="tips" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Personalizado</div><h2 class="section-title">Dicas para você</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionRandomMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const available = state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher));
+    state.factionRandomIds ||= {};
+    let ids = Array.isArray(state.factionRandomIds[faction.id]) ? state.factionRandomIds[faction.id] : [];
+    const items = ids.map(id => available.find(item => String(item.id) === String(id))).filter(Boolean);
+    if (items.length < Math.min(6, available.length)) {
+      const selected = uniqueCatalogItems([...available].sort(() => Math.random() - .5).slice(0, 6));
+      ids = selected.map(item => item.id);
+      state.factionRandomIds[faction.id] = ids;
+      items.splice(0, items.length, ...selected);
+    }
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Nenhuma edição disponível para sortear nesta facção.</div>';
+    const subtitle = publisher ? `Uma seleção aleatória da editora ${escapeHTML(faction.publisher_name)}.` : "Uma seleção aleatória para descobrir algo novo.";
+    return `<section class="section faction-extra-abafac faction-random-abafac" data-faction-abafac="random" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Descoberta</div><h2 class="section-title">Escolha aleatória</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionArtistMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const library = state.db.library.filter(item => !publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher);
+    const recommendation = readArtistSeriesRecommendation(library);
+    if (!recommendation) return '<section class="section faction-extra-abafac faction-artist-abafac" data-faction-abafac="artist"><div class="empty">Conclua uma leitura para receber dicas do mesmo artista.</div></section>';
+    const { readItem, seriesItems } = recommendation;
+    const body = `<div class="section-subtitle faction-artist-source">A partir de <strong>${escapeHTML(itemDisplayTitle(readItem))}</strong></div><div class="results-grid">${seriesItems.slice(0, 6).map(item => seriesCard(item)).join("")}</div>`;
+    const subtitle = publisher ? `Outras séries do mesmo artista, dentro da editora ${escapeHTML(faction.publisher_name)}.` : "Outras séries do mesmo artista para você conhecer.";
+    return `<section class="section faction-extra-abafac faction-artist-abafac" data-faction-abafac="artist" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Recomendação</div><h2 class="section-title">Do mesmo artista de</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionRecommendationsMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const library = state.db.library.filter(item => !publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher);
+    const periods = recommendationPeriodKeys();
+    const day = globalRecommendation(library, periods.day);
+    const week = globalRecommendation(library, periods.week);
+    const month = globalRecommendation(library, periods.month, true);
+    const body = day || week || month ? `<div class="global-recommendations-grid">${globalRecommendationCard(day, "Recomendação do dia", "Uma edição para abrir agora e deixar a leitura acontecer.", "day")}${globalRecommendationCard(week, "Recomendação da semana", "A edição que merece um espaço na sua agenda desta semana.", "week")}${globalRecommendationCard(month, "Série do mês", "Uma série para acompanhar com calma, edição por edição.", "month", true)}</div>` : '<div class="empty">Nenhuma escolha disponível para esta facção.</div>';
+    const subtitle = publisher ? `Uma seleção renovada da editora ${escapeHTML(faction.publisher_name)}.` : "Uma seleção renovada para descobrir algo especial.";
+    return `<section class="section faction-extra-abafac faction-recommendations-abafac" data-faction-abafac="recommendations" style="--faction-color:${escapeHTML(faction.color)}"><div class="global-recommendations-heading"><div><div class="eyebrow">Curadoria global</div><h2 class="section-title">Escolhas da banca</h2><div class="section-subtitle">${subtitle}</div></div><span class="global-recommendations-mark">✦</span></div>${body}</section>`;
+  }
+
+  function factionRandomPublisherMarkup(faction) {
+    const factionPublisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const groups = new Map();
+    state.db.library.filter(item => !item.local && String(item.publisher || "").trim() && (!factionPublisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === factionPublisher)).forEach(item => {
+      const publisher = String(item.publisher).trim();
+      if (!groups.has(publisher)) groups.set(publisher, []);
+      groups.get(publisher).push(item);
+    });
+    const publishers = [...groups.keys()];
+    if (!publishers.length) return '<section class="section faction-extra-abafac faction-random-publisher-abafac" data-faction-abafac="random-publisher"><div class="empty">Nenhuma editora disponível para sortear nesta facção.</div></section>';
+    state.factionRandomPublishers ||= {};
+    if (!publishers.includes(state.factionRandomPublishers[faction.id])) state.factionRandomPublishers[faction.id] = weightedRandom(publishers);
+    const publisher = state.factionRandomPublishers[faction.id];
+    const items = groups.get(publisher) || [];
+    const body = `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>`;
+    return `<section class="section faction-extra-abafac faction-random-publisher-abafac" data-faction-abafac="random-publisher" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Descoberta</div><h2 class="section-title">Uma editora escolhida aleatoriamente</h2><div class="section-subtitle">${factionPublisher ? `Edições da editora ${escapeHTML(publisher)}.` : `A editora sorteada foi ${escapeHTML(publisher)}.`}</div></div></div>${body}</section>`;
+  }
+
+  function factionDownloadsMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const items = state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).sort((a, b) => Number(b.downloadCount) - Number(a.downloadCount) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR")).slice(0, 20);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Nenhuma edição disponível para esta facção.</div>';
+    const subtitle = publisher ? `As edições mais baixadas da editora ${escapeHTML(faction.publisher_name)}.` : "As edições mais baixadas na banca.";
+    return `<section class="section faction-extra-abafac faction-downloads-abafac" data-faction-abafac="downloads" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Popularidade</div><h2 class="section-title">Mais baixados</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionPinnedImprintsMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const pinned = [...state.factionPinnedImprints.values()].filter(row => row.faction_id === faction.id);
+    const groups = new Map();
+    state.db.library.filter(item => String(item.imprint || "").trim() && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach(item => {
+      const name = String(item.imprint).trim();
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(item);
+    });
+    const entries = pinned.map(row => { const items = groups.get(row.imprint_name) || [...groups.entries()].find(([name]) => publisherKey(name) === row.imprint_key)?.[1] || []; return [row.imprint_name, items]; }).filter(([, items]) => items.length);
+    const body = entries.length ? `<div class="publisher-carousel">${entries.map(([name, items]) => { const setting = state.imprintSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative); return `<button class="publisher-card imprint-card" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`; }).join("")}</div>` : '<div class="empty">Nenhum selo foi fixado nesta facção.</div>';
+    const subtitle = publisher ? `Selos fixados pela liderança dentro da editora ${escapeHTML(faction.publisher_name)}.` : "Selos destacados pelos líderes e curadores da facção.";
+    return `<section class="section faction-extra-abafac faction-pinned-imprints-abafac" data-faction-abafac="pinned-imprints" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Selos fixados</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionPinnedCharactersMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const pinned = [...state.factionPinnedCharacters.values()].filter(row => row.faction_id === faction.id);
+    const groups = new Map();
+    state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach(item => {
+      characterNames(item).forEach(name => {
+        const character = String(name || "").trim();
+        if (!character) return;
+        if (!groups.has(character)) groups.set(character, []);
+        groups.get(character).push(item);
+      });
+    });
+    const entries = pinned.map(row => { const items = groups.get(row.character_name) || [...groups.entries()].find(([name]) => publisherKey(name) === row.character_key)?.[1] || []; return [row.character_name, items]; }).filter(([, items]) => items.length);
+    const body = entries.length ? `<div class="publisher-carousel">${entries.map(([name, items]) => { const setting = state.characterSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative) || "assets/batmanicon.jpg"; return `<button class="publisher-card character-card" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} ediÃ§Ã£o(Ãµes)</span></div></button>`; }).join("")}</div>` : '<div class="empty">Nenhum personagem foi fixado nesta facÃ§Ã£o.</div>';
+    const subtitle = publisher ? `Personagens destacados dentro da editora ${escapeHTML(faction.publisher_name)}.` : "Personagens destacados pelos lÃ­deres e curadores da facÃ§Ã£o.";
+    return `<section class="section faction-extra-abafac faction-pinned-characters-abafac" data-faction-abafac="pinned-characters" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Personagens em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionPinnedOwnCollectionsMarkupLegacy(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const pinned = [...state.factionPinnedCollections.values()].filter(row => String(row.faction_id) === String(faction.id));
+    const catalogs = pinned.map(row => state.factionCatalogs.find(catalog => String(catalog.id) === String(row.catalog_id))).filter(Boolean).map(catalog => ({ ...catalog, item_ids: (Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []).map(id => state.db.library.find(item => String(item.id) === id)).filter(item => item && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).map(item => item.id) })).filter(catalog => catalog.item_ids.length);
+    if (!catalogs.length) return "";
+    const body = catalogs.length ? `<div class="publisher-carousel faction-featured-collections">${catalogs.map(catalog => { const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []; const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean); const cover = catalog.cover_url || (items[0] ? coverFor(items[0]) : "assets/batmanicon.jpg"); const href = `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`; return `<a class="publisher-card faction-collection-card" href="${escapeHTML(href)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(catalog.name)}</strong><span>${items.length} ediÃ§Ã£o(Ãµes)</span></div></a>`; }).join("")}</div>` : '<div class="empty">Nenhuma coleÃ§Ã£o foi fixada nesta facÃ§Ã£o.</div>';
+    const subtitle = publisher ? `ColeÃ§Ãµes com ediÃ§Ãµes da editora ${escapeHTML(faction.publisher_name)}.` : "ColeÃ§Ãµes escolhidas pelos lÃ­deres e curadores da facÃ§Ã£o.";
+    return `<section class="section faction-extra-abafac faction-pinned-collections-abafac" data-faction-abafac="pinned-collections" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">ColeÃ§Ãµes de quadrinhos em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionPinnedCollectionsMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const ownPins = [...state.factionPinnedCollections.values()].filter(row => String(row.faction_id) === String(faction.id));
+    const publicPins = [...state.factionPinnedPublicCollections.values()].filter(row => String(row.faction_id) === String(faction.id));
+    const own = ownPins.map(row => state.factionCatalogs.find(catalog => String(catalog.id) === String(row.catalog_id))).filter(Boolean).map(catalog => ({ ...catalog, publicCatalog: false }));
+    const publicCatalogs = publicPins.map(row => state.factionPublicPinnedCollectionDetails.get(String(row.collection_id))).filter(Boolean).map(catalog => ({ ...catalog, publicCatalog: true }));
+    const catalogs = [...own, ...publicCatalogs].map(catalog => ({ ...catalog, featuredItems: (Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []).map(id => state.db.library.find(item => String(item.id) === id)).filter(item => item && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)) })).filter(catalog => catalog.featuredItems.length);
+    if (!catalogs.length) return "";
+    const body = `<div class="publisher-carousel faction-featured-collections">${catalogs.map(catalog => { const items = catalog.featuredItems; const cover = catalog.cover_url || (items[0] ? coverFor(items[0]) : "assets/batmanicon.jpg"); const href = catalog.publicCatalog ? publicProfileHref(catalog.username, catalog.id) : `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`; return `<a class="publisher-card faction-collection-card" href="${escapeHTML(href)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(catalog.name)}</strong><span>${items.length} edi\u00e7\u00e3o(\u00f5es)</span></div></a>`; }).join("")}</div>`;
+    const subtitle = publisher ? `Cole\u00e7\u00f5es com edi\u00e7\u00f5es da editora ${escapeHTML(faction.publisher_name)}.` : "Cole\u00e7\u00f5es escolhidas pelos l\u00edderes e curadores da fac\u00e7\u00e3o.";
+    return `<section class="section faction-extra-abafac faction-pinned-collections-abafac" data-faction-abafac="pinned-collections" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Cole\u00e7\u00f5es de quadrinhos em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionMostReadMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const items = state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).sort((a, b) => Number(b.clicks) - Number(a.clicks) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR")).slice(0, 20);
+    const body = items.length ? `<div class="rail-viewport"><div class="rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div>` : '<div class="empty">Nenhuma edição disponível para esta facção.</div>';
+    const subtitle = publisher ? `As edições mais lidas da editora ${escapeHTML(faction.publisher_name)}.` : "As edições mais lidas na banca.";
+    return `<section class="section faction-extra-abafac faction-most-read-abafac" data-faction-abafac="most-read" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Popularidade</div><h2 class="section-title">Mais lidos</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+
+  function factionChatMarkup(faction) {
+    const roomId = `faccao-${faction.id}`;
+    const room = CHAT_ROOMS.find(item => item.id === roomId);
+    const body = room ? `<button type="button" class="btn faction-chat-open-button" data-faction-chat-open="${escapeHTML(room.id)}">Abrir chat exclusivo</button>` : '<div class="empty">O chat desta fac\u00e7\u00e3o ainda n\u00e3o est\u00e1 configurado.</div>';
+    return `<section class="section faction-extra-abafac faction-chat-abafac" data-faction-abafac="faction-chat" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h2 class="section-title">Chat exclusivo da fac\u00e7\u00e3o</h2><div class="section-subtitle">Converse com os membros desta fac\u00e7\u00e3o em uma sala reservada.</div></div></div>${body}</section>`;
+  }
+
   function factionExtraAbafacsMarkup(faction, stats) {
     function factionMandatoryReadsMarkup(factionId) {
       const reads = state.factionMandatoryReads.get(factionId) || [];
@@ -12209,7 +12866,41 @@
     */
     const section = (key, eyebrow, title, subtitle, body) => `<section class="section faction-extra-abafac faction-${key}-abafac" data-faction-abafac="${key}" style="--faction-color:${color}"><div class="section-head"><div><div class="eyebrow">${eyebrow}</div><h2 class="section-title">${title}</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
     const mandatoryBody = factionMandatoryReadsMarkup(faction.id);
+    const factionChatSection = factionChatMarkup(faction);
+    const continueReadingSection = factionContinueReadingMarkup(faction);
+    const recentlyAddedSection = factionRecentlyAddedMarkup(faction);
+    const featuredCharacterSection = factionFeaturedCharacterMarkup(faction);
+    const newSeriesSection = factionNewSeriesMarkup(faction);
+    const mostReadMonthSection = factionMostReadMonthMarkup(faction);
+    const bestSeriesSection = factionBestSeriesMarkup(faction);
+    const tipsSection = factionTipsMarkup(faction);
+    const randomSection = factionRandomMarkup(faction);
+    const artistSection = factionArtistMarkup(faction);
+    const recommendationsSection = factionRecommendationsMarkup(faction);
+    const randomPublisherSection = factionRandomPublisherMarkup(faction);
+    const downloadsSection = factionDownloadsMarkup(faction);
+    const mostReadSection = factionMostReadMarkup(faction);
+    const pinnedImprintsSection = factionPinnedImprintsMarkup(faction);
+    const pinnedCharactersSection = factionPinnedCharactersMarkup(faction);
+    const pinnedCollectionsSection = factionPinnedCollectionsMarkup(faction);
     return [
+      factionChatSection,
+      continueReadingSection,
+      recentlyAddedSection,
+      featuredCharacterSection,
+      newSeriesSection,
+      mostReadMonthSection,
+      bestSeriesSection,
+      tipsSection,
+      randomSection,
+      artistSection,
+      recommendationsSection,
+      randomPublisherSection,
+      downloadsSection,
+      mostReadSection,
+      pinnedImprintsSection,
+      pinnedCharactersSection,
+      pinnedCollectionsSection,
       section("manifest", "Identidade", "Manifesto", "O que move esta facção.", `<p>${escapeHTML(faction.description || "Esta facção ainda está escrevendo sua história.")}</p>`),
       section("mural", "Comunicação", "Mural de avisos", "Um espaço para os comunicados da liderança.", `<div class="notice">${escapeHTML(faction.mural_notice || "Nenhum aviso publicado pela liderança ainda.")}</div>`),
       section("missions", "Temporada", "Missões da temporada", "Desafios coletivos para fazer a facção avançar.", `<div class="faction-extra-list"><div><strong>Marcar presença</strong><span>Participe dos chats e das atividades da comunidade.</span></div><div><strong>Compartilhar leituras</strong><span>Leia, comente e ajude a movimentar a banca.</span></div><div><strong>Buscar o topo</strong><span>Acumule XP e acompanhe a disputa mensal.</span></div></div>`),
@@ -12229,7 +12920,12 @@
       const directCatalog = state.factionCatalogId ? state.factionCatalogs.find(catalog => String(catalog.id) === String(state.factionCatalogId) && catalog.faction_id === selected.id) : null;
       if (directCatalog) return renderFactionCatalogPage(selected, directCatalog);
       const stats = state.factionStats.get(selected.id) || { members: 0, xp: 0 };
-      return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats"><span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionExtraAbafacsMarkup(selected, stats)}${factionCatalogMarkup(selected)}${factionOwnedCatalogMarkup(selected)}</div>`;
+      const publisherName = String(selected.publisher_name || "").trim();
+      const publisherSetting = publisherName ? state.publisherSettings.get(publisherKey(publisherName)) : null;
+      const publisherItem = publisherName ? state.db.library.find(item => String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisherName.toLocaleLowerCase("pt-BR")) : null;
+      const publisherImage = publisherName ? (publisherSetting?.cover_url || (publisherItem ? coverFor(publisherItem) : instantCover({ title: publisherName }))) : "";
+      const publisherMarkup = publisherName ? `<div class="faction-publisher-summary"><img src="${escapeHTML(proxiedImageUrl(publisherImage))}" alt="Editora ${escapeHTML(publisherName)}" loading="lazy"><span><strong>${escapeHTML(publisherName)}</strong><small>Editora</small></span></div>` : "";
+      return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats">${publisherMarkup}<span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionExtraAbafacsMarkup(selected, stats)}${factionCatalogMarkup(selected)}${factionOwnedCatalogMarkup(selected)}</div>`;
     }
     return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${canChooseFaction() ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
   }
@@ -13034,7 +13730,9 @@
     if (state.section === "entity" && state.entityFilter?.kind === "publisher") loadPublisherFans(state.entityFilter.value);
     // Aguarda as configurações remotas dos personagens para que uma imagem
     // personalizada nunca seja substituída momentaneamente pela Wikipédia.
-    if (state.section === "comic" && state.authReady) loadCharacterWikiCarousel();
+    if (state.authReady && (state.section === "comic" || (state.section === "entity" && state.entityFilter?.kind === "publisher"))) {
+      loadCharacterWikiCarousel();
+    }
   }
 
   function openFileReportsPopup(previousOverlay = null) {
@@ -13735,7 +14433,34 @@
     $$('[data-character-wiki]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openCharacterWiki(el.dataset.characterWiki); }));
     $$('[data-saved-entity-wiki]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openSavedEntityWiki(el.dataset.savedEntityWiki, el.dataset.savedEntityName); }));
     $$('[data-save-imprint]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); toggleImprintSave(el); }));
+    $$('[data-faction-imprint-pin]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); toggleFactionImprintPin(el); }));
+    $$('[data-faction-imprint-pin], [data-faction-character-pin]').forEach(el => {
+      const pinned = el.dataset.factionImprintPinned === "true" || el.dataset.factionCharacterPinned === "true";
+      el.textContent = pinned ? "\u2605 Fixado na fac\u00e7\u00e3o" : "\u2606 Fixar na fac\u00e7\u00e3o";
+    });
     $$('[data-save-character]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); toggleCharacterSave(el); }));
+    if (state.section === "entity" && state.entityFilter?.kind === "character") {
+      const factionId = currentFactionId();
+      const factionRole = state.factionRoles.find(role => role.faction_id === factionId && role.user_id === state.session?.user?.id);
+      if (factionId && ["leader", "curator"].includes(factionRole?.role)) {
+        const characterName = String(state.entityFilter.value || "").trim();
+        const key = publisherKey(characterName);
+        const pinned = state.factionPinnedCharacters.has(`${factionId}:${key}`);
+        const actions = $(".publisher-page-actions");
+        if (actions && !$('[data-faction-character-pin]', actions)) {
+          const button = document.createElement("button");
+          button.className = `small-btn ${pinned ? "is-liked" : ""}`;
+          button.dataset.factionCharacterPin = characterName;
+          button.dataset.factionCharacterPinned = pinned ? "true" : "false";
+          button.textContent = pinned ? "â˜… Fixado na facÃ§Ã£o" : "â˜† Fixar na facÃ§Ã£o";
+          actions.appendChild(button);
+        }
+      }
+    }
+    $$('[data-faction-character-pin]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); toggleFactionCharacterPin(el); }));
+    $$('[data-faction-character-pin]').forEach(el => {
+      el.textContent = el.dataset.factionCharacterPinned === "true" ? "\u2605 Fixado na fac\u00e7\u00e3o" : "\u2606 Fixar na fac\u00e7\u00e3o";
+    });
     $$('[data-character-settings]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openCharacterSettings(el.dataset.characterSettings); }));
     if (state.section === "entity" && state.entityFilter?.kind === "publisher") {
       const actions = $(".publisher-page-actions");
@@ -13816,7 +14541,7 @@
       $(".faction-page:not(.faction-detail-page) .section-title").textContent = "Facção";
     }
     if (state.section === "factions" && state.factionPageId && $(".faction-detail-page") && !$(".faction-leadership-tools")) {
-      $(".faction-detail-page").insertAdjacentHTML("beforeend", factionLeadershipMarkup(state.factionPageId));
+      $(".faction-detail-page").insertAdjacentHTML("beforeend", factionLeadershipMarkup(state.factionPageId) + factionElectionMarkup(state.factionPageId));
       applyFactionAbafacOrder(state.factionPageId);
       $('[data-faction-resign]')?.addEventListener("click", async () => {
         const faction = state.factions.find(item => item.id === state.factionPageId);
@@ -13834,7 +14559,7 @@
         const catalogUrl = faction.abafac_catalog_url || null;
         const catalogWasActive = factionAbafacOrder(faction.id).includes("catalog");
         if (catalogUrl === false) return toast("Informe o link de um catálogo público de quadrinhos deste site.");
-        const result = await sb.rpc("update_faction_identity_v2", { p_faction_id: faction.id, p_name: values.name, p_color: values.color, p_emblem: values.emblem, p_description: values.description, p_catalog_url: catalogUrl });
+        const result = await sb.rpc("update_faction_identity_v2", { p_faction_id: faction.id, p_name: values.name, p_color: values.color, p_emblem: values.emblem, p_description: values.description, p_catalog_url: catalogUrl, p_publisher_name: values.publisherName || null });
         if (result.error) return toast(result.error.message || "Não foi possível atualizar a facção.");
         await loadFactions();
         const catalogOrder = factionAbafacOrder(faction.id).filter(key => key !== "catalog");
@@ -13844,6 +14569,20 @@
         await loadFactions();
         render();
       });
+      $('[data-faction-election-section] form')?.addEventListener("submit", async event => {
+        event.preventDefault();
+        const pitch = new FormData(event.currentTarget).get("pitch") || "";
+        const result = await sb.rpc("register_faction_curator_candidate", { p_pitch: pitch });
+        if (result.error) return toast(result.error.message || "Não foi possível registrar sua candidatura.");
+        await loadFactions();
+        render();
+      });
+      $$('[data-faction-election-vote]').forEach(button => button.addEventListener("click", async () => {
+        const result = await sb.rpc("cast_faction_election_vote", { p_election_id: state.factionElections.get(state.factionPageId)?.id, p_office: button.dataset.factionElectionVote, p_candidate_id: button.dataset.factionElectionCandidate });
+        if (result.error) return toast(result.error.message || "Não foi possível registrar seu voto.");
+        await loadFactions();
+        render();
+      }));
     }
     if (state.section === "ranking" && $(".ranking-benefits") && !$(".ranking-faction-overview")) {
       const overview = document.createElement("section");
@@ -14066,6 +14805,18 @@
         button.textContent = saved ? "★ Salva" : "☆ Salvar";
         actions.insertBefore(button, actions.firstChild);
         button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
+      }
+      const managedFactionIds = new Set(state.factionRoles.filter(role => role.user_id === state.session?.user?.id && ["leader", "curator"].includes(role.role)).map(role => String(role.faction_id)));
+      const linkedFactionId = [...managedFactionIds][0] || null;
+      if (category && category.collection_type !== "blog" && actions && linkedFactionId && !$("[data-faction-public-catalog-pin]", actions)) {
+        const button = document.createElement("button");
+        const pinned = state.factionPinnedPublicCollections.has(`${linkedFactionId}:${category.id}`);
+        button.className = `small-btn ${pinned ? "is-liked" : ""}`;
+        button.dataset.factionPublicCatalogPin = category.id;
+        button.dataset.factionPublicCatalogPinned = pinned ? "true" : "false";
+        button.textContent = pinned ? "★ Destaque da facção" : "☆ Destacar na facção";
+        actions.appendChild(button);
+        button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleFactionPublicCollectionPin(button, linkedFactionId); };
       }
     }
     if (state.section === "public-profile" && !state.publicProfile?.collectionId && state.session && state.publicProfile?.profile?.id !== state.session.user.id) {
@@ -14356,8 +15107,9 @@
       if (s === "factions") {
         if (!requireAuthenticatedSection()) return;
         if (isFactionStaff()) return navigate({ pagina: "ranking", secao: "faccoes" });
-        if (!canAccessFactions()) return navigate({}, true);
-        return navigate({ pagina: "faccoes", faccao: factionRouteKey(state.profile.faction_id) });
+        const ownFactionId = currentFactionId();
+        if (!ownFactionId) return navigate({}, true);
+        return navigate({ pagina: "faccoes", faccao: factionRouteKey(ownFactionId) });
       }
       if (s === "album" && !requireAuthenticatedSection()) return;
       setSection(s === "comics" ? "comic" : s);
@@ -15611,13 +16363,29 @@
       armOfflineHistoryGuard();
     }
   });
-  loadAccount()
+  const accountBootstrap = initialPublicUsername
+    ? Promise.race([
+      loadAccount(),
+      new Promise((_, reject) => window.setTimeout(() => reject(new Error("Account bootstrap timeout")), 15000))
+    ])
+    : loadAccount();
+  accountBootstrap
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1");
       pumpDownloadQueue();
     })
     .catch(error => console.warn("Supabase indisponível:", error))
+    .then(async () => {
+      if (!initialPublicUsername || !state.publicProfile?.loading) return;
+      try {
+        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1");
+      } catch (error) {
+        console.warn("Public profile load failed:", error);
+        state.publicProfile = { error: "Não foi possível carregar este perfil agora.", username: initialPublicUsername };
+        render();
+      }
+    })
     .finally(() => {
       if (appRoot) appRoot.style.visibility = "";
     });

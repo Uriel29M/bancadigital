@@ -2018,7 +2018,8 @@ create table if not exists public.factions (
   description text not null default '',
   sort_order integer not null default 0,
   abafac_order jsonb not null default '["stats", "manifest", "mural", "missions", "achievements", "hall", "report", "leadership", "members"]'::jsonb,
-  abafac_catalog_url text
+  abafac_catalog_url text,
+  publisher_name text
 );
 
 alter table public.factions add column if not exists page_key bigint;
@@ -2054,6 +2055,8 @@ set abafac_order = coalesce((
 ), '[]'::jsonb)
 where coalesce(public.factions.abafac_order, '[]'::jsonb) ? 'showcase';
 alter table public.factions add column if not exists abafac_catalog_url text;
+alter table public.factions add column if not exists publisher_name text;
+create unique index if not exists factions_publisher_name_unique on public.factions (lower(trim(publisher_name))) where nullif(trim(publisher_name), '') is not null;
 alter table public.factions add column if not exists mural_notice text not null default '';
 update public.factions
 set abafac_order = jsonb_build_array('stats') || coalesce(abafac_order, '[]'::jsonb)
@@ -2424,7 +2427,7 @@ begin
   if exists (
     select 1 from jsonb_array_elements_text(p_order) item(value)
     where not (
-      item.value in ('stats', 'manifest', 'mural', 'missions', 'mandatory-reads', 'achievements', 'hall', 'report', 'leadership', 'members')
+      item.value in ('stats', 'manifest', 'mural', 'missions', 'mandatory-reads', 'faction-chat', 'continue-reading', 'recently-added', 'featured-character', 'new-series', 'most-read-month', 'best-series', 'tips', 'random', 'artist', 'recommendations', 'random-publisher', 'downloads', 'most-read', 'pinned-imprints', 'pinned-characters', 'pinned-collections', 'achievements', 'hall', 'report', 'leadership', 'members')
       or (item.value = 'catalog' and exists (select 1 from public.factions where id = p_faction_id and nullif(trim(abafac_catalog_url), '') is not null))
       or (item.value ~ '^image:[0-9]+$' and exists (
         select 1 from public.faction_abafac_images image
@@ -2739,9 +2742,10 @@ update public.factions set emblem = case id
 end
 where id in ('aurora-rubra', 'vigilia-cobalto', 'forja-dourada', 'nevoa-violeta');
 
+drop function if exists public.update_faction_identity_v2(text, text, text, text, text, text, text);
 drop function if exists public.update_faction_identity_v2(text, text, text, text, text, text);
 drop function if exists public.update_faction_identity_v2(text, text, text, text, text);
-create or replace function public.update_faction_identity_v2(p_faction_id text, p_name text, p_color text, p_emblem text default '🦁', p_description text default null, p_catalog_url text default null)
+create or replace function public.update_faction_identity_v2(p_faction_id text, p_name text, p_color text, p_emblem text default '🦁', p_description text default null, p_catalog_url text default null, p_publisher_name text default null)
 returns void language plpgsql security definer set search_path = public
 as $$
 begin
@@ -2751,6 +2755,7 @@ begin
   if exists (select 1 from public.factions where id <> p_faction_id and emblem = p_emblem) then raise exception 'Esse emoji ja pertence a outra faccao'; end if;
   if not public.is_admin() and not exists (select 1 from public.faction_roles where user_id = auth.uid() and faction_id = p_faction_id and role = 'leader') then raise exception 'Apenas o lider pode editar a identidade da faccao'; end if;
   if char_length(trim(coalesce(p_name, ''))) < 3 then raise exception 'Nome invalido'; end if;
+  if nullif(trim(p_publisher_name), '') is not null and exists (select 1 from public.factions where id <> p_faction_id and lower(trim(publisher_name)) = lower(trim(p_publisher_name))) then raise exception 'Essa editora ja foi definida por outra faccao'; end if;
   if nullif(trim(p_catalog_url), '') is not null and (trim(p_catalog_url) like '//%' or trim(p_catalog_url) ilike 'http:%' or trim(p_catalog_url) ilike 'https:%' or trim(p_catalog_url) !~ '(^|[?&])perfil=[A-Za-z0-9_]{3,24}(&|$)' or trim(p_catalog_url) !~ '(^|[?&])lista=[^&#]+') then
     raise exception 'O catálogo deve ser um link interno de uma coleção pública deste site';
   end if;
@@ -2765,10 +2770,10 @@ begin
   ) then
     raise exception 'A coleção precisa ser pública e pertencer a este site';
   end if;
-  update public.factions set name = left(trim(p_name), 80), color = lower(p_color), emblem = p_emblem, description = nullif(left(trim(coalesce(p_description, '')), 500), ''), abafac_catalog_url = nullif(trim(p_catalog_url), '') where id = p_faction_id;
+  update public.factions set name = left(trim(p_name), 80), color = lower(p_color), emblem = p_emblem, description = nullif(left(trim(coalesce(p_description, '')), 500), ''), abafac_catalog_url = nullif(trim(p_catalog_url), ''), publisher_name = nullif(left(trim(p_publisher_name), 160), '') where id = p_faction_id;
 end;
 $$;
-grant execute on function public.update_faction_identity_v2(text, text, text, text, text, text) to authenticated;
+grant execute on function public.update_faction_identity_v2(text, text, text, text, text, text, text) to authenticated;
 
 create or replace function public.update_faction_catalog(p_faction_id text, p_catalog_url text default null)
 returns void language plpgsql security definer set search_path = public

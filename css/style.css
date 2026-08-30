@@ -2364,9 +2364,22 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-join-button[data-tooltip]:hover::after, .faction-join-button[data-tooltip]:focus-visible::after { opacity: 1; visibility: visible; transform: translateY(0); }
 .faction-detail-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .faction-detail-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 22px; border: 1px solid color-mix(in srgb, var(--faction-color) 55%, var(--line)); border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--faction-color) 20%, #202025), #141419); }
+.faction-publisher-summary { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.faction-publisher-summary img { width: 74px; height: 74px; flex: 0 0 74px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; background: var(--surface); }
+.faction-publisher-summary span { display: grid; gap: 3px; min-width: 0; }
+.faction-publisher-summary small { color: var(--muted); font-size: 10px; }
+.faction-publisher-summary strong { max-width: 18ch; overflow: hidden; color: var(--faction-color); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .faction-detail-hero strong { display: block; color: var(--faction-color); font-size: 22px; }
 .faction-detail-hero span:last-child { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
 .faction-leadership-tools { border-left: 3px solid var(--faction-color); padding-left: 28px; }
+.faction-election-section { border-left: 3px solid var(--faction-election-color); padding-left: 28px; }
+.faction-election-section .eyebrow, .faction-election-section .section-title { color: var(--faction-election-color); }
+.faction-election-candidates { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 9px; margin: 14px 0; }
+.faction-election-candidate { display: grid; gap: 5px; justify-items: start; min-height: 48px; border-color: color-mix(in srgb, var(--faction-election-color) 55%, var(--line)); text-align: left; }
+.faction-election-candidate:hover, .faction-election-candidate:focus-visible, .faction-election-candidate.is-active { border-color: var(--faction-election-color); background: color-mix(in srgb, var(--faction-election-color) 20%, var(--surface)); color: var(--faction-election-color); }
+.faction-election-candidate span { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.faction-election-candidacy { display: grid; gap: 10px; max-width: 620px; margin-top: 14px; }
+.faction-election-candidacy .small-btn { justify-self: start; border-color: var(--faction-election-color); color: var(--faction-election-color); }
 .faction-management-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .faction-role-list { display: grid; gap: 12px; margin: 12px 0; }
 .faction-role-list > div { display: grid; gap: 7px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.025); }
@@ -2379,6 +2392,8 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-abafac-controls { position: relative; z-index: 3; pointer-events: auto; }
 .faction-abafac-controls .small-btn { min-width: 32px; padding: 5px 8px; }
 .faction-abafac-controls .small-btn:disabled { cursor: not-allowed; opacity: .35; }
+.faction-chat-open-button { display: inline-flex; align-items: center; justify-content: center; border-color: var(--faction-color); background: var(--faction-color); color: #fff; box-shadow: 0 8px 18px color-mix(in srgb, var(--faction-color) 28%, transparent); }
+.faction-chat-open-button:hover { border-color: var(--faction-color); background: color-mix(in srgb, var(--faction-color) 82%, #000); color: #fff; }
 .faction-abafac-modal { width: min(520px, 100%); }
 .faction-abafac-manager { display: grid; gap: 8px; margin-top: 18px; }
 .faction-abafac-manager-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.025); }
