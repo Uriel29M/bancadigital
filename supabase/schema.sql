@@ -1541,6 +1541,9 @@ create policy "profiles are public" on public.profiles for select using (
   (not public.is_blocked_between(id) and (not profile_hidden or auth.uid() = id or public.is_moderator()))
   or exists (select 1 from public.profile_blocks where blocker_id = auth.uid() and blocked_id = id)
 );
+-- Keep the login lookup in get_login_email(), but never expose the account
+-- email as a selectable column through the public Data API.
+revoke select (account_email) on public.profiles from anon, authenticated;
 create policy "publisher settings are public" on public.publisher_settings for select using (true);
 create policy "moderators manage publisher settings" on public.publisher_settings for all using (public.is_moderator()) with check (public.is_moderator());
 create policy "homepage settings are public" on public.homepage_settings for select using (true);
@@ -3121,7 +3124,7 @@ declare
 begin
   if v_user_id is null then return; end if;
   select * into v_profile from public.profiles where id = v_user_id;
-  if not found or v_profile.plan in ('moderator', 'banca', 'admin') then return; end if;
+  if not found or v_profile.plan not in ('free', 'premium') then return; end if;
   if v_profile.faction_id is not null then
     if p_faction_id is null or p_faction_id = v_profile.faction_id then
       select f.id, f.name, f.color, f.emblem, f.description, v_profile.faction_changed_at into v_result_faction_id, v_result_name, v_result_color, v_result_emblem, v_result_description, v_result_changed_at from public.factions f where f.id = v_profile.faction_id;

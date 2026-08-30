@@ -509,6 +509,11 @@
   function normalizedPlan(profile = state.profile) {
     return String(profile?.plan || "").trim().toLowerCase();
   }
+  function canChooseFaction(profile = state.profile) {
+    // Apenas contas Comum e Lenda participam da disputa de facções.
+    // Uma allowlist evita abrir o seletor para planos novos ou inválidos.
+    return ["free", "premium"].includes(normalizedPlan(profile));
+  }
   function canAccessStickerAlbum(profile = state.profile) {
     return Boolean(profile) && normalizedPlan(profile) !== "banca";
   }
@@ -1108,6 +1113,12 @@
 
   function canAccessFactions() {
     return Boolean(state.profile?.faction_id);
+  }
+
+  function requireAuthenticatedSection() {
+    if (state.session) return true;
+    openAuthPage();
+    return false;
   }
 
   function isFactionStaff() {
@@ -1870,7 +1881,7 @@
   }
 
   function openFactionChoice() {
-    if (!state.session || !state.profile || ["moderator", "banca", "admin"].includes(state.profile.plan) || state.factionChoiceOpen || !state.factions.length) return;
+    if (!state.session || !canChooseFaction() || state.factionChoiceOpen || !state.factions.length) return;
     state.factionChoiceOpen = true;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop faction-choice-backdrop";
@@ -2706,7 +2717,12 @@
     state.comicLikeCounts = (comicLikes.data || []).reduce((counts, row) => counts.set(row.item_id, (counts.get(row.item_id) || 0) + 1), new Map());
     if (!session?.user) await loadFactions();
     if (session?.user) {
-      const profile = await sb.from("profiles").select("*").eq("id", session.user.id).single();
+      let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, profile_hidden, is_banned, silenced_until, last_seen_at, created_at, plan, profile_background_theme, profile_accent_theme, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, likes_public, wall_description, profile_banner_url, allow_mentions, allow_messages, shelf_sort_orders, shelf_style, shelf_styles, notifications_enabled, shelf_blogs_public, profile_wall_public, shelf_saved_public_collections, profile_activity_public, xp, level, daily_streak, last_checkin_at, faction_id, faction_joined_at, faction_changed_at, profile_sticker_award_id, allow_sticker_requests").eq("id", session.user.id).single();
+      if (profile.error) {
+        // Compatibilidade com instalações que ainda não aplicaram os scripts
+        // opcionais do álbum de stickers.
+        profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, profile_hidden, is_banned, silenced_until, last_seen_at, created_at, plan, profile_background_theme, profile_accent_theme, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, likes_public, wall_description, profile_banner_url, allow_mentions, allow_messages, shelf_sort_orders, shelf_style, shelf_styles, notifications_enabled, shelf_blogs_public, profile_wall_public, shelf_saved_public_collections, profile_activity_public, xp, level, daily_streak, last_checkin_at, faction_id, faction_joined_at, faction_changed_at").eq("id", session.user.id).single();
+      }
       saveOfflineAccount(profile.data);
       state.profile = effectiveSundayProfile(profile.data);
       loadDownloads();
@@ -2805,7 +2821,7 @@
     if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["SÃ©rie Mensal", "Recentes", "VÃ¡rios autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
     }
-    if (state.session && state.profile && !["moderator", "banca", "admin"].includes(state.profile.plan) && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
+    if (state.session && canChooseFaction() && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
     if (state.section === "ranking") loadRankingData();
   }
 
@@ -2997,9 +3013,13 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_section_order, shelf_collection_order, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     if (profile.error) {
-      profile = await sb.from("profiles").select("id, username, avatar_url, profile_sticker_award_id, title, plan, xp, level, daily_streak, last_seen_at, allow_messages").ilike("username", username).maybeSingle();
+      // Uma coluna opcional nova pode ainda não existir em instalações que
+      // não aplicaram todas as migrations. Não descarte as preferências de
+      // visibilidade nesse caso: elas são necessárias para renderizar o
+      // perfil público de outras pessoas corretamente.
+      profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
     }
     if (profile.error || !profile.data) {
       state.publicProfile = { error: "Perfil não encontrado.", username };
@@ -4209,7 +4229,6 @@
             <button class="btn btn-danger" type="submit">Enviar link</button>
           </div>
           <div class="auth-message" id="recovery-message"></div>
-        </form>
         </form>
       </div>`;
     $("#modal-root").appendChild(overlay);
@@ -9121,13 +9140,13 @@
   }
 
   function shelfSectionOrderForProfile(profile = {}) {
-    if (Array.isArray(profile.shelf_section_order)) return profile.shelf_section_order;
-    try { return JSON.parse(localStorage.getItem(`bancaDigitalShelfSectionOrder:${profile.id}`) || "null"); } catch { return null; }
+    if (Array.isArray(profile?.shelf_section_order)) return profile.shelf_section_order;
+    try { return JSON.parse(localStorage.getItem(`bancaDigitalShelfSectionOrder:${profile?.id || ""}`) || "null"); } catch { return null; }
   }
 
   function shelfCollectionOrderForProfile(profile = {}) {
-    if (Array.isArray(profile.shelf_collection_order)) return profile.shelf_collection_order;
-    try { return JSON.parse(localStorage.getItem(`bancaDigitalShelfCollectionOrder:${profile.id}`) || "null"); } catch { return null; }
+    if (Array.isArray(profile?.shelf_collection_order)) return profile.shelf_collection_order;
+    try { return JSON.parse(localStorage.getItem(`bancaDigitalShelfCollectionOrder:${profile?.id || ""}`) || "null"); } catch { return null; }
   }
 
   function isOwnShelfProfile() {
@@ -11005,7 +11024,7 @@
     </div>`;
   }
 
-  function renderCatalog(type = null) {
+  function renderCatalogLegacyBase(type = null) {
     const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
      const characterCarousel = type === "comic" ? characterWikiCarouselMarkup(items) : "";
     return `
@@ -12210,7 +12229,7 @@
       const stats = state.factionStats.get(selected.id) || { members: 0, xp: 0 };
       return `<div class="content faction-page faction-detail-page" style="--faction-color:${escapeHTML(selected.color)}"><div class="section-head"><div><div class="eyebrow">Página da facção</div><h1 class="section-title">${escapeHTML(selected.emblem)} ${escapeHTML(selected.name)}</h1><div class="section-subtitle">${escapeHTML(selected.description)}</div></div><button class="small-btn" data-faction-back>Voltar às facções</button></div><section class="section faction-detail-hero faction-stats-abafac" data-faction-abafac="stats"><span class="faction-page-emblem">${escapeHTML(selected.emblem)}</span><div class="faction-page-stats faction-stats-copy"><strong>${stats.members} membro(s)</strong><span>${stats.xp.toLocaleString("pt-BR")} XP na temporada</span></div></section>${factionExtraAbafacsMarkup(selected, stats)}${factionCatalogMarkup(selected)}${factionOwnedCatalogMarkup(selected)}</div>`;
     }
-    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${state.profile && !["moderator", "banca", "admin"].includes(state.profile.plan) ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
+    return `<div class="content faction-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Facções</h1><div class="section-subtitle">Escolha seu lado, ajude sua equipe e dispute a temporada mensal.</div></div>${canChooseFaction() ? `<button class="small-btn" data-open-faction-choice>${state.profile.faction_id ? "Trocar facção" : "Escolher facção"}</button>` : ""}</div>${factionOverviewMarkup()}<section class="section faction-rules"><div class="section-head"><div><h2 class="section-title">Como funciona</h2><div class="section-subtitle">A temporada recomeça no primeiro dia de cada mês.</div></div></div><p>Leituras, comentários, curtidas e participação nos chats geram XP para sua facção. Moderadores e administradores acompanham a disputa, mas não participam dela.</p></section></div>`;
   }
 
   function renderStaffActivities() {
@@ -13775,7 +13794,7 @@
         navigate(ownFactionId ? { pagina: "faccoes", faccao: factionRouteKey(ownFactionId) } : {});
       };
     }
-    if (state.section === "factions" && state.factionPageId && state.profile && !["moderator", "banca", "admin"].includes(state.profile.plan) && state.profile.faction_id !== state.factionPageId && !$("[data-faction-join]")) {
+    if (state.section === "factions" && state.factionPageId && canChooseFaction() && state.profile.faction_id !== state.factionPageId && !$("[data-faction-join]")) {
       const joinButton = document.createElement("button");
       joinButton.type = "button";
       joinButton.className = "small-btn faction-join-button";
@@ -14333,12 +14352,12 @@
       el.addEventListener("click", () => {
       const s = el.dataset.section;
       if (s === "factions") {
-        if (!state.session) return openAuthPage();
+        if (!requireAuthenticatedSection()) return;
         if (isFactionStaff()) return navigate({ pagina: "ranking", secao: "faccoes" });
         if (!canAccessFactions()) return navigate({}, true);
         return navigate({ pagina: "faccoes", faccao: factionRouteKey(state.profile.faction_id) });
       }
-      if (s === "album" && !state.session) return openAuthPage();
+      if (s === "album" && !requireAuthenticatedSection()) return;
       setSection(s === "comics" ? "comic" : s);
       });
     });
@@ -14930,7 +14949,7 @@
     };
   }
 
-  function openAdmin(editId = null) {
+  function openAdminLegacy(editId = null) {
     const existing = editId ? state.db.library.find(x => x.id === editId) : null;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
@@ -14986,7 +15005,7 @@
     });
   }
 
-  function openEditForm(id = null) {
+  function openEditFormLegacy(id = null) {
     const x = id ? state.db.library.find(i => i.id === id) : {
       id: "item-" + Date.now(), addedAt: new Date().toISOString(), title:"", issue:"", type:"comic", author:"", year:new Date().getFullYear(),
       description:"", cover:"", fileUrl:"", telegramUrl:"", format:"pdf", clicks:0, featured:false, randomWeight:5, tags:[], collectionIds:[]
@@ -15054,7 +15073,7 @@
     };
   }
 
-  function renderCatalog(type = null) {
+  function renderCatalogLegacyAdmin(type = null) {
      const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
      const series = uniqueCatalogItems(items.filter(x => x.seriesId));
      const oneshots = uniqueCatalogItems(items.filter(x => !x.seriesId));
@@ -15295,7 +15314,7 @@
     $("#edit-form", overlay).onsubmit = event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const sourceUrl = String(fd.get("sourceUrl") || "").trim(); const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean); const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim(); const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, ""); const item = { ...x, title: String(fd.get("title") || "").trim(), seriesTitle, seriesId: seriesTitle ? seriesKey(seriesTitle) : "", issue: volumeNumber, type: fd.get("type"), year: Number(fd.get("year")) || new Date().getFullYear(), publisher: String(fd.get("publisher") || "").trim(), imprint: String(fd.get("imprint") || "").trim(), character: String(fd.get("character") || "").trim(), author: String(fd.get("author") || "").trim(), format: detectFormat(sourceUrl), fileUrl: sourceUrl, backupUrls, telegramUrl: "", featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(), description: String(fd.get("description") || "").trim(), tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean), featured: fd.get("featured") === "on" }; delete item.randomWeight; const index = state.db.library.findIndex(i => i.id === item.id); if (index >= 0) state.db.library[index] = item; else state.db.library.push(item); saveCatalog("Edição salva."); overlay.remove(); render(); };
   }
 
-  function renderCatalog(type = null) {
+  function renderCatalogLegacyAdmin2(type = null) {
     const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
     const series = uniqueCatalogItems(items.filter(x => x.seriesId));
     const oneshots = uniqueCatalogItems(items.filter(x => !x.seriesId));
@@ -15313,7 +15332,7 @@
     $("#submission-form", overlay).onsubmit = event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const seriesTitle = String(fd.get("seriesTitle") || "").trim(); state.db.submissions.push({ id: "sub-" + Date.now(), author: String(fd.get("author") || "").trim(), seriesTitle, seriesId: seriesTitle ? seriesKey(seriesTitle) : "", title: String(fd.get("title") || "").trim(), issue: String(fd.get("issue") || "").trim(), type: fd.get("type"), year: Number(fd.get("year")) || "", publisher: String(fd.get("publisher") || "").trim(), imprint: String(fd.get("imprint") || "").trim(), character: String(fd.get("character") || "").trim(), fileUrl: String(fd.get("sourceUrl") || "").trim(), format: detectFormat(fd.get("sourceUrl") || ""), message: String(fd.get("message") || ""), createdAt: new Date().toISOString() }); save(); overlay.remove(); toast("Envio registrado para análise."); };
   }
 
-  function renderCatalog(type = null) {
+  function renderCatalogLegacyAdmin3(type = null) {
     const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
     const series = uniqueCatalogItems(items.filter(x => x.seriesId));
     const oneshots = uniqueCatalogItems(items.filter(x => !x.seriesId));

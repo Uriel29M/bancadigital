@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v430";
+const CACHE_VERSION = "banca-digital-shell-v431";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
@@ -8,6 +8,8 @@ const APP_SHELL = [
   "./js/app.js?v=2.2.10.325",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
+  "./js/data/dc-comics/black-label.js?v=1.0.14",
+  "./js/data/loading-tips.js?v=1.0.0",
   "./js/supabase.js",
   "./assets/barracabrancaicon.png?v=1",
   "./assets/semfoto.jpg?v=1",
@@ -89,14 +91,13 @@ self.addEventListener("fetch", event => {
       }
       return response;
     } catch {
-      // Uma navegação do SPA ainda pode funcionar com o shell local. Não
-      // devolva um 504 vazio, pois isso quebra a rota /?pagina=... mesmo
-      // quando o index.html já está no cache.
-      return caches.match("./index.html").then(cached => cached || new Response("Offline", {
+      // Somente navegações usam index.html como fallback. Para assets, um
+      // HTML retornado com status 200 mascara o erro e quebra a aplicação.
+      return new Response("Offline", {
         status: 503,
         statusText: "Offline",
         headers: { "Content-Type": "text/plain; charset=utf-8" },
-      }));
+      });
     }
   })());
 });

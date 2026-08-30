@@ -17,7 +17,7 @@ $$;
 drop policy if exists "sticker slot preferences are public" on public.sticker_slot_preferences;
 drop policy if exists "users manage own sticker slot preferences" on public.sticker_slot_preferences;
 create policy "sticker slot preferences are public" on public.sticker_slot_preferences for select using (true);
-create policy "users manage own sticker slot preferences" on public.stickeACr_slot_preferences for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "users manage own sticker slot preferences" on public.sticker_slot_preferences for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create or replace function public.set_sticker_slot_gum(p_character_id text, p_award_id bigint default null, p_blocked boolean default true)
 returns void language plpgsql security definer set search_path = public
