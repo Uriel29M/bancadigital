@@ -1,14 +1,15 @@
-const CACHE_VERSION = "banca-digital-shell-v434";
+const CACHE_VERSION = "banca-digital-shell-v451";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
   "./css/style.css?v=2.2.10.171",
-  "./js/app.js?v=2.2.10.329",
+  "./js/app.js?v=2.2.10.336",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
   "./js/data/dc-comics/black-label.js?v=1.0.14",
+  "./js/data/dc-comics/milestone.js?v=1.1.0",
   "./js/data/loading-tips.js?v=1.0.0",
   "./js/supabase.js",
   "./assets/barracabrancaicon.png?v=1",

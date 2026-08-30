@@ -12,7 +12,7 @@
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=214", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=215", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponÃ­vel:", error));
       });
     }
@@ -132,8 +132,9 @@
   <!-- Catálogos por editora/selo. -->
   <script src="js/data/dc-comics/recentes.js?v=2.2.7.43"></script>
   <script src="js/data/dc-comics/black-label.js?v=1.0.14"></script>
+  <script src="js/data/dc-comics/milestone.js?v=1.1.0"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-  <script src="js/app.js?v=2.2.10.329"></script>
+  <script src="js/app.js?v=2.2.10.336"></script>
 </body>
 </html>
 

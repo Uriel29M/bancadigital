@@ -66,6 +66,10 @@ function extractDownloadUrl(html: string, pageUrl: URL) {
 async function resolveDownload(url: URL) {
   if (/^download\d+\.mediafire\.com$/i.test(url.hostname)) return url;
   const page = await fetchAllowed(url, { headers: { Accept: "text/html,application/xhtml+xml" } });
+  // Alguns links permanentes /file/{id} redirecionam diretamente para o
+  // host de download. Nesse caso fetchAllowed já resolveu o destino e a
+  // resposta não é uma página HTML para ser analisada.
+  if (/^download\d+\.mediafire\.com$/i.test(page.url.hostname)) return page.url;
   if (!page.response.ok) throw new Error(`MediaFire respondeu HTTP ${page.response.status}.`);
   const html = await page.response.text();
   return extractDownloadUrl(html, page.url);

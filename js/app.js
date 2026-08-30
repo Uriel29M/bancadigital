@@ -87,6 +87,16 @@
       SERIES_FIELDS.forEach(field => {
         if (item[field] === undefined || item[field] === null || item[field] === "") merged[field] = definition[field];
       });
+      if (merged.seriesId === "series-hardware-milestone-1993") merged.character = "Hardware";
+      if (merged.seriesId === "series-icone-milestone-1993") {
+        merged.character = "\u00cdcone";
+        merged.secondaryCharacters = ["Foguete"];
+      }
+      if (merged.seriesId === "series-sindicato-de-sangue-milestone-1993") {
+        const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+      }
+      if (merged.seriesId === "series-superchoque-milestone-1993") merged.character = "Super Choque";
       if (definition.imprint === "Black Label") {
         const issueNumber = Number(String(merged.issue || "").match(/\d+/)?.[0] || 0);
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
@@ -215,6 +225,14 @@
             return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
           });
           saved.library = materializeSeriesItems(saved.library.map(item => ({ ...(defaultsById.get(item.id) || {}), ...item })));
+          const milestoneSeriesIds = new Set((window.DEFAULT_SERIES || []).filter(series => series.imprint === "Milestone").map(series => series.id));
+          const milestoneItemIds = new Set((window.DEFAULT_LIBRARY || []).filter(item => milestoneSeriesIds.has(item.seriesId)).map(item => item.id));
+          const hadUnavailableMilestoneIssues = saved.library.some(item => milestoneSeriesIds.has(item.seriesId) && !milestoneItemIds.has(item.id));
+          saved.library = saved.library.filter(item => !milestoneSeriesIds.has(item.seriesId) || milestoneItemIds.has(item.id));
+          const hadObsoleteHardwareIssues = saved.library.some(item => item.seriesId === "series-hardware-milestone-1993" && Number(item.issue) > 16);
+          saved.library = saved.library.filter(item => item.seriesId !== "series-hardware-milestone-1993" || Number(item.issue) <= 16);
+          const hadLegacyIconCatalog = saved.library.some(item => item.seriesId === "series-icone-milestone-1993");
+          saved.library = saved.library.filter(item => item.seriesId !== "series-icone-milestone-1993");
           const batgirlsCharacterChanged = saved.library.some(item => item.seriesId === "series-batgirls-2022" && item.character !== "Batgirl");
           if (batgirlsCharacterChanged) {
             saved.library = saved.library.map(item => item.seriesId === "series-batgirls-2022" ? { ...item, character: "Batgirl" } : item);
@@ -233,7 +251,7 @@
             const previous = previousLibrary.find(entry => entry.id === item.id);
             return previous && (previous.volume !== item.volume || previous.volumeTitle !== item.volumeTitle);
           });
-          if (knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged) this.save(saved);
+          if (knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
           if (saved.library.some(item => item.id === "series-justice-godzilla-kong-2023-08" && String(item.fileUrl || "").includes("bpk2XxWKhFNO9s"))) this.save(saved);
           const knownIds = new Set(saved.library.map(item => item.id));
           const newDefaults = materializeSeriesItems(structuredClone(window.DEFAULT_LIBRARY)).filter(item => !knownIds.has(item.id) && !removedItemIds.has(item.id) && !isLegacyRemovedCatalogItem(item));
@@ -640,11 +658,12 @@
   function isHiddenCatalogItem(item) {
     return Boolean(item?.id && state.hiddenCatalogItemIds?.has(String(item.id)));
   }
-  function canViewCatalogItem(item) {
-    return !isHiddenCatalogItem(item) || isStaffProfile();
+  function canViewCatalogItem(item, includeHidden = false) {
+    const hiddenCharacter = characterNames(item).some(name => state.characterSettings.get(publisherKey(name))?.is_hidden);
+    return (!isHiddenCatalogItem(item) && !hiddenCharacter) || (includeHidden && isAdminProfile());
   }
-  function visibleCatalogItems(items = state.db.library) {
-    return items.filter(canViewCatalogItem);
+  function visibleCatalogItems(items = state.db.library, includeHidden = false) {
+    return items.filter(item => canViewCatalogItem(item, includeHidden));
   }
   async function loadCatalogVisibility() {
     state.hiddenCatalogItemIds = new Set();
@@ -1424,6 +1443,11 @@
         console.warn("Não foi possível carregar o ranking:", result.error.message);
         state.rankingMembers = [];
         return;
+      }
+      if (definition.imprint === "Milestone") {
+        const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+        if (!merged.fileUrl && defaultItem?.fileUrl) merged.fileUrl = defaultItem.fileUrl;
       }
       state.rankingMembers = result.data || [];
       const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
@@ -2834,7 +2858,7 @@
     state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
     const imprintSettings = await sb.from("imprint_settings").select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned");
     state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
-    const characterSettings = await sb.from("character_settings").select("character_key, character_name, cover_url, wikipedia_url, authored_text, is_pinned");
+    const characterSettings = await sb.from("character_settings").select("character_key, character_name, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden");
     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
     characterSettingsReady = true;
     wikiCharacterImageCache.clear();
@@ -8025,9 +8049,14 @@
     const selectedCover = previewChoice
       ? (previewChoice.cover_url || item.coverUrl || item.cover)
       : (activeChoices?.get?.(item.id) || activeChoices?.get?.(String(item.id)))?.cover_url;
-    if (selectedCover) return proxiedImageUrl(selectedCover);
+    const isBlockedGcdCover = value => /^https:\/\/files1\.comics\.org\//i.test(String(value || ""));
+    if (selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover)) && !isBlockedGcdCover(selectedCover)) return proxiedImageUrl(selectedCover);
     if (variant === "hero" && item.featuredCoverUrl) return proxiedImageUrl(item.featuredCoverUrl);
-    if (item.coverUrl) return proxiedImageUrl(item.coverUrl);
+    const defaultItemCover = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === item.id)?.coverUrl;
+    const defaultCover = /^assets\/covers\/milestone\//i.test(String(item.coverUrl || "")) || isBlockedGcdCover(item.coverUrl)
+      ? defaultItemCover
+      : item.coverUrl;
+    if (defaultCover) return proxiedImageUrl(defaultCover);
     if (item.cover) return proxiedImageUrl(item.cover); // backward compatibility
     return instantCover(item);
   }
@@ -8084,7 +8113,7 @@
   function seriesCoverFor(item, seriesCoverChoices = null) {
     const activeChoices = seriesCoverChoices || (state.section === "public-profile" ? state.publicProfile?.seriesCoverChoices : state.seriesCoverChoices);
     const selectedCover = activeChoices?.get?.(item?.seriesId)?.cover_url;
-    if (selectedCover) return proxiedImageUrl(selectedCover);
+    if (selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover))) return proxiedImageUrl(selectedCover);
     return coverFor(item);
   }
 
@@ -9149,7 +9178,11 @@
       }
     }
     const normalizedValue = String(filter.value || "").trim().toLowerCase();
-    const allItems = visibleCatalogItems().filter(item => {
+    const requestedCharacterSetting = filter.kind === "character" ? state.characterSettings.get(publisherKey(filter.value)) : null;
+    if (requestedCharacterSetting?.is_hidden === true && !isAdminProfile()) {
+      return '<div class="content"><div class="empty">Este personagem está oculto no catálogo.</div></div>';
+    }
+    const allItems = visibleCatalogItems(state.db.library, isAdminProfile()).filter(item => {
       if (filter.kind === "year") return String(item.year || "") === String(filter.value || "");
       if (filter.kind === "author") return String(item.author || "").split(/\s*(?:\/|&|\be\b)\s*/i).some(author => author.trim().toLowerCase() === normalizedValue);
       if (filter.kind === "character") return characterNames(item).some(character => character.toLowerCase() === normalizedValue);
@@ -9182,7 +9215,8 @@
         const characterKey = publisherKey(characterName);
         const saved = state.savedCharacterKeys.has(characterKey);
         const canManage = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-        const actions = `<div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-character="${escapeHTML(characterName)}">${saved ? "★ Personagem salvo" : "☆ Salvar personagem"}</button>${canManage ? `<button class="small-btn" data-character-settings="${escapeHTML(characterName)}">Configurar personagem</button>` : ""}</div>`;
+        const hidden = state.characterSettings.get(characterKey)?.is_hidden === true;
+        const actions = `<div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-character="${escapeHTML(characterName)}">${saved ? "★ Personagem salvo" : "☆ Salvar personagem"}</button>${canManage ? `<button class="small-btn" data-character-settings="${escapeHTML(characterName)}">Configurar personagem</button>` : ""}${isAdminProfile() ? `<button class="small-btn danger" data-character-visibility="${escapeHTML(characterName)}">${hidden ? "Mostrar personagem" : "Ocultar personagem"}</button>` : ""}</div>`;
         const seriesCount = new Set(filteredItems.filter(item => item.seriesId).map(item => item.seriesId)).size;
         const characterCount = `${seriesCount} série(s) · ${filteredItems.length} edição(ões)`;
         return `<div class="content publisher-page character-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Personagem</div><h1 class="section-title">${escapeHTML(characterName)}</h1><div class="section-subtitle">${characterCount}</div></div>${actions}</div>${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section></div>`;
@@ -9637,7 +9671,8 @@
   }
 
   function savedCharactersMarkup(characters = []) {
-    return `<section class="section saved-publishers saved-characters"><div class="section-head"><div><h2 class="section-title">Personagens salvos</h2><div class="section-subtitle">Personagens acompanhados por este perfil.</div></div></div><div class="saved-publishers-list">${characters.map(character => { const name = character.character_name || "Personagem"; const setting = state.characterSettings.get(publisherKey(name)); const image = setting?.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg"; return `<article class="saved-publisher-card saved-character-card" data-character-card="${escapeHTML(name)}" role="link" tabindex="0"><img class="saved-entity-image" src="${escapeHTML(image)}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"><div class="saved-entity-copy"><strong>${escapeHTML(name)}</strong><button class="small-btn" type="button" data-character="${escapeHTML(name)}">Abrir personagem</button></div></article>`; }).join("") || '<div class="empty">Nenhum personagem salvo.</div>'}</div></section>`;
+    const visibleCharacters = characters.filter(character => !state.characterSettings.get(publisherKey(character.character_name || ""))?.is_hidden || isAdminProfile());
+    return `<section class="section saved-publishers saved-characters"><div class="section-head"><div><h2 class="section-title">Personagens salvos</h2><div class="section-subtitle">Personagens acompanhados por este perfil.</div></div></div><div class="saved-publishers-list">${visibleCharacters.map(character => { const name = character.character_name || "Personagem"; const setting = state.characterSettings.get(publisherKey(name)); const image = setting?.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg"; return `<article class="saved-publisher-card saved-character-card" data-character-card="${escapeHTML(name)}" role="link" tabindex="0"><img class="saved-entity-image" src="${escapeHTML(image)}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"><div class="saved-entity-copy"><strong>${escapeHTML(name)}</strong><button class="small-btn" type="button" data-character="${escapeHTML(name)}">Abrir personagem</button></div></article>`; }).join("") || '<div class="empty">Nenhum personagem salvo.</div>'}</div></section>`;
   }
 
   function savedImprintsMarkup(imprints = []) {
@@ -12684,7 +12719,7 @@
   function factionFeaturedCharacterMarkup(faction) {
     const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
     const groups = new Map();
-    state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher) && characterNames(item).length).forEach(item => {
+    visibleCatalogItems().filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher) && characterNames(item).length).forEach(item => {
       const character = characterNames(item)[0];
       if (!groups.has(character)) groups.set(character, []);
       groups.get(character).push(item);
@@ -12833,7 +12868,7 @@
     const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
     const pinned = [...state.factionPinnedCharacters.values()].filter(row => row.faction_id === faction.id);
     const groups = new Map();
-    state.db.library.filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach(item => {
+    visibleCatalogItems().filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach(item => {
       characterNames(item).forEach(name => {
         const character = String(name || "").trim();
         if (!character) return;
@@ -13931,6 +13966,26 @@
     };
   }
 
+  async function toggleCharacterVisibility(button) {
+    if (!isAdminProfile()) return toast("Apenas administradores podem ocultar personagens.");
+    if (!sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
+    const name = String(button.dataset.characterVisibility || "").trim();
+    const key = publisherKey(name);
+    if (!name || !key) return;
+    const setting = state.characterSettings.get(key) || {};
+    const hidden = setting.is_hidden !== true;
+    button.disabled = true;
+    const next = { character_key: key, character_name: name, cover_url: setting.cover_url || null, wikipedia_url: setting.wikipedia_url || null, authored_text: setting.authored_text || null, is_pinned: setting.is_pinned === true, is_hidden: hidden };
+    const result = await sb.from("character_settings").upsert(next, { onConflict: "character_key" });
+    if (result.error) {
+      button.disabled = false;
+      return toast(result.error.message || "Não foi possível alterar a visibilidade do personagem. Execute a migração do Supabase.");
+    }
+    state.characterSettings.set(key, next);
+    render();
+    toast(hidden ? "Personagem ocultado para os usuários." : "Personagem visível novamente para todos.");
+  }
+
   function openCharacterSettings(name) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
@@ -13971,7 +14026,7 @@
         if (upload.error) return toast("Não foi possível enviar a imagem. Verifique o bucket publisher-covers no Supabase.");
         coverUrl = sb.storage.from("publisher-covers").getPublicUrl(path).data.publicUrl;
       }
-      const next = { character_key: key, character_name: name, cover_url: coverUrl, wikipedia_url: wikipediaUrl, authored_text: authoredText, is_pinned: form.get("isPinned") === "on" };
+      const next = { character_key: key, character_name: name, cover_url: coverUrl, wikipedia_url: wikipediaUrl, authored_text: authoredText, is_pinned: form.get("isPinned") === "on", is_hidden: setting.is_hidden === true };
       const result = await sb.from("character_settings").upsert(next, { onConflict: "character_key" });
       if (result.error) return toast("Não foi possível salvar a configuração do personagem. Execute a atualização do schema no Supabase.");
       state.characterSettings.set(key, next);
@@ -14508,6 +14563,7 @@
       el.textContent = el.dataset.factionCharacterPinned === "true" ? "\u2605 Fixado na fac\u00e7\u00e3o" : "\u2606 Fixar na fac\u00e7\u00e3o";
     });
     $$('[data-character-settings]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); openCharacterSettings(el.dataset.characterSettings); }));
+    $$('[data-character-visibility]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); toggleCharacterVisibility(el); }));
     if (state.section === "entity" && state.entityFilter?.kind === "publisher") {
       const actions = $(".publisher-page-actions");
       if (actions && !$("[data-save-publisher]", actions)) {
