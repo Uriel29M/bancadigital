@@ -502,10 +502,11 @@ main { min-height: calc(100vh - 150px); }
 .global-recommendation-card:hover, .global-recommendation-card:focus-visible { transform: translateY(-5px); border-color: rgba(255,255,255,.42); box-shadow: 0 16px 30px rgba(0,0,0,.32); outline: none; }
 .global-recommendation-cover { position: absolute; inset: 0 0 0 30%; z-index: -2; background-position: center; background-size: cover; opacity: .72; filter: saturate(.9); transition: transform .3s ease, opacity .3s ease; }
 .global-recommendation-card:hover .global-recommendation-cover, .global-recommendation-card:focus-visible .global-recommendation-cover { transform: scale(1.06); opacity: .88; }
-.global-recommendation-glow { position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #111116 0%, #111116 24%, rgba(17,17,22,.98) 38%, rgba(17,17,22,.72) 54%, rgba(17,17,22,.28) 76%, rgba(17,17,22,0) 100%), linear-gradient(0deg, rgba(0,0,0,.85), transparent 70%); }
+.global-recommendation-glow { position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #111116 0%, #111116 30%, rgba(17,17,22,.98) 40%, rgba(17,17,22,.82) 50%, rgba(17,17,22,.5) 61%, rgba(17,17,22,.16) 72%, rgba(17,17,22,0) 80%), linear-gradient(0deg, rgba(0,0,0,.85), transparent 70%); }
 .global-recommendation-copy { width: 100%; padding: 22px 20px 20px; }
 .global-recommendation-label { display: flex; align-items: center; gap: 8px; color: #ffbd72; font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
 .global-recommendation-label i { display: block; width: 25px; height: 1px; background: currentColor; opacity: .7; }
+.global-recommendation-xp { display: inline-flex; align-items: center; margin-top: 12px; padding: 4px 7px; border: 1px solid rgba(255,189,114,.45); border-radius: 999px; background: rgba(255,189,114,.12); color: #ffd39a; font-size: 10px; font-weight: 800; letter-spacing: .02em; }
 .global-recommendation-card h3 { max-width: 87%; margin: 11px 0 7px; color: #fff; font-size: clamp(19px, 2vw, 26px); line-height: 1.04; letter-spacing: -.03em; }
 .global-recommendation-card p { max-width: 260px; min-height: 38px; margin: 0 0 14px; color: #d6d0d7; font-size: 12px; line-height: 1.45; }
 .global-recommendation-meta { color: #bcb2be; font-size: 11px; }

@@ -613,6 +613,10 @@ create table if not exists public.reading_progress (
   updated_at timestamptz not null default now(),
   primary key (user_id, item_id)
 );
+alter table public.reading_progress add column if not exists completion_source text;
+update public.reading_progress set completion_source = 'manual' where completed and completion_source is null;
+alter table public.reading_progress drop constraint if exists reading_progress_completion_source_check;
+alter table public.reading_progress add constraint reading_progress_completion_source_check check (completion_source is null or completion_source in ('manual', 'normal'));
 
 create table if not exists public.comic_read_counts (
   item_id text primary key,
@@ -1643,6 +1647,7 @@ begin
   if v_user_id is null or not exists (select 1 from public.profiles where id = v_user_id) then return 0; end if;
   v_xp := case p_event_type
     when 'read' then 10
+    when 'curated_read' then 25
     when 'comment' then 5
     when 'like' then 2
     when 'chat' then 3
@@ -3027,7 +3032,7 @@ declare
 begin
   select profile.faction_id into v_faction from public.profiles profile where profile.id = v_user_id and profile.plan not in ('moderator', 'admin');
   if v_faction is null then return 0; end if;
-  v_xp := case p_event_type when 'read' then 10 when 'comment' then 5 when 'like' then 2 when 'chat' then 3 when 'follow' then 2 else 0 end;
+  v_xp := case p_event_type when 'read' then 10 when 'curated_read' then 25 when 'comment' then 5 when 'like' then 2 when 'chat' then 3 when 'follow' then 2 else 0 end;
   if v_xp <= 0 then return 0; end if;
   v_season := public.current_faction_season();
   v_key := coalesce(nullif(trim(p_event_key), ''), p_event_type || ':' || clock_timestamp()::text);

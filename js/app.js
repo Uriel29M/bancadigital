@@ -2597,7 +2597,7 @@
       const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", session.user.id);
       state.favoriteIds = new Set((favorites.data || []).map(row => row.item_id));
       state.favoriteAddedAt = new Map((favorites.data || []).map(row => [row.item_id, row.created_at]));
-      const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", session.user.id);
+      const progress = await sb.from("reading_progress").select("item_id, page, total_pages, completed, completion_source, updated_at").eq("user_id", session.user.id);
       state.readingProgress = new Map((progress.data || []).map(row => [row.item_id, row]));
       const stickerAwards = await sb.from("sticker_awards").select("id, user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, requests_blocked, gum_placed_by, album_section, awarded_at").eq("user_id", session.user.id).order("awarded_at", { ascending: false });
       state.stickerAwards = stickerAwards.data || [];
@@ -2863,7 +2863,7 @@
       sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
       sb.from("imprint_saves").select("imprint_key, imprint_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
       sb.from("character_saves").select("character_key, character_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
-      sb.from("reading_progress").select("item_id, page, total_pages, completed, updated_at").eq("user_id", profile.data.id),
+      sb.from("reading_progress").select("item_id, page, total_pages, completed, completion_source, updated_at").eq("user_id", profile.data.id),
       sb.from("sticker_awards").select("id, user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, requests_blocked, gum_placed_by, album_section, awarded_at").eq("user_id", profile.data.id).order("awarded_at", { ascending: false }),
       sb.from("sticker_slot_preferences").select("character_id, blocked, placed_by").eq("user_id", profile.data.id),
       sb.from("profile_display_stickers").select("award_id, slot").eq("user_id", profile.data.id).order("slot", { ascending: true }),
@@ -3453,8 +3453,10 @@
     if (!state.session || !sb || item?.local || !item?.id || !totalPages) return;
     const current = progressFor(item);
     const wasCompleted = Boolean(current?.completed);
-    const completed = Boolean(current?.completed) || page >= Math.max(1, totalPages - 2);
-    const row = { user_id: state.session.user.id, item_id: item.id, page: Math.max(1, Math.min(page, totalPages)), total_pages: totalPages, completed, updated_at: new Date().toISOString() };
+    const reachedStoryEnd = page >= Math.max(1, totalPages - 2);
+    const completed = wasCompleted || reachedStoryEnd;
+    const completionSource = reachedStoryEnd ? "normal" : (current?.completion_source || (wasCompleted ? "manual" : null));
+    const row = { user_id: state.session.user.id, item_id: item.id, page: Math.max(1, Math.min(page, totalPages)), total_pages: totalPages, completed, completion_source: completionSource, updated_at: new Date().toISOString() };
     state.readingProgress.set(item.id, row);
     if (completed) rememberShelfItem("read", item.id);
     $("[data-toggle-read]")?.replaceChildren(document.createTextNode(completed ? "Desmarcar como lida" : "Marcar como lida"));
@@ -3478,6 +3480,10 @@
         await loadFactions();
         render();
       }
+    }
+    if (!result.error && reachedStoryEnd && current?.completion_source !== "normal" && isGlobalRecommendationItem(item)) {
+      await awardProfileXp("curated_read", `curated-read:${item.id}`);
+      toast("Leitura concluída: +25 XP de curadoria!");
     }
   }
 
@@ -3846,7 +3852,8 @@
   function toggleReadingCompleted(item, totalPages = progressFor(item)?.total_pages || 1) {
     if (!state.session || !sb || item?.local) return;
     const current = progressFor(item);
-    const row = { user_id: state.session.user.id, item_id: item.id, page: current?.page || 1, total_pages: totalPages, completed: !current?.completed, updated_at: new Date().toISOString() };
+    const completed = !current?.completed;
+    const row = { user_id: state.session.user.id, item_id: item.id, page: current?.page || 1, total_pages: totalPages, completed, completion_source: completed ? "manual" : null, updated_at: new Date().toISOString() };
     state.readingProgress.set(item.id, row);
     if (row.completed) rememberShelfItem("read", item.id);
     updateCompletionCards(item, row.completed);
@@ -8296,7 +8303,18 @@
     const meta = isSeries ? `${editions || 1} ${editions === 1 ? "edição" : "edições"}` : [item.issue ? `Edição ${item.issue}` : "Edição única", item.year].filter(Boolean).join(" · ");
     const action = isSeries ? `data-view-series="${escapeHTML(item.seriesId)}"` : `data-open="${escapeHTML(item.id)}" data-open-direct="true"`;
     const cover = isSeries ? seriesCoverFor(item) : coverFor(item, "card");
-    return `<article class="global-recommendation-card global-recommendation-${accent}" ${action} tabindex="0"><div class="global-recommendation-glow"></div><div class="global-recommendation-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="global-recommendation-copy"><div class="global-recommendation-label"><span>${escapeHTML(label)}</span><i></i></div><h3>${escapeHTML(title || "Recomendação da banca")}</h3><p>${escapeHTML(description)}</p><div class="global-recommendation-meta">${escapeHTML(meta)}</div><span class="global-recommendation-cta">${isSeries ? "Explorar série" : "Ler edição"} <b>→</b></span></div></article>`;
+    return `<article class="global-recommendation-card global-recommendation-${accent}" ${action} tabindex="0"><div class="global-recommendation-glow"></div><div class="global-recommendation-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="global-recommendation-copy"><div class="global-recommendation-label"><span>${escapeHTML(label)}</span><i></i></div><span class="global-recommendation-xp">✦ +25 XP ao concluir a leitura</span><h3>${escapeHTML(title || "Recomendação da banca")}</h3><p>${escapeHTML(description)}</p><div class="global-recommendation-meta">${escapeHTML(meta)}</div><span class="global-recommendation-cta">${isSeries ? "Explorar série" : "Ler edição"} <b>→</b></span></div></article>`;
+  }
+
+  function isGlobalRecommendationItem(item) {
+    if (!item?.id || item.local) return false;
+    const library = state.db?.library || [];
+    const periods = recommendationPeriodKeys();
+    const day = globalRecommendation(library, periods.day);
+    const week = globalRecommendation(library, periods.week);
+    const month = globalRecommendation(library, periods.month, true);
+    return [day, week].some(entry => String(entry?.id || "") === String(item.id))
+      || Boolean(month?.seriesId && String(month.seriesId) === String(item.seriesId));
   }
 
   function globalRecommendationsSection(lib) {
