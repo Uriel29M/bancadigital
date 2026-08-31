@@ -5720,7 +5720,7 @@
     $(".form-grid", profileForm).appendChild(privacyField);
     const profileSectionsPrivacy = document.createElement("div");
     profileSectionsPrivacy.className = "field full profile-privacy-settings";
-    profileSectionsPrivacy.innerHTML = `<label>Seções do perfil público</label><label class="checkbox-inline"><input name="savedPublicCollectionsPublic" type="checkbox" ${state.profile?.shelf_saved_public_collections !== false ? "checked" : ""}> Mostrar Públicas salvas</label><label class="checkbox-inline"><input name="activityPublic" type="checkbox" ${state.profile?.profile_activity_public !== false ? "checked" : ""}> Mostrar Histórico</label>`;
+    profileSectionsPrivacy.innerHTML = `<label>Seções do perfil público</label><label class="checkbox-inline"><input name="savedPublicCollectionsPublic" type="checkbox" ${state.profile?.shelf_saved_public_collections !== false ? "checked" : ""}> Mostrar Coleções salvas</label><label class="checkbox-inline"><input name="activityPublic" type="checkbox" ${state.profile?.profile_activity_public !== false ? "checked" : ""}> Mostrar Histórico</label>`;
     $(".form-grid", profileForm).appendChild(profileSectionsPrivacy);
     $("[name=likesPublic]", overlay)?.closest("label")?.remove();
      const originalProfileSubmit = async () => {};
@@ -9589,7 +9589,7 @@
     const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
     const options = shelfStyleOptionsFor(profile);
     const current = options.some(([value]) => value === selected) ? selected : "none";
-    return `<div class="shelf-style-picker"><button type="button" class="small-btn" data-shelf-style-toggle aria-expanded="false">✦ Estilo</button><div class="shelf-style-menu" hidden><span class="shelf-style-menu-title">Estilo das prateleiras</span>${options.map(([value, label]) => `<button type="button" class="shelf-style-option${current === value ? " is-selected" : ""}" data-shelf-style="${value}">${label}</button>`).join("")}</div></div>`;
+    return `<div class="shelf-style-picker"><button type="button" class="small-btn shelf-style-menu-toggle" data-shelf-style-toggle aria-expanded="false">✦ Estilo</button><select class="shelf-style-native-select" data-shelf-style-native aria-label="Estilo da prateleira">${options.map(([value, label]) => `<option value="${value}" ${current === value ? "selected" : ""}>${label}</option>`).join("")}</select><div class="shelf-style-menu" hidden><span class="shelf-style-menu-title">Estilo das prateleiras</span>${options.map(([value, label]) => `<button type="button" class="shelf-style-option${current === value ? " is-selected" : ""}" data-shelf-style="${value}">${label}</button>`).join("")}</div></div>`;
   }
 
   function shelfCollectionMarkup(title, items, key, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, actions = "", coverChoices = null, renderSeriesCards = false) {
@@ -9621,7 +9621,7 @@
     const featureAction = shelfStyleKeyMarker + shelfStyleMarkup(shelfStyle, key) + shelfSortSelectMarkup(key, sortOrder) + fixedShelfSectionControls(sectionKey, isOwnShelfProfile()) + (publicCategory && ["moderator", "banca", "admin"].includes(state.profile?.plan)
       ? `<button class="small-btn" data-collection-feature="${escapeHTML(publicCategory.id)}" data-collection-featured="${publicCategory.is_featured ? "true" : "false"}">${publicCategory.is_featured ? "Remover destaque" : "Destacar"}</button>`
       : "");
-    return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>${likedCollection}`;
+    return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle shelf-item-count">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>${likedCollection}`;
   }
 
   function isSeriesId(id) {
@@ -9663,7 +9663,7 @@
   }
 
   function savedPublicCollectionsMarkup(collections = []) {
-    return '<section class="section saved-public-collections"><div class="section-head"><div><h2 class="section-title">Públicas salvas</h2><div class="section-subtitle">Coleções públicas salvas por este perfil.</div></div></div><div class="public-collections-grid">' + (collections.map(collection => publicCollectionCard(collection)).join("") || '<div class="empty">Nenhuma coleção pública salva.</div>') + '</div></section>';
+    return '<section class="section saved-publishers saved-public-collections"><div class="section-head"><div><h2 class="section-title">Coleções salvas</h2><div class="section-subtitle">Coleções públicas salvas por este perfil.</div></div></div><div class="public-collections-grid saved-publishers-list">' + (collections.map(collection => publicCollectionCard(collection)).join("") || '<div class="empty">Nenhuma coleção pública salva.</div>') + '</div></section>';
   }
 
   function savedPublishersMarkup(publishers = []) {
@@ -14203,7 +14203,7 @@
     if (state.section === "shelf" && state.session) {
       const shelfHead = $(".content > .section-head");
       if (shelfHead && !$(".shelf-media-tabs")) {
-        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Públicas salvas</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
+        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Coleções salvas</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
         $("[data-action=open-local-box]", shelfHead.nextElementSibling)?.addEventListener("click", () => { state.localBoxVisible = true; setSection("local-box"); });
         $("[data-shelf-tab-panel=wall]")?.setAttribute("hidden", "");
         $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
@@ -14266,7 +14266,7 @@
       const publicAlbumAvailable = canAccessStickerAlbum(publicProfile);
       if (publicHead && !$("[data-public-album-link]")) publicHead.querySelector(".profile-actions")?.insertAdjacentHTML("afterbegin", `<a class="small-btn" data-public-album-link href="${escapeHTML(publicProfileHref(publicProfile.username, "", true))}">Álbum</a>`);
       if (publicHead && !publicHead.classList.contains("public-profile-actions-head") && !$(".public-shelf-media-tabs")) {
-        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Públicas salvas</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
+        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Coleções salvas</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
       }
       if (false && $(".public-shelf-media-tabs") && !$("[data-public-shelf-media=activity]")) {
         $(".public-shelf-media-tabs").insertAdjacentHTML("beforeend", '<button class="small-btn" data-public-shelf-media="activity">Histórico</button>');
@@ -14501,6 +14501,51 @@
     }, { once: true }));
     $$('[data-like-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleComicLike(el.dataset.likeItem); }));
     $$('[data-share-item]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); shareComic(el.dataset.shareItem); }));
+    $$('[data-imprint-carousel]').forEach(carousel => {
+      const section = carousel.closest(".imprint-carousel-section");
+      const previous = $("[data-imprint-carousel-prev]", section);
+      const next = $("[data-imprint-carousel-next]", section);
+      const step = () => Math.max(carousel.clientWidth * 0.82, 220);
+      const syncControls = () => {
+        const canScroll = carousel.scrollWidth > carousel.clientWidth + 1;
+        if (previous) previous.disabled = !canScroll || carousel.scrollLeft <= 1;
+        if (next) next.disabled = !canScroll || carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 1;
+      };
+      previous?.addEventListener("click", event => { event.stopPropagation(); carousel.scrollBy({ left: -step(), behavior: "smooth" }); });
+      next?.addEventListener("click", event => { event.stopPropagation(); carousel.scrollBy({ left: step(), behavior: "smooth" }); });
+      carousel.addEventListener("scroll", syncControls, { passive: true });
+      syncControls();
+    });
+    $$('[data-collections-carousel]').forEach(carousel => {
+      const section = carousel.closest(".popular-collections-section");
+      const previous = $("[data-collections-carousel-prev]", section);
+      const next = $("[data-collections-carousel-next]", section);
+      const step = () => Math.max(carousel.clientWidth * 0.82, 220);
+      const syncControls = () => {
+        const canScroll = carousel.scrollWidth > carousel.clientWidth + 1;
+        if (previous) previous.disabled = !canScroll || carousel.scrollLeft <= 1;
+        if (next) next.disabled = !canScroll || carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 1;
+      };
+      previous?.addEventListener("click", event => { event.stopPropagation(); carousel.scrollBy({ left: -step(), behavior: "smooth" }); });
+      next?.addEventListener("click", event => { event.stopPropagation(); carousel.scrollBy({ left: step(), behavior: "smooth" }); });
+      carousel.addEventListener("scroll", syncControls, { passive: true });
+      syncControls();
+    });
+    $$('[data-publishers-carousel]').forEach(carousel => {
+      const section = carousel.closest(".publisher-all-section");
+      const previous = $("[data-publishers-carousel-prev]", section);
+      const next = $("[data-publishers-carousel-next]", section);
+      const step = () => Math.max(carousel.clientWidth * 0.82, 220);
+      const syncControls = () => {
+        const canScroll = carousel.scrollWidth > carousel.clientWidth + 1;
+        if (previous) previous.disabled = !canScroll || carousel.scrollLeft <= 1;
+        if (next) next.disabled = !canScroll || carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 1;
+      };
+      previous?.addEventListener("click", event => { event.stopPropagation(); carousel.scrollBy({ left: -step(), behavior: "smooth" }); });
+      next?.addEventListener("click", event => { event.stopPropagation(); carousel.scrollBy({ left: step(), behavior: "smooth" }); });
+      carousel.addEventListener("scroll", syncControls, { passive: true });
+      syncControls();
+    });
     $$('[data-publisher]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); el.closest(".modal-backdrop")?.remove(); openEntityPage("publisher", el.dataset.publisher); }));
     $$('[data-imprint]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); el.closest(".modal-backdrop")?.remove(); openEntityPage("imprint", el.dataset.imprint); }));
     $$('[data-character]').forEach(el => el.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); el.closest(".modal-backdrop")?.remove(); openEntityPage("character", el.dataset.character); }));
@@ -15100,6 +15145,10 @@
     $$('[data-shelf-style]').forEach(button => button.addEventListener("click", event => {
       const key = event.currentTarget.closest(".shelf-fixed-collection")?.querySelector(".shelf-style-key")?.dataset.shelfStyleKey;
       saveShelfStyle(key, event.currentTarget.dataset.shelfStyle);
+    }));
+    $$('[data-shelf-style-native]').forEach(select => select.addEventListener("change", event => {
+      const key = event.currentTarget.closest(".shelf-fixed-collection")?.querySelector(".shelf-style-key")?.dataset.shelfStyleKey;
+      saveShelfStyle(key, event.currentTarget.value);
     }));
     $$('[data-shelf-edit-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openShelfCategoryForm(el.dataset.shelfEditCategory); }));
     $$('[data-shelf-delete-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteShelfCategory(el.dataset.shelfDeleteCategory); }));
@@ -16214,11 +16263,10 @@
       const publisher = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
       return `<button class="publisher-card imprint-card" type="button" data-imprint="${escapeHTML(imprint)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(imprint)}</strong><span>${escapeHTML(publisher || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
     }).join("");
-    const imprintLoopCards = imprintGroups.size > 4 ? `<div class="imprint-carousel-group" aria-hidden="true">${imprintCards}</div>` : "";
-    const imprintCarousel = type === "comic" && imprintCards ? `<section class="section imprint-carousel-section"><div class="section-head"><div><h2 class="section-title">Selos</h2><div class="section-subtitle">Explore todos os selos disponíveis no catálogo.</div></div></div><div class="imprint-carousel" data-imprint-loop="${imprintGroups.size > 4 ? "true" : "false"}" aria-label="Todos os selos"><div class="imprint-carousel-track"><div class="imprint-carousel-group">${imprintCards}</div>${imprintLoopCards}</div></div></section>` : "";
-    const publisherCarousel = type === "comic" && publisherEntries.length ? `<section class="section publisher-all-section"><div class="section-head"><div><h2 class="section-title">Editoras</h2><div class="section-subtitle">Explore todos os quadrinhos por editora.</div></div></div><div class="publisher-carousel">${publisherEntries.map(publisherCard).join("")}</div></section>` : "";
+    const imprintCarousel = type === "comic" && imprintCards ? `<section class="section imprint-carousel-section"><div class="section-head"><div><h2 class="section-title">Selos</h2><div class="section-subtitle">Explore todos os selos disponíveis no catálogo.</div></div><div class="carousel-controls" aria-label="Navegação dos selos"><button class="carousel-control" type="button" data-imprint-carousel-prev aria-label="Selo anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-imprint-carousel-next aria-label="Próximo selo" title="Próximo">›</button></div></div><div class="imprint-carousel" data-imprint-carousel aria-label="Todos os selos"><div class="imprint-carousel-track">${imprintCards}</div></div></section>` : "";
+    const publisherCarousel = type === "comic" && publisherEntries.length ? `<section class="section publisher-all-section"><div class="section-head"><div><h2 class="section-title">Editoras</h2><div class="section-subtitle">Explore todos os quadrinhos por editora.</div></div><div class="carousel-controls" aria-label="Navegação das editoras"><button class="carousel-control" type="button" data-publishers-carousel-prev aria-label="Editora anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-publishers-carousel-next aria-label="Próxima editora" title="Próximo">›</button></div></div><div class="publisher-carousel" data-publishers-carousel aria-label="Todas as editoras">${publisherEntries.map(publisherCard).join("")}</div></section>` : "";
     const popularCollections = state.popularPublicCollections || [];
-    const popularCollectionsMarkup = type === "comic" && popularCollections.length ? `<section class="section popular-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções públicas mais curtidas</h2><div class="section-subtitle">Descubra listas públicas da comunidade</div></div></div><div class="feature-grid">${popularCollections.map(collection => `<div class="feature-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username)}"><div class="cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover_url || ""))}')"></div><div class="gradient"></div><div class="feature-info"><h3>${escapeHTML(collection.name)}</h3><p>${collection.likes} curtida(s) · @${escapeHTML(collection.username)}</p></div></div>`).join("")}</div></section>` : "";
+    const popularCollectionsMarkup = type === "comic" && popularCollections.length ? `<section class="section popular-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções públicas mais curtidas</h2><div class="section-subtitle">Descubra listas públicas da comunidade</div></div><div class="carousel-controls" aria-label="Navegação das coleções públicas"><button class="carousel-control" type="button" data-collections-carousel-prev aria-label="Coleção anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-collections-carousel-next aria-label="Próxima coleção" title="Próximo">›</button></div></div><div class="collections-carousel" data-collections-carousel aria-label="Coleções públicas mais curtidas"><div class="collections-carousel-track">${popularCollections.map(collection => `<div class="feature-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username)}"><div class="cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover_url || ""))}')"></div><div class="gradient"></div><div class="feature-info"><h3>${escapeHTML(collection.name)}</h3><p>${collection.likes} curtida(s) · @${escapeHTML(collection.username)}</p></div></div>`).join("")}</div></div></section>` : "";
     const characterCarousel = type === "comic" ? characterWikiCarouselMarkup(items) : "";
     const heading = type === "manga" ? "Mangás" : type === "comic" ? "Quadrinhos" : "Catálogo";
     const catalogHeader = type === "comic" ? "" : `<div class="section-head"><div><h1 class="section-title">${heading}</h1><div class="section-subtitle">${items.length} edição(ões)</div></div></div>`;
