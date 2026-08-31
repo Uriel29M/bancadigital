@@ -2427,6 +2427,7 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-abafac-controls .small-btn { min-width: 32px; padding: 5px 8px; }
 .faction-abafac-controls .small-btn:disabled { cursor: not-allowed; opacity: .35; }
 .faction-chat-open-button { display: inline-flex; align-items: center; justify-content: center; border-color: var(--faction-color); background: var(--faction-color); color: #fff; box-shadow: 0 8px 18px color-mix(in srgb, var(--faction-color) 28%, transparent); }
+.faction-chat-abafac > .faction-chat-open-button { display: flex; width: fit-content; margin: 0 auto; }
 .faction-chat-open-button:hover { border-color: var(--faction-color); background: color-mix(in srgb, var(--faction-color) 82%, #000); color: #fff; }
 .faction-abafac-modal { width: min(520px, 100%); }
 .faction-abafac-manager { display: grid; gap: 8px; margin-top: 18px; }
@@ -2444,6 +2445,10 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-featured-role-grid, .faction-member-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .faction-featured-role-card, .faction-member-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 13px; border: 1px solid color-mix(in srgb, var(--faction-color) 55%, var(--line)); border-radius: 11px; background: linear-gradient(145deg, color-mix(in srgb, var(--faction-color) 14%, #202025), #15151a); }
 .faction-featured-role-card { min-height: 72px; box-shadow: 0 8px 20px color-mix(in srgb, var(--faction-color) 12%, transparent); }
+.faction-featured-role-card[role="link"] { cursor: pointer; }
+.faction-featured-role-card[role="link"]:hover, .faction-featured-role-card[role="link"]:focus-visible { border-color: var(--faction-color); transform: translateY(-2px); }
+.faction-member-card[role="link"] { cursor: pointer; }
+.faction-member-card[role="link"]:hover, .faction-member-card[role="link"]:focus-visible { border-color: var(--faction-color); transform: translateY(-2px); outline: none; }
 .faction-featured-role-card.is-empty { opacity: .58; }
 .faction-featured-role-card > div, .faction-member-card > div { display: grid; gap: 4px; min-width: 0; }
 .faction-featured-role-card strong, .faction-member-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2455,7 +2460,8 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-member-directory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .faction-members-section { border-left: 3px solid var(--faction-color); padding-left: 28px; }
 .faction-member-avatar { width: 38px; height: 38px; flex: 0 0 38px; border: 2px solid color-mix(in srgb, var(--faction-color) 60%, var(--line)); border-radius: 50%; object-fit: cover; }
-.faction-member-card small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.faction-member-card small { display: block; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.faction-featured-role-card span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .faction-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
 .faction-choice-card { display: grid; gap: 7px; min-height: 145px; padding: 16px; border: 1px solid color-mix(in srgb, var(--faction-color) 60%, #36363d); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--faction-color) 18%, #202025), #15151a); color: white; text-align: left; cursor: pointer; }
 .faction-choice-card:hover { border-color: var(--faction-color); transform: translateY(-2px); }
@@ -2468,6 +2474,7 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-page-card.is-current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--faction-color) 45%, transparent); }
 .faction-page-emblem { color: var(--faction-color); font-size: 34px; line-height: 1; }
 .faction-page-card h2 { margin: 0; color: var(--faction-color); font-size: 20px; }
+.faction-detail-page > .section-head .section-title { white-space: nowrap; }
 .faction-page-card p { margin: 7px 0 16px; color: #d0d0d5; line-height: 1.45; }
 .faction-page-stats { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; }
 .faction-page-stats strong { color: var(--faction-color); }
@@ -2480,8 +2487,14 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-catalog-abafac .section-title, .faction-catalog-abafac .eyebrow { color: var(--faction-color); }
 .faction-catalog-creator { color: var(--faction-color); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .faction-catalog-creator:hover, .faction-catalog-creator:focus-visible { color: #fff; }
+@media (min-width: 681px) { .faction-recently-added-abafac .rail-viewport { width: 100%; max-width: none; } }
 .faction-catalog-carousel { width: 100%; max-width: none; background: color-mix(in srgb, var(--faction-color) 5%, #111116); }
 .faction-catalog-rail { --media-card-width: 210px; }
+.faction-extra-abafac .rail, .faction-catalog-abafac .rail, .faction-extra-abafac .publisher-carousel, .faction-members-section .faction-member-grid { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--faction-color) 78%, #fff) color-mix(in srgb, var(--faction-color) 12%, #111116); }
+.faction-extra-abafac .rail::-webkit-scrollbar, .faction-catalog-abafac .rail::-webkit-scrollbar, .faction-extra-abafac .publisher-carousel::-webkit-scrollbar, .faction-members-section .faction-member-grid::-webkit-scrollbar { display: block; height: 8px; }
+.faction-extra-abafac .rail::-webkit-scrollbar-track, .faction-catalog-abafac .rail::-webkit-scrollbar-track, .faction-extra-abafac .publisher-carousel::-webkit-scrollbar-track, .faction-members-section .faction-member-grid::-webkit-scrollbar-track { border-radius: 999px; background: color-mix(in srgb, var(--faction-color) 12%, #111116); }
+.faction-extra-abafac .rail::-webkit-scrollbar-thumb, .faction-catalog-abafac .rail::-webkit-scrollbar-thumb, .faction-extra-abafac .publisher-carousel::-webkit-scrollbar-thumb, .faction-members-section .faction-member-grid::-webkit-scrollbar-thumb { border: 2px solid color-mix(in srgb, var(--faction-color) 12%, #111116); border-radius: 999px; background: color-mix(in srgb, var(--faction-color) 78%, #fff); }
+.faction-extra-abafac .rail::-webkit-scrollbar-thumb:hover, .faction-catalog-abafac .rail::-webkit-scrollbar-thumb:hover, .faction-extra-abafac .publisher-carousel::-webkit-scrollbar-thumb:hover, .faction-members-section .faction-member-grid::-webkit-scrollbar-thumb:hover { background: var(--faction-color); }
 .faction-extra-abafac { position: relative; overflow: hidden; margin-top: 20px; padding: 24px 26px; border: 1px solid color-mix(in srgb, var(--faction-color) 38%, var(--line)); border-left: 4px solid var(--faction-color); border-radius: 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--faction-color) 10%, #1b1b21), #141419 58%); box-shadow: 0 12px 28px rgba(0,0,0,.14); }
 .faction-extra-abafac::before { position: absolute; top: -70px; right: -45px; width: 180px; height: 180px; border-radius: 50%; background: color-mix(in srgb, var(--faction-color) 18%, transparent); content: ""; filter: blur(18px); pointer-events: none; }
 .faction-extra-abafac > * { position: relative; z-index: 1; }
@@ -2529,8 +2542,8 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .faction-showcase-abafac .faction-member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; overflow: visible; }
 .faction-showcase-abafac .faction-member-grid .faction-member-card { flex: initial; min-height: 74px; }
 @media (max-width: 900px) { .faction-extra-list { grid-template-columns: 1fr; } .faction-extra-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 680px) { .faction-extra-abafac { padding: 20px 16px; border-radius: 13px; } .faction-extra-stats { grid-template-columns: 1fr; } .faction-showcase-abafac .faction-member-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 680px) { .faction-stats-abafac { align-items: flex-start; } .faction-stats-abafac .faction-page-stats { padding-right: 0; } .faction-stats-abafac .faction-abafac-controls { position: static; margin-top: 10px; transform: none; } }
+@media (max-width: 680px) { .faction-extra-abafac { padding: 20px 16px; border-radius: 13px; } .faction-extra-stats { grid-template-columns: 1fr; } .faction-showcase-abafac .faction-member-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .faction-members-section .faction-member-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; overflow: visible; } .faction-members-section .faction-member-grid .faction-member-card { flex: initial; } }
+@media (max-width: 680px) { .faction-stats-abafac { align-items: flex-start; } .faction-stats-abafac:has(.faction-publisher-summary) { gap: 10px; } .faction-stats-abafac:has(.faction-publisher-summary) .faction-publisher-summary { flex: 0 0 100%; } .faction-stats-abafac:has(.faction-publisher-summary) .faction-page-emblem { display: grid; place-items: center; width: 74px; height: 74px; } .faction-stats-abafac:has(.faction-publisher-summary) .faction-stats-copy { align-self: center; } .faction-stats-abafac .faction-page-stats { padding-right: 0; } .faction-stats-abafac .faction-abafac-controls { position: static; margin-top: 10px; transform: none; } }
 .faction-current-badge { position: absolute; top: 12px; right: 12px; color: var(--faction-color); font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .faction-rules { margin-top: 20px; }
 .faction-rules p { color: #d0d0d5; line-height: 1.6; }

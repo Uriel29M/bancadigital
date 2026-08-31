@@ -1248,6 +1248,12 @@
     activeReaderCleanup?.();
     activeReaderCleanup = null;
     handlingRoute = true;
+    const profileUsername = params.get("perfil");
+    if (!readerId && profileUsername) {
+      loadPublicProfile(profileUsername, params.get("lista") || null, params.get("album") === "1");
+      handlingRoute = false;
+      return;
+    }
     if (readerId && item) {
       state.section = "reader";
       state.readerItemId = readerId;
@@ -6019,6 +6025,28 @@
 
     const body = $("#reader-body", overlay);
     const controls = $("#reader-controls", overlay);
+    body.addEventListener("contextmenu", async event => {
+      if (!event.target.closest("img.reader-image")) return;
+      event.preventDefault();
+
+      try {
+        const imageUrl = new URL("assets/Baixarpaginas.jpg", document.baseURI).href;
+        const response = await fetch(imageUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const imageBlob = await response.blob();
+        const downloadUrl = URL.createObjectURL(new Blob([imageBlob], { type: "image/jpeg" }));
+        const downloadLink = document.createElement("a");
+        downloadLink.href = downloadUrl;
+        downloadLink.download = "Baixarpaginas.jpg";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      } catch (error) {
+        console.warn("Não foi possível baixar a imagem de proteção:", error);
+        toast("Não foi possível baixar a imagem de proteção.");
+      }
+    });
     body.classList.toggle("reader-page-swipe", ["single-page", "double-page"].includes(state.readingMode));
     const toggleReadButton = $("[data-toggle-read]", overlay);
     if (toggleReadButton) toggleReadButton.disabled = true;
@@ -12185,6 +12213,39 @@
   function applyFactionAbafacOrder(factionId) {
     const page = $(".faction-detail-page");
     if (!page) return;
+    const factionRoles = state.factionRoleMembers.filter(item => item.faction_id === factionId);
+    const leaderRole = factionRoles.find(item => item.role === "leader");
+    const curatorRoles = [1, 2, 3].map(slot => factionRoles.find(item => item.role === "curator" && item.slot === slot));
+    const roleProfiles = [leaderRole, ...curatorRoles].map(item => item?.profile || null);
+    $$(".faction-featured-role-card", page).forEach((card, index) => {
+      const profile = roleProfiles[index];
+      if (!profile?.username) return;
+      const identity = $("strong", card);
+      if (identity) identity.innerHTML = `${factionDot({ ...profile, faction_id: factionId })}@${escapeHTML(profile.username)}`;
+      const username = profile.username;
+      card.setAttribute("role", "link");
+      card.tabIndex = 0;
+      const openProfile = () => navigate({ perfil: username });
+      card.addEventListener("click", event => { if (event.target.closest(".faction-emblem-button")) return; openProfile(); });
+      card.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openProfile();
+      });
+    });
+    $$(".faction-members-section .faction-member-card", page).forEach(card => {
+      const username = $("strong", card)?.textContent.trim().replace(/^@/, "");
+      if (!username) return;
+      card.setAttribute("role", "link");
+      card.tabIndex = 0;
+      const openProfile = () => navigate({ perfil: username });
+      card.addEventListener("click", openProfile);
+      card.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openProfile();
+      });
+    });
     const pinnedCollectionsSection = $(".faction-pinned-collections-abafac", page);
     if (pinnedCollectionsSection) {
       $(".section-title", pinnedCollectionsSection).textContent = "Cole\u00e7\u00f5es de quadrinhos em destaque";
@@ -12341,7 +12402,7 @@
       $$('[data-faction-abafac-move]', controls).forEach(button => button.addEventListener("click", () => moveFactionAbafac(factionId, key, button.dataset.factionAbafacMove === "up" ? -1 : 1)));
       $('[data-faction-abafac-link]', controls)?.addEventListener("click", () => editFactionAbafacLink(factionId, key));
       $('[data-faction-view-members]', controls)?.addEventListener("click", () => navigate({ pagina: "faccoes", faccao: factionRouteKey(factionId), membros: "1" }));
-      $('[data-faction-abafac-remove]', controls)?.addEventListener("click", () => removeFactionAbafac(factionId, key));
+      $('[data-faction-abafac-remove]', controls)?.addEventListener("click", event => { event.currentTarget.closest("[data-faction-abafac]")?.setAttribute("hidden", ""); removeFactionAbafac(factionId, key); });
     });
     $$('[data-faction-catalog-share]', page).forEach(button => button.onclick = async () => {
       const link = new URL(`?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(factionId))}&catalogo=${encodeURIComponent(button.dataset.factionCatalogShare)}`, window.location.href).href;
@@ -12806,9 +12867,9 @@
     const recommendation = readArtistSeriesRecommendation(library);
     if (!recommendation) return '<section class="section faction-extra-abafac faction-artist-abafac" data-faction-abafac="artist"><div class="empty">Conclua uma leitura para receber dicas do mesmo artista.</div></section>';
     const { readItem, seriesItems } = recommendation;
-    const body = `<div class="section-subtitle faction-artist-source">A partir de <strong>${escapeHTML(itemDisplayTitle(readItem))}</strong></div><div class="results-grid">${seriesItems.slice(0, 6).map(item => seriesCard(item)).join("")}</div>`;
+    const body = `<div class="rail-viewport faction-artist-carousel"><div class="rail">${seriesItems.slice(0, 6).map(item => seriesCard(item)).join("")}</div></div>`;
     const subtitle = publisher ? `Outras séries do mesmo artista, dentro da editora ${escapeHTML(faction.publisher_name)}.` : "Outras séries do mesmo artista para você conhecer.";
-    return `<section class="section faction-extra-abafac faction-artist-abafac" data-faction-abafac="artist" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Recomendação</div><h2 class="section-title">Do mesmo artista de</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+    return `<section class="section faction-extra-abafac faction-artist-abafac" data-faction-abafac="artist" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Recomendação</div><h2 class="section-title">Do mesmo artista de ${escapeHTML(itemDisplayTitle(readItem))}</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
   }
 
   function factionRecommendationsMarkup(faction) {
