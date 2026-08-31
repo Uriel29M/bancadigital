@@ -1238,6 +1238,7 @@
   }
 
   function applyRoute() {
+    cancelCoverLoads();
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const params = new URLSearchParams(window.location.search);
     const readerId = params.get("ler");
@@ -4306,15 +4307,20 @@
   const coverLoading = new Map();
   const coverAbortControllers = new Map();
   let deferredCoverObserver = null;
+  let homeHeroReady = true;
+  let coverLoadGeneration = 0;
 
   function cancelCoverLoads() {
+    coverLoadGeneration += 1;
+    homeHeroReady = true;
     deferredCoverObserver?.disconnect();
     deferredCoverObserver = null;
     for (const controller of coverAbortControllers.values()) controller.abort();
     coverAbortControllers.clear();
     coverLoading.clear();
     $$('[data-cover-id]').forEach(element => {
-      const maxWidth = element.classList.contains("hero-bg") || element.classList.contains("hero-cover") ? 1200 : 480;
+      const isHero = element.classList.contains("hero-bg") || element.classList.contains("hero-cover");
+      const maxWidth = isHero ? coverMaxWidthForViewport() : 480;
       if (!coverMemoryCache.has(`${element.dataset.coverId}:${maxWidth}`)) element.dataset.coverReady = "";
     });
   }
@@ -8069,6 +8075,16 @@
     const cachedCover = state.offlineCoverData?.get?.(String(item.id));
     if (cachedCover) return cachedCover;
     if (state.session?.offline) return instantCover(item);
+    // O hero jÃ¡ Ã© conhecido no primeiro render: libere sua capa imediatamente.
+    if (variant === "hero" || variant === "hero-background") {
+      const earlyBlockedGcdCover = value => /^https:\/\/files1\.comics\.org\//i.test(String(value || ""));
+      const earlyDefaultItemCover = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === item.id)?.coverUrl;
+      const earlyDefaultCover = /^assets\/covers\/milestone\//i.test(String(item.coverUrl || "")) || earlyBlockedGcdCover(item.coverUrl)
+        ? earlyDefaultItemCover
+        : item.coverUrl;
+      const earlyHeroCover = variant === "hero" ? item.featuredCoverUrl || earlyDefaultCover || item.cover : earlyDefaultCover || item.cover;
+      if (earlyHeroCover && !/^data:/i.test(String(earlyHeroCover)) && !earlyBlockedGcdCover(earlyHeroCover)) return proxiedImageUrl(earlyHeroCover);
+    }
     // Antes de a sessão e as preferências serem carregadas, não mostre a capa
     // padrão: ela seria substituída depois pela variante escolhida.
     if (!state.authReady) return instantCover(item);
@@ -8078,7 +8094,7 @@
       ? (previewChoice.cover_url || item.coverUrl || item.cover)
       : (activeChoices?.get?.(item.id) || activeChoices?.get?.(String(item.id)))?.cover_url;
     const isBlockedGcdCover = value => /^https:\/\/files1\.comics\.org\//i.test(String(value || ""));
-    if (selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover)) && !isBlockedGcdCover(selectedCover)) return proxiedImageUrl(selectedCover);
+    if (variant !== "hero-background" && selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover)) && !isBlockedGcdCover(selectedCover)) return proxiedImageUrl(selectedCover);
     if (variant === "hero" && item.featuredCoverUrl) return proxiedImageUrl(item.featuredCoverUrl);
     const defaultItemCover = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === item.id)?.coverUrl;
     const defaultCover = /^assets\/covers\/milestone\//i.test(String(item.coverUrl || "")) || isBlockedGcdCover(item.coverUrl)
@@ -8087,6 +8103,16 @@
     if (defaultCover) return proxiedImageUrl(defaultCover);
     if (item.cover) return proxiedImageUrl(item.cover); // backward compatibility
     return instantCover(item);
+  }
+
+  // No celular o hero ocupa uma área bem menor e a capa grande nem é exibida.
+  // Limitar a extração evita baixar/renderizar uma imagem de 1200px para uma
+  // área de aproximadamente 400-700px de largura.
+  function coverMaxWidthForViewport() {
+    const isMobile = typeof window.matchMedia === "function"
+      ? window.matchMedia("(max-width: 700px)").matches
+      : window.innerWidth <= 700;
+    return isMobile ? 640 : 1200;
   }
 
   function coverStyleFor(item, coverStyles = null) {
@@ -8525,6 +8551,7 @@
       return;
     }
     if (!lazyCoverObserver) lazyCoverObserver = new IntersectionObserver(entries => {
+      if (state.section === "home" && !homeHeroReady) return;
       entries.sort((a, b) => {
         const first = a.target.getBoundingClientRect();
         const second = b.target.getBoundingClientRect();
@@ -8701,23 +8728,53 @@
     if (!elements.length) return;
     const load = element => {
       if (readerIsOpen) return;
+      const generation = coverLoadGeneration;
       const item = state.db.library.find(x => x.id === element.dataset.coverId) || state.localBoxFiles.find(x => x.id === element.dataset.coverId);
       if (!item || element.dataset.coverReady === "true") return;
       element.dataset.coverReady = "true";
       const controller = new AbortController();
       coverAbortControllers.set(item.id, controller);
       const isHero = element.classList.contains("hero-bg") || element.classList.contains("hero-cover");
-      const maxWidth = isHero ? 1200 : 480;
+      const maxWidth = isHero ? coverMaxWidthForViewport() : 480;
       const cacheId = `${item.id}:${maxWidth}`;
       const job = coverLoading.get(cacheId) || autoCover(item, controller.signal, maxWidth);
+      const directUrl = isHero ? (element.currentSrc || element.src || element.style.backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1]) : "";
+      if (!job) {
+        // URLs já prontas não passam por autoCover; aguarde o download das
+        // imagens prioritárias antes de liberar as demais.
+        if (!directUrl) return;
+        return new Promise(resolve => {
+         const image = new Image();
+          image.onload = () => {
+            if (generation === coverLoadGeneration && isHero) {
+              $$('[data-cover-id]').filter(el => el.dataset.coverId === item.id && el.classList.contains("hero-cover")).forEach(el => { el.style.backgroundImage = `url("${directUrl}")`; });
+            }
+            resolve();
+          };
+          image.onerror = resolve;
+         image.src = directUrl;
+        });
+      }
       coverLoading.set(cacheId, job);
       job.then(cover => {
-        if (!cover) return;
-        $$('[data-cover-id]').filter(el => el.dataset.coverId === item.id && ((el.classList.contains("hero-bg") || el.classList.contains("hero-cover")) === isHero)).forEach(el => { el.style.backgroundImage = `url("${cover}")`; });
+        if (generation !== coverLoadGeneration) return;
+        const resolvedCover = cover || directUrl;
+        if (!resolvedCover) return;
+        $$('[data-cover-id]').filter(el => el.dataset.coverId === item.id && ((el.classList.contains("hero-bg") || el.classList.contains("hero-cover")) === isHero)).forEach(el => {
+          if (el.matches("img.hero-bg-image")) el.src = resolvedCover;
+          else el.style.backgroundImage = `url("${resolvedCover}")`;
+        });
       }).catch(error => { element.dataset.coverReady = ""; console.warn("Não foi possível gerar a capa de", item.title, error); })
         .finally(() => coverLoading.delete(cacheId));
+      return job;
     };
-    const priority = elements.filter(element => element.classList.contains("hero-bg"));
+    const heroPriority = elements.filter(element => element.classList.contains("hero-bg"));
+    const visible = elements.filter(element => {
+      if (heroPriority.includes(element)) return false;
+      const rect = element.getBoundingClientRect();
+      return rect.bottom >= 0 && rect.top <= window.innerHeight + 80;
+    });
+    const priority = state.section === "home" ? heroPriority : visible;
     const deferred = elements.filter(element => !element.classList.contains("hero-bg"));
     const observeDeferred = () => {
       if (readerIsOpen) return;
@@ -8725,9 +8782,31 @@
       deferredCoverObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { load(entry.target); deferredCoverObserver?.unobserve(entry.target); } }), { rootMargin: "500px" }) : null;
       deferred.forEach(element => deferredCoverObserver ? deferredCoverObserver.observe(element) : load(element));
     };
+    const releaseLazyBackgrounds = () => {
+      if (state.section !== "home" || !homeHeroReady || !lazyCoverObserver) return;
+      $$('.is-lazy-cover').forEach(element => {
+        const rect = element.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight + 250) return;
+        if (element.dataset.lazyBackground) {
+          element.style.backgroundImage = element.dataset.lazyBackground;
+          delete element.dataset.lazyBackground;
+        }
+        element.classList.remove("is-lazy-cover");
+        lazyCoverObserver.unobserve(element);
+      });
+    };
     const priorityJobs = priority.map(load).filter(Boolean);
-    if (priorityJobs.length) Promise.allSettled(priorityJobs).then(observeDeferred);
-    else observeDeferred();
+    homeHeroReady = !priorityJobs.length;
+    if (priorityJobs.length) {
+      Promise.allSettled(priorityJobs).then(() => {
+        homeHeroReady = true;
+        observeDeferred();
+        releaseLazyBackgrounds();
+      });
+    } else {
+      observeDeferred();
+      releaseLazyBackgrounds();
+    }
   }
 
   function card(item, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, directOpen = false, coverChoices = null, seriesContext = false, collectionContext = null) {
@@ -9099,10 +9178,13 @@
     const orderedSections = visibleHomeKeys
       .map((key, index, visible) => decorateHomepageSection(key, homeSections[key], index, visible.length))
       .join("");
-    return `
+    const heroCoverMarkup = coverMaxWidthForViewport() > 640
+      ? `<div class="hero-cover" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" data-open="${escapeHTML(heroItem?.id || "")}" data-open-direct="true" aria-label="Abrir quadrinho em destaque"></div>`
+      : "";
+   return `
       <section class="hero">
-        <div class="hero-bg" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" style="background-image:url('${escapeHTML(coverFor(heroItem, "hero"))}')"></div>
-        <div class="hero-cover" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" data-open="${escapeHTML(heroItem?.id || "")}" data-open-direct="true" style="background-image:url('${escapeHTML(coverFor(heroItem, "hero"))}')" aria-label="Abrir quadrinho em destaque"></div>
+        <img class="hero-bg hero-bg-image" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" src="${escapeHTML(coverFor(heroItem, "hero-background"))}" alt="" aria-hidden="true" fetchpriority="high" loading="eager" decoding="async">
+        ${heroCoverMarkup}
         <div class="hero-content">
           <div class="eyebrow">Destaque da banca</div>
           <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
