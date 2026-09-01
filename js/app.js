@@ -19,6 +19,9 @@
     const profileId = profile?.id || profile?.user_id;
     return hasLegendaryAccess(profile) ? (profile?.avatar_url || randomAvatarUrl(profileId)) : randomAvatarUrl(profileId, "#ffffff", factionColorForProfile(profile));
   }
+  function officialAiBadge(profile = {}) {
+    return profile?.is_bot && profile?.is_official ? '<span class="official-ai-badge" title="Perfil oficial de inteligência artificial">IA oficial</span>' : "";
+  }
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
@@ -2950,7 +2953,7 @@
     state.comicLikeCounts = (comicLikes.data || []).reduce((counts, row) => counts.set(row.item_id, (counts.get(row.item_id) || 0) + 1), new Map());
     if (!session?.user) await loadFactions();
     if (session?.user) {
-      let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, profile_hidden, is_banned, silenced_until, last_seen_at, created_at, plan, profile_background_theme, profile_accent_theme, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, likes_public, wall_description, profile_banner_url, allow_mentions, allow_messages, shelf_sort_orders, shelf_style, shelf_styles, notifications_enabled, shelf_blogs_public, profile_wall_public, shelf_saved_public_collections, profile_activity_public, xp, level, daily_streak, last_checkin_at, faction_id, faction_joined_at, faction_changed_at, profile_sticker_award_id, allow_sticker_requests").eq("id", session.user.id).single();
+      let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, profile_hidden, is_banned, silenced_until, last_seen_at, created_at, plan, profile_background_theme, profile_accent_theme, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, likes_public, wall_description, profile_banner_url, allow_mentions, allow_messages, shelf_sort_orders, shelf_style, shelf_styles, notifications_enabled, guria_proactive_enabled, shelf_blogs_public, profile_wall_public, shelf_saved_public_collections, profile_activity_public, xp, level, daily_streak, last_checkin_at, faction_id, faction_joined_at, faction_changed_at, profile_sticker_award_id, allow_sticker_requests").eq("id", session.user.id).single();
       if (profile.error) {
         // Compatibilidade com instalações que ainda não aplicaram os scripts
         // opcionais do álbum de stickers.
@@ -3259,13 +3262,13 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select(options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select(`${options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS}, is_bot, is_official, bot_type`)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
     if (profile.error) {
       // Uma coluna opcional nova pode ainda não existir em instalações que
       // não aplicaram todas as migrations. Não descarte as preferências de
       // visibilidade nesse caso: elas são necessárias para renderizar o
       // perfil público de outras pessoas corretamente.
-      profile = await sb.from("profiles").select(options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
+      profile = await sb.from("profiles").select(`${options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS}, is_bot, is_official, bot_type`)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
     }
     if (profile.error || !profile.data) {
       state.publicProfile = { error: "Perfil não encontrado.", username };
@@ -6222,7 +6225,7 @@
     $(".form-grid", profileForm).appendChild(emailField);
     const privacyField = document.createElement("div");
     privacyField.className = "field full profile-privacy-settings";
-    privacyField.innerHTML = `<label>Privacidade e notificações</label><label class="checkbox-inline"><input name="likesPublic" type="checkbox" ${state.profile?.likes_public !== false ? "checked" : ""}> Mostrar minhas curtidas publicamente</label><label class="checkbox-inline"><input name="allowMentions" type="checkbox" ${state.profile?.allow_mentions !== false ? "checked" : ""}> Receber marcações</label><label class="checkbox-inline"><input name="allowMessages" type="checkbox" ${state.profile?.allow_messages !== false ? "checked" : ""}> Receber mensagens privadas</label><label class="checkbox-inline"><input name="notificationsEnabled" type="checkbox" ${state.profile?.notifications_enabled !== false ? "checked" : ""}> Receber notificações</label>`;
+      privacyField.innerHTML = `<label>Privacidade e notificações</label><label class="checkbox-inline"><input name="likesPublic" type="checkbox" ${state.profile?.likes_public !== false ? "checked" : ""}> Mostrar minhas curtidas publicamente</label><label class="checkbox-inline"><input name="allowMentions" type="checkbox" ${state.profile?.allow_mentions !== false ? "checked" : ""}> Receber marcações</label><label class="checkbox-inline"><input name="allowMessages" type="checkbox" ${state.profile?.allow_messages !== false ? "checked" : ""}> Receber mensagens privadas</label><label class="checkbox-inline"><input name="notificationsEnabled" type="checkbox" ${state.profile?.notifications_enabled !== false ? "checked" : ""}> Receber notificações</label><label class="checkbox-inline"><input name="guriaProactiveEnabled" type="checkbox" ${state.profile?.guria_proactive_enabled !== false ? "checked" : ""}> Receber mensagens proativas da Guria</label>`;
     $(".form-grid", profileForm).appendChild(privacyField);
     const profileSectionsPrivacy = document.createElement("div");
     profileSectionsPrivacy.className = "field full profile-privacy-settings";
@@ -6238,7 +6241,7 @@
     profileForm.addEventListener("submit", async event => {
       event.preventDefault();
       const fd = new FormData(profileForm);
-      const privacy = { likes_public: fd.has("likesPublic") ? fd.get("likesPublic") === "on" : state.profile?.likes_public !== false, allow_mentions: fd.get("allowMentions") === "on", allow_messages: fd.get("allowMessages") === "on", notifications_enabled: fd.get("notificationsEnabled") === "on" };
+      const privacy = { likes_public: fd.has("likesPublic") ? fd.get("likesPublic") === "on" : state.profile?.likes_public !== false, allow_mentions: fd.get("allowMentions") === "on", allow_messages: fd.get("allowMessages") === "on", notifications_enabled: fd.get("notificationsEnabled") === "on", guria_proactive_enabled: fd.get("guriaProactiveEnabled") === "on" };
       privacy.profile_wall_public = fd.get("wallPublic") === "on";
       privacy.shelf_saved_public_collections = fd.get("savedPublicCollectionsPublic") === "on";
       privacy.profile_activity_public = fd.get("activityPublic") === "on";
@@ -10441,13 +10444,13 @@
       : await sb.from("profile_follows").select("following_id").eq("follower_id", profileId);
     if (relation.error) return toast("Não foi possível carregar essa lista.");
     const ids = (relation.data || []).map(row => isFollowers ? row.follower_id : row.following_id).filter(Boolean);
-    const profiles = ids.length ? await sb.from("profiles").select("id, username, avatar_url, title, plan, faction_id").in("id", ids) : { data: [] };
+    const profiles = ids.length ? await sb.from("profiles").select("id, username, avatar_url, title, plan, faction_id, is_bot, is_official, bot_type").in("id", ids) : { data: [] };
     if (profiles.error) return toast("Não foi possível carregar os perfis.");
     const byId = new Map((profiles.data || []).map(profile => [profile.id, profile]));
     const title = isFollowers ? "Seguidores" : "Seguindo";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal follow-list-modal"><div class="section-head"><div><h2>${title}</h2><div class="section-subtitle">${ids.length} perfil(is)</div></div><button class="small-btn" data-close>Fechar</button></div><div class="follow-list">${ids.map(id => { const profile = byId.get(id); return profile ? `<a class="follow-list-item" href="${escapeHTML(publicProfileHref(profile.username))}">${avatarMarkup(profile, "follow-list-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b>${profile.title ? `<small>${escapeHTML(profile.title)}</small>` : ""}</span></a>` : ""; }).join("") || '<div class="empty">Nenhum perfil nesta lista.</div>'}</div></div>`;
+    overlay.innerHTML = `<div class="modal follow-list-modal"><div class="section-head"><div><h2>${title}</h2><div class="section-subtitle">${ids.length} perfil(is)</div></div><button class="small-btn" data-close>Fechar</button></div><div class="follow-list">${ids.map(id => { const profile = byId.get(id); return profile ? `<a class="follow-list-item" href="${escapeHTML(publicProfileHref(profile.username))}">${avatarMarkup(profile, "follow-list-avatar")}<span><b>${factionDot(profile)}@${escapeHTML(profile.username)} ${officialAiBadge(profile)}</b>${profile.title ? `<small>${escapeHTML(profile.title)}</small>` : ""}</span></a>` : ""; }).join("") || '<div class="empty">Nenhum perfil nesta lista.</div>'}</div></div>`;
     $("#modal-root").appendChild(overlay);
     $("[data-close]", overlay).onclick = () => overlay.remove();
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
@@ -10841,7 +10844,7 @@
     const expandButton = `<button type="button" class="chat-expand-message-action" data-chat-message-expand aria-expanded="false" hidden>Expandir</button>`;
     const replyButton = `<button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button>`;
     const pinButton = canModerateChat && options.allowPin ? `<button type="button" class="chat-pin-action" data-chat-pin="${escapeHTML(message.id || "")}" aria-label="Fixar mensagem" title="Fixar mensagem">📌</button>` : "";
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${staffTitleMarkup(profile)}${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}" data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)} ${officialAiBadge(profile)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${staffTitleMarkup(profile)}${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
   }
 
   function updateChatMessageExpansionUI(messagesRoot) {
@@ -11407,7 +11410,7 @@
     render();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${contact ? `<button class="small-btn" type="button" data-chat-back>Voltar</button>` : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)}</b></div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`;
+    overlay.innerHTML = `<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${contact ? `<button class="small-btn" type="button" data-chat-back>Voltar</button>` : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)} ${officialAiBadge(contact)}</b>${contact.is_bot ? '<small>Mensagens para a IA podem passar por moderação automatizada.</small>' : ''}</div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`;
     $("#modal-root").appendChild(overlay);
     let channel = null;
     let closed = false;
@@ -11478,7 +11481,7 @@
         event.preventDefault();
         const username = String(new FormData(event.currentTarget).get("username") || "").trim();
         if (!username) return;
-        const result = await sb.from("profiles").select("id, username, avatar_url, title, allow_messages").ilike("username", username).maybeSingle();
+        const result = await sb.from("profiles").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
         if (result.error || !result.data) return toast("Usuário não encontrado.");
         if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
         overlay.remove();
@@ -11493,7 +11496,7 @@
       const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at").or(`and(sender_id.eq.${state.session.user.id},recipient_id.eq.${contact.id}),and(sender_id.eq.${contact.id},recipient_id.eq.${state.session.user.id})`).gt("expires_at", now).order("created_at", { ascending: true }).limit(200);
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderIds = [...new Set((result.data || []).map(message => message.sender_id).filter(Boolean))];
-      const profilesResult = senderIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", senderIds) : { data: [] };
+      const profilesResult = senderIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id, is_bot, is_official, bot_type").in("id", senderIds) : { data: [] };
       const profilesById = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
       const senderVisuals = await loadChatSenderVisuals(senderIds);
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: profilesById.get(message.sender_id) || {} }]));
@@ -11525,7 +11528,7 @@
       messagesRoot.insertAdjacentHTML("beforeend", `<div class="chat-message is-mine chat-message-pending" data-chat-pending="${optimisticId}"><div>${escapeHTML(body)}</div><small>Enviando…</small></div>`);
       event.currentTarget.reset();
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }).select("id").single();
       if (result.error) {
         $(`[data-chat-pending="${optimisticId}"]`, messagesRoot)?.remove();
         submitButton.disabled = false;
@@ -12211,7 +12214,7 @@
       <div class="profile-header">
         ${profileStickerMarkup(profile, publicState.stickerAwards || [])}${avatarMarkup(profile)}
         <div>
-          <div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)}</div>
+          <div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)} ${officialAiBadge(profile)}</div>
           ${profile.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : '<div class="section-subtitle">Perfil público</div>'}
           ${trophyRoom(publicState.achievements)}
           ${followSummary(profile.id, publicState.followerCount, publicState.followingCount)}
@@ -12445,6 +12448,9 @@
         deleteButton.closest("[data-top10-list-comment]")?.remove();
         await refresh();
         return;
+      }
+      if (contact.is_bot && contact.is_official && result.data?.id) {
+        sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] resposta assíncrona indisponível", error?.message || error));
       }
       const replyButton = event.target.closest?.("[data-top10-list-comment-reply]");
       if (replyButton && state.session) {
