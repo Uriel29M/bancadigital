@@ -10823,7 +10823,7 @@
       return `<a class="chat-comic-preview" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener"><div class="chat-comic-preview-cover" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(previewCover)}')"></div><span class="chat-comic-preview-copy"><b>${escapeHTML(title)}</b><small>${escapeHTML(year.replace(/^ · /, ""))}</small></span></a>`;
     };
     const source = String(body || "");
-    const urlPattern = /!?\[([^\]\r\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<\])]+)/gi;
+    const urlPattern = /!?\[([^\]\r\n]+)\]\(((?:https?:\/\/|\/)[^\s)]+)\)|(https?:\/\/[^\s<\])]+)/gi;
     let output = "";
     let cursor = 0;
     for (const match of source.matchAll(urlPattern)) {

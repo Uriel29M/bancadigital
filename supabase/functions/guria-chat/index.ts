@@ -143,7 +143,7 @@ Deno.serve(async (request) => {
     const enrichedPrompt = PERSONA + '\nHistorico recente (mantenha continuidade e evite repetir respostas):\n' + (historyText || '(nenhum)') + '\n' + prompt;
     let reply = FALLBACK, provider = 'disabled', errorCode = null;
     const repeatedUserQuestion = history.some((row: any) => row.sender_id === user.id && String(row.body || '').trim().toLowerCase() === String(message.body || '').trim().toLowerCase());
-    const siteIntent = /\b(?:onde fica|onde encontro|como acesso|abrir|acessar|link|ir para|mostrar)\b.*\b(?:perfil|estante|leituras?|quadrinhos?|catalogo|catálogo|pesquisa|buscar|mensagens?)\b|\b(?:meu perfil|minha estante|minhas leituras|meus quadrinhos|abrir catalogo|abrir catálogo|pesquisar quadrinhos)\b|^\s*(?:estante|perfil|leituras?|quadrinhos?|catalogo|catálogo|pesquisa)\s*[?!.]*\s*$/i.test(message.body);
+    const siteIntent = /\b(?:onde fica|onde encontro|como acesso|abrir|acessar|link|ir para|mostrar)\b.*\b(?:perfil|estante|leituras?|quadrinhos?|mang[aá]s?|catalogo|catálogo|pesquisa|buscar|mensagens?)\b|\b(?:meu perfil|minha estante|minhas leituras|meus quadrinhos|abrir catalogo|abrir catálogo|pesquisar quadrinhos)\b|^\s*(?:estante|perfil|leituras?|quadrinhos?|mang[aá]s?|catalogo|catálogo|pesquisa)\s*[?!.]*\s*$/i.test(message.body);
     const { data: currentProfile } = siteIntent ? await admin.from('profiles').select('username').eq('id', user.id).maybeSingle() : { data: null };
     const searchTerm = String(message.body || '')
       .replace(/\b(?:quero|queria|pode|poderia|vou|onde|como|me ajuda a|me ajude a|abrir|acessar|ler|buscar|pesquisar|encontrar)\b/gi, '')
@@ -152,10 +152,25 @@ Deno.serve(async (request) => {
       .replace(/\s+/g, ' ').trim();
     const siteReply = siteIntent && /\b(?:perfil|estante|leituras?|cole[cç][aã]o)\b/i.test(message.body) && currentProfile?.username
       ? `Aqui está seu espaço na Banca: [abrir meu perfil e estante](/?perfil=${encodeURIComponent(currentProfile.username)}).`
-      : siteIntent && /\b(?:pesquisa|buscar|encontrar|ler|quadrinhos?|catalogo|catálogo)\b/i.test(message.body)
+      : siteIntent && /\b(?:pesquisa|buscar|encontrar|ler|quadrinhos?|mang[aá]s?|catalogo|catálogo)\b/i.test(message.body)
         ? `${searchTerm ? `Vou deixar a busca por “${searchTerm}” pronta` : 'O catálogo está logo ali'}, [abrir quadrinhos e pesquisa](/?pagina=${searchTerm ? `pesquisar&q=${encodeURIComponent(searchTerm)}` : 'quadrinhos'}).`
         : null;
-    const directReply = siteReply || (
+    const navigationReply = /\b(?:o que eu posso fazer|o que posso fazer|o que você pode fazer|o que vc pode fazer|o que voce pode fazer|como eu uso|como usar|como você pode ajudar|como vc pode ajudar)\b/i.test(message.body)
+      ? `Posso te guiar pela Banca, procurar quadrinhos, explicar as funções e indicar sua estante. Também posso falar sobre heróis, vilões e histórias, desde que você não me peça para organizar uma pilha de gibis, porque aí já é exploração trabalhista. [Abrir o catálogo](/?pagina=quadrinhos)${currentProfile?.username ? ` · [Abrir seu perfil](/?perfil=${encodeURIComponent(currentProfile.username)})` : ''}`
+      : /\bmang[aá]s?\b/i.test(message.body)
+        ? 'Ainda não temos mangás cadastrados na Banca. Por enquanto, o catálogo está focado em quadrinhos. [Abrir quadrinhos disponíveis](/?pagina=quadrinhos).'
+      : /\b(?:me recomenda|me indique|alguma recomendação|qualquer coisa|o que ler|sugest[aã]o)\b/i.test(message.body)
+        ? 'Posso procurar uma boa leitura, mas “qualquer coisa” é um cardápio perigosamente amplo. [Abrir o catálogo para escolher](/?pagina=quadrinhos).'
+      : /\b(?:ranking|classificação|classificacao|mais lidos|populares)\b/i.test(message.body)
+        ? 'Quer ver quem está brilhando na Banca? [Abrir o ranking](/?pagina=ranking).'
+        : /\b(?:coleções?|colecoes)\b/i.test(message.body) && !/salv(?:a|as|os|adas)/i.test(message.body)
+          ? 'As coleções estão aqui: [abrir coleções](/?pagina=colecoes).'
+          : /\b(?:downloads?|baixados?|arquivos baixados?)\b/i.test(message.body)
+            ? 'Seus arquivos baixados ficam aqui: [abrir downloads](/?pagina=downloads).'
+            : /\b(?:caixa local|meus arquivos|arquivo do computador)\b/i.test(message.body)
+              ? 'A caixa local é o cantinho dos seus arquivos: [abrir caixa local](/?pagina=caixa).'
+              : null;
+    const directReply = navigationReply || siteReply || (
       /\b(solteir[ao]s?|namorando|namora|relacionamento|casad[ao])\b/i.test(message.body)
       ? (repeatedUserQuestion
         ? 'Você já perguntou isso, hein? Continua sendo solteira. Minha companhia mais constante ainda é uma boa história em quadrinhos, pelo menos ela não insiste na mesma pergunta. Quer trocar de assunto?'
