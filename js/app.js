@@ -20,7 +20,7 @@
     return hasLegendaryAccess(profile) ? (profile?.avatar_url || randomAvatarUrl(profileId)) : randomAvatarUrl(profileId, "#ffffff", factionColorForProfile(profile));
   }
   function officialAiBadge(profile = {}) {
-    return profile?.is_bot && profile?.is_official ? '<span class="official-ai-badge" title="Perfil oficial de inteligência artificial">IA oficial</span>' : "";
+    return "";
   }
   const FACTION_COLOR_OPTIONS = [
     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
@@ -1647,6 +1647,7 @@
   }
 
   function factionDot(profile = {}) {
+    if (String(profile?.username || "").toLowerCase() === "guria") return "";
     const factionId = profile.faction_id || state.factionByUser.get(profile.id);
     const faction = state.factions.find(item => item.id === factionId) || { color: profile.faction_color, name: "Facção", emblem: "" };
     return faction?.emblem ? `<button type="button" class="faction-emblem-button" data-faction-open="${escapeHTML(factionId || "")}" title="Abrir ${escapeHTML(faction.name || "Facção")}" aria-label="Abrir ${escapeHTML(faction.name || "Facção")}">${escapeHTML(faction.emblem)}</button>` : "";
@@ -1670,6 +1671,7 @@
   }
 
   function staffTitleForProfile(profile = {}) {
+    if (String(profile?.username || "").toLowerCase() === "guria") return "Guia";
     const plan = normalizedPlan(profile);
     if (["moderator", "banca"].includes(plan)) return "ADM";
     return "";
@@ -2647,10 +2649,11 @@
     const factionId = profile?.faction_id || state.factionByUser.get(profileId);
     const faction = state.factions.find(item => item.id === factionId);
     const staff = ["moderator", "banca", "admin"].includes(profile?.plan);
-    const avatarClass = staff ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
-    const avatarStyle = !staff && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
+    const isGuria = String(profile?.username || "").toLowerCase() === "guria";
+    const avatarClass = staff || isGuria ? "avatar-staff" : faction?.color ? "avatar-faction" : "";
+    const avatarStyle = !staff && !isGuria && faction?.color ? ` style="--avatar-faction-color:${escapeHTML(faction.color)}"` : "";
     const isGeneratedAvatar = String(profile?.avatar_url || "").startsWith(RANDOM_AVATAR_BASE_URL);
-    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (isGeneratedAvatar ? generatedAvatarForProfile(profile) : (profile?.avatar_url || generatedAvatarForProfile(profile)));
+    const avatarUrl = state.session?.offline || navigator.onLine === false ? DEFAULT_AVATAR_URL : (isGuria ? "assets/guria/guriaperfil.png?v=1" : (isGeneratedAvatar ? generatedAvatarForProfile(profile) : (profile?.avatar_url || generatedAvatarForProfile(profile))));
     return `<img class="${className} ${avatarClass}"${avatarStyle} src="${escapeHTML(avatarUrl)}" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URL}'" alt="Foto de ${escapeHTML(profile?.username || "usuário")}">`;
   }
 
@@ -4121,9 +4124,9 @@
     library.filter(item => !item.local && characterNames(item).length).forEach(item => {
       const publisherName = String(item.publisher || "Sem editora").trim() || "Sem editora";
       characterNames(item).forEach(characterName => {
-        if (isTeamCharacter(characterName) || isRedirectedCharacter(characterName)) return;
+        if (isRedirectedCharacter(characterName)) return;
         const id = stickerCharacterId(item, characterName);
-        if (!groups.has(id)) groups.set(id, { id, kind: "character", characterName, publisherName, items: [] });
+        if (!groups.has(id)) groups.set(id, { id, kind: isTeamCharacter(characterName) ? "team" : "character", characterName, publisherName, items: [] });
         groups.get(id).items.push(item);
       });
     });
@@ -4191,7 +4194,7 @@
 
   async function maybeAwardCharacterStickers(item) {
     if (!state.session || !sb || !item || item.local) return;
-    const groups = stickerGroups().filter(group => group.items.some(entry => String(entry.id) === String(item.id)));
+    const groups = stickerGroups().filter(group => ["character", "team"].includes(group.kind) && group.items.some(entry => String(entry.id) === String(item.id)));
     for (const group of groups) {
       if (!group.items.every(entry => state.readingProgress.get(entry.id)?.completed)) continue;
       const fingerprint = stickerFingerprint(group);
@@ -4226,7 +4229,7 @@
 
   async function maybeAwardCompletedStickers() {
     if (!state.session || !sb) return;
-    for (const group of stickerGroups()) {
+    for (const group of stickerGroups().filter(entry => ["character", "team"].includes(entry.kind))) {
       if (group.items.every(entry => state.readingProgress.get(entry.id)?.completed)) await maybeAwardCharacterStickers(group.items[0]);
     }
   }
@@ -4287,13 +4290,14 @@
 
   function stickerAlbumMarkup(profile, awards = [], options = {}) {
     if (!profile) return '<div class="content sticker-album-page"><div class="empty">Carregando seu álbum…</div></div>';
-    const groups = stickerGroups();
+    const groups = stickerGroups().filter(group => ["character", "team"].includes(group.kind));
+    const characterGroupIds = new Set(groups.map(group => String(group.id)));
     const isOwn = options.isOwn === true || Boolean(state.session?.user?.id && profile?.id && String(state.session.user.id) === String(profile.id));
     const canSeeRepeated = isOwn || state.profile?.plan === "admin";
     const albumView = canSeeRepeated ? (state.stickerAlbumView || "pasted") : "pasted";
-    const pastedAwards = (awards || []).filter(award => award.album_section !== "repeated");
+    const pastedAwards = (awards || []).filter(award => award.album_section !== "repeated" && characterGroupIds.has(String(award.character_id)));
     const owned = currentStickerAwards(pastedAwards);
-    const repeatedAwards = canSeeRepeated ? (awards || []).filter(award => award.album_section === "repeated") : [];
+    const repeatedAwards = canSeeRepeated ? (awards || []).filter(award => award.album_section === "repeated" && characterGroupIds.has(String(award.character_id))) : [];
     const ownerId = profile?.id;
     const slotPreferences = options.slotPreferences || (isOwn ? state.stickerSlotPreferences : state.publicProfile?.stickerSlotPreferences) || new Map();
     const offerable = isOwn ? (state.stickerAwards || []) : (state.stickerAwards || []);
@@ -10723,7 +10727,12 @@
   }
 
   function chatBodyMarkup(body, metadata = {}, senderVisual = null) {
-    const mentionMarkup = text => escapeHTML(String(text || "")).replace(/@([A-Za-z0-9_]{3,24})/g, (match, mentionedUsername) => `<a class="comment-mention" href="${escapeHTML(publicProfileHref(mentionedUsername))}" target="_blank" rel="noopener">${match}</a>`);
+    const mentionMarkup = text => escapeHTML(String(text || ""))
+      .replace(/@([A-Za-z0-9_]{3,24})/g, (match, mentionedUsername) => `<a class="comment-mention" href="${escapeHTML(publicProfileHref(mentionedUsername))}" target="_blank" rel="noopener">${match}</a>`)
+      .replace(/\*\*([^*\r\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(?<!\*)\*([^*\r\n]+)\*(?!\*)/g, '<strong class="chat-emphasis-soft">$1</strong>')
+      .replace(/([.!?:])\s+-\s+(?=<strong>)/g, "$1<br>")
+      .replace(/\r?\n/g, "<br>");
     const cleanChatUrl = rawUrl => String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
     const isChatImageUrl = rawUrl => {
       let parsed;
@@ -10834,7 +10843,8 @@
 
   function chatMessageMarkup(message, profile = {}, senderVisual = null, options = {}) {
     const username = cleanUsername(profile.username || "usuário");
-    const title = String(profile.title || "").trim();
+    const isGuria = username.toLowerCase() === "guria";
+    const title = isGuria ? "" : String(profile.title || "").trim();
     const reply = message.metadata?.reply_to;
     const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
     const canModerateChat = options.canModerate ?? ["moderator", "banca", "admin"].includes(state.profile?.plan);
@@ -10870,7 +10880,7 @@
           range.selectNodeContents(node);
           [...range.getClientRects()].forEach(rect => lineTops.add(Math.round(rect.top)));
         }
-        const canExpand = lineTops.size > 10;
+        const canExpand = lineTops.size > 9;
         body.classList.add("is-line-limited");
         button.hidden = !canExpand;
         button.textContent = "Expandir";
@@ -11396,8 +11406,9 @@
     if (!state.session || !sb) return openAuthPage();
     if (contact?.id === state.session.user.id) return toast("Você não pode enviar mensagens para si mesmo.");
     if (contact?.id && contact.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
-    if (contact?.id && contact.allow_messages === undefined) {
-      const recipient = await sb.from("profiles").select("allow_messages").eq("id", contact.id).maybeSingle();
+    if (contact?.id && (contact.allow_messages === undefined || contact.is_bot === undefined || contact.is_official === undefined)) {
+      const recipient = await sb.from("profiles").select("allow_messages, is_bot, is_official, bot_type").eq("id", contact.id).maybeSingle();
+      if (recipient.data) contact = { ...contact, ...recipient.data };
       if (recipient.data?.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
     }
     state.chatContact = contact?.id ? contact : null;
@@ -11458,7 +11469,7 @@
       });
       const contactIds = [...conversations.keys()];
       if (contactIds.length) {
-        const profilesResult = await sb.from("profiles").select("id, username, avatar_url, title, title_color, allow_messages").in("id", contactIds);
+        const profilesResult = await sb.from("profiles").select("id, username, avatar_url, title, title_color, allow_messages, is_bot, is_official, bot_type").in("id", contactIds);
         const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
         const cards = contactIds.map(contactId => {
           const profile = profiles.get(contactId);
@@ -11534,6 +11545,9 @@
         submitButton.disabled = false;
         console.error("[private chat] erro ao enviar mensagem", result.error);
         return toast(result.error.message || "Não foi possível enviar a mensagem.");
+      }
+      if (contact.is_bot && contact.is_official && result.data?.id) {
+        sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] resposta assíncrona indisponível", error?.message || error));
       }
       await renderMessages();
       getReply.clear();
@@ -12448,9 +12462,6 @@
         deleteButton.closest("[data-top10-list-comment]")?.remove();
         await refresh();
         return;
-      }
-      if (contact.is_bot && contact.is_official && result.data?.id) {
-        sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] resposta assíncrona indisponível", error?.message || error));
       }
       const replyButton = event.target.closest?.("[data-top10-list-comment-reply]");
       if (replyButton && state.session) {
@@ -16091,9 +16102,13 @@
         $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
       }
        const shelfMediaTabs = $(".shelf-media-tabs");
+       $("[data-shelf-media=collections]", shelfMediaTabs).textContent = "Estante";
+       $("[data-shelf-media=saved-public]", shelfMediaTabs).textContent = "Coleções";
       if (shelfMediaTabs && !$("[data-section=album]", shelfMediaTabs)) shelfMediaTabs.insertAdjacentHTML("beforeend", `<button class="small-btn" data-section="album">Álbum</button>`);
        $("[data-section=album]", shelfMediaTabs)?.remove();
-       const ownSavedPublicPanel = $("[data-shelf-tab-panel=saved-public]");
+      const ownSavedPublicPanel = $("[data-shelf-tab-panel=saved-public]");
+      const ownSavedPublicTitle = $(".saved-public-collections .section-title", ownSavedPublicPanel);
+      if (ownSavedPublicTitle) ownSavedPublicTitle.textContent = "Coleções";
       if (ownSavedPublicPanel && !$(".saved-publishers", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.savedPublishers));
       if (ownSavedPublicPanel && !$(".saved-imprints", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("beforeend", savedImprintsMarkup(state.savedImprints));
       if (ownSavedPublicPanel && !$(".saved-characters", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("beforeend", savedCharactersMarkup(state.savedCharacters));
@@ -16167,6 +16182,8 @@
         publicAlbumLink = null;
       }
        const publicShelfMediaTabs = $(".public-shelf-media-tabs");
+       $("[data-public-shelf-media=collections]", publicShelfMediaTabs).textContent = "Estante";
+       $("[data-public-shelf-media=saved-public]", publicShelfMediaTabs).textContent = "Coleções";
        if (!publicAlbumLink && publicShelfMediaTabs && publicAlbumAvailable) {
          publicAlbumLink = document.createElement("a");
          publicAlbumLink.className = "small-btn";
@@ -16178,6 +16195,8 @@
        const publicSavedTab = $("[data-public-shelf-media=saved-public]", publicShelfMediaTabs);
       if (publicAlbumLink && publicSavedTab) ( $("[data-public-shelf-media=top10]", publicShelfMediaTabs) || publicSavedTab ).after(publicAlbumLink);
       const publicSavedPublicPanel = $("[data-public-shelf-tab-panel=saved-public]");
+      const publicSavedPublicTitle = $(".saved-public-collections .section-title", publicSavedPublicPanel);
+      if (publicSavedPublicTitle) publicSavedPublicTitle.textContent = "Coleções";
       if (publicSavedPublicPanel && !$(".saved-publishers", publicSavedPublicPanel)) publicSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.publicProfile.savedPublishers || []));
       if (publicSavedPublicPanel && !$(".saved-imprints", publicSavedPublicPanel)) publicSavedPublicPanel.insertAdjacentHTML("beforeend", savedImprintsMarkup(state.publicProfile.savedImprints || []));
       if (publicSavedPublicPanel && !$(".saved-characters", publicSavedPublicPanel)) publicSavedPublicPanel.insertAdjacentHTML("beforeend", savedCharactersMarkup(state.publicProfile.savedCharacters || []));
@@ -16308,7 +16327,11 @@
       if (badge) badge.hidden = true;
     });
     $$('.local-box-nav').forEach(button => { button.style.display = state.session && state.localBoxVisible ? "" : "none"; });
-    $$('.album-nav').forEach(button => { button.style.display = ""; });
+    $$('.album-nav').forEach(link => {
+      const username = state.profile?.username;
+      link.href = username ? publicProfileHref(username, "", true) : "#";
+      link.style.display = state.session && username ? "" : "none";
+    });
     const downloadsSortHead = $(".downloads-completed .section-head");
     if (downloadsSortHead && !$("[data-download-sort]", downloadsSortHead)) {
       const completedCount = [...state.downloads.values()].filter(entry => entry.status === "completed").length;
@@ -17745,7 +17768,7 @@
         if (mode === "signup" && !providedEmail && /email rate limit exceeded/i.test(result.error.message)) {
           message.textContent = "O cadastro sem email exige a confirmação de email desativada no Supabase. Desative-a em Authentication > Providers > Email ou informe um email válido.";
         } else {
-          message.textContent = /database error saving new user/i.test(result.error.message)
+          message.textContent = /already registered|duplicate key|unique constraint|profiles_username_key/i.test(result.error.message)
             ? "Não foi possível criar a conta. Verifique se esse usuário já está em uso."
             : result.error.message;
         }

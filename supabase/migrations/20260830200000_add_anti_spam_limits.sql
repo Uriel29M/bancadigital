@@ -30,7 +30,7 @@ declare
   v_created_at timestamptz;
   v_now timestamptz := now();
   v_fingerprint text := md5(lower(regexp_replace(coalesce(trim(p_body), ''), '\s+', ' ', 'g')));
-  v_limit integer := case when p_channel = 'chat' then 12 else 5 end;
+  v_limit integer := case when p_channel = 'chat' then 20 else 8 end;
   v_recent_count integer;
   v_duplicate_count integer;
   v_last_at timestamptz;
@@ -58,7 +58,7 @@ begin
   where user_id = v_user_id and channel = p_channel and body_fingerprint = v_fingerprint and created_at > v_now - interval '10 minutes';
 
   -- Contas novas precisam espaçar as primeiras interações.
-  if v_created_at > v_now - interval '24 hours' and v_last_at is not null and v_last_at > v_now - interval '30 seconds' then
+  if v_created_at > v_now - interval '24 hours' and v_last_at is not null and v_last_at > v_now - interval '5 seconds' then
     return false;
   end if;
 

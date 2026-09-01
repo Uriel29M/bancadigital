@@ -129,7 +129,7 @@ begin
   v_message := format('Oi, %s! Eu sou a Guria, a IA oficial e guia da Banca. Vi que você acabou de chegar e passei para dar as boas-vindas. Posso explicar como o site funciona, indicar uma leitura ou simplesmente conversar sobre quadrinhos. Por onde você quer começar?', coalesce(nullif(new.username,''),'leitor'));
   insert into public.chat_messages(sender_id, recipient_id, body, metadata, guria_event_key)
   values (v_guria, new.id, v_message, jsonb_build_object('guria_type','welcome','official_ai',true), 'welcome:' || new.id::text)
-  on conflict (guria_event_key) do nothing;
+  on conflict do nothing;
   return new;
 end;
 $$;

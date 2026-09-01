@@ -1340,7 +1340,7 @@ as $$
 declare
   v_user_id uuid := auth.uid(); v_plan text; v_created_at timestamptz; v_now timestamptz := now();
   v_fingerprint text := md5(lower(regexp_replace(coalesce(trim(p_body), ''), '\\s+', ' ', 'g')));
-  v_limit integer := case when p_channel = 'chat' then 12 else 5 end;
+  v_limit integer := case when p_channel = 'chat' then 20 else 8 end;
   v_recent_count integer; v_duplicate_count integer; v_last_at timestamptz; v_violation_count integer; v_silence interval;
 begin
   if v_user_id is null or p_channel not in ('comment', 'chat') or length(trim(coalesce(p_body, ''))) = 0 then return false; end if;
@@ -1349,7 +1349,7 @@ begin
   if exists (select 1 from public.profiles where id = v_user_id and (is_banned or (silenced_until is not null and silenced_until > v_now))) then return false; end if;
   select count(*), max(created_at) into v_recent_count, v_last_at from private.anti_spam_events where user_id = v_user_id and channel = p_channel and created_at > v_now - interval '1 minute';
   select count(*) into v_duplicate_count from private.anti_spam_events where user_id = v_user_id and channel = p_channel and body_fingerprint = v_fingerprint and created_at > v_now - interval '10 minutes';
-  if v_created_at > v_now - interval '24 hours' and v_last_at is not null and v_last_at > v_now - interval '30 seconds' then return false; end if;
+  if v_created_at > v_now - interval '24 hours' and v_last_at is not null and v_last_at > v_now - interval '5 seconds' then return false; end if;
   if v_duplicate_count >= 1 then return false; end if;
   if v_recent_count >= v_limit then
     select count(*) into v_violation_count from private.anti_spam_events where user_id = v_user_id and channel = p_channel and created_at > v_now - interval '24 hours' and (body_fingerprint = v_fingerprint or created_at > v_now - interval '1 minute');
@@ -1417,6 +1417,26 @@ $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
+
+create or replace function public.follow_banca_accounts_for_profile()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  insert into public.profile_follows (follower_id, following_id)
+  select new.id, profile.id
+  from public.profiles profile
+  where profile.plan = 'banca' and profile.id <> new.id
+  on conflict (follower_id, following_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists follow_banca_accounts_after_profile_insert on public.profiles;
+create trigger follow_banca_accounts_after_profile_insert
+after insert on public.profiles
+for each row execute procedure public.follow_banca_accounts_for_profile();
+
+revoke execute on function public.follow_banca_accounts_for_profile() from public;
 
 create or replace function public.get_login_email(p_username text)
 returns text language sql security definer set search_path = public
