@@ -232,6 +232,18 @@
             updatedIcon13Url = true;
             return { ...item, fileUrl: defaultItem.fileUrl };
           });
+          let normalizedSeriesIds = false;
+          saved.library = saved.library.map(item => {
+            const canonicalSeriesId = canonicalSeriesIdFor(item.seriesTitle, item.seriesId);
+            if (!canonicalSeriesId || item.seriesId === canonicalSeriesId) return item;
+            normalizedSeriesIds = true;
+            const definition = (window.DEFAULT_SERIES || []).find(series => series.id === canonicalSeriesId);
+            return {
+              ...item,
+              seriesId: canonicalSeriesId,
+              seriesTitle: item.seriesTitle || definition?.name || definition?.seriesTitle || ""
+            };
+          });
           saved.library = materializeSeriesItems(saved.library.map(item => ({ ...(defaultsById.get(item.id) || {}), ...item })));
           const milestoneSeriesIds = new Set((window.DEFAULT_SERIES || []).filter(series => series.imprint === "Milestone").map(series => series.id));
           const milestoneItemIds = new Set((window.DEFAULT_LIBRARY || []).filter(item => milestoneSeriesIds.has(item.seriesId)).map(item => item.id));
@@ -259,7 +271,7 @@
             const previous = previousLibrary.find(entry => entry.id === item.id);
             return previous && (previous.volume !== item.volume || previous.volumeTitle !== item.volumeTitle);
           });
-          if (updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
+          if (normalizedSeriesIds || updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
           if (saved.library.some(item => item.id === "series-justice-godzilla-kong-2023-08" && String(item.fileUrl || "").includes("bpk2XxWKhFNO9s"))) this.save(saved);
           const knownIds = new Set(saved.library.map(item => item.id));
           const newDefaults = materializeSeriesItems(structuredClone(window.DEFAULT_LIBRARY)).filter(item => !knownIds.has(item.id) && !removedItemIds.has(item.id) && !isLegacyRemovedCatalogItem(item));
@@ -394,7 +406,10 @@
     downloadsSeriesSortOrders: (() => { try { return JSON.parse(localStorage.getItem("bancaDigitalDownloadsSeriesSort") || "{}"); } catch { return {}; } })(),
     notifications: [],
     notificationUnreadCount: 0,
+    communityActivities: [],
     notificationChannel: null,
+    chatTop10PreviewCache: new Map(),
+    chatInternalPreviewCache: new Map(),
     publicStickerChannel: null,
     staffActivities: [],
     staffPendingCount: 0,
@@ -1271,7 +1286,7 @@
     handlingRoute = true;
     const profileUsername = params.get("perfil");
     if (!readerId && profileUsername) {
-      loadPublicProfile(profileUsername, params.get("lista") || null, params.get("album") === "1");
+      loadPublicProfile(profileUsername, params.get("lista") || null, params.get("album") === "1", { top10ListId: params.get("lista_top10") || null });
       handlingRoute = false;
       return;
     }
@@ -3028,6 +3043,7 @@
     }
     if (!session?.user) await loadFactions();
     await loadNotifications();
+    await loadCommunityActivity();
     await loadStaffActivities();
     state.authReady = true;
     syncTopAvatar();
@@ -3230,10 +3246,10 @@
     const top10LoadRevision = state.top10Revision;
     const sameProfile = state.publicProfile?.profile
       && cleanUsername(state.publicProfile.profile.username) === cleanUsername(username);
-    const requestedPublicShelfTab = sameProfile ? state.publicShelfTab : "collections";
+    const requestedPublicShelfTab = options.top10ListId ? "top10" : sameProfile ? state.publicShelfTab : "collections";
     state.publicProfile = sameProfile
-      ? { ...state.publicProfile, username, collectionId, album, loading: false, detailsLoading: true }
-      : { loading: true, username, collectionId, album };
+      ? { ...state.publicProfile, username, collectionId, album, top10ListId: options.top10ListId || null, loading: false, detailsLoading: true }
+      : { loading: true, username, collectionId, album, top10ListId: options.top10ListId || null };
     state.publicShelfTab = requestedPublicShelfTab;
     state.collectionFilter = { field: "all", query: "" };
     state.section = "public-profile";
@@ -3265,7 +3281,7 @@
       : [];
     const block = blockRows.find(result => !result.error && result.data)?.data || null;
     if (block) {
-      state.publicProfile = { profile: profile.data, username, collectionId, album, blocked: true, blockedByMe: block.blocker_id === viewerId };
+      state.publicProfile = { profile: profile.data, username, collectionId, album, top10ListId: options.top10ListId || null, blocked: true, blockedByMe: block.blocker_id === viewerId };
       render();
       return;
     }
@@ -3276,6 +3292,7 @@
       username,
       collectionId,
       album,
+      top10ListId: options.top10ListId || null,
       loading: false,
       detailsLoading: true,
       stickerAwards: [],
@@ -3402,6 +3419,7 @@
       profile: profile.data,
       collectionId,
       album,
+      top10ListId: options.top10ListId || null,
       stickerAwards: stickerAwards.data || [],
       profileDisplayStickers: profileDisplayStickersResult.data || [],
       stickerSlotPreferences: new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }])),
@@ -3436,6 +3454,24 @@
     };
     subscribePublicStickerUpdates(profile.data.id);
     render();
+    if (options.top10ListId) requestAnimationFrame(() => $(`[data-top10-list-card="${options.top10ListId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
+
+  async function loadCommunityActivity() {
+    state.communityActivities = [];
+    if (!sb || !state.session?.user?.id || state.session?.offline || navigator.onLine === false) return;
+    const result = await sb.from("community_activity")
+      .select("id, actor_id, event_type, title, body, metadata, created_at, expires_at")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (result.error) return;
+    const actorIds = [...new Set((result.data || []).map(activity => activity.actor_id).filter(Boolean))];
+    const actorsResult = actorIds.length
+      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
+      : { data: [] };
+    const actors = new Map((actorsResult.data || []).map(actor => [actor.id, actor]));
+    state.communityActivities = (result.data || []).map(activity => ({ ...activity, actor: actors.get(activity.actor_id) || null }));
   }
 
   async function signOut() {
@@ -3452,6 +3488,7 @@
     state.session = null; state.profile = null; state.profileDisplayStickers = []; state.downloads = new Map(); state.favoriteIds = new Set(); state.favoriteAddedAt = new Map(); state.readingProgress = new Map(); state.shelfSnapshot = null; state.shelfCategories = []; state.comicLikeIds = new Set(); state.comicLikeAddedAt = new Map(); state.achievements = []; state.achievementChecks = new Set(); state.savedPublisherKeys = new Set(); state.savedPublishers = []; state.savedImprintKeys = new Set(); state.savedImprints = []; state.savedCharacterKeys = new Set(); state.savedCharacters = [];
     state.notifications = [];
     state.notificationUnreadCount = 0;
+    state.communityActivities = [];
     state.section = "home"; render(); toast("Você saiu da conta.");
   }
 
@@ -4020,6 +4057,7 @@
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop site-dialog-backdrop";
       overlay.innerHTML = `<div class="modal site-dialog-modal" role="dialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>Editar personagem</h2><div class="section-subtitle">Altere o nome e a imagem somente neste Top 10.</div></div></div><form data-top10-edit-form><label class="field"><span>Nome do personagem</span><input name="name" type="text" maxlength="120" required value="${escapeHTML(item.character_name || "")}"></label><label class="field"><span>URL da imagem (opcional)</span><input name="imageUrl" type="url" placeholder="https://..." value="${escapeHTML(item.image_url || "")}"><small class="format-hint">Se deixar como está, a imagem atual será mantida.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-top10-edit-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Inserir</button></div></form></div>`;
+      overlay.innerHTML = overlay.innerHTML.replace(/neste Top 10/g, "nesta lista");
       $("#modal-root").appendChild(overlay);
       const finish = value => { overlay.remove(); resolve(value); };
       $("[data-top10-edit-cancel]", overlay).onclick = () => finish(null);
@@ -4030,6 +4068,36 @@
       };
       overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
       $("[name=name]", overlay)?.select();
+    });
+  }
+
+  function openTop10ListType() {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop site-dialog-backdrop";
+      overlay.innerHTML = `<div class="modal site-dialog-modal" role="dialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>Nova lista</h2><div class="section-subtitle">Crie uma lista personalizada.</div></div></div><form data-top10-new-list-form><label class="field"><span>Dê um nome para a sua lista (ex.: Heróis favoritos):</span><input name="name" type="text" maxlength="60" required></label><div class="top10-new-list-options"><span class="top10-new-list-label">Tipo de lista</span><button type="button" class="small-btn" data-top10-type="character">Personagens</button><button type="button" class="small-btn" data-top10-type="story">Histórias</button></div><fieldset class="top10-character-filters top10-new-list-filters" data-top10-new-list-filters hidden><legend>Incluir personagens</legend><div class="top10-character-filter-options">${TOP10_CHARACTER_CATEGORIES.map(([key, label]) => `<label class="checkbox-inline"><input type="checkbox" data-top10-new-character-filter="${key}" checked> ${label}</label>`).join("")}</div></fieldset><div class="modal-actions top10-type-actions"><button type="submit" class="small-btn" data-top10-type-continue>Continuar</button><button type="button" class="small-btn" data-top10-type-cancel>Cancelar</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      const filters = $(`[data-top10-new-list-filters]`, overlay);
+      const form = $(`[data-top10-new-list-form]`, overlay);
+      let selectedType = "character";
+      $(`[data-top10-type=character]`, overlay).classList.add("is-active");
+      $$('[data-top10-type]', overlay).forEach(button => button.onclick = () => {
+        selectedType = button.dataset.top10Type;
+        filters.hidden = selectedType !== "character";
+        $$('[data-top10-type]', overlay).forEach(option => option.classList.toggle("is-active", option === button));
+      });
+      form.onsubmit = event => {
+        event.preventDefault();
+        const name = String(new FormData(form).get("name") || "").trim();
+        if (!name) return;
+        const categories = $$('[data-top10-new-character-filter]:checked', overlay).map(input => input.dataset.top10NewCharacterFilter);
+        if (selectedType === "character" && !categories.length) return toast("Mantenha pelo menos uma categoria selecionada.");
+        finish({ name, type: selectedType, categories: selectedType === "character" ? categories : TOP10_DEFAULT_CHARACTER_CATEGORIES });
+      };
+      $("[data-top10-type-cancel]", overlay).onclick = () => finish(null);
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=name]", overlay)?.focus();
     });
   }
 
@@ -4598,11 +4666,25 @@
     openReader(weightedRandom(candidates));
   }
 
-  function seriesKey(value = "") {
-    const key = String(value).trim().toLowerCase()
+  function normalizedSeriesKey(value = "") {
+    return String(value).trim().toLowerCase()
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    return key === "shazam" ? "series-shazam-2023" : key;
+  }
+
+  function canonicalSeriesIdFor(seriesTitle = "", currentSeriesId = "") {
+    const titleKey = normalizedSeriesKey(seriesTitle);
+    const currentKey = normalizedSeriesKey(currentSeriesId).replace(/^series-/, "");
+    const definition = (window.DEFAULT_SERIES || []).find(series => {
+      const idKey = normalizedSeriesKey(series.id).replace(/^series-/, "");
+      const nameKey = normalizedSeriesKey(series.name || series.seriesTitle);
+      return (titleKey && (nameKey === titleKey || idKey === titleKey)) || (currentKey && idKey === currentKey);
+    });
+    return definition?.id || (titleKey === "shazam" ? "series-shazam-2023" : currentSeriesId || "");
+  }
+
+  function seriesKey(value = "") {
+    return canonicalSeriesIdFor(value, "") || normalizedSeriesKey(value);
   }
 
   function issueSortValue(item) {
@@ -10452,6 +10534,191 @@
     return visuals;
   }
 
+  function chatTop10PreviewMarkup(preview, url) {
+    const story = preview.list.list_type === "story";
+    const items = (preview.items || []).slice(0, 3);
+    const rows = items.map((item, index) => {
+      const storyEntry = story ? state.db.library.find(entry => String(entry.id) === String(item.character_key)) : null;
+      const image = item.image_url || (storyEntry ? coverFor(storyEntry) : characterSettingForName(item.character_name)?.cover_url) || "assets/batmanicon.jpg";
+      return `<li class="chat-top10-preview-item" data-chat-top10-preview-item="${escapeHTML(item.id)}" data-chat-top10-preview-type="${story ? "story" : "character"}" data-chat-top10-preview-key="${escapeHTML(item.character_key || item.character_name)}"><span>${index + 1}</span><img src="${escapeHTML(image)}" alt="${escapeHTML(item.character_name)}" loading="lazy"><strong>${escapeHTML(item.character_name)}</strong><span class="top10-vote-actions"><button type="button" class="small-btn" data-chat-top10-vote="1">👍 ${item.likes || 0}</button><button type="button" class="small-btn" data-chat-top10-vote="-1">👎 ${item.dislikes || 0}</button></span></li>`;
+    }).join("");
+    return `<div class="chat-top10-preview" data-chat-top10-preview="${escapeHTML(url)}" data-chat-top10-hydrated="true"><div class="chat-top10-preview-head"><strong>${escapeHTML(preview.list.name)}</strong><span>3 primeiros</span></div><ol>${rows || '<li class="empty">Lista sem itens.</li>'}</ol><button type="button" class="small-btn" data-chat-top10-open="${escapeHTML(preview.list.id)}" data-chat-top10-owner="${escapeHTML(preview.owner.username)}">Abrir lista completa</button></div>`;
+  }
+
+  async function loadChatTop10Preview(url) {
+    if (!sb) return null;
+    const parsed = new URL(url, window.location.href);
+    const listId = parsed.searchParams.get("lista_top10");
+    const username = parsed.searchParams.get("perfil");
+    if (!listId || !username) return null;
+    const cacheKey = `${username}:${listId}`;
+    if (state.chatTop10PreviewCache.has(cacheKey)) return state.chatTop10PreviewCache.get(cacheKey);
+    const owner = await sb.from("profiles").select("id, username").ilike("username", username).maybeSingle();
+    if (owner.error || !owner.data) return null;
+    const listResult = await sb.from("profile_top10_lists").select("id, owner_id, name, list_type, is_public").eq("id", listId).eq("owner_id", owner.data.id).eq("is_public", true).maybeSingle();
+    if (listResult.error || !listResult.data) return null;
+    const itemsResult = await sb.from("profile_top10_items").select("id, character_key, character_name, image_url, rank").eq("list_id", listId).order("rank", { ascending: true }).limit(3);
+    if (itemsResult.error) return null;
+    const items = itemsResult.data || [];
+    const votesResult = items.length ? await sb.from("profile_top10_item_votes").select("item_id, user_id, vote").in("item_id", items.map(item => item.id)) : { data: [] };
+    items.forEach(item => {
+      const votes = (votesResult.data || []).filter(vote => String(vote.item_id) === String(item.id));
+      item.likes = votes.filter(vote => vote.vote === 1).length;
+      item.dislikes = votes.filter(vote => vote.vote === -1).length;
+      item.userVote = votes.find(vote => String(vote.user_id) === String(state.session?.user?.id))?.vote || 0;
+    });
+    const preview = { list: listResult.data, owner: owner.data, items };
+    state.chatTop10PreviewCache.set(cacheKey, preview);
+    return preview;
+  }
+
+  async function hydrateChatTop10Previews(root) {
+    if (!root) return;
+    hydrateChatInternalPreviews(root);
+    const previews = [...root.querySelectorAll("[data-chat-top10-preview]:not([data-chat-top10-hydrated])")];
+    await Promise.all(previews.map(async previewElement => {
+      if (!previewElement.isConnected) return;
+      const preview = await loadChatTop10Preview(previewElement.dataset.chatTop10Preview);
+      if (preview && previewElement.isConnected) previewElement.outerHTML = chatTop10PreviewMarkup(preview, previewElement.dataset.chatTop10Preview);
+    }));
+    $$('[data-chat-top10-open]', root).forEach(button => {
+      if (button.dataset.bound) return;
+      button.dataset.bound = "true";
+      button.onclick = () => {
+        button.closest(".chat-modal, .comments-modal, .top10-comments-modal")?.querySelector("[data-close]")?.click();
+        loadPublicProfile(button.dataset.chatTop10Owner, null, false, { top10ListId: button.dataset.chatTop10Open });
+      };
+    });
+    $$('[data-chat-top10-preview-item]', root).forEach(row => {
+      if (row.dataset.bound) return;
+      row.dataset.bound = "true";
+      row.onclick = event => {
+        if (event.target.closest("button")) return;
+        row.closest(".chat-modal, .comments-modal, .top10-comments-modal")?.querySelector("[data-close]")?.click();
+        if (row.dataset.chatTop10PreviewType === "story") openReader(state.db.library.find(item => String(item.id) === String(row.dataset.chatTop10PreviewKey)));
+        else openEntityPage("character", row.dataset.chatTop10PreviewKey);
+      };
+      row.onkeydown = event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); row.click(); } };
+      row.tabIndex = 0;
+    });
+    $$('[data-chat-top10-vote]', root).forEach(button => {
+      if (button.dataset.bound) return;
+      button.dataset.bound = "true";
+      button.onclick = event => {
+        event.stopPropagation();
+        const row = button.closest("[data-chat-top10-preview-item]");
+        const previewElement = button.closest("[data-chat-top10-preview]");
+        const preview = previewElement && loadChatTop10Preview(previewElement.dataset.chatTop10Preview);
+        Promise.resolve(preview).then(data => {
+          const item = data?.items?.find(entry => String(entry.id) === String(row?.dataset.chatTop10PreviewItem));
+          if (item) voteTop10Item(item, Number(button.dataset.chatTop10Vote), button.closest(".top10-vote-actions"), data.list);
+        });
+      };
+    });
+  }
+
+  async function hydrateChatInternalPreviews(root) {
+    const characterPreviews = [...(root?.querySelectorAll?.('[data-chat-character-preview]:not([data-chat-internal-hydrated])') || [])];
+    if (sb) await Promise.all(characterPreviews.map(async preview => {
+      const name = preview.dataset.chatCharacterPreview;
+      if (!name) return;
+      let setting = characterSettingForName(name);
+      if (!setting) {
+        const result = await sb.from("character_settings").select("character_key, character_name, cover_url").ilike("character_name", name).maybeSingle();
+        if (!result.error && result.data) {
+          state.characterSettings.set(result.data.character_key, result.data);
+          setting = result.data;
+        }
+      }
+      if (!preview.isConnected) return;
+      const image = setting?.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg";
+      preview.outerHTML = `<a class="chat-internal-preview" data-chat-internal-hydrated="true" href="${escapeHTML(preview.dataset.chatCharacterUrl)}" target="_blank" rel="noopener noreferrer"><img class="chat-internal-preview-character" data-chat-character-image="${escapeHTML(name)}" src="${escapeHTML(image)}" alt="Imagem de ${escapeHTML(name)}"><span><b>${escapeHTML(name)}</b><small>Personagem</small></span><span class="chat-internal-preview-arrow">›</span></a>`;
+    }));
+    if (characterPreviews.length) {
+      await loadCharacterWikiCarousel();
+      await Promise.all([...root.querySelectorAll('[data-chat-character-image]')].map(async image => {
+        const name = image.dataset.chatCharacterImage;
+        if (!name || state.characterSettings.get(publisherKey(name))?.cover_url || (wikiCharacterImageCache.get(name) && wikiCharacterImageCache.get(name) !== "assets/batmanicon.jpg")) return;
+        try {
+          const response = await fetch(wikiApiUrl({ action: "query", generator: "search", gsrsearch: name, gsrnamespace: "0", gsrlimit: "5", prop: "pageimages", piprop: "thumbnail", pithumbsize: "180" }));
+          if (!response.ok) return;
+          const pages = Object.values((await response.json()).query?.pages || {});
+          const source = pages.find(page => page.thumbnail?.source)?.thumbnail?.source;
+          if (!source || !image.isConnected) return;
+          wikiCharacterImageCache.set(name, source);
+          image.src = imageProxyFetchUrl(source);
+        } catch {}
+      }));
+    }
+    const entityPreviews = [...(root?.querySelectorAll?.('[data-chat-entity-preview]:not([data-chat-internal-hydrated])') || [])];
+    await Promise.all(entityPreviews.map(async preview => {
+      const kind = preview.dataset.chatEntityPreviewKind;
+      const name = String(preview.dataset.chatEntityPreview || '').trim();
+      if (!name || !['publisher', 'imprint'].includes(kind) || !preview.isConnected) return;
+      const normalized = publisherKey(name);
+      const setting = kind === 'publisher' ? state.publisherSettings.get(normalized) : state.imprintSettings.get(normalized);
+      const matchingItems = state.db.library.filter(item => publisherKey(kind === 'publisher' ? item.publisher : item.imprint) === normalized);
+      const representative = matchingItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || matchingItems[0];
+      const image = setting?.cover_url || (representative ? coverFor(representative) : instantCover({ title: name }));
+      const label = kind === 'publisher' ? 'Editora' : 'Selo';
+      const count = matchingItems.length ? `<small>${label} · ${matchingItems.length} edição(ões)</small>` : `<small>${label}</small>`;
+      preview.outerHTML = `<a class="chat-internal-preview" data-chat-internal-hydrated="true" href="${escapeHTML(preview.dataset.chatEntityPreviewUrl)}" target="_blank" rel="noopener noreferrer"><img class="chat-internal-preview-cover" src="${escapeHTML(proxiedImageUrl(image))}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"><span><b>${escapeHTML(name)}</b>${count}</span><span class="chat-internal-preview-arrow">›</span></a>`;
+    }));
+    const factionPreviews = [...(root?.querySelectorAll?.('[data-chat-faction-preview]:not([data-chat-internal-hydrated])') || [])];
+    await Promise.all(factionPreviews.map(async preview => {
+      const factionKey = String(preview.dataset.chatFactionPreview || '').trim();
+      const faction = state.factions.find(item => item.id === factionKey || String(item.page_key) === factionKey);
+      if (!faction || !preview.isConnected) return;
+      const color = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(faction.color || '')) ? faction.color : '#777780';
+      preview.outerHTML = `<a class="chat-internal-preview chat-faction-preview" data-chat-internal-hydrated="true" style="--chat-faction-color:${escapeHTML(color)}" href="${escapeHTML(preview.dataset.chatFactionPreviewUrl)}" target="_blank" rel="noopener noreferrer"><span class="chat-faction-preview-emblem" aria-hidden="true">${escapeHTML(faction.emblem || '✦')}</span><span><b>${escapeHTML(faction.name || factionKey)}</b><small>Facção</small></span><span class="chat-internal-preview-arrow">›</span></a>`;
+    }));
+    if (!sb) return;
+    const previews = [...(root?.querySelectorAll?.('[data-chat-profile-preview]:not([data-chat-internal-hydrated])') || [])];
+    await Promise.all(previews.map(async preview => {
+      const username = preview.dataset.chatProfilePreview;
+      if (!username) return;
+      let profile = state.chatInternalPreviewCache.get(username);
+      if (!profile) {
+        const result = await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan").ilike("username", username).maybeSingle();
+        if (result.error || !result.data) return;
+        profile = result.data;
+        state.chatInternalPreviewCache.set(username, profile);
+      }
+      if (!preview.isConnected) return;
+      const label = preview.dataset.chatProfileLabel || "Perfil público";
+      if (preview.dataset.chatProfileCollection) {
+        const collectionResult = await sb.from("shelf_collections").select("id, name, cover_url, is_public").eq("id", preview.dataset.chatProfileCollection).eq("owner_id", profile.id).eq("is_public", true).maybeSingle();
+        if (collectionResult.error || !collectionResult.data || !preview.isConnected) return;
+        const collection = collectionResult.data;
+        const cover = collection.cover_url || "assets/estantepb.jpg";
+        preview.outerHTML = `<a class="chat-internal-preview" data-chat-internal-hydrated="true" href="${escapeHTML(preview.dataset.chatProfileUrl)}" target="_blank" rel="noopener noreferrer"><img class="chat-internal-preview-cover" src="${escapeHTML(cover)}" alt="Capa da coleção"><span><b>${escapeHTML(collection.name)}</b><small>Coleção pública</small></span><span class="chat-internal-preview-arrow">›</span></a>`;
+        return;
+      }
+      const profileVisual = preview.dataset.chatProfileAlbum === "true"
+        ? '<img class="chat-internal-preview-art" src="assets/album/album.jpg" alt="Álbum de figurinhas">'
+        : avatarMarkup(profile, "chat-internal-preview-avatar");
+      preview.outerHTML = `<a class="chat-internal-preview" data-chat-internal-hydrated="true" href="${escapeHTML(preview.dataset.chatProfileUrl)}" target="_blank" rel="noopener noreferrer">${profileVisual}<span><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b><small>${escapeHTML(profile.title || label)}</small></span><span class="chat-internal-preview-arrow">›</span></a>`;
+    }));
+  }
+
+  function hydrateCommentLinkPreviews(root = document) {
+    if (!root?.querySelectorAll) return;
+    $$('.comment > p, .profile-wall-comment > p', root).forEach(body => {
+      if (body.querySelector(".chat-top10-preview")) return;
+      const text = body.textContent || "";
+      if (!/https?:\/\//i.test(text)) return;
+      body.innerHTML = chatBodyMarkup(text);
+    });
+    hydrateChatTop10Previews(root);
+  }
+
+  function observeCommentLinkPreviews() {
+    const modalRoot = $("#modal-root");
+    if (!modalRoot || modalRoot.dataset.commentPreviewObserver) return;
+    modalRoot.dataset.commentPreviewObserver = "true";
+    new MutationObserver(() => hydrateCommentLinkPreviews(modalRoot)).observe(modalRoot, { childList: true, subtree: true });
+  }
+
   function chatBodyMarkup(body, metadata = {}, senderVisual = null) {
     const mentionMarkup = text => escapeHTML(String(text || "")).replace(/@([A-Za-z0-9_]{3,24})/g, (match, mentionedUsername) => `<a class="comment-mention" href="${escapeHTML(publicProfileHref(mentionedUsername))}" target="_blank" rel="noopener">${match}</a>`);
     const cleanChatUrl = rawUrl => String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
@@ -10479,6 +10746,43 @@
         return `<a class="chat-image-link" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener noreferrer" data-chat-image-link><img src="${escapeHTML(cleanUrl)}" alt="Imagem enviada no chat" loading="lazy" decoding="async"><span class="chat-image-fallback">Imagem indisponível · abrir link</span></a>`;
       }
       return `<a class="chat-link" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener noreferrer">${escapeHTML(label || cleanUrl)}</a>`;
+    };
+    const internalPreview = rawUrl => {
+      const cleanUrl = cleanChatUrl(rawUrl);
+      let parsed;
+      try { parsed = new URL(cleanUrl, window.location.href); } catch { return null; }
+      if (parsed.origin !== window.location.origin || parsed.searchParams.has("ler") || parsed.searchParams.has("lista_top10")) return null;
+      const profile = parsed.searchParams.get("perfil");
+      const collection = parsed.searchParams.get("lista");
+      const album = parsed.searchParams.get("album") === "1";
+      const page = parsed.searchParams.get("pagina");
+      const faction = parsed.searchParams.get("faccao");
+      const kind = parsed.searchParams.get("tipo");
+      const value = parsed.searchParams.get("valor");
+      const blog = parsed.searchParams.get("blog");
+      let title = "Banca Digital";
+      let subtitle = "Abrir página";
+      if (profile) {
+        title = `@${cleanUsername(profile)}`;
+        subtitle = album ? "Álbum de figurinhas" : collection ? "Coleção pública" : "Perfil público";
+        return `<div class="chat-internal-preview" data-chat-profile-preview="${escapeHTML(cleanUsername(profile))}" data-chat-profile-url="${escapeHTML(cleanUrl)}" data-chat-profile-label="${escapeHTML(subtitle)}" data-chat-profile-album="${album ? "true" : "false"}" data-chat-profile-collection="${escapeHTML(collection || "")}">${album ? '<img class="chat-internal-preview-art" src="assets/album/album.jpg" alt="Álbum de figurinhas">' : ""}<span>${album ? "" : "Carregando perfil..."}</span></div>`;
+      } else if (page === "entidade" && value) {
+        title = value;
+        subtitle = kind === "character" ? "Personagem" : kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Página da entidade";
+        if (kind === "character") return `<div class="chat-internal-preview" data-chat-character-preview="${escapeHTML(value)}" data-chat-character-url="${escapeHTML(cleanUrl)}"><span>Carregando personagem...</span></div>`;
+        if (["publisher", "imprint"].includes(kind)) return `<div class="chat-internal-preview" data-chat-entity-preview="${escapeHTML(value)}" data-chat-entity-preview-kind="${escapeHTML(kind)}" data-chat-entity-preview-url="${escapeHTML(cleanUrl)}"><span>Carregando ${kind === "publisher" ? "editora" : "selo"}...</span></div>`;
+      } else if (page === "blogs" && blog) {
+        title = "Publicação do blog";
+        subtitle = `Blog · ${blog}`;
+      } else if (page === "faccoes" && faction) {
+        return `<div class="chat-internal-preview" data-chat-faction-preview="${escapeHTML(faction)}" data-chat-faction-preview-url="${escapeHTML(cleanUrl)}"><span>Carregando facção...</span></div>`;
+      } else if (page) {
+        title = page.charAt(0).toUpperCase() + page.slice(1);
+        subtitle = "Página da Banca Digital";
+      } else {
+        return null;
+      }
+      return `<a class="chat-internal-preview" href="${escapeHTML(cleanUrl)}" target="_blank" rel="noopener noreferrer"><span class="chat-internal-preview-icon">▣</span><span><b>${escapeHTML(title)}</b><small>${escapeHTML(subtitle)}</small></span><span class="chat-internal-preview-arrow">›</span></a>`;
     };
     const sharedPreviews = Array.isArray(metadata?.comic_previews) ? metadata.comic_previews : [];
     const comicPreview = rawUrl => {
@@ -10514,7 +10818,12 @@
       output += mentionMarkup(source.slice(cursor, match.index));
       const rawUrl = match[2] || match[3] || match[0];
       const markdownLabel = match[2] ? match[1] : null;
-      output += comicPreview(rawUrl) || chatUrlMarkup(rawUrl, markdownLabel);
+      let top10Preview = null;
+      try {
+        const parsed = new URL(cleanChatUrl(rawUrl), window.location.href);
+        if (parsed.searchParams.has("lista_top10") && parsed.searchParams.has("perfil")) top10Preview = `<div class="chat-top10-preview" data-chat-top10-preview="${escapeHTML(cleanChatUrl(rawUrl))}"><span>Carregando lista...</span></div>`;
+      } catch {}
+      output += top10Preview || comicPreview(rawUrl) || internalPreview(rawUrl) || chatUrlMarkup(rawUrl, markdownLabel);
       cursor = match.index + match[0].length;
     }
     return output + mentionMarkup(source.slice(cursor));
@@ -11028,6 +11337,7 @@
       const senderVisuals = await loadChatSenderVisuals((result.data || []).map(message => message.sender_id));
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: message.profiles || {} }]));
       messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, message.profiles || {}, senderVisuals.get(message.sender_id), { allowPin: true, canModerate: chatCanModerate, sheriffId: sheriff?.user_id, sheriffIds: factionSheriffIds })).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      hydrateChatTop10Previews(messagesRoot);
       $$('[data-chat-message-id]', messagesRoot).forEach(node => {
         const message = chatMessagesById.get(String(node.dataset.chatMessageId));
         if (!message) return;
@@ -11188,6 +11498,7 @@
       const senderVisuals = await loadChatSenderVisuals(senderIds);
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: profilesById.get(message.sender_id) || {} }]));
       messagesRoot.innerHTML = (result.data || []).map(message => chatMessageMarkup(message, profilesById.get(message.sender_id) || (message.sender_id === state.session.user.id ? state.profile : {}), senderVisuals.get(message.sender_id))).join("") || '<div class="empty">Nenhuma mensagem ainda.</div>';
+      hydrateChatTop10Previews(messagesRoot);
       hydrateChatFactionRoleTitles(messagesRoot);
       updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
@@ -11972,15 +12283,47 @@
     return `<section class="section wiki-team-carousel-section"><div class="section-head"><div><h2 class="section-title">Equipes</h2><div class="section-subtitle">Explore as equipes presentes nos quadrinhos.</div></div></div><div class="wiki-character-carousel"><div class="wiki-character-track wiki-team-track">${cards}</div></div></section>`;
   }
 
+  const TOP10_MAX_ITEMS = 100;
+  const TOP10_CHARACTER_CATEGORIES = [
+    ["team", "Equipes"],
+    ["villain", "Vilões"],
+    ["support", "Secundários"],
+    ["hero", "Heróis"],
+    ["antihero", "Anti-heróis"]
+  ];
+  const TOP10_DEFAULT_CHARACTER_CATEGORIES = TOP10_CHARACTER_CATEGORIES.map(([key]) => key);
+
   async function loadTop10Lists(ownerId) {
     if (!sb || !ownerId) return [];
-    const listsResult = await sb.from("profile_top10_lists").select("id, owner_id, name, is_public, created_at, updated_at").eq("owner_id", ownerId).order("created_at", { ascending: true });
+    const listsResult = await sb.from("profile_top10_lists").select("id, owner_id, name, list_type, character_categories, is_final, sort_order, is_public, created_at, updated_at").eq("owner_id", ownerId).order("sort_order", { ascending: true }).order("created_at", { ascending: true });
     if (listsResult.error || !listsResult.data?.length) return [];
     const ids = listsResult.data.map(list => list.id);
     const itemsResult = await sb.from("profile_top10_items").select("id, list_id, character_key, character_name, image_url, rank").in("list_id", ids).order("rank", { ascending: true });
     const itemsByList = new Map(ids.map(id => [id, []]));
     (itemsResult.data || []).forEach(item => itemsByList.get(item.list_id)?.push(item));
-    return listsResult.data.map(list => ({ ...list, items: itemsByList.get(list.id) || [] }));
+    const itemIds = (itemsResult.data || []).map(item => item.id);
+    const votesResult = itemIds.length ? await sb.from("profile_top10_item_votes").select("item_id, user_id, vote").in("item_id", itemIds) : { data: [] };
+    const commentsResult = await sb.from("profile_top10_list_comments").select("list_id").in("list_id", ids);
+    const commentCounts = (commentsResult.data || []).reduce((counts, comment) => counts.set(String(comment.list_id), (counts.get(String(comment.list_id)) || 0) + 1), new Map());
+    const votesByItem = new Map(itemIds.map(id => [id, { likes: 0, dislikes: 0, userVote: 0 }]));
+    (votesResult.data || []).forEach(vote => {
+      const summary = votesByItem.get(vote.item_id);
+      if (!summary) return;
+      if (vote.vote === 1) summary.likes += 1;
+      if (vote.vote === -1) summary.dislikes += 1;
+      if (String(vote.user_id) === String(state.session?.user?.id || "")) summary.userVote = vote.vote;
+    });
+    return listsResult.data.map(list => ({
+      ...list,
+      comment_count: commentCounts.get(String(list.id)) || 0,
+      items: (itemsByList.get(list.id) || []).map(item => {
+        const votes = votesByItem.get(item.id) || { likes: 0, dislikes: 0, userVote: 0 };
+        item = { ...item, ...votes };
+        if (list.list_type !== "story") return item;
+        const story = state.db.library.find(entry => String(entry.id) === String(item.character_key));
+        return story ? { ...item, character_name: item.character_name === story.title ? top10StoryLabel(story) : item.character_name, image_url: item.image_url || coverFor(story) || null } : item;
+      })
+    }));
   }
 
   function top10CharacterEntries() {
@@ -11988,13 +12331,325 @@
     state.db.library.forEach(item => characterNames(item).forEach(rawName => {
       const name = String(rawName || "").trim();
       const key = name.toLocaleLowerCase("pt-BR");
-      if (name && !isTeamCharacter(name) && !isRedirectedCharacter(name) && !characters.has(key)) characters.set(key, name);
+      if (name && !isRedirectedCharacter(name) && !characters.has(key)) characters.set(key, name);
     }));
     return [...characters.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
   }
 
+  function top10CharacterCategory(name) {
+    const setting = characterSettingForName(name);
+    if (setting?.character_type === "team" || isTeamCharacter(name)) return "team";
+    return TOP10_CHARACTER_CATEGORIES.some(([key]) => key === setting?.character_alignment) ? setting.character_alignment : "support";
+  }
+
+  function top10CharacterCategoriesForList(list) {
+    const selected = Array.isArray(list?.character_categories) ? list.character_categories : TOP10_DEFAULT_CHARACTER_CATEGORIES;
+    return new Set(selected.length ? selected : TOP10_DEFAULT_CHARACTER_CATEGORIES);
+  }
+
+  function top10StoryEntries() {
+    return [...new Map(state.db.library.filter(item => item?.id && item?.title).map(item => [String(item.id), item])).values()]
+      .map(item => [String(item.id), top10StoryLabel(item), item])
+      .filter(([, name]) => name)
+      .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  }
+
+  function top10StoryLabel(item) {
+    return [item.title || itemDisplayTitle(item), item.issue ? `#${item.issue}` : "", item.year ? `(${item.year})` : ""].filter(Boolean).join(" · ");
+  }
+
+  function top10EntriesForList(list) {
+    if (list?.list_type === "story") return top10StoryEntries();
+    const categories = top10CharacterCategoriesForList(list);
+    return top10CharacterEntries().filter(([, name]) => categories.has(top10CharacterCategory(name))).map(([key, name]) => [key, name, null]);
+  }
+
+  function top10StorySeriesKey(item, key) {
+    return item?.seriesId ? `series:${item.seriesId}` : `item:${key}`;
+  }
+
+  function updateTop10VoteButtons(item, controls) {
+    const likeButton = $("[data-top10-vote='1']", controls);
+    const dislikeButton = $("[data-top10-vote='-1']", controls);
+    if (!likeButton || !dislikeButton) return;
+    likeButton.textContent = `👍 ${item.likes || 0}`;
+    dislikeButton.textContent = `👎 ${item.dislikes || 0}`;
+    likeButton.classList.toggle("is-active", item.userVote === 1);
+    dislikeButton.classList.toggle("is-active", item.userVote === -1);
+  }
+
+  function top10ListReason(list) {
+    return (list?.items || []).reduce((total, item) => total + (Number(item.likes) || 0) - (Number(item.dislikes) || 0), 0);
+  }
+
+  function updateTop10Reason(list, card) {
+    if (!card) return;
+    const reason = $("[data-top10-reason]", card);
+    if (reason) reason.textContent = `★ Razão: ${top10ListReason(list)}`;
+  }
+
+  function top10ListShareUrl(list) {
+    const username = state.section === "public-profile" ? state.publicProfile?.profile?.username : state.profile?.username;
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("perfil", cleanUsername(username || ""));
+    url.searchParams.set("lista_top10", String(list.id));
+    return url.toString();
+  }
+
+  async function shareTop10List(list) {
+    const url = top10ListShareUrl(list);
+    const shareData = { title: list.name, text: `Veja a lista ${list.name} na Banca Digital`, url };
+    if (navigator.share) await navigator.share(shareData).catch(() => {});
+    else {
+      await navigator.clipboard?.writeText(url);
+      toast("Link da lista copiado.");
+    }
+  }
+
+  async function openTop10ListComments(list) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal top10-comments-modal"><div class="section-head"><div><h2>Comentários</h2><div class="section-subtitle">${escapeHTML(list.name)}</div></div><button class="small-btn" data-close>Fechar</button></div><div class="top10-comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form" data-top10-list-comment-form><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
+    $("#modal-root").appendChild(overlay);
+    const close = () => overlay.remove();
+    $("[data-close]", overlay).onclick = close;
+    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
+    const commentsList = $(".top10-comments-list", overlay);
+    const renderComments = comments => {
+      commentsList.innerHTML = comments.map(comment => {
+        const profile = { ...(comment.profiles || {}), username: cleanUsername(comment.profiles?.username || "usuário") };
+        const canDelete = state.session?.user?.id === comment.user_id || ["moderator", "banca", "admin"].includes(state.profile?.plan);
+        return `<article class="comment top10-list-comment${comment.parent_id ? " is-reply" : ""}" data-top10-list-comment="${escapeHTML(comment.id)}">${avatarMarkup(profile, "comment-avatar")}<div class="top10-list-comment-body"><div class="comment-author-info"><a class="comment-author" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a></div><div class="top10-list-comment-text">${chatBodyMarkup(comment.body)}</div><div class="top10-list-comment-footer"><time class="comment-date">${escapeHTML(formatCommentDate(comment.created_at))}</time><button type="button" class="comment-action" data-top10-list-comment-reply="${escapeHTML(comment.id)}">Responder</button>${canDelete ? `<button type="button" class="comment-action comment-delete-action" data-top10-list-comment-delete="${escapeHTML(comment.id)}">Excluir</button>` : ""}</div></div></article>`;
+      }).join("") || '<span class="section-subtitle">Nenhum comentário ainda.</span>';
+    };
+    const refresh = async () => {
+      const result = await sb.from("profile_top10_list_comments").select("id, parent_id, user_id, body, created_at").eq("list_id", list.id).order("created_at", { ascending: true });
+      if (result.error) { commentsList.innerHTML = '<span class="section-subtitle">Não foi possível carregar os comentários.</span>'; return; }
+      const userIds = [...new Set((result.data || []).map(comment => comment.user_id).filter(Boolean))];
+      const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan").in("id", userIds) : { data: [] };
+      const profilesById = new Map((profiles.data || []).map(profile => [profile.id, profile]));
+      const comments = (result.data || []).map(comment => ({ ...comment, profiles: profilesById.get(comment.user_id) || {} }));
+      renderComments(comments);
+      hydrateChatTop10Previews(commentsList);
+      list.comment_count = comments.length;
+      $(`[data-top10-comments="${list.id}"]`)?.replaceChildren(document.createTextNode(`Comentários · ${comments.length}`));
+    };
+    commentsList.addEventListener("click", async event => {
+      const deleteButton = event.target.closest?.("[data-top10-list-comment-delete]");
+      if (deleteButton) {
+        if (!await openSiteConfirm("Excluir este comentário e suas respostas?", { title: "Excluir comentário", confirmLabel: "Excluir comentário" })) return;
+        const result = await sb.from("profile_top10_list_comments").delete().eq("id", deleteButton.dataset.top10ListCommentDelete).eq("list_id", list.id);
+        if (result.error) return toast("Não foi possível excluir o comentário.");
+        deleteButton.closest("[data-top10-list-comment]")?.remove();
+        await refresh();
+        return;
+      }
+      const replyButton = event.target.closest?.("[data-top10-list-comment-reply]");
+      if (replyButton && state.session) {
+        const comment = replyButton.closest("[data-top10-list-comment]");
+        if (!$("[data-top10-list-reply-form]", comment)) comment.insertAdjacentHTML("beforeend", '<form class="comment-form top10-list-reply-form" data-top10-list-reply-form><textarea name="body" maxlength="1000" required placeholder="Escreva uma resposta..."></textarea><button class="small-btn" type="submit">Responder</button></form>');
+      } else if (replyButton) openAuthPage();
+    });
+    await refresh();
+    $("[data-top10-list-comment-form]", overlay)?.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!state.session?.user?.id) return openAuthPage();
+      const form = event.currentTarget;
+      const body = String(new FormData(form).get("body") || "").trim();
+      if (!body) return;
+      const button = $("button[type=submit]", form);
+      button.disabled = true;
+      const replyTo = form.closest("[data-top10-list-comment]")?.dataset.top10ListComment || null;
+      const result = await sb.from("profile_top10_list_comments").insert({ list_id: list.id, user_id: state.session.user.id, parent_id: replyTo, body });
+      if (result.error) toast("Não foi possível publicar o comentário.");
+      else { form.reset(); await refresh(); }
+      button.disabled = false;
+    });
+  }
+
+  async function voteTop10Item(item, vote, controls, listOverride = null) {
+    if (!state.session?.user?.id || !sb) return openAuthPage();
+    const previous = { likes: item.likes || 0, dislikes: item.dislikes || 0, userVote: item.userVote || 0 };
+    const nextVote = previous.userVote === vote ? 0 : vote;
+    if (previous.userVote === 1) item.likes = Math.max(0, previous.likes - 1);
+    if (previous.userVote === -1) item.dislikes = Math.max(0, previous.dislikes - 1);
+    if (nextVote === 1) item.likes = previous.userVote === -1 ? previous.likes + 1 : previous.likes + (previous.userVote === 1 ? 0 : 1);
+    if (nextVote === -1) item.dislikes = previous.userVote === 1 ? previous.dislikes + 1 : previous.dislikes + (previous.userVote === -1 ? 0 : 1);
+    item.userVote = nextVote;
+    updateTop10VoteButtons(item, controls);
+    const card = controls.closest("[data-top10-list-card]");
+    const list = listOverride || editableTop10Lists().find(entry => String(entry.id) === String(card?.dataset.top10ListCard));
+    if (list) updateTop10Reason(list, card);
+    const result = nextVote
+      ? await sb.from("profile_top10_item_votes").upsert({ item_id: item.id, user_id: state.session.user.id, vote: nextVote }, { onConflict: "item_id,user_id" })
+      : await sb.from("profile_top10_item_votes").delete().eq("item_id", item.id).eq("user_id", state.session.user.id);
+    if (result.error) {
+      Object.assign(item, previous);
+      updateTop10VoteButtons(item, controls);
+      if (list) updateTop10Reason(list, card);
+      toast("Não foi possível registrar seu voto.");
+    }
+  }
+
+  function bindTop10VoteControls(panel, allowVoting = false) {
+    if (!panel) return;
+    const lists = editableTop10Lists();
+    $$('[data-top10-list-card]', panel).forEach(card => {
+      const list = lists.find(entry => String(entry.id) === String(card.dataset.top10ListCard));
+      if (!list) return;
+      const sharedList = String(state.publicProfile?.top10ListId || "") === String(list.id);
+      card.classList.toggle("is-shared-target", sharedList);
+      if (sharedList && !$(".top10-shared-label", card)) {
+        const title = $("h3", card);
+        title?.insertAdjacentHTML("afterend", '<span class="top10-shared-label">Lista compartilhada</span>');
+      }
+      if (sharedList && card.dataset.sharedScrolled !== "true") {
+        card.dataset.sharedScrolled = "true";
+        requestAnimationFrame(() => card.scrollIntoView({ behavior: "smooth", block: "center" }));
+      }
+      const items = [...(list.items || [])].sort((a, b) => a.rank - b.rank);
+      $$(".top10-item", card).forEach((row, index) => {
+        if ($(".top10-vote-actions", row)) return;
+        const item = items[index];
+        if (!item?.id) return;
+        const controls = document.createElement("span");
+        controls.className = "top10-vote-actions";
+        controls.dataset.top10VoteTarget = list.list_type === "story" ? "edition" : "character";
+        const voteTarget = list.list_type === "story" ? "edição" : "personagem";
+        controls.innerHTML = allowVoting
+          ? `<button type="button" class="small-btn" data-top10-vote="1" aria-label="Curtir ${voteTarget}">👍 0</button><button type="button" class="small-btn" data-top10-vote="-1" aria-label="Não curtir ${voteTarget}">👎 0</button>`
+          : '<span class="top10-vote-count" data-top10-vote="1">👍 0</span><span class="top10-vote-count" data-top10-vote="-1">👎 0</span>';
+        const editActions = $(".top10-item-actions", row);
+        if (editActions) editActions.prepend(controls);
+        else $("strong", row)?.after(controls);
+        updateTop10VoteButtons(item, controls);
+        $$('button[data-top10-vote]', controls).forEach(button => button.addEventListener("click", event => {
+          event.stopPropagation();
+          voteTop10Item(item, Number(button.dataset.top10Vote), controls);
+        }));
+      });
+    });
+  }
+
+  function bindTop10ListDragCards(panel, editable = false) {
+    if (!panel || !editable) return;
+    const container = $('[data-top10-panel]', panel) || panel;
+    $$('[data-top10-list-card]', container).forEach(card => {
+      if (card.dataset.top10ListDragBound === "true") return;
+      card.draggable = true;
+      card.dataset.top10ListDragBound = "true";
+      card.addEventListener("dragstart", event => {
+        if (event.target.closest("button, input, textarea, a")) return event.preventDefault();
+        card.classList.add("is-list-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", card.dataset.top10ListCard);
+      });
+      card.addEventListener("dragover", event => {
+        event.preventDefault();
+        const dragging = container.querySelector(".top10-list-card.is-list-dragging");
+        if (!dragging || dragging === card) return;
+        const before = event.clientY < card.getBoundingClientRect().top + card.offsetHeight / 2;
+        container.insertBefore(dragging, before ? card : card.nextSibling);
+      });
+      card.addEventListener("dragend", async () => {
+        card.classList.remove("is-list-dragging");
+        const orderedIds = $$('[data-top10-list-card]', container).map(item => String(item.dataset.top10ListCard));
+        const lists = editableTop10Lists();
+        const previousOrder = lists.map(list => String(list.id));
+        const orderedLists = orderedIds.map(id => lists.find(list => String(list.id) === id)).filter(Boolean);
+        if (orderedLists.length !== lists.length || orderedIds.every((id, index) => id === previousOrder[index])) return;
+        orderedLists.forEach((list, index) => { list.sort_order = index; });
+        const result = await Promise.all(orderedLists.map(list => sb.from("profile_top10_lists").update({ sort_order: list.sort_order }).eq("id", list.id).eq("owner_id", state.session.user.id)));
+        if (result.some(response => response.error)) {
+          lists.forEach(list => { list.sort_order = previousOrder.indexOf(String(list.id)); });
+          render();
+          toast("Não foi possível salvar a ordem das listas.");
+        }
+      });
+    });
+  }
+
+  function syncTop10Labels() {
+    $$('[data-shelf-media="top10"], [data-public-shelf-media="top10"]').forEach(button => { button.textContent = "Listas"; });
+    $$('[data-top10-panel] > .section-head .section-title').forEach(title => { title.textContent = "Listas"; });
+    $$('[data-top10-panel] > .section-head .section-subtitle').forEach(subtitle => { subtitle.textContent = "Crie listas personalizadas de personagens, histórias, favoritos ou qualquer tema."; });
+    $$('[data-top10-new-list]').forEach(button => { button.textContent = "+ Nova lista"; });
+    const lists = editableTop10Lists();
+    const canEdit = state.section === "shelf" || (state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || ""));
+    $$('[data-top10-panel] > .empty').forEach(empty => { empty.textContent = canEdit ? "Crie sua primeira lista para começar." : "Este perfil ainda não criou uma lista pública."; });
+    $$('[data-top10-list-card]').forEach(card => {
+      const list = lists.find(entry => String(entry.id) === String(card.dataset.top10ListCard));
+      if (!list) return;
+      const story = list.list_type === "story";
+      const status = $(".section-head .shelf-visibility", card);
+      if (status) {
+        status.textContent = list.is_final ? "Definitiva" : "Mutável";
+        status.classList.toggle("is-mutable", !list.is_final);
+        status.classList.toggle("is-final", list.is_final);
+      }
+      if (canEdit && list.is_final) {
+        $$('[data-top10-remove], [data-top10-move], [data-top10-edit-item]', card).forEach(control => control.remove());
+        $(".top10-add-form", card)?.remove();
+      }
+      if (canEdit && !list.is_final && (list.items || []).length < TOP10_MAX_ITEMS && !$("[data-top10-search-list]", card)) {
+        const searchLabel = story ? "história" : "personagem";
+        card.insertAdjacentHTML("beforeend", `<div class="top10-add-form"><input type="search" placeholder="Digite o nome da ${searchLabel}..." aria-label="Buscar ${searchLabel} para ${escapeHTML(list.name)}" data-top10-search-list="${escapeHTML(list.id)}" autocomplete="off"><div class="top10-suggestions" data-top10-suggestions="${escapeHTML(list.id)}"></div></div>`);
+      }
+      const count = $(".section-head .section-subtitle", card);
+      if (count) count.textContent = `${(list.items || []).length}/${TOP10_MAX_ITEMS} ${story ? "histórias" : "personagens"}`;
+      let reason = $("[data-top10-reason]", card);
+      if (!reason) {
+        reason = document.createElement("span");
+        reason.className = "top10-reason";
+        reason.dataset.top10Reason = list.id;
+        count?.after(reason);
+      }
+      updateTop10Reason(list, card);
+      const cardHead = $(".section-head", card);
+      if (cardHead && !$("[data-top10-comments]", card)) {
+        const actions = document.createElement("div");
+        actions.className = "top10-list-actions";
+        actions.innerHTML = `<button type="button" class="small-btn" data-top10-comments="${escapeHTML(list.id)}">Comentários · ${list.comment_count || 0}</button><button type="button" class="small-btn" data-top10-share="${escapeHTML(list.id)}">Compartilhar</button>`;
+        cardHead.append(actions);
+      }
+      const listActions = $(".top10-list-actions", card);
+      if (status && listActions) listActions.prepend(status);
+      const input = $("[data-top10-search-list]", card);
+      if (input) {
+        input.placeholder = `Digite o nome da ${story ? "história" : "personagem"}...`;
+        input.setAttribute("aria-label", `Buscar ${story ? "história" : "personagem"} para ${list.name}`);
+      }
+      if (story) {
+        const rankedItems = [...(list.items || [])].sort((a, b) => a.rank - b.rank);
+        $$(".top10-item", card).forEach((row, index) => {
+          const rankedItem = rankedItems[index];
+          const storyEntry = state.db.library.find(entry => String(entry.id) === String(rankedItem?.character_key));
+          const title = $("strong", row);
+          if (!title || !storyEntry) return;
+          title.classList.add("top10-story-title");
+          title.textContent = rankedItem.character_name === top10StoryLabel(storyEntry)
+            ? (storyEntry.title || itemDisplayTitle(storyEntry))
+            : (rankedItem.character_name || storyEntry.title || itemDisplayTitle(storyEntry));
+          const metadata = [storyEntry.issue ? `#${storyEntry.issue}` : "", storyEntry.year ? `(${storyEntry.year})` : ""].filter(Boolean).join(" · ");
+          let metadataElement = $(".top10-story-meta", row);
+          if (!metadataElement) {
+            metadataElement = document.createElement("span");
+            metadataElement.className = "top10-story-meta";
+            title.after(metadataElement);
+          }
+          metadataElement.textContent = metadata;
+          metadataElement.hidden = !metadata;
+          const image = $("img", row);
+          const storyCover = rankedItem.image_url || coverFor(storyEntry) || "assets/batmanicon.jpg";
+          if (image && image.getAttribute("src") !== storyCover) image.src = storyCover;
+        });
+      }
+    });
+  }
+
   function top10Markup(lists = [], own = false) {
-    const entries = top10CharacterEntries();
     const cards = lists.map(list => {
       const items = [...(list.items || [])].sort((a, b) => a.rank - b.rank);
       const itemMarkup = items.map((item, index) => {
@@ -12002,9 +12657,9 @@
         const image = item.image_url || setting?.cover_url || wikiCharacterImageCache.get(item.character_name) || "assets/batmanicon.jpg";
         return `<li class="top10-item"><span class="top10-rank">${index + 1}</span><img src="${escapeHTML(image)}" data-top10-character-image="${escapeHTML(item.character_name)}" alt="Imagem de ${escapeHTML(item.character_name)}" loading="lazy"><strong>${escapeHTML(item.character_name)}</strong>${own ? `<span class="top10-item-actions"><button class="small-btn" data-top10-move="up" data-top10-list="${escapeHTML(list.id)}" data-top10-item="${escapeHTML(item.id)}" ${index === 0 ? "disabled" : ""}>↑</button><button class="small-btn" data-top10-move="down" data-top10-list="${escapeHTML(list.id)}" data-top10-item="${escapeHTML(item.id)}" ${index === items.length - 1 ? "disabled" : ""}>↓</button><button class="small-btn danger" data-top10-remove="${escapeHTML(item.id)}" data-top10-list="${escapeHTML(list.id)}">Remover</button></span>` : ""}</li>`;
       }).join("");
-      return `<article class="top10-list-card" data-top10-list-card="${escapeHTML(list.id)}"><div class="section-head"><div><h3>${escapeHTML(list.name)}</h3><div class="section-subtitle">${items.length}/10 personagens</div></div>${own ? `<button class="small-btn danger" data-top10-delete-list="${escapeHTML(list.id)}">Excluir lista</button>` : `<span class="shelf-visibility is-public">${list.is_public === false ? "Privada" : "Pública"}</span>`}</div><ol class="top10-items">${itemMarkup || '<li class="empty">Escolha personagens para montar este ranking.</li>'}</ol>${own && items.length < 10 ? `<div class="top10-add-form"><input type="search" placeholder="Digite o nome do personagem..." aria-label="Buscar personagem para ${escapeHTML(list.name)}" data-top10-search-list="${escapeHTML(list.id)}" autocomplete="off"><div class="top10-suggestions" data-top10-suggestions="${escapeHTML(list.id)}"></div></div>` : ""}</article>`;
+      return `<article class="top10-list-card" data-top10-list-card="${escapeHTML(list.id)}"><div class="section-head"><div><h3>${escapeHTML(list.name)}</h3><div class="section-subtitle">${items.length}/${TOP10_MAX_ITEMS} itens</div></div>${own ? `<button class="small-btn danger" data-top10-delete-list="${escapeHTML(list.id)}">Excluir lista</button>` : `<span class="shelf-visibility is-public">${list.is_final ? "Definitiva" : "Mutável"}</span>`}</div><ol class="top10-items">${itemMarkup || '<li class="empty">Escolha itens para montar esta lista.</li>'}</ol>${own && !list.is_final && items.length < TOP10_MAX_ITEMS ? `<div class="top10-add-form"><input type="search" placeholder="Digite o nome do item..." aria-label="Buscar item para ${escapeHTML(list.name)}" data-top10-search-list="${escapeHTML(list.id)}" autocomplete="off"><div class="top10-suggestions" data-top10-suggestions="${escapeHTML(list.id)}"></div></div>` : ""}</article>`;
     }).join("");
-    return `<section class="section top10-section" data-top10-panel><div class="section-head"><div><h2 class="section-title">Top 10</h2><div class="section-subtitle">Crie rankings personalizados de heróis, vilões, equipes, favoritos ou qualquer tema.</div></div>${own ? '<button class="small-btn" data-top10-new-list>+ Novo Top 10</button>' : ''}</div>${cards || `<div class="empty">${own ? "Crie seu primeiro ranking para começar." : "Este perfil ainda não criou um Top 10 público."}</div>`}</section>`;
+    return `<section class="section top10-section" data-top10-panel><div class="section-head"><div><h2 class="section-title">Listas</h2><div class="section-subtitle">Crie listas personalizadas de personagens, histórias, favoritos ou qualquer tema.</div></div>${own ? '<button class="small-btn" data-top10-new-list>+ Nova lista</button>' : ''}</div>${cards || `<div class="empty">${own ? "Crie sua primeira lista para começar." : "Este perfil ainda não criou uma lista pública."}</div>`}</section>`;
   }
 
   function currentTop10Context() {
@@ -12028,9 +12683,10 @@
   }
 
   async function addTop10Character(list, key, name) {
-    if (!list || !key || !name || (list.items || []).length >= 10) return;
+      if (!list || list.is_final || !key || !name || (list.items || []).length >= TOP10_MAX_ITEMS) return;
     if ((list.items || []).some(item => item.character_key === key)) return toast("Esse personagem já está neste ranking.");
-    const items = [...(list.items || []), { character_key: key, character_name: name }];
+    const story = list.list_type === "story" ? top10StoryEntries().find(([entryKey]) => String(entryKey) === String(key))?.[2] : null;
+    const items = [...(list.items || []), { character_key: key, character_name: name, image_url: story ? (coverFor(story) || null) : null }];
     await updateTop10Items(list, items, "Não foi possível atualizar o ranking.");
   }
 
@@ -12092,11 +12748,13 @@
     const empty = $(".empty", listElement);
     if (nextItems.length) empty?.remove();
     const count = $(".section-head .section-subtitle", card);
-    if (count) count.textContent = `${nextItems.length}/10 personagens`;
+      if (count) count.textContent = `${nextItems.length}/${TOP10_MAX_ITEMS} itens`;
     const addForm = $(".top10-add-form", card);
-    if (addForm) addForm.hidden = nextItems.length >= 10;
+    if (addForm) addForm.hidden = nextItems.length >= TOP10_MAX_ITEMS;
     bindTop10DragRows(listElement);
     ensureTop10EditButtons(card);
+    styleTop10RemoveButtons(card);
+    syncTop10Labels();
   }
 
   function bindTop10DragRows(container) {
@@ -12144,6 +12802,14 @@
       editButton.dataset.top10EditList = removeButton.dataset.top10List;
       editButton.textContent = "Editar";
       removeButton.before(editButton);
+    });
+  }
+
+  function styleTop10RemoveButtons(scope = document) {
+    scope.querySelectorAll?.('[data-top10-remove]').forEach(button => {
+      button.textContent = "×";
+      button.title = "Remover personagem";
+      button.setAttribute("aria-label", "Remover personagem");
     });
   }
 
@@ -12258,8 +12924,13 @@
   async function loadCharacterWikiCarousel() {
     if (wikiCharacterCarouselPromise) return wikiCharacterCarouselPromise;
     wikiCharacterCarouselPromise = (async () => {
-      const images = [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image]")];
-      const characters = [...new Set(images.map(image => image.dataset.top10CharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter).filter(Boolean))];
+      const top10Lists = state.section === "public-profile" ? (state.publicProfile?.top10Lists || []) : state.top10Lists;
+      const isStoryTop10Image = image => {
+        const listId = image.closest("[data-top10-list-card]")?.dataset.top10ListCard;
+        return top10Lists.some(list => String(list.id) === String(listId) && list.list_type === "story");
+      };
+      const images = [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image], [data-chat-character-image]")].filter(image => !isStoryTop10Image(image));
+      const characters = [...new Set(images.map(image => image.dataset.top10CharacterImage || image.dataset.chatCharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter).filter(Boolean))];
       const missing = characters.filter(character => {
         const setting = state.characterSettings.get(publisherKey(character)) || {};
         return !setting.cover_url && !wikiCharacterImageCache.has(character);
@@ -12351,8 +13022,8 @@
           console.warn("Imagens de personagens indisponíveis", error);
         }
       }
-      [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image]")].forEach(image => {
-        const character = image.dataset.top10CharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter;
+      [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image], [data-chat-character-image]")].forEach(image => {
+        const character = image.dataset.top10CharacterImage || image.dataset.chatCharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter;
         const customImage = state.characterSettings.get(publisherKey(character))?.cover_url;
         const source = customImage || wikiCharacterImageCache.get(character);
         if (!source) return;
@@ -14610,6 +15281,32 @@
     return `<div class="content notifications-page"><div class="section-head"><div><div class="eyebrow">Central da conta</div><h1 class="section-title">Notificações</h1><div class="section-subtitle">${state.notificationUnreadCount} não lida(s)</div></div><button class="small-btn" data-mark-all-notifications>Marcar todas como lidas</button></div><div class="notification-list">${state.notifications.map(notification => { const actor = notification.actor; const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "A Banca Digital"; const actorMarkup = actor?.username ? `<a class="notification-actor" href="${escapeHTML(publicProfileHref(actor.username))}" data-notification-profile="${escapeHTML(actor.username)}">${avatarMarkup(actor, "notification-actor-avatar")}<span><b>${actorName}</b>${actor.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(actor.title)}</small>` : ""}</span></a>` : `<span class="notification-system-actor"><span class="notification-icon">${notificationIcon(notification.type)}</span><b>${actorName}</b></span>`; return `<div class="notification-item ${notification.read_at ? "" : "is-unread"}" role="button" tabindex="0" data-notification-open="${escapeHTML(notification.id)}"><span class="notification-icon">${notificationIcon(notification.type)}</span><span class="notification-copy">${actorMarkup}<strong>${escapeHTML(notification.title)}</strong><span>${escapeHTML(notification.body)}</span><small>${escapeHTML(formatCommentDate(notification.created_at))}</small></span></div>`; }).join("") || '<div class="empty">Você ainda não recebeu notificações.</div>'}</div></div>`;
   }
 
+  function communityActivityContext(activity) {
+    const metadata = activity.metadata || {};
+    if (metadata.source === "comic" && metadata.item_id) {
+      const item = state.db.library.find(entry => String(entry.id) === String(metadata.item_id));
+      return item ? itemDisplayTitle(item) : "Uma história";
+    }
+    if (metadata.source === "blog") {
+      const post = (state.blogPosts || []).find(entry => String(entry.id) === String(metadata.blog_id));
+      return post?.title || "Uma publicação no blog";
+    }
+    if (metadata.source === "profile_wall") return "Um mural de perfil";
+    if (metadata.source === "collection") return "Uma coleção";
+    if (metadata.source === "top10") return "Uma lista da comunidade";
+    return "Atividade da comunidade";
+  }
+
+  function renderCommunityActivity() {
+    const rows = state.communityActivities.map(activity => {
+      const actor = activity.actor;
+      const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "Alguém da comunidade";
+      const icon = activity.event_type === "comment" ? "💬" : activity.event_type === "completed" ? "🏁" : "♥";
+      return `<div class="notification-item community-activity-item"><span class="notification-icon">${icon}</span><span class="notification-copy"><span class="notification-actor">${actor ? avatarMarkup(actor, "notification-actor-avatar") : ""}<span><b>${actorName}</b>${actor?.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(actor.title)}</small>` : ""}</span></span><strong>${escapeHTML(activity.title)}</strong><span>${escapeHTML(activity.body)}</span><small>${escapeHTML(communityActivityContext(activity))} · ${escapeHTML(formatCommentDate(activity.created_at))}</small></span></div>`;
+    }).join("");
+    return `<div class="content notifications-page community-activity-page"><div class="section-subtitle community-activity-note">Registro das atividades recentes da comunidade. Os registros desaparecem após 24 horas.</div><div class="notification-list">${rows || '<div class="empty">Nenhuma atividade recente da comunidade.</div>'}</div></div>`;
+  }
+
   function closeNotificationsPopups() {
     $$('.notifications-popup-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
   }
@@ -14620,9 +15317,10 @@
     return roomId ? CHAT_ROOMS.find(entry => entry.id === roomId) || null : null;
   }
 
-  function openNotificationsPopup(tab = "notifications") {
+  async function openNotificationsPopup(tab = "notifications") {
     if (!state.session) return openAuthPage();
     closeNotificationsPopups();
+    if (tab === "community") await loadCommunityActivity();
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const staff = canViewBancaMonitoring();
@@ -14633,6 +15331,33 @@
     }
     overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>${tab === "staff" ? "📜 Monitoramento" : "Notificações"}</h2><div class="section-subtitle">${tab === "staff" ? "Central interna · não gera notificações públicas" : `${state.notificationUnreadCount} não lida(s)`}</div></div><button class="small-btn" data-close>Fechar</button></div>${staff ? `<div class="notification-tabs"><button class="small-btn notification-tab ${tab !== "staff" ? "is-active" : ""}" data-notification-tab="notifications">🔔 Notificações</button><button class="small-btn notification-tab ${tab === "staff" ? "is-active" : ""}" data-notification-tab="staff">📜 Monitoramento</button>${state.profile?.plan === "admin" ? `<button class="small-btn" data-open-series-link-monitor>Novas edições${state.seriesLinkPendingCount ? ` (${state.seriesLinkPendingCount})` : ""}</button>` : ""}${canViewBancaMonitoring() ? `<button class="small-btn" data-open-cover-variants>Examinar capas variantes${coverVariantCandidates().length ? ` (${coverVariantCandidates().length})` : ""}</button>` : ""}</div>` : ""}${tab === "staff" ? renderStaffActivities() : renderNotifications()}</div>`;
     $("#modal-root").appendChild(overlay);
+    const modal = $(".notifications-popup-modal", overlay);
+    if (tab === "community") {
+      $("h2", modal).textContent = "👥 Comunidade";
+      $(".section-head .section-subtitle", modal).textContent = "Atividades recentes, sem alertas";
+      $(".content", modal)?.replaceWith(new DOMParser().parseFromString(renderCommunityActivity(), "text/html").body.firstElementChild);
+    }
+    let tabs = $(".notification-tabs", overlay);
+    if (!tabs) {
+      tabs = document.createElement("div");
+      tabs.className = "notification-tabs";
+      $(".section-head", modal)?.after(tabs);
+    }
+    const notificationTab = document.createElement("button");
+    notificationTab.className = `small-btn notification-tab ${tab === "notifications" ? "is-active" : ""}`;
+    notificationTab.dataset.notificationTab = "notifications";
+    notificationTab.textContent = "🔔 Notificações";
+    const communityTab = document.createElement("button");
+    communityTab.className = `small-btn notification-tab ${tab === "community" ? "is-active" : ""}`;
+    communityTab.dataset.notificationTab = "community";
+    communityTab.textContent = "👥 Comunidade";
+    if (!$('[data-notification-tab=notifications]', tabs)) tabs.prepend(notificationTab);
+    if (!$('[data-notification-tab=community]', tabs)) {
+      const staffTab = $('[data-notification-tab=staff]', tabs);
+      tabs.insertBefore(communityTab, staffTab || null);
+    }
+    $('[data-notification-tab=notifications]', tabs)?.classList.toggle("is-active", tab === "notifications");
+    $('[data-notification-tab=community]', tabs)?.classList.toggle("is-active", tab === "community");
     if (staff) {
       const tabs = $(".notification-tabs", overlay);
       if (tabs && !$("[data-notification-tab=file-reports]", tabs)) {
@@ -14648,11 +15373,15 @@
         if (sourceTab) tabs.appendChild(sourceTab);
       }
     }
-    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
-    $$('[data-close]', overlay).forEach(button => button.onclick = event => {
-      event.preventDefault();
-      event.stopPropagation();
+    const closePopup = async event => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      if (tab === "notifications") await markAllNotificationsRead();
       overlay.remove();
+    };
+    overlay.addEventListener("click", event => { if (event.target === overlay) closePopup(event); });
+    $$('[data-close]', overlay).forEach(button => button.onclick = event => {
+      closePopup(event);
     });
     $$('[data-notification-tab]', overlay).forEach(button => button.onclick = () => openNotificationsPopup(button.dataset.notificationTab));
     $$('[data-bot-review]', overlay).forEach(button => button.onclick = async () => {
@@ -14691,6 +15420,8 @@
         else openNotificationsPopup();
       } else if (notification?.type === "collection_like" && notification.metadata?.collection_id) {
         openCollection(String(notification.metadata.collection_id));
+      } else if ((notification?.type === "top10_item_like" || notification?.type === "top10_item_dislike") && notification.metadata?.profile_username) {
+        await loadPublicProfile(notification.metadata.profile_username, null, false, { top10ListId: notification.metadata.list_id || null });
       } else if ((notification?.type === "profile_wall_comment" || notification?.type === "profile_wall_reply") && notification.metadata?.profile_username) {
         await loadPublicProfile(notification.metadata.profile_username);
       } else if ((notification?.type === "comment_reply" || notification?.type === "comment_like" || notification?.type === "mention") && notification.metadata?.blog_id) {
@@ -14793,6 +15524,8 @@
     hydrateHomeCovers();
     prepareLazyImages(main);
     decorateFactionNames(main);
+    hydrateCommentLinkPreviews(main);
+    observeCommentLinkPreviews();
     hydrateFactionRoleTitles(main);
     if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["Série Mensal", "Recentes", "Vários autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
@@ -15386,7 +16119,10 @@
         actions.append(wikiButton, button);
       });
       const top10Panel = $("[data-shelf-tab-panel=top10]");
-      if (top10Panel) top10Panel.innerHTML = top10Markup(state.top10Lists, true);
+      if (top10Panel) {
+        top10Panel.innerHTML = top10Markup(state.top10Lists, true);
+        bindTop10VoteControls(top10Panel, false);
+      }
       const showSpecialShelfTab = ["wall", "saved-public", "top10"].includes(state.shelfTab);
       $$(".shelf-page > .shelf-collection, .shelf-page > .shelf-categories, .shelf-page > .local-box-notice").forEach(element => { element.hidden = showSpecialShelfTab; });
       $$('[data-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.shelfTabPanel !== state.shelfTab; });
@@ -15490,14 +16226,25 @@
         $(".top10-items", publicTop10Panel)?.querySelectorAll(".top10-item").forEach(row => {
           const characterName = $("strong", row)?.textContent?.trim();
           if (!characterName) return;
+          const rankedList = (state.publicProfile.top10Lists || []).find(list => String(list.id) === String(row.closest("[data-top10-list-card]")?.dataset.top10ListCard));
+          const rankedItems = [...(rankedList?.items || [])].sort((a, b) => a.rank - b.rank);
+          const rankedItem = rankedItems[[...row.parentElement.children].indexOf(row)];
           row.dataset.top10PublicCharacter = characterName;
           row.setAttribute("role", "link");
           row.setAttribute("tabindex", "0");
-          const openCharacter = () => openEntityPage("character", characterName);
-          row.addEventListener("click", openCharacter);
-          row.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCharacter(); } });
+          const openRankedItem = () => {
+            if (rankedList?.list_type === "story") {
+              const edition = state.db.library.find(item => String(item.id) === String(rankedItem?.character_key));
+              if (edition) openReader(edition);
+              return;
+            }
+            openEntityPage("character", characterName);
+          };
+          row.addEventListener("click", openRankedItem);
+          row.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRankedItem(); } });
         });
       }
+      bindTop10VoteControls(publicTop10Panel, !isOwnPublicProfile);
       const showSpecialPublicTab = ["wall", "saved-public", "top10"].includes(state.publicShelfTab);
       $$(".public-profile-page > .shelf-collection, .public-profile-page > .shelf-categories, .public-profile-page > .local-box-notice").forEach(element => { element.hidden = showSpecialPublicTab; });
       $$('[data-public-shelf-tab-panel], [data-shelf-tab-panel=top10]').forEach(panel => { panel.hidden = (panel.dataset.publicShelfTabPanel || panel.dataset.shelfTabPanel) !== state.publicShelfTab; });
@@ -16182,12 +16929,25 @@
     $$('[data-shelf-expand]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); state.shelfExpanded[el.dataset.shelfExpand] = !state.shelfExpanded[el.dataset.shelfExpand]; render(); }));
     $$('[data-shelf-media]').forEach(el => el.addEventListener("click", () => { state.shelfTab = el.dataset.shelfMedia; render(); }));
     $$('[data-public-shelf-media]').forEach(el => el.addEventListener("click", () => { state.publicShelfTab = el.dataset.publicShelfMedia; render(); }));
+    syncTop10Labels();
+    $$('[data-shelf-tab-panel="top10"], [data-public-shelf-tab-panel="top10"]').forEach(panel => bindTop10ListDragCards(panel, state.section === "shelf" || (state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || ""))));
+    $$('[data-top10-share]').forEach(button => button.addEventListener("click", event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10Share));
+      if (list) shareTop10List(list);
+    }));
+    $$('[data-top10-comments]').forEach(button => button.addEventListener("click", event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10Comments));
+      if (list) openTop10ListComments(list);
+    }));
     $('[data-top10-new-list]')?.addEventListener("click", async () => {
       if (!state.session?.user?.id || !sb) return openAuthPage();
-      const name = String(await openSiteInput("Dê um nome para o seu ranking (ex.: Heróis favoritos):", "", { title: "Novo Top 10", label: "Nome do ranking" }) || "").trim();
-      if (!name) return;
-      const result = await sb.from("profile_top10_lists").insert({ owner_id: state.session.user.id, name, is_public: true }).select("id, owner_id, name, is_public, created_at, updated_at").single();
-      if (result.error) return toast(result.error.message || "Não foi possível criar o Top 10. Aplique a migração do Top 10 no Supabase.");
+      const listChoice = await openTop10ListType();
+      if (!listChoice) return;
+      const nextOrder = editableTop10Lists().length;
+      const result = await sb.from("profile_top10_lists").insert({ owner_id: state.session.user.id, name: listChoice.name, list_type: listChoice.type, character_categories: listChoice.categories, is_final: false, sort_order: nextOrder, is_public: true }).select("id, owner_id, name, list_type, character_categories, is_final, sort_order, is_public, created_at, updated_at").single();
+      if (result.error) return toast(result.error.message || "Não foi possível criar a lista. Aplique a migração das listas no Supabase.");
       replaceEditableTop10Lists([...editableTop10Lists(), { ...result.data, items: [] }]);
       render();
     });
@@ -16196,9 +16956,27 @@
       const suggestions = input.closest(".top10-add-form")?.querySelector(".top10-suggestions");
       if (!suggestions) return;
       if (!query) { suggestions.innerHTML = ""; return; }
-      const existing = new Set((editableTop10Lists().find(list => String(list.id) === String(input.dataset.top10SearchList))?.items || []).map(item => item.character_key));
-      const matches = top10CharacterEntries().filter(([key, name]) => !existing.has(key)).map(([key, name]) => ({ key, name, score: name.toLocaleLowerCase("pt-BR").startsWith(query) ? 0 : name.toLocaleLowerCase("pt-BR").includes(query) ? 1 : 2 })).filter(item => item.score < 2).sort((a, b) => a.score - b.score || a.name.localeCompare(b.name, "pt-BR")).slice(0, 3);
-      suggestions.innerHTML = matches.map(item => `<button type="button" class="top10-suggestion" data-top10-suggestion-key="${escapeHTML(item.key)}" data-top10-suggestion-name="${escapeHTML(item.name)}" data-top10-suggestion-list="${escapeHTML(input.dataset.top10SearchList)}">${escapeHTML(item.name)}</button>`).join("") || '<span class="top10-no-suggestions">Nenhum personagem parecido encontrado.</span>';
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(input.dataset.top10SearchList));
+      const existing = new Set((list?.items || []).map(item => item.character_key));
+      let suggestionEntries = top10EntriesForList(list).filter(([key]) => !existing.has(key));
+      if (list?.list_type === "story") {
+        const seenSeries = new Set();
+        suggestionEntries = suggestionEntries.filter(([key, , story]) => {
+          const seriesKey = top10StorySeriesKey(story, key);
+          if (seenSeries.has(seriesKey)) return false;
+          seenSeries.add(seriesKey);
+          return true;
+        });
+      }
+      const matches = suggestionEntries.map(([key, name]) => ({ key, name, score: name.toLocaleLowerCase("pt-BR").startsWith(query) ? 0 : name.toLocaleLowerCase("pt-BR").includes(query) ? 1 : 2 })).filter(item => item.score < 2).sort((a, b) => a.score - b.score || a.name.localeCompare(b.name, "pt-BR")).slice(0, 3);
+      suggestions.innerHTML = matches.map(item => `<button type="button" class="top10-suggestion" data-top10-suggestion-key="${escapeHTML(item.key)}" data-top10-suggestion-name="${escapeHTML(item.name)}" data-top10-suggestion-list="${escapeHTML(input.dataset.top10SearchList)}">${escapeHTML(item.name)}</button>`).join("") || `<span class="top10-no-suggestions">Nenhuma ${list?.list_type === "story" ? "história parecida" : "personagem parecido"} encontrada.</span>`;
+    }));
+    $$('[data-top10-search-list]').forEach(input => input.addEventListener("keydown", event => {
+      if (event.key !== "Enter") return;
+      const firstSuggestion = input.closest(".top10-add-form")?.querySelector('[data-top10-suggestion-key]');
+      if (!firstSuggestion) return;
+      event.preventDefault();
+      firstSuggestion.click();
     }));
     $$('[data-top10-suggestions]').forEach(suggestions => suggestions.addEventListener("click", async event => {
       const button = event.target.closest?.('[data-top10-suggestion-key]');
@@ -16211,7 +16989,7 @@
       const list = editableTop10Lists().find(item => String(item.id) === String(form.dataset.top10AddForm));
       const key = String(new FormData(form).get("character") || "");
       const name = $("option:checked", form)?.dataset.characterName || "";
-      if (!list || !key || !name || (list.items || []).length >= 10) return;
+    if (!list || list.is_final || !key || !name || (list.items || []).length >= TOP10_MAX_ITEMS) return;
       if ((list.items || []).some(item => item.character_key === key)) return toast("Esse personagem já está neste ranking.");
       const items = [...(list.items || []), { character_key: key, character_name: name }];
       await updateTop10Items(list, items, "Não foi possível atualizar o ranking.");
@@ -16235,21 +17013,45 @@
       await updateTop10Items(list, items, "Não foi possível reordenar o ranking.");
     }));
     $$('[data-top10-list-card] .top10-items').forEach(bindTop10DragRows);
+    styleTop10RemoveButtons();
     $$('[data-top10-list-card]').forEach(card => {
       const deleteButton = $("[data-top10-delete-list]", card);
-      if (!deleteButton || $("[data-top10-rename-list]", card)) return;
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(deleteButton?.dataset.top10DeleteList));
+      const listActions = $(".top10-list-actions", card);
+      if (!deleteButton || !list || !listActions) return;
+      listActions.append(deleteButton);
+      if (list.is_final || $("[data-top10-rename-list]", card)) return;
       const renameButton = document.createElement("button");
       renameButton.type = "button";
       renameButton.className = "small-btn";
       renameButton.dataset.top10RenameList = deleteButton.dataset.top10DeleteList;
       renameButton.textContent = "Renomear";
-      deleteButton.before(renameButton);
+      const defineButton = document.createElement("button");
+      defineButton.type = "button";
+      defineButton.className = "small-btn";
+      defineButton.dataset.top10FinalizeList = deleteButton.dataset.top10DeleteList;
+      defineButton.textContent = "Definir";
+      deleteButton.before(renameButton, defineButton);
     });
+    $$('[data-top10-finalize-list]').forEach(button => button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10FinalizeList));
+      if (!list || list.is_final) return;
+      if (!await openSiteConfirm("Definir esta lista? Depois disso, os personagens não poderão ser editados, removidos ou reordenados.", { title: "Definir lista", confirmLabel: "Definir lista" })) return;
+      list.is_final = true;
+      requestAnimationFrame(() => render());
+      const result = await sb.from("profile_top10_lists").update({ is_final: true }).eq("id", list.id).eq("owner_id", state.session.user.id);
+      if (result.error) {
+        list.is_final = false;
+        render();
+        toast("Não foi possível definir a lista.");
+      }
+    }));
     $$('[data-top10-rename-list]').forEach(button => button.addEventListener("click", async event => {
       event.stopPropagation();
       const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10RenameList));
       if (!list) return;
-      const name = String(await openSiteInput("Digite o novo nome do Top 10:", list.name || "", { title: "Renomear Top 10", label: "Nome do ranking" }) || "").trim();
+      const name = String(await openSiteInput("Digite o novo nome da lista:", list.name || "", { title: "Renomear lista", label: "Nome da lista" }) || "").trim();
       if (!name || name === list.name) return;
       const previousName = list.name;
       list.name = name;
@@ -16258,7 +17060,7 @@
       if (result.error) {
         list.name = previousName;
         $("h3", button.closest("[data-top10-list-card]"))?.replaceChildren(document.createTextNode(previousName));
-        toast("Não foi possível renomear o Top 10.");
+        toast("Não foi possível renomear a lista.");
       }
     }));
     $$('[data-top10-list-card] .top10-item').forEach(row => {
@@ -16298,13 +17100,13 @@
         item.image_url = previous.imageUrl;
         $("strong", row)?.replaceChildren(document.createTextNode(previous.name));
         if (image) { image.src = previous.imageUrl || "assets/batmanicon.jpg"; image.alt = `Imagem de ${previous.name}`; image.dataset.top10CharacterImage = previous.name; }
-        toast("Não foi possível editar o personagem neste Top 10.");
+        toast("Não foi possível editar o personagem nesta lista.");
       }
     }));
     $$('[data-top10-delete-list]').forEach(button => button.addEventListener("click", async event => {
       event.stopPropagation();
       const listId = button.dataset.top10DeleteList;
-      if (!await openSiteConfirm("Excluir este Top 10? Esta ação não pode ser desfeita.", { title: "Excluir Top 10", confirmLabel: "Excluir ranking" })) return;
+      if (!await openSiteConfirm("Excluir esta lista? Esta ação não pode ser desfeita.", { title: "Excluir lista", confirmLabel: "Excluir lista" })) return;
       const previousLists = editableTop10Lists();
       replaceEditableTop10Lists(editableTop10Lists().filter(list => String(list.id) !== String(listId)));
       requestAnimationFrame(() => render());
@@ -17505,16 +18307,46 @@
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
-    $("#edit-form", overlay).onsubmit = event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const sourceUrl = String(fd.get("sourceUrl") || "").trim(); const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean); const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim(); const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, ""); const item = { ...x, title: String(fd.get("title") || "").trim(), seriesTitle, seriesId: seriesTitle ? seriesKey(seriesTitle) : "", issue: volumeNumber, type: fd.get("type"), year: Number(fd.get("year")) || new Date().getFullYear(), publisher: String(fd.get("publisher") || "").trim(), imprint: String(fd.get("imprint") || "").trim(), character: String(fd.get("character") || "").trim(), author: String(fd.get("author") || "").trim(), format: detectFormat(sourceUrl), fileUrl: sourceUrl, backupUrls, telegramUrl: "", featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(), description: String(fd.get("description") || "").trim(), tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean), featured: fd.get("featured") === "on" }; delete item.randomWeight; const index = state.db.library.findIndex(i => i.id === item.id); if (index >= 0) state.db.library[index] = item; else state.db.library.push(item); saveCatalog("Edição salva."); overlay.remove(); render(); };
-    $("#edit-form", overlay)?.addEventListener("submit", event => {
+    $("#edit-form", overlay).onsubmit = event => {
+      event.preventDefault();
       const form = event.currentTarget;
-      const item = state.db.library.find(entry => entry.id === x.id);
-      if (!item) return;
-      const character = String($("[name=character]", form)?.value || "").trim();
-      item.secondaryCharacters = [...new Set(String($("[name=secondaryCharacters]", form)?.value || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
-      if (Array.isArray(item.characters)) item.characters = [character, ...item.secondaryCharacters];
-      save();
-    });
+      const fd = new FormData(form);
+      const sourceUrl = String(fd.get("sourceUrl") || "").trim();
+      const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+      const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim();
+      const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, "");
+      const character = String(fd.get("character") || "").trim();
+      const secondaryCharacters = [...new Set(String(fd.get("secondaryCharacters") || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
+      const item = {
+        ...x,
+        title: String(fd.get("title") || "").trim(),
+        seriesTitle,
+        seriesId: seriesTitle ? seriesKey(seriesTitle) : "",
+        issue: volumeNumber,
+        type: fd.get("type"),
+        year: Number(fd.get("year")) || new Date().getFullYear(),
+        publisher: String(fd.get("publisher") || "").trim(),
+        imprint: String(fd.get("imprint") || "").trim(),
+        character,
+        secondaryCharacters,
+        author: String(fd.get("author") || "").trim(),
+        format: detectFormat(sourceUrl),
+        fileUrl: sourceUrl,
+        backupUrls,
+        telegramUrl: "",
+        featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(),
+        description: String(fd.get("description") || "").trim(),
+        tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean),
+        featured: fd.get("featured") === "on"
+      };
+      if (Array.isArray(item.characters)) item.characters = [character, ...secondaryCharacters];
+      delete item.randomWeight;
+      const index = state.db.library.findIndex(i => i.id === item.id);
+      if (index >= 0) state.db.library[index] = item; else state.db.library.push(item);
+      saveCatalog("Edição salva.");
+      overlay.remove();
+      render();
+    };
   }
 
   function renderCatalogLegacyAdmin2(type = null) {
@@ -17730,6 +18562,7 @@
   const routeParts = siteBasePaths.has(pathParts[0]?.toLowerCase()) ? pathParts.slice(1) : pathParts;
   const queryProfile = new URLSearchParams(window.location.search).get("perfil");
   const queryPublicCollection = new URLSearchParams(window.location.search).get("lista");
+  const queryTop10List = new URLSearchParams(window.location.search).get("lista_top10");
   const legacyShelfRoute = new URLSearchParams(window.location.search).get("pagina") === "estante";
   const initialPublicUsername = queryProfile
     ? cleanUsername(queryProfile)
@@ -17738,7 +18571,7 @@
       : "";
   if (initialPublicUsername && /^[a-z0-9_]{3,24}$/.test(initialPublicUsername)) {
     state.section = "public-profile";
-    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, album: new URLSearchParams(window.location.search).get("album") === "1" };
+    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, top10ListId: queryTop10List, album: new URLSearchParams(window.location.search).get("album") === "1" };
   } else if (legacyShelfRoute) {
     // Evita que a rota antiga pisque a home enquanto a sessão é recuperada.
     state.section = "public-profile";
@@ -17758,7 +18591,7 @@
   // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
   // a rota pública não fique bloqueada pelas consultas globais do aplicativo.
   const earlyPublicProfileLoad = initialPublicUsername && sb
-    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { basicOnly: true })
+    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { basicOnly: true, top10ListId: queryTop10List })
       .catch(error => console.warn("Perfil público inicial indisponível:", error))
     : null;
   const warmLibarchive = () => loadLibarchiveModule().catch(error => console.warn("Biblioteca CBR indisponível:", error));
@@ -17838,14 +18671,14 @@
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
-      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1");
+      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
     .catch(error => console.warn("Supabase indisponível:", error))
     .then(async () => {
       if (!initialPublicUsername || !state.publicProfile?.loading) return;
       try {
-        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1");
+        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       } catch (error) {
         console.warn("Public profile load failed:", error);
         state.publicProfile = { error: "Não foi possível carregar este perfil agora.", username: initialPublicUsername };
