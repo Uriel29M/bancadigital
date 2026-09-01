@@ -13,7 +13,9 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Método não permitido" }, 405);
   try {
     const body = await request.json();
-    const text = String(body?.text || "").trim().slice(0, 480);
+    // O leitor envia um parágrafo inteiro. Cortá-lo aqui fazia a tradução
+    // terminar no meio da frase e deixava o restante em inglês.
+    const text = String(body?.text || "").trim();
     const source = String(body?.sourceLanguage || "en").toLowerCase().split("-")[0];
     if (!text || source === "pt" || source === "auto") return json({ translatedText: text });
 

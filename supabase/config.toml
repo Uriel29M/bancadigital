@@ -22,5 +22,8 @@ verify_jwt = false
 [functions.translate]
 verify_jwt = false
 
+[functions.character-news]
+verify_jwt = false
+
 [functions.delete-account]
 verify_jwt = false

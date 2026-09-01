@@ -51,7 +51,7 @@
   const ids = {
     guerra: "anlkv56579gle8w,cyolvd2b02riu4b,njbhrbydi5bmpri,mn8kv1fv3v30mfd,5jeshrlusvpl1qr,5bizvwrntca8hgs",
     hardware: "3rcs3z7owxfxykc,0fptwvlfrulmvl5,wqcf1eef4vg2irb,a8hf6c60d8gjgtq,qdqp2571tfeit10,p3rkc2v1710miah,ulgbqm65a5rw99x,j36i201b2bhd0co,80zz080fvjlsovj,wcesgt3jw54ilnw,anlkv56579gle8w,4t5ftn6z4f37ocd,ny7u06a0al2v4to,erefsc7hb92lzut,xv9j5y0w4sevq8o,7d2fst8ubpx463r",
-    icone: "irpl9aq3e7cd05w,j0zvg8b9fvqtfbr,31jer5nwrwtgqr7,b4ix55qglrof676,tudrp221m8y3yyu,lotw9zb2z0esfz7,4u6ddx3jyfq8gou,6ah5hig7zoy01sl,cyolvd2b02riu4b,1dtv0jdycswhvqj,is7fdg9j8man5q6,b8araabx7e4g7h9,75aatdrkdfmzxe,j4kk2w6zkutduqu,igf0zbev6xubdd2,mw02xy4yotjlmes,nyc2ghm1uoj3prl,w60lk6r7hicyq96,lqpldr9dku3t6w6,nqu30l8lf3ncs32,3s2iaqj5563i5zr,v1wuvolicts5efk,ub4xd23snb2zxl1,49k3obtwhwx91zv,ne5icdczon6oduk,gao9gh4o63dzbrq,6m4w000evh3zk79,mi5dneai1wf4nfv",
+    icone: "irpl9aq3e7cd05w,j0zvg8b9fvqtfbr,31jer5nwrwtgqr,b4ix55qglrof676,tudrp221m8y3yyu,lotw9zb2z0esfz7,4u6ddx3jyfq8gou,6ah5hig7zoy01sl,cyolvd2b02riu4b,1dtv0jdycswhvqj,is7fdg9j8man5q6,b8araabx7e4g7h9,https://www.mediafire.com/file_premium/75aatdrkdfmzxe8,j4kk2w6zkutduqu,igf0zbev6xubdd2,mw02xy4yotjlmes,nyc2ghm1uoj3prl,w60lk6r7hicyq96,lqpldr9dku3t6w6,nqu30l8lf3ncs32,3s2iaqj5563i5zr,v1wuvolicts5efk,ub4xd23snb2zxl1,49k3obtwhwx91zv,ne5icdczon6oduk,gao9gh4o63dzbrq,6m4w000evh3zk79,mi5dneai1wf4nfv",
     sindicato: "4eyz20yszdn9a27,0glmvgwg06lqo1r,oseusg3e84bimnn,gvxvi5qvf799e6g,4ag7s1vnphgclvh,bv8d8f86kud1znx,920j28lzi55jdr3,6p5lg1kvv180tb5,1giduz4jrloo7b1,mn8kv1fv3v30mfd",
     static: "xe0iw6x7rqt1eg6,ip295ttiyp6vb44,xy092c0o5fch9ws,5ahn3hrwerwa7ik,pi3nekrpvt428lj,jop0r0ixb0vebsy,r98a6an03che1tw,5jeshrlusvpl1qr,00c1fsbx504jk8l,6ux8vkiz84x9rtx,3teqe08g1rdj92l,6utsbiod77brk1n,a27f8l3tecu0jel,vshlibo8qmvxtco,w23emzha82fg2b1,9odj6phqenec8pq,df2f24u973sqtye,ijybmb3pi2m9qu6,wz37ufedj6max9p,u8xpt33cr3u9uv3,s7xdfk2mrw8o3ln,xa23ajny7k1vlec,8sicf4c6hgpel7j,4f15k6zeyb582hl"
   };
@@ -68,7 +68,7 @@
     const blogUrl = sources[key];
     if (key === "hardware") character = "Hardware";
     if (key === "icone") character = "\u00cdcone";
-    const fileLinks = ids[key].split(",").map(fileId => fileId.trim()).filter(Boolean).map(fileId => `https://www.mediafire.com/file/${fileId}`);
+    const fileLinks = ids[key].split(",").map(fileId => fileId.trim()).filter(Boolean).map(fileId => /^https?:\/\//i.test(fileId) ? fileId : `https://www.mediafire.com/file/${fileId}`);
     count = fileLinks.length;
     const numberedIssues = issueNumbers[key] || Array.from({ length: count }, (_, index) => index + 1);
     window.DEFAULT_SERIES.push({ id, name, seriesTitle: name, originalTitle, type: "comic", publisher, imprint, publication: key === "guerra" ? "Evento" : "Série Mensal", status: "Cancelada/Terminada", editions: String(count).padStart(2, "0"), year, description, coverUrl, blogUrl, telegramUrl: "", author, character, tags: [name, originalTitle, character, "DC Comics", "Milestone"], officialUrl: "https://www.dc.com/comics" });

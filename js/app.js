@@ -220,9 +220,17 @@
           }
           const defaultsById = new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item]));
           const previousLibrary = saved.library;
+          let updatedIcon13Url = false;
           saved.library = saved.library.map(item => {
             if (!/^series-shazam-2023-\d{2}$/.test(String(item.id || ""))) return item;
             return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
+          });
+          saved.library = saved.library.map(item => {
+            if (item.id !== "series-icone-milestone-1993-013") return item;
+            const defaultItem = defaultsById.get(item.id);
+            if (!defaultItem?.fileUrl || item.fileUrl === defaultItem.fileUrl) return item;
+            updatedIcon13Url = true;
+            return { ...item, fileUrl: defaultItem.fileUrl };
           });
           saved.library = materializeSeriesItems(saved.library.map(item => ({ ...(defaultsById.get(item.id) || {}), ...item })));
           const milestoneSeriesIds = new Set((window.DEFAULT_SERIES || []).filter(series => series.imprint === "Milestone").map(series => series.id));
@@ -251,7 +259,7 @@
             const previous = previousLibrary.find(entry => entry.id === item.id);
             return previous && (previous.volume !== item.volume || previous.volumeTitle !== item.volumeTitle);
           });
-          if (knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
+          if (updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
           if (saved.library.some(item => item.id === "series-justice-godzilla-kong-2023-08" && String(item.fileUrl || "").includes("bpk2XxWKhFNO9s"))) this.save(saved);
           const knownIds = new Set(saved.library.map(item => item.id));
           const newDefaults = materializeSeriesItems(structuredClone(window.DEFAULT_LIBRARY)).filter(item => !knownIds.has(item.id) && !removedItemIds.has(item.id) && !isLegacyRemovedCatalogItem(item));
@@ -302,6 +310,9 @@
     authMode: "login",
     publicProfile: null,
     search: "",
+    searchUsers: [],
+    searchUsersQuery: "",
+    searchUsersLoading: false,
     entityFilter: null,
     collectionId: null,
     editingId: null,
@@ -341,6 +352,9 @@
     savedImprints: [],
     savedCharacterKeys: new Set(),
     savedCharacters: [],
+    top10Lists: [],
+    top10PendingOperations: 0,
+    top10Revision: 0,
     blogShelfCategories: [],
     shelfTab: "collections",
     publicShelfTab: "collections",
@@ -392,13 +406,14 @@
     coverVariantReviewTab: "pending",
     localBoxFiles: [],
     localBoxVisible: false,
-    publisherSettings: new Map(),
-    imprintSettings: new Map(),
-    characterSettings: new Map(),
-    legendarySundayEnabled: true,
-    legendaryManualDate: null,
-    publisherSeriesExpanded: {},
-    popularPublicCollections: [],
+     publisherSettings: new Map(),
+     imprintSettings: new Map(),
+     characterSettings: new Map(),
+     legendarySundayEnabled: true,
+     legendaryManualDate: null,
+     publisherSeriesExpanded: {},
+     comicSeriesCollapsed: (() => { try { return localStorage.getItem("bancaDigitalComicSeriesCollapsed") === "true"; } catch { return false; } })(),
+     popularPublicCollections: [],
     featuredComicCollections: [],
     featuredBlogCollections: [],
     blogPosts: [],
@@ -1127,7 +1142,6 @@
     factions: "faccoes",
     collections: "colecoes",
     search: "pesquisar",
-    shelf: "estante",
     downloads: "downloads",
     "local-box": "caixa",
     album: "album",
@@ -1243,6 +1257,12 @@
     const params = new URLSearchParams(window.location.search);
     const readerId = params.get("ler");
     const page = params.get("pagina") || "";
+    if (!readerId && page === "estante") {
+      if (!state.authReady) return;
+      if (state.session?.user && state.profile?.username) openOwnPublicProfile();
+      else openAuthPage();
+      return;
+    }
     const section = params.get("colecao") ? "collection" : Object.keys(sectionRoutes).find(key => sectionRoutes[key] === page) || "home";
     const item = readerId ? state.db.library.find(entry => entry.id === readerId) : null;
 
@@ -1263,6 +1283,7 @@
     } else {
       const previousSection = state.section;
       state.section = section;
+      if (previousSection === "entity" && section !== "entity") characterNewsCache?.clear();
       if (section === "home" && previousSection !== "home") {
         state.homeRandomPublisher = null;
         state.homeRandomCharacter = null;
@@ -1280,6 +1301,7 @@
       if (section === "search") state.search = params.get("q") || "";
       if (section === "entity") state.entityFilter = { kind: params.get("tipo") || "character", value: params.get("valor") || "" };
       render();
+      if (section === "search") loadSearchUsers(state.search);
       if (section === "blog" && !state.blogPosts.length) loadBlogPosts();
       if (section === "ranking" && state.authReady) loadRankingData();
       if (section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
@@ -1450,11 +1472,6 @@
         console.warn("Não foi possível carregar o ranking:", result.error.message);
         state.rankingMembers = [];
         return;
-      }
-      if (definition.imprint === "Milestone") {
-        const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
-        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
-        if (!merged.fileUrl && defaultItem?.fileUrl) merged.fileUrl = defaultItem.fileUrl;
       }
       state.rankingMembers = result.data || [];
       const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
@@ -2696,7 +2713,7 @@
     const headerAvatar = $(".avatar");
     if (!headerAvatar) return;
     headerAvatar.innerHTML = avatarMarkup(state.profile, "top-avatar-img");
-    headerAvatar.title = state.session ? "Abrir minha estante" : "Entrar ou abrir minha estante";
+    headerAvatar.title = state.session ? "Abrir meu perfil" : "Entrar ou abrir meu perfil";
     headerAvatar.classList.toggle("avatar-staff", ["moderator", "banca", "admin"].includes(state.profile?.plan));
   }
 
@@ -2723,6 +2740,15 @@
     if (collectionId) url.searchParams.set("lista", collectionId);
     if (album) url.searchParams.set("album", "1");
     return `${url.pathname}?${url.searchParams.toString()}`;
+  }
+
+  function openOwnPublicProfile() {
+    if (!state.session?.user || !state.profile?.username) return openAuthPage();
+    const profileUrl = publicProfileHref(state.profile.username);
+    if (`${window.location.pathname}${window.location.search}` !== profileUrl) {
+      window.history.pushState({ [ROUTE_HISTORY_KEY]: true, [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1 }, "", profileUrl);
+    }
+    loadPublicProfile(state.profile.username);
   }
 
   async function loadCoverCatalog() {
@@ -2865,7 +2891,7 @@
     state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
     const imprintSettings = await sb.from("imprint_settings").select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned");
     state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
-    const characterSettings = await sb.from("character_settings").select("character_key, character_name, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden");
+    const characterSettings = await sb.from("character_settings").select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls");
     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
     characterSettingsReady = true;
     wikiCharacterImageCache.clear();
@@ -2917,6 +2943,9 @@
       }
       saveOfflineAccount(profile.data);
       state.profile = effectiveSundayProfile(profile.data);
+      const top10LoadRevision = state.top10Revision;
+      const loadedTop10Lists = await loadTop10Lists(session.user.id);
+      if (!state.top10PendingOperations && top10LoadRevision === state.top10Revision) state.top10Lists = loadedTop10Lists;
       loadDownloads();
       state.collectionSortOrders = profile.data?.shelf_sort_orders || {};
       try { state.collectionSortOrders = { ...JSON.parse(localStorage.getItem(`bancaDigitalShelfSort:${session.user.id}`) || "{}"), ...state.collectionSortOrders }; } catch {}
@@ -3189,14 +3218,23 @@
     state.publicStickerChannel = channel;
   }
 
-  async function loadPublicProfile(username, collectionId = null, album = false) {
+  const PUBLIC_PROFILE_BASIC_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, faction_id, profile_hidden, is_banned, silenced_until, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_wall_public, profile_activity_public, allow_messages, allow_sticker_requests";
+  const PUBLIC_PROFILE_FULL_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until";
+
+  async function loadPublicProfile(username, collectionId = null, album = false, options = {}) {
     if (navigator.onLine === false || state.session?.offline) {
       activateOfflineMode();
       setSection("downloads");
       return;
     }
-    state.publicProfile = { loading: true, username, collectionId, album };
-    state.publicShelfTab = "collections";
+    const top10LoadRevision = state.top10Revision;
+    const sameProfile = state.publicProfile?.profile
+      && cleanUsername(state.publicProfile.profile.username) === cleanUsername(username);
+    const requestedPublicShelfTab = sameProfile ? state.publicShelfTab : "collections";
+    state.publicProfile = sameProfile
+      ? { ...state.publicProfile, username, collectionId, album, loading: false, detailsLoading: true }
+      : { loading: true, username, collectionId, album };
+    state.publicShelfTab = requestedPublicShelfTab;
     state.collectionFilter = { field: "all", query: "" };
     state.section = "public-profile";
     render();
@@ -3205,13 +3243,13 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+    let profile = await sb.from("profiles").select(options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
     if (profile.error) {
       // Uma coluna opcional nova pode ainda não existir em instalações que
       // não aplicaram todas as migrations. Não descarte as preferências de
       // visibilidade nesse caso: elas são necessárias para renderizar o
       // perfil público de outras pessoas corretamente.
-      profile = await sb.from("profiles").select("id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until").ilike("username", username).maybeSingle();
+      profile = await sb.from("profiles").select(options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
     }
     if (profile.error || !profile.data) {
       state.publicProfile = { error: "Perfil não encontrado.", username };
@@ -3231,7 +3269,49 @@
       render();
       return;
     }
-    const [favorites, savedPublishersResult, savedImprintsResult, savedCharactersResult, progress, stickerAwards, stickerSlotPreferences, profileDisplayStickersResult, comicLikes, activityResults] = await Promise.all([
+    // O cabeçalho não precisa esperar a estante inteira. Mostra o perfil básico
+    // assim que a primeira consulta termina e preenche os dados abaixo em lote.
+    state.publicProfile = {
+      profile: profile.data,
+      username,
+      collectionId,
+      album,
+      loading: false,
+      detailsLoading: true,
+      stickerAwards: [],
+      profileDisplayStickers: [],
+      stickerSlotPreferences: new Map(),
+      collections: [],
+      blogCollections: [],
+      authoredBlogPosts: [],
+      savedBlogPosts: [],
+      collectionBlogPosts: [],
+      favoriteIds: new Set(),
+      favoriteAddedAt: new Map(),
+      comicLikeAddedAt: new Map(),
+      savedPublishers: [],
+      savedImprints: [],
+      savedCharacters: [],
+      comicLikeIds: new Set(),
+      readingProgress: new Map(),
+      achievements: [],
+      collectionLikes: new Set(),
+      collectionLikeCounts: new Map(),
+      coverChoices: new Map(),
+      coverStyles: new Map(),
+      seriesCoverChoices: new Map(),
+      savedPublicCollections: [],
+      top10Lists: [],
+      wallComments: [],
+      activity: [],
+      moderationHistory: [],
+      isFollowing: false,
+      followerCount: 0,
+      followingCount: 0,
+    };
+    render();
+    if (options.basicOnly) return;
+    const [favorites, savedPublishersResult, savedImprintsResult, savedCharactersResult, progress, stickerAwards, stickerSlotPreferences, profileDisplayStickersResult, activityResults] = await Promise.all([
       sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id),
       sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
       sb.from("imprint_saves").select("imprint_key, imprint_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
@@ -3240,7 +3320,6 @@
       sb.from("sticker_awards").select("id, user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, requests_blocked, gum_placed_by, album_section, awarded_at").eq("user_id", profile.data.id).order("awarded_at", { ascending: false }),
       sb.from("sticker_slot_preferences").select("character_id, blocked, placed_by").eq("user_id", profile.data.id),
       sb.from("profile_display_stickers").select("award_id, slot").eq("user_id", profile.data.id).order("slot", { ascending: true }),
-      sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id),
       Promise.all([
       sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id),
       sb.from("blog_likes").select("blog_id, created_at").eq("user_id", profile.data.id),
@@ -3256,6 +3335,8 @@
       sb.from("reading_progress").select("item_id, updated_at").eq("user_id", profile.data.id).eq("completed", true)
       ])
     ]);
+    // A atividade já traz a mesma lista de curtidas necessária para a estante.
+    const comicLikes = { data: activityResults[0]?.data || [] };
     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
     if (collections.error) {
       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
@@ -3281,6 +3362,12 @@
       sb.from("user_series_cover_choices").select("series_id, item_id, cover_url, variant_key, is_variant").eq("user_id", profile.data.id),
       sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", profile.data.id)
     ]);
+    const top10Lists = await loadTop10Lists(profile.data.id);
+    const currentPublicProfile = state.publicProfile?.profile || state.publicProfile;
+    const samePublicProfile = cleanUsername(currentPublicProfile?.username || "") === cleanUsername(username);
+    const preservedTop10Lists = samePublicProfile && top10LoadRevision !== state.top10Revision
+      ? (state.publicProfile?.top10Lists || top10Lists)
+      : top10Lists;
     const isFollowing = state.session?.user?.id ? (followers.data || []).some(row => row.follower_id === state.session.user.id) : false;
     const actorIds = [...new Set((moderationHistory.data || []).map(entry => entry.actor_id).filter(Boolean))];
     const actors = actorIds.length ? await sb.from("profiles").select("id, username").in("id", actorIds) : { data: [] };
@@ -3338,12 +3425,14 @@
       ,coverStyles: publicCoverStyles
       ,seriesCoverChoices: publicSeriesCoverChoices
       ,savedPublicCollections
+      ,top10Lists: preservedTop10Lists
       ,wallComments: wallCommentsResult
       ,activity
       ,moderationHistory: (moderationHistory.data || []).map(entry => ({ ...entry, actor_username: actorNames.get(entry.actor_id) || "moderador" }))
       ,isFollowing
       ,followerCount: (followers.data || []).length
       ,followingCount: (following.data || []).length
+      ,detailsLoading: false
     };
     subscribePublicStickerUpdates(profile.data.id);
     render();
@@ -3894,7 +3983,7 @@
       overlay.className = "modal-backdrop site-dialog-backdrop";
       const title = options.title || "Confirmar ação";
       const confirmLabel = options.confirmLabel || "Confirmar";
-      overlay.innerHTML = `<div class="modal site-dialog-modal" role="alertdialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-site-dialog-cancel>Cancelar</button></div><div class="modal-actions"><button type="button" class="small-btn" data-site-dialog-cancel>Cancelar</button><button type="button" class="btn btn-danger" data-site-dialog-confirm>${escapeHTML(confirmLabel)}</button></div></div>`;
+      overlay.innerHTML = `<div class="modal site-dialog-modal" role="alertdialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-site-dialog-cancel>Cancelar</button><button type="button" class="btn btn-danger" data-site-dialog-confirm>${escapeHTML(confirmLabel)}</button></div></div>`;
       $("#modal-root").appendChild(overlay);
       const finish = value => { overlay.remove(); resolve(value); };
       $$('[data-site-dialog-cancel]', overlay).forEach(button => button.onclick = () => finish(false));
@@ -3908,14 +3997,15 @@
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop site-dialog-backdrop";
       const title = options.title || "Informação";
-      overlay.innerHTML = `<div class="modal site-dialog-modal" role="dialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div><button type="button" class="small-btn" data-site-dialog-cancel>Fechar</button></div><form data-site-dialog-form><label class="field"><span>${escapeHTML(options.label || "Valor")}</span><textarea name="value" rows="3" ${options.editable ? "" : "readonly"}>${escapeHTML(defaultValue)}</textarea></label><div class="modal-actions">${options.editable ? "" : '<button type="button" class="small-btn" data-site-dialog-copy>Copiar</button>'}<button type="button" class="small-btn" data-site-dialog-cancel>${options.editable ? "Cancelar" : "Fechar"}</button>${options.editable ? '<button type="button" class="btn btn-danger" data-site-dialog-submit>Inserir</button>' : ""}</div></form></div>`;
+      overlay.innerHTML = `<div class="modal site-dialog-modal" role="dialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(message)}</div></div></div><form data-site-dialog-form><label class="field"><span>${escapeHTML(options.label || "Valor")}</span><textarea name="value" rows="3" ${options.editable ? "" : "readonly"}>${escapeHTML(defaultValue)}</textarea></label><div class="modal-actions">${options.editable ? "" : '<button type="button" class="small-btn" data-site-dialog-copy>Copiar</button>'}<button type="button" class="small-btn" data-site-dialog-cancel>${options.editable ? "Cancelar" : "Fechar"}</button>${options.editable ? '<button type="submit" class="btn btn-danger" data-site-dialog-submit>Inserir</button>' : ""}</div></form></div>`;
       $("#modal-root").appendChild(overlay);
       const finish = value => { overlay.remove(); resolve(value); };
       $$('[data-site-dialog-cancel]', overlay).forEach(button => button.onclick = () => finish(null));
-      $("[data-site-dialog-copy]", overlay).onclick = async () => {
+      $("[data-site-dialog-copy]", overlay)?.addEventListener("click", async () => {
         try { await navigator.clipboard.writeText(defaultValue); toast("Texto copiado."); } catch { $("[name=value]", overlay)?.select(); }
-      };
-      $("[data-site-dialog-submit]", overlay)?.addEventListener("click", () => finish($("[name=value]", overlay).value.trim()));
+      });
+      const inputForm = $("[data-site-dialog-form]", overlay);
+      inputForm?.addEventListener("submit", event => { event.preventDefault(); finish($("[name=value]", overlay).value.trim()); });
       overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
       $("[name=value]", overlay)?.select();
     });
@@ -3923,6 +4013,24 @@
 
   function openSiteInput(message, defaultValue = "", options = {}) {
     return openSitePrompt(message, defaultValue, { ...options, editable: true });
+  }
+
+  function openTop10ItemEditor(item) {
+    return new Promise(resolve => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-backdrop site-dialog-backdrop";
+      overlay.innerHTML = `<div class="modal site-dialog-modal" role="dialog" aria-modal="true"><div class="section-head"><div><div class="eyebrow">Banca Digital</div><h2>Editar personagem</h2><div class="section-subtitle">Altere o nome e a imagem somente neste Top 10.</div></div></div><form data-top10-edit-form><label class="field"><span>Nome do personagem</span><input name="name" type="text" maxlength="120" required value="${escapeHTML(item.character_name || "")}"></label><label class="field"><span>URL da imagem (opcional)</span><input name="imageUrl" type="url" placeholder="https://..." value="${escapeHTML(item.image_url || "")}"><small class="format-hint">Se deixar como está, a imagem atual será mantida.</small></label><div class="modal-actions"><button type="button" class="small-btn" data-top10-edit-cancel>Cancelar</button><button type="submit" class="btn btn-danger">Inserir</button></div></form></div>`;
+      $("#modal-root").appendChild(overlay);
+      const finish = value => { overlay.remove(); resolve(value); };
+      $("[data-top10-edit-cancel]", overlay).onclick = () => finish(null);
+      $("[data-top10-edit-form]", overlay).onsubmit = event => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        finish({ name: String(form.get("name") || "").trim(), imageUrl: String(form.get("imageUrl") || "").trim() });
+      };
+      overlay.addEventListener("click", event => { if (event.target === overlay) finish(null); });
+      $("[name=name]", overlay)?.select();
+    });
   }
 
   function stickerSlug(value) {
@@ -3942,6 +4050,7 @@
     library.filter(item => !item.local && characterNames(item).length).forEach(item => {
       const publisherName = String(item.publisher || "Sem editora").trim() || "Sem editora";
       characterNames(item).forEach(characterName => {
+        if (isTeamCharacter(characterName) || isRedirectedCharacter(characterName)) return;
         const id = stickerCharacterId(item, characterName);
         if (!groups.has(id)) groups.set(id, { id, kind: "character", characterName, publisherName, items: [] });
         groups.get(id).items.push(item);
@@ -4344,6 +4453,28 @@
     }[c]));
   }
 
+  function decodeNewsText(value = "") {
+    let text = String(value);
+    if (/[ÃÂâ]/.test(text)) {
+      try {
+        text = new TextDecoder("utf-8").decode(Uint8Array.from(text, char => char.charCodeAt(0)));
+      } catch {}
+    }
+    return text
+      .replace(/&#0?39;/gi, "'")
+      .replace(/&#0?34;/gi, '"')
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/Â·/g, "·")
+      .replace(/â€™/g, "’")
+      .replace(/â€œ|â€/g, '"')
+      .replace(/â€“|â€”/g, "–")
+      .replace(/â€¢|âœ•/g, "•")
+      .replace(/Ã—/g, "×")
+      .replace(/â€¦/g, "…");
+  }
+
   function getSpreadIndexes(totalPages, spread) {
     const a = spread * 2;
     const b = a + 1;
@@ -4627,6 +4758,7 @@
   }
 
   function openEntityPage(kind, value) {
+    if (kind === "character") value = canonicalCharacterName(value);
     state.entityFilter = { kind, value };
     state.collectionFilter = { field: "all", query: "" };
     navigate({ pagina: "entidade", tipo: kind, valor: value });
@@ -4835,7 +4967,20 @@
     const value = String(text || "").trim();
     if (!value || value.length < 3) return text;
     if (["pt", "auto"].includes(String(sourceLanguage).toLowerCase())) return text;
-    const translationKey = `${sourceLanguage}:${value}`;
+    if (value.length > 420) {
+      const chunks = [];
+      let remaining = value;
+      while (remaining.length > 420) {
+        let cut = remaining.lastIndexOf(" ", 420);
+        if (cut < 180) cut = 420;
+        chunks.push(remaining.slice(0, cut).trim());
+        remaining = remaining.slice(cut).trim();
+      }
+      if (remaining) chunks.push(remaining);
+      const translatedChunks = await Promise.all(chunks.map(chunk => translateToPortuguese(chunk, sourceLanguage)));
+      return decodeNewsText(translatedChunks.join(" "));
+    }
+    const translationKey = "v3:" + sourceLanguage + ":" + value;
     if (translationCache.has(translationKey)) return translationCache.get(translationKey);
     if (translationInFlight.has(translationKey)) return translationInFlight.get(translationKey);
     const request = (async () => {
@@ -4847,7 +4992,7 @@
           if (!backend.error && backendText) {
             translationCache.set(translationKey, backendText);
             persistTranslationCache();
-            return backendText;
+            return decodeNewsText(backendText);
           }
         } catch {}
         // Com Supabase configurado, nunca voltar ao MyMemory no navegador:
@@ -4874,7 +5019,7 @@
       if (!translated || /invalid source language|error/i.test(translated)) return text;
       translationCache.set(translationKey, translated);
       persistTranslationCache();
-      return translated;
+      return decodeNewsText(translated);
     })().catch(() => text).finally(() => translationInFlight.delete(translationKey));
     translationInFlight.set(translationKey, request);
     return request;
@@ -4889,8 +5034,8 @@
     while ((node = walker.nextNode())) {
       if (!node.parentElement?.closest("script,style,code,pre") && node.nodeValue.trim().length >= 3) textNodes.push(node);
     }
-    for (let start = 0; start < textNodes.length; start += 4) {
-      await Promise.all(textNodes.slice(start, start + 2).map(async textNode => {
+    for (let start = 0; start < textNodes.length; start += 6) {
+      await Promise.all(textNodes.slice(start, start + 6).map(async textNode => {
         const leading = textNode.nodeValue.match(/^\s*/)?.[0] || "";
         const trailing = textNode.nodeValue.match(/\s*$/)?.[0] || "";
         const translated = await translateToPortuguese(textNode.nodeValue.trim(), sourceLanguage);
@@ -4927,7 +5072,7 @@
     let expanded = true;
     try { expanded = localStorage.getItem("bancaWikiQuickExpanded") !== "false"; } catch {}
     const settings = kind === "character" ? state.characterSettings : kind === "imprint" ? state.imprintSettings : new Map();
-    const customImage = settings.get(publisherKey(value))?.cover_url || "";
+    const customImage = kind === "character" ? characterSettingForName(value)?.cover_url || "" : settings.get(publisherKey(value))?.cover_url || "";
     const imageMarkup = customImage ? `<img src="${escapeHTML(proxiedImageUrl(customImage))}" alt="Imagem de ${escapeHTML(value)}" loading="lazy">` : "";
     return `<section class="entity-wiki ${expanded ? "is-expanded" : "is-collapsed"}" data-wiki-quick="${escapeHTML(character)}"><div class="entity-wiki-heading"><div class="eyebrow">Wiki rápida</div><button type="button" class="small-btn" data-wiki-toggle aria-expanded="${expanded ? "true" : "false"}">${expanded ? "Recolher" : "Expandir"}</button></div><div class="entity-wiki-layout"><div class="entity-wiki-image ${customImage ? "" : "is-loading"}" data-wiki-image aria-hidden="true">${imageMarkup}</div><div class="entity-wiki-copy" data-wiki-copy><p class="section-subtitle">Buscando informações na Wikipédia...</p></div></div></section>`;
   }
@@ -4951,7 +5096,7 @@
     if (!host || host.dataset.wikiLoading === "true" || host.dataset.wikiLoaded === "true") return;
     host.dataset.wikiLoading = "true";
     const setting = kind === "character"
-      ? state.characterSettings.get(publisherKey(value)) || {}
+      ? characterSettingForName(value) || {}
       : kind === "imprint" ? state.imprintSettings.get(publisherKey(value)) || {} : {};
     const customImage = setting.cover_url || "";
     const authoredText = String(setting.authored_text || "").trim();
@@ -5100,6 +5245,273 @@
       console.warn(`Wiki de ${kind} indisponível`, error);
       toast("Não foi possível abrir esta wiki agora.");
     }
+  }
+
+  function assignedCharactersMarkup(characterName) {
+    const setting = characterSettingForName(characterName);
+    const keys = Array.isArray(setting?.assigned_character_keys) ? setting.assigned_character_keys : [];
+    const entries = [...new Set(keys)].map(key => state.characterSettings.get(key)).filter(Boolean);
+    if (!entries.length) return "";
+    const cards = entries.map(entry => {
+      const image = entry.cover_url || wikiCharacterImageCache.get(entry.character_name) || "assets/batmanicon.jpg";
+      return `<button type="button" class="wiki-character-card" data-wiki-character="${escapeHTML(entry.character_name)}" aria-label="Ver ${escapeHTML(entry.character_name)}"><span class="wiki-character-image"><img src="${escapeHTML(imageProxyFetchUrl(image))}" alt="Imagem de ${escapeHTML(entry.character_name)}" loading="lazy"></span><strong>${escapeHTML(entry.character_name)}</strong></button>`;
+    }).join("");
+    return `<section class="section assigned-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens relacionados</h2><div class="section-subtitle">Personagens atribuídos a ${escapeHTML(characterName)}.</div></div></div><div class="wiki-character-carousel"><div class="wiki-character-track wiki-team-track">${cards}</div></div></section>`;
+  }
+
+  const CHARACTER_NEWS_SITES = [
+    { id: "ovicio", name: "O Vício", domain: "ovicio.com.br" },
+    { id: "legiao", name: "Legião dos Heróis", domain: "legiaodosherois.com.br" },
+    { id: "cbr", name: "CBR", domain: "cbr.com" },
+  ];
+
+  function newsSearchUrl(domain, character) {
+    const query = encodeURIComponent(`site:${domain} "${String(character || "").trim()}"`);
+    return `https://news.google.com/rss/search?q=${query}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+  }
+
+  function newsSearchProxyUrl(domain, character) {
+    const query = encodeURIComponent(`site:${domain} "${String(character || "").trim()}"`);
+    return `https://r.jina.ai/http://www.google.com/search?q=${query}`;
+  }
+
+  function newsRssItems(xml, site) {
+    const documentCopy = new DOMParser().parseFromString(String(xml || ""), "text/xml");
+    return [...documentCopy.querySelectorAll("item")].map(item => {
+      const title = String(item.querySelector("title")?.textContent || "").replace(/\s+-\s+[^-]+$/, "").trim();
+      let link = String(item.querySelector("link")?.textContent || "").trim();
+      try { const parsedLink = new URL(link); link = parsedLink.searchParams.get("url") || parsedLink.searchParams.get("q") || link; } catch {}
+      try { if (!(new URL(link)).hostname.toLowerCase().endsWith(site.domain)) return null; } catch { return null; }
+      const description = String(item.querySelector("description")?.textContent || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!title || !link) return null;
+      return { title, url: link, description, site: site.name, siteId: site.id };
+    }).filter(Boolean);
+  }
+
+  function randomNewsItems(items, count = 3) {
+    return [...items].sort(() => Math.random() - 0.5).slice(0, count);
+  }
+
+  function newsSearchMarkdownItems(markdown, site) {
+    const items = [];
+    const pattern = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+    let match;
+    while ((match = pattern.exec(String(markdown || "")))) {
+      let link = match[2];
+      try {
+        const parsed = new URL(link);
+        link = parsed.searchParams.get("url") || parsed.searchParams.get("q") || link;
+        const hostname = new URL(link).hostname.toLowerCase();
+        if (hostname !== site.domain && !hostname.endsWith(`.${site.domain}`)) continue;
+      } catch { continue; }
+      const title = match[1].replace(/\s+/g, " ").trim();
+      if (title && !items.some(item => item.url === link)) items.push({ title, url: link, description: "Leia a matéria completa no site de origem.", site: site.name, siteId: site.id });
+    }
+    return items;
+  }
+
+  async function searchCharacterNewsFallback(site, character) {
+    try {
+      const response = await fetchWithTimeout(newsSearchProxyUrl(site.domain, character), { cache: "no-store" }, 15000);
+      if (!response.ok) return [];
+      return newsSearchMarkdownItems(await response.text(), site);
+    } catch (error) {
+      console.warn("Busca alternativa indisponÃ­vel", error);
+      return [];
+    }
+  }
+
+  async function searchCharacterNews(character) {
+    if (sb && navigator.onLine !== false && !state.session?.offline) {
+      try {
+        const historyKey = "bancaCharacterNewsHistory:" + String(character || "").trim().toLowerCase();
+        let excludeUrls = [];
+        try { excludeUrls = JSON.parse(localStorage.getItem(historyKey) || "[]"); } catch {}
+        const result = await sb.functions.invoke("character-news", { body: { character, excludeUrls } });
+        if (!result.error && Array.isArray(result.data?.items)) {
+          try {
+            const updatedHistory = [...new Set([...excludeUrls, ...result.data.items.map(item => item.url).filter(Boolean)])].slice(-120);
+            localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
+          } catch {}
+          return result.data.items;
+        }
+        console.warn("Edge Function character-news indisponível", result.error?.message || "resposta inválida");
+      } catch (error) {
+        console.warn("Não foi possível consultar a Edge Function character-news", error);
+      }
+    }
+    if (sb) return [];
+    const results = await Promise.all(CHARACTER_NEWS_SITES.map(async site => {
+      try {
+        const response = await fetchWithTimeout(newsSearchUrl(site.domain, character), { cache: "no-store" }, 9000);
+        if (response.ok) {
+          const rssItems = newsRssItems(await response.text(), site);
+          if (rssItems.length) return rssItems;
+        }
+      } catch (error) {
+        console.warn(`Busca de notícias indisponível em ${site.name}`, error);
+        return await searchCharacterNewsFallback(site, character);
+      }
+      return await searchCharacterNewsFallback(site, character);
+    }));
+    const unique = new Map();
+    results.flat().forEach(item => { if (!unique.has(item.url)) unique.set(item.url, item); });
+    return randomNewsItems([...unique.values()]);
+  }
+
+  function characterNewsMarkup() {
+    return "";
+    return `<section class="section character-news-section" data-character-news><div class="section-head"><div><div class="eyebrow">Notícias e curiosidades</div><h2 class="section-title">Mais sobre este personagem</h2><div class="section-subtitle">Encontramos páginas recentes em sites especializados.</div></div></div><div class="character-news-grid"><div class="empty">Pesquisando notícias e curiosidades...</div></div></section>`;
+  }
+
+  function cleanNewsMarkdown(markdown, title = "") {
+    let value = String(markdown || "").replace(/\r/g, "");
+    const contentIndex = value.indexOf("Markdown Content:");
+    if (contentIndex >= 0) value = value.slice(contentIndex + "Markdown Content:".length);
+    value = value.replace(/\]\(\[(https?:\/\/[^)\]]+)\]\((https?:\/\/[^)]+)\)\)/g, "]($2)");
+    const titleIndex = title ? value.indexOf(title) : -1;
+    if (titleIndex >= 0) value = value.slice(titleIndex);
+    const cbrArticleStart = value.search(/Show me the facts\s+Explain it like.*?Give me a lighthearted recap\s*/i);
+    if (cbrArticleStart >= 0) value = value.slice(cbrArticleStart).replace(/^[^\n]*\n?/i, "");
+    value = value.replace(/\n(?:#{1,6}\s*)?(?:Leia mais sobre[^\n]*|Leia também sobre[^\n]*|Veja também:|Comentários|Fonte:)[\s\S]*$/i, "");
+    // No CBR, o extrator costuma inserir este aviso antes do texto real. Tudo
+    // que vem antes dele é a moldura da página (menu, autor, anúncio e player).
+    value = value.replace(/^[\s\S]*?Here is a fact-based summary of the story contents:\s*/i, "");
+    value = value.replace(/\nImage \d+:[^\n]*(?:\n[^\n]*)?/gi, "");
+    // Algumas páginas do CBR injetam um quiz promocional completo no corpo
+    // retornado pelo extrator. Ele não pertence à matéria.
+    const cbrQuizIndex = value.search(/\nCBR Exclusive\s*[·•-]?\s*Quiz\b/i);
+    if (cbrQuizIndex >= 0) value = value.slice(0, cbrQuizIndex);
+    const cbrPromoIndex = value.search(/\n(?:\[\s*\]\([^)]*repackz\.cbr\.com|##\s*\[Adriano Di Benedetto)/i);
+    if (cbrPromoIndex >= 0) value = value.slice(0, cbrPromoIndex);
+    // O CBR representa cards e players de vídeo como links Markdown.
+    value = value.replace(/\n[^\n]*(?:Visit|WATCH|NEXT)[^\n]*\n(?:\[(?:Video|VÃ­deo) \d+\][^\n]*\n)?[\s\S]*?(?=\n(?:Following|The series|A nova coleÃ§Ã£o|Scott Snyder's All Star))/gi, "\n");
+    value = value.replace(/\n\[(?:Video|VÃ­deo) \d+\][^\n]*\n?/gi, "\n");
+    const infoBoxIndex = value.search(/\n\\?#{1,6}\s*(?:Batman|\[Batman\]\([^)]*tag\/batman[^)]*\))\s*\n/i);
+    if (infoBoxIndex >= 0) value = value.slice(0, infoBoxIndex);
+    value = value.replace(/\n\*\*Google is updating how content is shown\.[\s\S]*$/i, "");
+    // O Jina também devolve a interface do CBR (menu, anúncios, player e rodapé).
+    // Esses elementos não fazem parte da matéria e deixam o leitor interno ilegível.
+    value = value.replace(/\n(?:#{1,6}\s*)?Batman\nFirst Film Batman:[\s\S]*$/i, "");
+    value = value.replace(/\n(?:#{1,6}\s*)?(?:Recommended|Trending|Most Popular|Comments)[\s\S]*$/i, "");
+    return value.split("\n").map(line => {
+      const normalized = line.trim();
+      if (!normalized) return "";
+      if (/^\[(?:Video|VÃ­deo) \d+\]\(https?:\/\/[^)]+\)$/i.test(normalized)
+        || /^\[[^\]]*(?:Visit|WATCH|NEXT|Remover anÃºncios)[^\]]*\]\(https?:\/\/[^)]+\)$/i.test(normalized)
+        || /^Scott Snyder's Complete All Star Batman Returns In Paperback$/i.test(normalized)) return "";
+      const cbrInterfaceNoise = /^(?:Menu|Sign in(?: now)?|Log in|Create account|Add Us|Follow|Like|Listen|Thread|More Action|Preferred Source|Upgrade to Premium|Remove Ads|Remover anúncios|Advertisement|Advertise|Now Playing|Video Player is loading\.|Play|Pause|Mute|Unmute|Current Time|Hora actual|Duration|Duração|Loaded:|Carregado:|Stream Type|Tipo de Fluxo|Seek to live|Procurar viver|Playback Rate|Chapters|Capítulos|Descriptions|descrições desligadas, selecionadas|Audio Track|Faixa de áudio|Picture-in-Picture|Fullscreen|Tela cheia|This is a modal window\.|The media could not be loaded|Não foi possível carregar a multimédia|Here is a fact-based summary of the story contents:|Try something different:|Share this article|Compartilhar|Subscribe|Newsletter|Image via .*)$/i.test(normalized)
+        || /^(?:•\s*)?(?:Chapters|Capítulos|descriptions off, selected|descrições desligadas, selecionadas|captions off, selected|legendas desligadas, seleccionadas|English|Português)$/i.test(normalized)
+        || /^(?:Video \d+|Skip Ad|Audio \d+|[\d:./×x-]+)$/i.test(normalized)
+        || /^(?:Vídeo \d+|Pular anúncio|Áudio \d+|VIGIA|PRÓXIMO|WATCH|NEXT|Reproduzir vídeo|Visite|Expandir\/Recolher)$/i.test(normalized)
+        || /^\d{1,2}:\d{2}(?:\s*\/\s*\d{1,2}:\d{2})?(?:\s+\d+[×x])?$/i.test(normalized);
+      return !cbrInterfaceNoise && !/^Image \d+(?::|$)/i.test(normalized) && !/^Pular para o conte[uú]do$/i.test(normalized)
+        && !/^Pesquisar\.\.\.$/i.test(normalized) && !/^Compartilhe:/i.test(normalized)
+        && !/^Estimated reading time:/i.test(normalized) && !/^By\s*[^\n]+$/i.test(normalized)
+        && !/^Published\s*(?:on|:)?.*$/i.test(normalized) && normalized !== title ? line : "";
+    }).join("\n");
+  }
+
+  function newsMarkdownToHtml(markdown, title = "") {
+    const lines = cleanNewsMarkdown(markdown, title).split("\n");
+    const html = [];
+    let paragraph = [];
+    const flush = () => { if (paragraph.length) { html.push(`<p>${paragraph.join(" ")}</p>`); paragraph = []; } };
+    lines.forEach(line => {
+      const value = line.trim();
+      if (!value) return flush();
+      if (/^#{1,3}\s+/.test(value)) { flush(); html.push(`<h2>${escapeHTML(value.replace(/^#{1,3}\s+/, ""))}</h2>`); return; }
+      if (/^[-*]\s+/.test(value)) { flush(); html.push(`<p>• ${escapeHTML(value.replace(/^[-*]\s+/, ""))}</p>`); return; }
+      paragraph.push(escapeHTML(value)
+        .replace(/!\[((?!tracking|pixel)[^\]]*)\]\((https?:\/\/(?!pixel\.wp\.com|gravatar\.com\/avatar|authors\/|ids(?:\d+)?\.ad\.gt|adnxs|openx|pubmatic|rubiconproject|adsrvr|doubleclick|360yield|sonobi|tapad)[^)\s]+)(?:\s+"[^"]*")?\)/gi, '<img src="$2" alt="$1" loading="lazy">')
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\\?_(.+?)\\?_/g, "<em>$1</em>")
+        .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'));
+    });
+    flush();
+    return html.join("");
+  }
+
+  async function openCharacterNewsArticle(article) {
+    article = { ...article, title: decodeNewsText(article?.title), description: decodeNewsText(article?.description) };
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop wiki-reader-backdrop";
+    overlay.innerHTML = `<article class="modal wiki-reader-modal character-news-reader"><div class="section-head"><div><div class="eyebrow">${escapeHTML(article.site)} · leitura interna</div><h2>${escapeHTML(article.title)}</h2></div><div class="wiki-reader-actions"><button type="button" class="small-btn" data-close>Fechar</button></div></div><div class="wiki-reader-content">${article.image ? `<img class="character-news-hero-image" src="${escapeHTML(article.image)}" alt="Imagem de ${escapeHTML(article.title)}" loading="lazy">` : ""}<p class="section-subtitle">Carregando matéria...</p></div></article>`;
+    $("#modal-root").appendChild(overlay);
+    $("[data-close]", overlay).onclick = () => overlay.remove();
+    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    const content = $(".wiki-reader-content", overlay);
+    const heroImage = article.image ? `<img class="character-news-hero-image" src="${escapeHTML(article.image)}" alt="Imagem de ${escapeHTML(article.title)}" loading="lazy">` : "";
+    try {
+      const target = new URL(article.url);
+      if (target.hostname === "news.google.com") {
+        const summary = article.description || article.title;
+        content.innerHTML = `${heroImage}<p>${escapeHTML(summary)}</p><p class="news-source-note">O Google News encontrou esta matéria, mas o site de origem não permitiu a extração automática do texto completo.<br><a href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">Abrir referência original em ${escapeHTML(article.site)}</a></p>`;
+        return;
+      }
+      const proxyUrl = `https://r.jina.ai/http://${target.host}${target.pathname}${target.search}`;
+      const response = await fetchWithTimeout(proxyUrl, { cache: "no-store" }, 15000);
+      if (!response.ok) throw new Error("Matéria indisponível");
+      const rawArticle = await Promise.race([
+        response.text(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Tempo limite ao ler matéria")), 10000)),
+      ]);
+      let html = newsMarkdownToHtml(rawArticle, article.title);
+      content.innerHTML = `${heroImage}${html || `<p>Não foi possível extrair o texto desta matéria.</p>`}<p class="news-source-note">Fonte: <a href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(article.site)}</a></p>`;
+      const isCbrArticle = article.siteId === "cbr"
+        || String(article.site || "").trim().toLowerCase() === "cbr"
+        || /(^|\.)cbr\.com$/i.test(target.hostname);
+      if (isCbrArticle) {
+        content.innerHTML = heroImage + '<p class="section-subtitle">Traduzindo matéria...</p>';
+        html = await Promise.race([
+          translateHtmlToPortuguese(html, "en"),
+          new Promise(resolve => setTimeout(() => resolve(html), 90000)),
+        ]);
+      }
+      content.innerHTML = `${heroImage}${html || `<p>Não foi possível extrair o texto desta matéria.</p>`}<p class="news-source-note">Fonte: <a href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(article.site)}</a></p>`;
+    } catch (error) {
+      content.innerHTML = `<p>Não foi possível carregar esta matéria dentro do site.</p><p><a href="${escapeHTML(article.url)}" target="_blank" rel="noopener noreferrer">Abrir matéria original em ${escapeHTML(article.site)}</a></p>`;
+      console.warn("Leitura interna de notícia indisponível", error);
+    }
+  }
+
+  const characterNewsCache = new Map();
+
+  async function loadCharacterNews(character) {
+    const host = $("[data-character-news]");
+    if (!host || host.dataset.newsLoading === "true" || host.dataset.newsLoaded === "true") return;
+    host.dataset.newsLoading = "true";
+    const cacheKey = String(character || "").trim().toLowerCase();
+    let items = characterNewsCache.get(cacheKey) || [];
+    if (!characterNewsCache.has(cacheKey)) {
+      try {
+      items = await Promise.race([
+        searchCharacterNews(character),
+        new Promise(resolve => setTimeout(() => resolve([]), 20000)),
+      ]);
+    } catch (error) {
+      console.warn("Notícias e curiosidades indisponíveis", error);
+    }
+    items = await Promise.all(items.map(async item => {
+      const isCbr = item.siteId === "cbr"
+        || String(item.site || "").trim().toLowerCase() === "cbr"
+        || /(^|\.)cbr\.com$/i.test(item.url || "");
+      if (!isCbr) return item;
+      const title = await translateToPortuguese(item.title, "en");
+      const description = item.description && item.description !== item.title
+        ? await translateToPortuguese(item.description, "en")
+        : title;
+      return { ...item, title, description };
+    }));
+      characterNewsCache.set(cacheKey, items);
+    }
+    const grid = $(".character-news-grid", host);
+    if (grid) grid.innerHTML = items.length
+      ? items.map((item, index) => `<button type="button" class="character-news-card" data-character-news-index="${index}">${item.image ? `<img class="character-news-card-image" src="${escapeHTML(item.image)}" alt="" loading="lazy">` : ""}<span class="eyebrow">${escapeHTML(item.site)}</span><strong>${escapeHTML(item.title)}</strong><p>${escapeHTML(item.description || `Leia notícias e curiosidades sobre ${character}.`)}</p><span class="small-btn">Ler no pop-up</span></button>`).join("")
+      : '<div class="empty">Não encontramos páginas sobre este personagem agora.</div>';
+    host._newsItems = items;
+    host.dataset.newsLoaded = "true";
+    $$('[data-character-news-index]', host).forEach(button => button.addEventListener("click", () => openCharacterNewsArticle(items[Number(button.dataset.characterNewsIndex)])));
   }
 
   async function openFandomReader(reference, existingOverlay = null) {
@@ -6408,13 +6820,19 @@
       const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(format);
       let selectedIndex = 0;
       if (!item.local && sourceCandidates.length && !isImage) {
+        selectedIndex = -1;
         for (let index = 0; index < sourceCandidates.length; index += 1) {
           if (await probeReaderSource(sourceCandidates[index])) { selectedIndex = index; break; }
           if (index === 0) {
             const fallback = sourceCandidates[1] || "nenhuma fonte reserva cadastrada";
             await reportFileFailure(item, `A fonte principal falhou ao abrir. O leitor tentou uma fonte reserva: ${fallback}`, { silent: true, automatic: true, failedUrl: sourceCandidates[0], fallbackUrl: sourceCandidates[1] });
           }
-          selectedIndex = index;
+        }
+        if (selectedIndex < 0) {
+          body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px"><h3>Arquivo indisponível</h3><p>O MediaFire não encontrou esse arquivo ou o link expirou. Verifique a URL permanente da edição ou relate o problema aos moderadores.</p><button class="btn btn-primary" data-report-file>Relatar arquivo</button></div>`;
+          controls.innerHTML = `<span class="reader-page">${escapeHTML(format.toUpperCase())}</span>`;
+          $(`[data-report-file]`, body).onclick = () => reportFileFailure(item, "O arquivo não foi encontrado na fonte cadastrada.");
+          return;
         }
         resolvedUrl = sourceCandidates[selectedIndex] || resolvedUrl;
       }
@@ -8837,9 +9255,10 @@
           <span class="cover-number">${escapeHTML(issueLabel)}</span>
           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
           <button class="card-favorite ${favoriteIds.has(item.id) ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="Salvar na estante">★</button>
+          ${isAdminProfile() ? `<button type="button" class="card-metadata-toggle" data-edit-item="${escapeHTML(item.id)}" title="Ver e editar metadados" aria-label="Ver e editar metadados">✎</button>` : ""}
         </div>
         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
-        ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
+        ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${isAdminProfile() ? "card-download-admin-offset" : ""} ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
         ${isAdminProfile() ? `<button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
         <div class="card-body">
           <div class="card-title">${escapeHTML(displayTitle)}</div>
@@ -8894,13 +9313,32 @@
       </section>`;
   }
 
+  function canonicalCharacterName(name) {
+    let current = String(name || "").trim();
+    const visited = new Set();
+    while (current && !visited.has(publisherKey(current))) {
+      const key = publisherKey(current);
+      visited.add(key);
+      const setting = state.characterSettings.get(key);
+      const target = setting?.redirect_character_key;
+      if (target) {
+        current = state.characterSettings.get(target)?.character_name || target;
+        continue;
+      }
+      if (setting?.character_name && setting.character_name !== current) {
+        current = setting.character_name;
+      } else break;
+    }
+    return current;
+  }
+
   function characterNames(item) {
     const explicit = Array.isArray(item?.characters) ? item.characters : null;
     const values = explicit || [item?.character, ...(Array.isArray(item?.secondaryCharacters) ? item.secondaryCharacters : [])];
     const names = values.flatMap(value => {
       const name = value && typeof value === "object" ? (value.name || value.character || "") : value;
       return String(name || "").split(/\s*(?:\/|\be\b)\s*/i);
-    }).map(value => String(value || "").trim()).filter(Boolean);
+    }).map(value => canonicalCharacterName(value)).filter(Boolean);
     return [...new Set(names)];
   }
 
@@ -9006,6 +9444,7 @@
     lib.filter(item => characterNames(item).length && !item.local).forEach(item => {
       // O primeiro nome é o protagonista; secundários não criam banners duplicados.
       const character = characterNames(item)[0];
+      if (isTeamCharacter(character) || isRedirectedCharacter(character)) return;
       if (!groups.has(character)) groups.set(character, []);
       groups.get(character).push(item);
     });
@@ -9143,11 +9582,13 @@
     lib.filter(item => item.type === "comic").forEach(item => characterNames(item).forEach(value => {
       const name = String(value || "").trim();
       const key = publisherKey(name);
-      if (!name || characterEntries.has(key)) return;
+      if (!name || isTeamCharacter(name) || isRedirectedCharacter(name) || characterEntries.has(key)) return;
       characterEntries.set(key, { name, items: [] });
     }));
     lib.filter(item => item.type === "comic").forEach(item => characterNames(item).forEach(value => {
-      const key = publisherKey(String(value || "").trim());
+      const name = String(value || "").trim();
+      if (isTeamCharacter(name) || isRedirectedCharacter(name)) return;
+      const key = publisherKey(name);
       if (characterEntries.has(key)) characterEntries.get(key).items.push(item);
     }));
     const pinnedCharacters = [...characterEntries.values()].filter(entry => state.characterSettings.get(publisherKey(entry.name))?.is_pinned);
@@ -9287,8 +9728,15 @@
         if (hasLegacyCharacter) filter = { ...requestedFilter, value: legacyValue };
       }
     }
+    if (filter.kind === "character") {
+      const redirectedName = canonicalCharacterName(filter.value);
+      if (redirectedName && publisherKey(redirectedName) !== publisherKey(filter.value) && !isAdminProfile()) {
+        queueMicrotask(() => openEntityPage("character", redirectedName));
+        return '<div class="content"><div class="empty">Redirecionando para o personagem principal...</div></div>';
+      }
+    }
     const normalizedValue = String(filter.value || "").trim().toLowerCase();
-    const requestedCharacterSetting = filter.kind === "character" ? state.characterSettings.get(publisherKey(filter.value)) : null;
+    const requestedCharacterSetting = filter.kind === "character" ? characterSettingForName(filter.value) : null;
     if (requestedCharacterSetting?.is_hidden === true && !isAdminProfile()) {
       return '<div class="content"><div class="empty">Este personagem está oculto no catálogo.</div></div>';
     }
@@ -9314,22 +9762,46 @@
       const factionRole = state.factionRoles.find(role => role.faction_id === factionId && role.user_id === state.session?.user?.id);
       const canFeatureInFaction = Boolean(factionId && ["leader", "curator"].includes(factionRole?.role));
       const isFactionPinned = canFeatureInFaction && state.factionPinnedImprints.has(`${factionId}:${imprintKey}`);
-      const entityCards = uniqueCatalogItems(items).map(item => item.seriesId ? seriesCard(item) : card(item)).join("");
+      const currentPublishers = new Set(items.map(item => String(item.publisher || "").trim().toLocaleLowerCase("pt-BR")).filter(Boolean));
+      const relatedImprints = new Map();
+      if (currentPublishers.size) {
+        visibleCatalogItems(state.db.library, isAdminProfile()).forEach(item => {
+          const publisher = String(item.publisher || "").trim().toLocaleLowerCase("pt-BR");
+          const imprint = String(item.imprint || "").trim();
+          if (!publisher || !currentPublishers.has(publisher) || !imprint || publisherKey(imprint) === imprintKey) return;
+          if (!relatedImprints.has(imprint)) relatedImprints.set(imprint, []);
+          relatedImprints.get(imprint).push(item);
+        });
+      }
+      const relatedImprintCards = [...relatedImprints.entries()]
+        .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+        .map(([imprint, imprintItems]) => {
+          const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
+          const relatedSetting = state.imprintSettings.get(publisherKey(imprint));
+          const cover = relatedSetting?.cover_url ? proxiedImageUrl(relatedSetting.cover_url) : coverFor(representative);
+          return `<button class="publisher-card imprint-card" type="button" data-imprint="${escapeHTML(imprint)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(imprint)}</strong><span>${imprintItems.length} edição(ões)</span></div></button>`;
+        }).join("");
+      const relatedImprintsMarkup = relatedImprintCards ? `<section class="section imprint-carousel-section related-imprints-section"><div class="section-head"><div><h2 class="section-title">Outros selos<span class="related-imprints-publisher-suffix"> da editora</span></h2><div class="section-subtitle">Conheça outros selos presentes no catálogo da mesma editora.</div></div><div class="carousel-controls" aria-label="Navegação de outros selos"><button class="carousel-control" type="button" data-imprint-carousel-prev aria-label="Selo anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-imprint-carousel-next aria-label="Próximo selo" title="Próximo">›</button></div></div><div class="imprint-carousel" data-imprint-carousel aria-label="Outros selos da editora"><div class="imprint-carousel-track">${relatedImprintCards}</div></div></section>` : "";
+      const imprintCharacterRail = imprintCharacterMarkup(items);
+      const entityCards = ((uniqueCatalogItems(items).map(item => item.seriesId ? seriesCard(item) : card(item)).join("") || '<div class="empty">Nenhuma edição encontrada.</div>') + (relatedImprintsMarkup ? `</div></section>${relatedImprintsMarkup}<section class="section"><div class="results-grid">` : ""));
       const factionPinButton = canFeatureInFaction ? `<button class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-imprint-pin="${escapeHTML(filter.value)}" data-faction-imprint-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "★ Fixado na facção" : "☆ Fixar na facção"}</button>` : "";
-      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section></div>`;
+      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${imprintCharacterRail}</div>`;
     }
     if (filter.kind !== "publisher") {
       const entityCards = uniqueCatalogItems(items).map(item => filter.kind === "character" && item.seriesId ? seriesCard(item) : card(item)).join("");
       if (filter.kind === "character") {
         const characterName = String(filter.value || "").trim();
-        const characterKey = publisherKey(characterName);
+         const characterKey = publisherKey(characterName);
+         const characterSetting = characterSettingForName(characterName) || {};
         const saved = state.savedCharacterKeys.has(characterKey);
         const canManage = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-        const hidden = state.characterSettings.get(characterKey)?.is_hidden === true;
+        const hidden = characterSetting.is_hidden === true;
         const actions = `<div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-character="${escapeHTML(characterName)}">${saved ? "★ Personagem salvo" : "☆ Salvar personagem"}</button>${canManage ? `<button class="small-btn" data-character-settings="${escapeHTML(characterName)}">Configurar personagem</button>` : ""}${isAdminProfile() ? `<button class="small-btn danger" data-character-visibility="${escapeHTML(characterName)}">${hidden ? "Mostrar personagem" : "Ocultar personagem"}</button>` : ""}</div>`;
         const seriesCount = new Set(filteredItems.filter(item => item.seriesId).map(item => item.seriesId)).size;
         const characterCount = `${seriesCount} série(s) · ${filteredItems.length} edição(ões)`;
-        return `<div class="content publisher-page character-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Personagem</div><h1 class="section-title">${escapeHTML(characterName)}</h1><div class="section-subtitle">${characterCount}</div></div>${actions}</div>${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section></div>`;
+         const fanartUrls = String(characterSetting.deviantart_fanart_image_urls || "").split(/\r?\n/).map(url => url.trim()).filter(url => /^https:\/\//i.test(url));
+         const fanartMarkup = characterSetting.deviantart_fanarts_enabled && (fanartUrls.length || characterSetting.deviantart_gallery_url) ? `<section class="section character-fanart-section"><div class="section-head"><div><div class="eyebrow">Arte da comunidade</div><h2 class="section-title">Fanarts de ${escapeHTML(characterName)}</h2><div class="section-subtitle">Trabalhos compartilhados por artistas no DeviantArt.</div></div></div><div class="character-fanart-grid">${fanartUrls.length ? fanartUrls.map((url, index) => `<div class="character-fanart-card"><img src="${escapeHTML(url)}" alt="Fanart ${index + 1} de ${escapeHTML(characterName)}" loading="lazy"><span>Fanart da comunidade</span></div>`).join("") : `<div class="character-fanart-empty-card" data-deviantart-oembed="${escapeHTML(characterSetting.deviantart_gallery_url)}"><strong>Carregando fanart...</strong><span>A imagem será exibida aqui.</span></div>`}</div></section>` : "";
+          return `<div class="content publisher-page character-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Personagem</div><h1 class="section-title">${escapeHTML(characterName)}</h1><div class="section-subtitle">${characterCount}</div></div>${actions}</div>${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${fanartMarkup}${assignedCharactersMarkup(characterName)}${characterNewsMarkup()}</div>`;
       }
       const countLabel = filter.kind === "character" ? `${items.filter(item => item.seriesId).length} série(s) · ${items.length} edição(ões)` : `${items.length} edição(ões)`;
       return `<div class="content"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · ${escapeHTML(title)}</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${countLabel}</div></div><button class="small-btn" data-section="home">Voltar ao início</button></div>${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || `<div class="empty">Nenhuma edição encontrada.</div>`}</div></section></div>`;
@@ -9373,7 +9845,18 @@
         .join("");
     };
     const imprintMarkup = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR")).map(([imprint, initials]) => `<section class="search-imprint publisher-imprint"><div class="section-head"><div><h2 class="section-title">${escapeHTML(imprint)}</h2><div class="section-subtitle">Selo</div></div></div>${initialOrder.filter(initial => initials.has(initial)).map(initial => `<section class="search-initial"><h3 class="search-initial-title">${initial}</h3><div class="results-grid publisher-initial-grid">${publisherGroupMarkup(initials.get(initial))}</div></section>`).join("")}</section>`).join("");
-    const publisherCharacters = publisherCharacterMarkup(allItems);
+    const publisherImprintCards = [...grouped.entries()]
+      .filter(([imprint]) => imprint !== "Sem selo")
+      .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+      .map(([imprint, initials]) => {
+        const imprintItems = [...initials.values()].flat();
+        const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
+        const imprintSetting = state.imprintSettings.get(publisherKey(imprint));
+        const cover = imprintSetting?.cover_url ? proxiedImageUrl(imprintSetting.cover_url) : coverFor(representative);
+        return `<button class="publisher-card imprint-card" type="button" data-imprint="${escapeHTML(imprint)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(imprint)}</strong><span>${imprintItems.length} edição(ões)</span></div></button>`;
+      }).join("");
+    const publisherImprintsMarkup = publisherImprintCards ? `<section class="section imprint-carousel-section publisher-imprints-section"><div class="section-head"><div><h2 class="section-title">Todos os selos</h2><div class="section-subtitle">Explore todos os selos desta editora.</div></div><div class="carousel-controls" aria-label="Navegação dos selos da editora"><button class="carousel-control" type="button" data-imprint-carousel-prev aria-label="Selo anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-imprint-carousel-next aria-label="Próximo selo" title="Próximo">›</button></div></div><div class="imprint-carousel" data-imprint-carousel aria-label="Todos os selos da editora"><div class="imprint-carousel-track">${publisherImprintCards}</div></div></section>` : "";
+    const publisherCharacters = publisherCharacterMarkup(allItems) + publisherImprintsMarkup;
     return `<div class="content publisher-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Editora</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) da editora</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button>${canManage ? `<button class="small-btn" data-publisher-settings="${escapeHTML(filter.value)}">Configurar editora</button>` : ""}</div></div>${wikiMarkup}${setting?.is_pinned ? '<div class="publisher-pin-badge">★ Editora fixada no carrossel</div>' : ""}${imprintMarkup || '<div class="empty">Nenhuma edição encontrada.</div>'}${publisherCharacters}${publisherFansMarkup(filter.value)}</div>`;
   }
 
@@ -9485,7 +9968,7 @@
     return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}"${disabled}>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
   }
 
-  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "collections"];
+  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "teams", "collections", "heroes", "villains", "antiheroes"];
 
   const FIXED_SHELF_SECTION_ORDER = ["saved", "series-saved", "read", "completed", "liked"];
 
@@ -9601,7 +10084,10 @@
   function normalizeComicSectionOrder(value) {
     const saved = Array.isArray(value) ? value.filter(key => COMIC_SECTION_ORDER.includes(key)) : [];
     const unique = [...new Set(saved)];
-    return [...unique, ...COMIC_SECTION_ORDER.filter(key => !unique.includes(key))];
+    const missing = COMIC_SECTION_ORDER.filter(key => !unique.includes(key));
+    const charactersIndex = unique.indexOf("characters");
+    if (!unique.includes("teams") && charactersIndex >= 0) unique.splice(charactersIndex + 1, 0, "teams");
+    return [...unique, ...missing.filter(key => key !== "teams")];
   }
 
   function moveComicSection(key, direction) {
@@ -9649,7 +10135,12 @@
       if (title === "series") return "series";
       if (title === "oneshots") return "oneshots";
       if (title === "editoras") return "publishers";
+      if (title === "equipes") return "teams";
       if (title.includes("personagens")) return "characters";
+      if (title === "herois") return "heroes";
+      if (title === "viloes") return "villains";
+      if (title === "anti-herois") return "antiheroes";
+      if (title === "secundarios e apoio") return "support";
       if (title.includes("colecoes")) return "collections";
       return null;
     };
@@ -9781,8 +10272,8 @@
   }
 
   function savedCharactersMarkup(characters = []) {
-    const visibleCharacters = characters.filter(character => !state.characterSettings.get(publisherKey(character.character_name || ""))?.is_hidden || isAdminProfile());
-    return `<section class="section saved-publishers saved-characters"><div class="section-head"><div><h2 class="section-title">Personagens salvos</h2><div class="section-subtitle">Personagens acompanhados por este perfil.</div></div></div><div class="saved-publishers-list">${visibleCharacters.map(character => { const name = character.character_name || "Personagem"; const setting = state.characterSettings.get(publisherKey(name)); const image = setting?.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg"; return `<article class="saved-publisher-card saved-character-card" data-character-card="${escapeHTML(name)}" role="link" tabindex="0"><img class="saved-entity-image" src="${escapeHTML(image)}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"><div class="saved-entity-copy"><strong>${escapeHTML(name)}</strong><button class="small-btn" type="button" data-character="${escapeHTML(name)}">Abrir personagem</button></div></article>`; }).join("") || '<div class="empty">Nenhum personagem salvo.</div>'}</div></section>`;
+    const visibleCharacters = characters.filter(character => !isTeamCharacter(character.character_name || "") && !isRedirectedCharacter(character.character_name || "") && (!state.characterSettings.get(publisherKey(character.character_name || ""))?.is_hidden || isAdminProfile()));
+    return `<section class="section saved-publishers saved-characters"><div class="section-head"><div><h2 class="section-title">Personagens salvos</h2><div class="section-subtitle">Personagens acompanhados por este perfil.</div></div></div><div class="saved-publishers-list">${visibleCharacters.map(character => { const setting = characterSettingForName(character.character_name || ""); const name = setting?.character_name || character.character_name || "Personagem"; const image = setting?.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg"; return `<article class="saved-publisher-card saved-character-card" data-character-card="${escapeHTML(name)}" role="link" tabindex="0"><img class="saved-entity-image" src="${escapeHTML(image)}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"><div class="saved-entity-copy"><strong>${escapeHTML(name)}</strong><button class="small-btn" type="button" data-character="${escapeHTML(name)}">Abrir personagem</button></div></article>`; }).join("") || '<div class="empty">Nenhum personagem salvo.</div>'}</div></section>`;
   }
 
   function savedImprintsMarkup(imprints = []) {
@@ -11004,7 +11495,9 @@
       return shelfCollectionMarkup(category.name, items, `${publicPrefix}category:${category.id}`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, extra, null, category.isSeries === true);
     }).join("");
     if (own || categories.length) categoryMarkup = `<section class="section shelf-categories"><div class="section-head shelf-categories-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div>${canEditPersonalCollections ? '<button class="small-btn" data-shelf-new-category>+ Nova coleção</button>' : ""}</div>${categoryMarkup || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>`;
-    return `<div class="content shelf-page${own ? "" : " public-profile-page"}"><div class="profile-header">${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile?.username || "")}</div>${profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : own ? "" : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(own ? state.achievements : profileState?.achievements)} </div><div class="profile-actions">${actions}</div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div>${own ? '<button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button>' : ""}</div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${savedItems.visible !== false ? shelfCollectionMarkup("Salvos", savedItems.items || savedItems, `${publicPrefix}saved`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${savedSeries.visible !== false ? shelfCollectionMarkup("Séries salvas", savedSeries.items || savedSeries, `${publicPrefix}series-saved`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, "", null, true) : ""}${readItems.visible !== false ? shelfCollectionMarkup("Lidos", readItems.items || readItems, `${publicPrefix}read`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${completedItems.visible !== false ? shelfCollectionMarkup("Concluídos", completedItems.items || completedItems, `${publicPrefix}completed`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, "", null, true) : ""}${likedItems.visible !== false ? shelfCollectionMarkup("Curtidos", likedItems.items || likedItems, `${publicPrefix}liked`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${categoryMarkup}</div>`;
+    const ownTop10Profile = own || String(profile?.id || "") === String(state.session?.user?.id || "");
+    const profileTop10Lists = (own ? state.top10Lists : (profileState?.top10Lists || [])).filter(list => ownTop10Profile || list.is_public !== false);
+    return `<div class="content shelf-page${own ? "" : " public-profile-page"}"><div class="profile-header">${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile?.username || "")}</div>${profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : own ? "" : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(own ? state.achievements : profileState?.achievements)} </div><div class="profile-actions">${actions}</div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div>${own ? '<button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button>' : ""}</div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${savedItems.visible !== false ? shelfCollectionMarkup("Salvos", savedItems.items || savedItems, `${publicPrefix}saved`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${savedSeries.visible !== false ? shelfCollectionMarkup("Séries salvas", savedSeries.items || savedSeries, `${publicPrefix}series-saved`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, "", null, true) : ""}${readItems.visible !== false ? shelfCollectionMarkup("Lidos", readItems.items || readItems, `${publicPrefix}read`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${completedItems.visible !== false ? shelfCollectionMarkup("Concluídos", completedItems.items || completedItems, `${publicPrefix}completed`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, "", null, true) : ""}${likedItems.visible !== false ? shelfCollectionMarkup("Curtidos", likedItems.items || likedItems, `${publicPrefix}liked`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${categoryMarkup}<div class="shelf-tab-panel shelf-top10-panel" data-shelf-tab-panel="top10">${top10Markup(profileTop10Lists, ownTop10Profile)}</div></div>`;
   }
 
   function renderShelfPage() {
@@ -11049,7 +11542,7 @@
     const normalized = String(query || "").trim().toLowerCase();
     if (!normalized) return items;
     return items.filter(item => {
-      const values = field === "tag" ? (item.tags || []) : field === "all" ? [item.title, item.seriesTitle, item.author, item.publisher, item.character, ...(item.tags || [])] : [item[field]];
+      const values = field === "tag" ? (item.tags || []) : field === "character" ? characterNames(item) : field === "all" ? [item.title, item.seriesTitle, item.author, item.publisher, ...characterNames(item), ...(item.tags || [])] : [item[field]];
       return values.some(value => String(value || "").toLowerCase().includes(normalized));
     });
   }
@@ -11359,7 +11852,7 @@
 
   function renderPublicProfilePage() {
     const publicState = state.publicProfile;
-    if (!publicState || publicState.loading) return '<div class="content"><div class="empty">Carregando perfil...</div></div>';
+    if (!publicState || publicState.loading || (publicState.collectionId && publicState.detailsLoading)) return '<div class="content"><div class="empty">Carregando perfil...</div></div>';
     if (publicState.error) return `<div class="content"><div class="empty">${escapeHTML(publicState.error)}</div></div>`;
     const profile = publicState.profile;
     if (publicState.blocked) return `<div class="content public-profile-page"><section class="section blocked-profile-notice"><div class="eyebrow">Privacidade</div><h1 class="section-title">Perfil indisponível</h1><p>${publicState.blockedByMe ? "Você bloqueou este usuário. Ele não pode enviar mensagens, comentar no seu mural ou acessar seu histórico, coleções e foto." : "Este perfil não está disponível para você."}</p><div class="profile-actions"><button class="small-btn" data-section="home">Voltar ao início</button>${publicState.blockedByMe ? `<button class="small-btn" data-unblock-profile>Desbloquear</button>` : ""}</div></section></div>`;
@@ -11425,7 +11918,7 @@
 
   function renderCatalogLegacyBase(type = null) {
     const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
-     const characterCarousel = type === "comic" ? characterWikiCarouselMarkup(items) : "";
+     const characterCarousel = type === "comic" ? `${characterWikiCarouselMarkup(items)}${teamWikiCarouselMarkup(items)}` : "";
     return `
       <div class="content">
         <div class="section-head">
@@ -11444,7 +11937,7 @@
     items.forEach(item => characterNames(item).forEach(name => {
       const character = String(name || "").trim();
       const key = character.toLocaleLowerCase("pt-BR");
-      if (character && !characters.has(key)) characters.set(key, character);
+      if (character && !isTeamCharacter(character) && !isRedirectedCharacter(character) && !characters.has(key)) characters.set(key, character);
     }));
     const entries = [...characters.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
     if (!entries.length) return "";
@@ -11458,6 +11951,263 @@
     return `<section class="section wiki-character-carousel-section"><div class="section-head"><div><h2 class="section-title">Personagens</h2><div class="section-subtitle">Explore os personagens presentes nos quadrinhos.</div></div></div><div class="wiki-character-carousel"><div class="wiki-character-track">${repeated}</div></div></section>`;
   }
 
+  function teamWikiCarouselMarkup(items) {
+    const teams = new Map();
+    state.characterSettings.forEach(setting => {
+      if (setting?.character_type !== "team") return;
+      const team = String(setting.character_name || "").trim();
+      if (team && !isRedirectedCharacter(team)) teams.set(publisherKey(team), team);
+    });
+    items.forEach(item => characterNames(item).forEach(name => {
+      const team = String(name || "").trim();
+      if (team && isTeamCharacter(team) && !isRedirectedCharacter(team) && !teams.has(publisherKey(team))) teams.set(publisherKey(team), team);
+    }));
+    const entries = [...teams.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    if (!entries.length) return "";
+    const cards = entries.map(team => {
+      const setting = state.characterSettings.get(publisherKey(team)) || {};
+      const image = setting.cover_url || wikiCharacterImageCache.get(team) || "assets/batmanicon.jpg";
+      return `<button type="button" class="wiki-character-card" data-wiki-character="${escapeHTML(team)}" aria-label="Ver equipe ${escapeHTML(team)}"><span class="wiki-character-image"><img src="${escapeHTML(imageProxyFetchUrl(image))}" alt="Imagem de ${escapeHTML(team)}" loading="lazy"></span><strong>${escapeHTML(team)}</strong></button>`;
+    }).join("");
+    return `<section class="section wiki-team-carousel-section"><div class="section-head"><div><h2 class="section-title">Equipes</h2><div class="section-subtitle">Explore as equipes presentes nos quadrinhos.</div></div></div><div class="wiki-character-carousel"><div class="wiki-character-track wiki-team-track">${cards}</div></div></section>`;
+  }
+
+  async function loadTop10Lists(ownerId) {
+    if (!sb || !ownerId) return [];
+    const listsResult = await sb.from("profile_top10_lists").select("id, owner_id, name, is_public, created_at, updated_at").eq("owner_id", ownerId).order("created_at", { ascending: true });
+    if (listsResult.error || !listsResult.data?.length) return [];
+    const ids = listsResult.data.map(list => list.id);
+    const itemsResult = await sb.from("profile_top10_items").select("id, list_id, character_key, character_name, image_url, rank").in("list_id", ids).order("rank", { ascending: true });
+    const itemsByList = new Map(ids.map(id => [id, []]));
+    (itemsResult.data || []).forEach(item => itemsByList.get(item.list_id)?.push(item));
+    return listsResult.data.map(list => ({ ...list, items: itemsByList.get(list.id) || [] }));
+  }
+
+  function top10CharacterEntries() {
+    const characters = new Map();
+    state.db.library.forEach(item => characterNames(item).forEach(rawName => {
+      const name = String(rawName || "").trim();
+      const key = name.toLocaleLowerCase("pt-BR");
+      if (name && !isTeamCharacter(name) && !isRedirectedCharacter(name) && !characters.has(key)) characters.set(key, name);
+    }));
+    return [...characters.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  }
+
+  function top10Markup(lists = [], own = false) {
+    const entries = top10CharacterEntries();
+    const cards = lists.map(list => {
+      const items = [...(list.items || [])].sort((a, b) => a.rank - b.rank);
+      const itemMarkup = items.map((item, index) => {
+        const setting = characterSettingForName(item.character_name || "");
+        const image = item.image_url || setting?.cover_url || wikiCharacterImageCache.get(item.character_name) || "assets/batmanicon.jpg";
+        return `<li class="top10-item"><span class="top10-rank">${index + 1}</span><img src="${escapeHTML(image)}" data-top10-character-image="${escapeHTML(item.character_name)}" alt="Imagem de ${escapeHTML(item.character_name)}" loading="lazy"><strong>${escapeHTML(item.character_name)}</strong>${own ? `<span class="top10-item-actions"><button class="small-btn" data-top10-move="up" data-top10-list="${escapeHTML(list.id)}" data-top10-item="${escapeHTML(item.id)}" ${index === 0 ? "disabled" : ""}>↑</button><button class="small-btn" data-top10-move="down" data-top10-list="${escapeHTML(list.id)}" data-top10-item="${escapeHTML(item.id)}" ${index === items.length - 1 ? "disabled" : ""}>↓</button><button class="small-btn danger" data-top10-remove="${escapeHTML(item.id)}" data-top10-list="${escapeHTML(list.id)}">Remover</button></span>` : ""}</li>`;
+      }).join("");
+      return `<article class="top10-list-card" data-top10-list-card="${escapeHTML(list.id)}"><div class="section-head"><div><h3>${escapeHTML(list.name)}</h3><div class="section-subtitle">${items.length}/10 personagens</div></div>${own ? `<button class="small-btn danger" data-top10-delete-list="${escapeHTML(list.id)}">Excluir lista</button>` : `<span class="shelf-visibility is-public">${list.is_public === false ? "Privada" : "Pública"}</span>`}</div><ol class="top10-items">${itemMarkup || '<li class="empty">Escolha personagens para montar este ranking.</li>'}</ol>${own && items.length < 10 ? `<div class="top10-add-form"><input type="search" placeholder="Digite o nome do personagem..." aria-label="Buscar personagem para ${escapeHTML(list.name)}" data-top10-search-list="${escapeHTML(list.id)}" autocomplete="off"><div class="top10-suggestions" data-top10-suggestions="${escapeHTML(list.id)}"></div></div>` : ""}</article>`;
+    }).join("");
+    return `<section class="section top10-section" data-top10-panel><div class="section-head"><div><h2 class="section-title">Top 10</h2><div class="section-subtitle">Crie rankings personalizados de heróis, vilões, equipes, favoritos ou qualquer tema.</div></div>${own ? '<button class="small-btn" data-top10-new-list>+ Novo Top 10</button>' : ''}</div>${cards || `<div class="empty">${own ? "Crie seu primeiro ranking para começar." : "Este perfil ainda não criou um Top 10 público."}</div>`}</section>`;
+  }
+
+  function currentTop10Context() {
+    const own = state.section === "shelf";
+    return { own, lists: own ? state.top10Lists : (state.publicProfile?.top10Lists || []) };
+  }
+
+  function editableTop10Lists() {
+    return state.section === "public-profile" ? (state.publicProfile?.top10Lists || []) : state.top10Lists;
+  }
+
+  function replaceEditableTop10Lists(lists) {
+    if (state.section === "public-profile" && state.publicProfile) state.publicProfile.top10Lists = lists;
+    else state.top10Lists = lists;
+  }
+
+  async function saveTop10Items(list, items) {
+    const result = await sb.from("profile_top10_items").delete().eq("list_id", list.id);
+    if (result.error) return result;
+    return items.length ? await sb.from("profile_top10_items").insert(items.map((item, index) => ({ list_id: list.id, character_key: item.character_key, character_name: item.character_name, image_url: item.image_url || null, rank: index + 1 }))) : { error: null };
+  }
+
+  async function addTop10Character(list, key, name) {
+    if (!list || !key || !name || (list.items || []).length >= 10) return;
+    if ((list.items || []).some(item => item.character_key === key)) return toast("Esse personagem já está neste ranking.");
+    const items = [...(list.items || []), { character_key: key, character_name: name }];
+    await updateTop10Items(list, items, "Não foi possível atualizar o ranking.");
+  }
+
+  async function updateTop10Items(list, items, errorMessage) {
+    const previousItems = list.items || [];
+    state.top10Revision += 1;
+    list.items = items.map((item, index) => ({ ...item, rank: index + 1, id: item.id || `top10-local-${Date.now()}-${index}` }));
+    updateTop10Dom(list, previousItems, list.items);
+    state.top10PendingOperations += 1;
+    const result = await saveTop10Items(list, list.items);
+    state.top10PendingOperations = Math.max(0, state.top10PendingOperations - 1);
+    if (!result.error) return;
+    list.items = previousItems;
+    render();
+    toast(result.error.message || errorMessage);
+  }
+
+  function updateTop10Dom(list, previousItems, nextItems) {
+    const card = $(`[data-top10-list-card="${list.id}"]`);
+    const listElement = $(".top10-items", card);
+    if (!card || !listElement) return;
+    const temporary = document.createElement("div");
+    temporary.innerHTML = top10Markup([list], true);
+    const nextRows = [...temporary.querySelectorAll(".top10-item")];
+    const rowFor = item => nextRows.find(row => [...row.querySelectorAll("[data-top10-item]")].some(button => String(button.dataset.top10Item) === String(item.id)));
+    const currentRows = new Map([...listElement.querySelectorAll(".top10-item")].map(row => {
+      const button = row.querySelector("[data-top10-item], [data-top10-remove]");
+      return [button?.dataset.top10Item || button?.dataset.top10Remove, row];
+    }));
+    nextItems.forEach(item => {
+      let row = currentRows.get(String(item.id));
+      if (!row) {
+        row = rowFor(item);
+        if (row) {
+          listElement.appendChild(row);
+          row.querySelectorAll("[data-top10-move], [data-top10-remove]").forEach(button => button.addEventListener("click", async event => {
+            event.stopPropagation();
+            const currentList = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10List));
+            if (!currentList) return;
+            const currentItems = [...(currentList.items || [])].sort((a, b) => a.rank - b.rank);
+            const index = currentItems.findIndex(entry => String(entry.id) === String(button.dataset.top10Item || button.dataset.top10Remove));
+            if (button.dataset.top10Remove) currentItems.splice(index, 1);
+            else {
+              const target = button.dataset.top10Move === "up" ? index - 1 : index + 1;
+              if (index < 0 || target < 0 || target >= currentItems.length) return;
+              [currentItems[index], currentItems[target]] = [currentItems[target], currentItems[index]];
+            }
+            await updateTop10Items(currentList, currentItems, "Não foi possível atualizar o ranking.");
+          }));
+        }
+      }
+      if (row) listElement.appendChild(row);
+    });
+    [...listElement.querySelectorAll(".top10-item")].forEach(row => {
+      const button = row.querySelector("[data-top10-item], [data-top10-remove]");
+      const id = button?.dataset.top10Item || button?.dataset.top10Remove;
+      if (!nextItems.some(item => String(item.id) === String(id))) row.remove();
+    });
+    const empty = $(".empty", listElement);
+    if (nextItems.length) empty?.remove();
+    const count = $(".section-head .section-subtitle", card);
+    if (count) count.textContent = `${nextItems.length}/10 personagens`;
+    const addForm = $(".top10-add-form", card);
+    if (addForm) addForm.hidden = nextItems.length >= 10;
+    bindTop10DragRows(listElement);
+    ensureTop10EditButtons(card);
+  }
+
+  function bindTop10DragRows(container) {
+    if (!container) return;
+    container.querySelectorAll(".top10-item").forEach(row => {
+      const control = row.querySelector("[data-top10-item]");
+      if (!control || row.dataset.top10DragBound === "true") return;
+      row.draggable = true;
+      row.dataset.top10DragList = control.dataset.top10List;
+      row.dataset.top10DragItem = control.dataset.top10Item;
+      row.dataset.top10DragBound = "true";
+      row.addEventListener("dragstart", event => {
+        row.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", row.dataset.top10DragItem);
+      });
+      row.addEventListener("dragover", event => {
+        event.preventDefault();
+        const dragging = container.querySelector(".top10-item.is-dragging");
+        if (!dragging || dragging === row) return;
+        const before = event.clientY < row.getBoundingClientRect().top + row.offsetHeight / 2;
+        container.insertBefore(dragging, before ? row : row.nextSibling);
+      });
+      row.addEventListener("dragend", async () => {
+        row.classList.remove("is-dragging");
+        const list = editableTop10Lists().find(entry => String(entry.id) === String(row.dataset.top10DragList));
+        if (!list) return;
+        const orderedIds = [...container.querySelectorAll(".top10-item")].map(item => String(item.dataset.top10DragItem));
+        const currentItems = [...(list.items || [])].sort((a, b) => a.rank - b.rank);
+        const items = orderedIds.map(id => currentItems.find(item => String(item.id) === id)).filter(Boolean);
+        if (items.length !== currentItems.length || items.every((item, index) => String(item.id) === String(currentItems[index].id))) return;
+        await updateTop10Items(list, items, "Não foi possível reordenar o ranking.");
+      });
+    });
+  }
+
+  function ensureTop10EditButtons(scope = document) {
+    scope.querySelectorAll?.('[data-top10-list-card] .top10-item').forEach(row => {
+      const removeButton = $("[data-top10-remove]", row);
+      if (!removeButton || $("[data-top10-edit-item]", row)) return;
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "small-btn";
+      editButton.dataset.top10EditItem = removeButton.dataset.top10Remove;
+      editButton.dataset.top10EditList = removeButton.dataset.top10List;
+      editButton.textContent = "Editar";
+      removeButton.before(editButton);
+    });
+  }
+
+  function alignmentWikiCarouselMarkup(items, alignment, title, subtitle) {
+    const entities = new Map();
+    items.forEach(item => characterNames(item).forEach(name => {
+      const entity = String(name || "").trim();
+      const setting = state.characterSettings.get(publisherKey(entity));
+      if (entity && setting?.character_alignment === alignment && !entities.has(publisherKey(entity))) entities.set(publisherKey(entity), entity);
+    }));
+    const entries = [...entities.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    if (!entries.length) return "";
+    const cards = entries.map(entity => {
+      const setting = state.characterSettings.get(publisherKey(entity)) || {};
+      const image = setting.cover_url || wikiCharacterImageCache.get(entity) || "assets/batmanicon.jpg";
+      return `<button type="button" class="wiki-character-card" data-wiki-character="${escapeHTML(entity)}" aria-label="Ver ${escapeHTML(entity)}"><span class="wiki-character-image"><img src="${escapeHTML(imageProxyFetchUrl(image))}" alt="Imagem de ${escapeHTML(entity)}" loading="lazy"></span><strong>${escapeHTML(entity)}</strong></button>`;
+    }).join("");
+    return `<section class="section wiki-alignment-carousel-section"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle">${escapeHTML(subtitle)}</div></div></div><div class="wiki-character-carousel"><div class="wiki-character-track wiki-alignment-track">${cards}</div></div></section>`;
+  }
+
+  function alignmentWikiCarouselsMarkup(items) {
+    return [
+      ["hero", "Heróis", "Explore os heróis presentes nos quadrinhos."],
+      ["villain", "Vilões", "Explore os vilões presentes nos quadrinhos."],
+      ["antihero", "Anti-heróis", "Explore os anti-heróis presentes nos quadrinhos."],
+      ["support", "Secundários e apoio", "Explore os personagens secundários e de apoio."]
+    ].map(([alignment, title, subtitle]) => alignmentWikiCarouselMarkup(items, alignment, title, subtitle)).join("");
+  }
+
+  function imprintCharacterMarkup(items) {
+    const characters = new Map();
+    items.forEach(item => {
+      const storyKey = String(item.seriesId || item.id || "");
+      characterNames(item).forEach(name => {
+        const character = String(name || "").trim();
+        const key = character.toLocaleLowerCase("pt-BR");
+        if (!character || isTeamCharacter(character) || isRedirectedCharacter(character)) return;
+        if (!characters.has(key)) characters.set(key, { name: character, stories: new Set() });
+        if (storyKey) characters.get(key).stories.add(storyKey);
+      });
+    });
+    const entries = [...characters.values()].sort((a, b) => b.stories.size - a.stories.size || a.name.localeCompare(b.name, "pt-BR"));
+    if (!entries.length) return "";
+    const cards = entries.map(({ name, stories }) => {
+      const setting = state.characterSettings.get(publisherKey(name)) || {};
+      const image = setting.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg";
+      return `<button type="button" class="wiki-character-card publisher-character-card" data-wiki-character="${escapeHTML(name)}" aria-label="Ver personagem ${escapeHTML(name)}"><span class="wiki-character-image"><img src="${escapeHTML(imageProxyFetchUrl(image))}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"></span><strong>${escapeHTML(name)}</strong><small>${stories.size} ${stories.size === 1 ? "história" : "histórias"}</small></button>`;
+    }).join("");
+    return `<section class="section imprint-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens do selo</h2><div class="section-subtitle">Personagens que aparecem nas histórias deste selo.</div></div></div><div class="publisher-character-carousel" aria-label="Personagens deste selo"><div class="publisher-character-track">${cards}</div></div></section>`;
+  }
+
+  function characterSettingForName(name) {
+    const key = publisherKey(name);
+    return state.characterSettings.get(key) || [...state.characterSettings.values()].find(setting => publisherKey(setting?.character_name) === key);
+  }
+
+  function isTeamCharacter(name) {
+    return characterSettingForName(name)?.character_type === "team";
+  }
+
+  function isRedirectedCharacter(name) {
+    return Boolean(characterSettingForName(name)?.redirect_character_key);
+  }
+
   function publisherCharacterMarkup(items) {
     const characters = new Map();
     items.forEach(item => {
@@ -11465,7 +12215,7 @@
       characterNames(item).forEach(name => {
         const character = String(name || "").trim();
         const key = character.toLocaleLowerCase("pt-BR");
-        if (!character) return;
+        if (!character || isTeamCharacter(character) || isRedirectedCharacter(character)) return;
         if (!characters.has(key)) characters.set(key, { name: character, stories: new Set() });
         if (storyKey) characters.get(key).stories.add(storyKey);
       });
@@ -11508,8 +12258,8 @@
   async function loadCharacterWikiCarousel() {
     if (wikiCharacterCarouselPromise) return wikiCharacterCarouselPromise;
     wikiCharacterCarouselPromise = (async () => {
-      const images = [...document.querySelectorAll("[data-wiki-character] img")];
-      const characters = [...new Set(images.map(image => image.closest("[data-wiki-character]")?.dataset.wikiCharacter).filter(Boolean))];
+      const images = [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image]")];
+      const characters = [...new Set(images.map(image => image.dataset.top10CharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter).filter(Boolean))];
       const missing = characters.filter(character => {
         const setting = state.characterSettings.get(publisherKey(character)) || {};
         return !setting.cover_url && !wikiCharacterImageCache.has(character);
@@ -11601,13 +12351,13 @@
           console.warn("Imagens de personagens indisponíveis", error);
         }
       }
-      [...document.querySelectorAll("[data-wiki-character] img")].forEach(image => {
-        const character = image.closest("[data-wiki-character]")?.dataset.wikiCharacter;
+      [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image]")].forEach(image => {
+        const character = image.dataset.top10CharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter;
         const customImage = state.characterSettings.get(publisherKey(character))?.cover_url;
         const source = customImage || wikiCharacterImageCache.get(character);
         if (!source) return;
-        const fallback = customImage ? proxiedImageUrl(customImage) : "assets/batmanicon.jpg";
-        image.src = proxiedImageUrl(source);
+        const fallback = customImage ? imageProxyFetchUrl(customImage) : "assets/batmanicon.jpg";
+        image.src = imageProxyFetchUrl(source);
         let fallbackAttempted = false;
         image.addEventListener("error", () => {
           if (!fallbackAttempted && fallback !== "assets/batmanicon.jpg") {
@@ -11667,6 +12417,62 @@
           </section>`).join("")}
         </div>
       </section>`).join("");
+    const userQuery = state.searchUsersQuery || state.search.trim();
+    const userResultsMarkup = !userQuery
+      ? ""
+      : `<section class="section search-users-section">
+          <div class="section-head"><div><h2 class="section-title">Usuários</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(userQuery)}”</div></div></div>
+          ${state.searchUsersLoading
+            ? '<div class="empty">Pesquisando usuários...</div>'
+            : `<div class="search-users-grid">${state.searchUsers.map(profile => {
+                const profileTitle = String(profile.title || "").trim();
+                const title = profileTitle ? `<span class="search-user-title" style="--title-bg:${safeTitleColor(profile.title_color)}" title="${escapeHTML(profileTitle)}">${escapeHTML(profileTitle)}</span>` : "";
+                return `<a class="search-user-card" href="${escapeHTML(publicProfileHref(profile.username))}">${avatarMarkup(profile, "search-user-avatar")}<span class="search-user-copy"><strong>${factionDot(profile)}@${escapeHTML(profile.username)}</strong>${title}<small>Ver perfil</small></span></a>`;
+              }).join("") || '<div class="empty">Nenhum usuário encontrado.</div>'}</div>`}
+        </section>`;
+    const matchingImprints = [...new Set(visibleCatalogItems()
+      .map(item => String(item.imprint || "").trim())
+      .filter(imprint => imprint && imprint.toLocaleLowerCase("pt-BR").includes(q)))];
+    const imprintCards = matchingImprints.map(imprint => {
+      const imprintItems = visibleCatalogItems().filter(item => String(item.imprint || "").trim() === imprint);
+      const setting = state.imprintSettings.get(publisherKey(imprint));
+      const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
+      const cover = setting?.cover_url || (representative ? coverFor(representative) : "assets/batmanicon.jpg");
+      return `<button class="publisher-card imprint-card" type="button" data-imprint="${escapeHTML(imprint)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(imprint)}</strong><span>${imprintItems.length} edição(ões)</span></div></button>`;
+    }).join("");
+    const imprintResultsMarkup = q && imprintCards
+      ? `<section class="section search-imprints-section imprint-carousel-section"><div class="section-head"><div><h2 class="section-title">Selos</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div><div class="carousel-controls" aria-label="Navegação dos selos encontrados"><button class="carousel-control" type="button" data-imprint-carousel-prev aria-label="Selo anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-imprint-carousel-next aria-label="Próximo selo" title="Próximo">›</button></div></div><div class="imprint-carousel" data-imprint-carousel aria-label="Selos encontrados"><div class="imprint-carousel-track">${imprintCards}</div></div></section>`
+      : "";
+    const matchingPublishers = [...new Set(visibleCatalogItems()
+      .map(item => String(item.publisher || "").trim())
+      .filter(publisher => publisher && publisher.toLocaleLowerCase("pt-BR").includes(q)))];
+    const publisherCards = matchingPublishers.map(publisher => {
+      const publisherItems = visibleCatalogItems().filter(item => String(item.publisher || "").trim() === publisher);
+      const setting = state.publisherSettings.get(publisherKey(publisher));
+      const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0];
+      const cover = setting?.cover_url || (representative ? coverFor(representative) : "assets/batmanicon.jpg");
+      return `<button class="publisher-card" type="button" data-publisher="${escapeHTML(publisher)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(publisher)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
+    }).join("");
+    const publisherResultsMarkup = q && publisherCards
+      ? `<section class="section search-publishers-section publisher-carousel-section"><div class="section-head"><div><h2 class="section-title">Editoras</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div><div class="carousel-controls" aria-label="Navegação das editoras encontradas"><button class="carousel-control" type="button" data-publishers-carousel-prev aria-label="Editora anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-publishers-carousel-next aria-label="Próxima editora" title="Próximo">›</button></div></div><div class="publisher-carousel" data-publishers-carousel aria-label="Editoras encontradas">${publisherCards}</div></section>`
+      : "";
+    const characterEntries = visibleCatalogItems().flatMap(item => characterNames(item)
+      .map(character => character.trim())
+      .filter(character => character && !isTeamCharacter(character) && !isRedirectedCharacter(character))
+      .map(character => ({ character, item })));
+    const matchingCharacters = [...new Set(characterEntries
+      .map(entry => entry.character)
+      .filter(character => character.toLocaleLowerCase("pt-BR").includes(q)))];
+    const characterCards = matchingCharacters.map(character => {
+      const characterItems = characterEntries.filter(entry => entry.character === character).map(entry => entry.item);
+      const setting = state.characterSettings.get(publisherKey(character));
+      const representative = characterItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || characterItems[0];
+      const cover = setting?.cover_url || wikiCharacterImageCache.get(character) || (representative ? coverFor(representative) : "assets/batmanicon.jpg");
+      return `<button class="publisher-card character-card" type="button" data-character="${escapeHTML(character)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(character)}</strong><span>${characterItems.length} edição(ões)</span></div></button>`;
+    }).join("");
+    const characterResultsMarkup = q && characterCards
+      ? `<section class="section search-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div></div><div class="publisher-carousel" aria-label="Personagens encontrados">${characterCards}</div></section>`
+      : "";
     return `
       <div class="content">
         <div class="section">
@@ -11678,7 +12484,44 @@
           <div class="section-subtitle">${results.length} resultado(s)</div>
           <div style="margin-top:15px">${publisherMarkup || `<div class="empty">Nada encontrado.</div>`}</div>
         </div>
+        ${userResultsMarkup}
+        ${imprintResultsMarkup}
+        ${publisherResultsMarkup}
+        ${characterResultsMarkup}
       </div>`;
+  }
+
+  async function loadSearchUsers(query = "") {
+    const normalizedQuery = String(query || "").trim();
+    state.searchUsersQuery = normalizedQuery;
+    state.searchUsers = [];
+    state.searchUsersLoading = Boolean(normalizedQuery && sb && navigator.onLine !== false);
+    if (!state.searchUsersLoading) {
+      if (state.section === "search") render();
+      return;
+    }
+    if (state.section === "search") render();
+    const escapedQuery = normalizedQuery.replace(/[\\%_]/g, "\\$&");
+    const result = await sb.from("profiles")
+      .select("id, username, avatar_url, title, title_color, faction_id, profile_hidden, is_banned")
+      .ilike("username", `%${escapedQuery}%`)
+      .eq("profile_hidden", false)
+      .neq("is_banned", true)
+      .limit(24);
+    if (state.searchUsersQuery !== normalizedQuery || state.section !== "search") return;
+    state.searchUsersLoading = false;
+    if (result.error) {
+      console.warn("Não foi possível pesquisar usuários:", result.error.message);
+      render();
+      return;
+    }
+    const foldedQuery = normalizedQuery.toLocaleLowerCase("pt-BR");
+    state.searchUsers = (result.data || []).sort((a, b) => {
+      const exactA = String(a.username || "").toLocaleLowerCase("pt-BR") === foldedQuery;
+      const exactB = String(b.username || "").toLocaleLowerCase("pt-BR") === foldedQuery;
+      return Number(exactB) - Number(exactA) || String(a.username).localeCompare(String(b.username), "pt-BR");
+    });
+    render();
   }
 
   function renderCollections() {
@@ -11830,7 +12673,7 @@
     const labels = { staff: "Moderadores", premium: "Lenda", free: "Comum" };
     const plan = state.rankingCategory === "banca" ? "staff" : (labels[state.rankingCategory] ? state.rankingCategory : "free");
     const group = rankingCategoryMembers(members, plan);
-    return `<div class="content ranking-page ranking-category-page"><div class="section-head"><div><div class="eyebrow">Diretório da comunidade</div><h1 class="section-title">Usuários ${labels[plan]}</h1><div class="section-subtitle">Todos os usuários desta categoria, ordenados por nível.</div></div><button type="button" class="small-btn" data-ranking-back>Voltar ao ranking</button></div><section class="section ranking-directory"><div class="ranking-member-list ranking-member-list-full">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section></div>`;
+    return `<div class="content ranking-page ranking-category-page"><div class="section-head"><div><div class="eyebrow">Diretório da comunidade</div><h1 class="section-title">Usuários ${labels[plan]}</h1><div class="section-subtitle">Todos os usuários desta categoria, ordenados por nível.</div></div><button type="button" class="small-btn" data-ranking-back>Voltar ao ranking</button></div><section class="section ranking-directory"><label class="ranking-user-search-wrap"><span>Pesquisar usuários</span><input class="ranking-user-search" type="search" value="${escapeHTML(state.rankingSearch || "")}" placeholder="Nome ou título..." autocomplete="off"></label><div class="ranking-member-list ranking-member-list-full">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section></div>`;
   }
 
   function renderRankingPage() {
@@ -13014,7 +13857,7 @@
     visibleCatalogItems().filter(item => !item.local && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach(item => {
       characterNames(item).forEach(name => {
         const character = String(name || "").trim();
-        if (!character) return;
+        if (!character || isTeamCharacter(character) || isRedirectedCharacter(character)) return;
         if (!groups.has(character)) groups.set(character, []);
         groups.get(character).push(item);
       });
@@ -13919,15 +14762,18 @@
     else if (state.section === "entity") markup = renderEntityPage();
     else if (state.section === "login") markup = renderLoginPage();
     else if (state.section === "signup") markup = renderSignupPage();
-    else if (state.section === "shelf") markup = renderShelfPage();
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
     else if (state.section === "album") markup = canAccessStickerAlbum() ? stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true }) : '<div class="content"><div class="empty">É preciso criar uma conta para usar o álbum.</div></div>';
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
+    if (state.section === "entity") markup = markup.replace(/<section class="section character-news-section"[\s\S]*?<\/section>/i, "");
     if (state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
     applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : ["shelf", "album"].includes(state.section) ? state.profile : null);
-    if (main.innerHTML === markup) {
+    // A estante recebe abas e o Top 10 depois da renderização inicial. Por isso,
+    // comparar apenas o HTML base pode esconder alterações nos itens do ranking.
+    const hasDynamicShelfContent = ["shelf", "public-profile"].includes(state.section);
+    if (main.innerHTML === markup && !hasDynamicShelfContent) {
       syncActiveNav();
       return;
     }
@@ -13954,7 +14800,7 @@
     if (state.section === "entity" && state.entityFilter?.kind === "publisher") loadPublisherFans(state.entityFilter.value);
     // Aguarda as configurações remotas dos personagens para que uma imagem
     // personalizada nunca seja substituída momentaneamente pela Wikipédia.
-    if (state.authReady && (state.section === "comic" || (state.section === "entity" && state.entityFilter?.kind === "publisher"))) {
+    if (state.authReady && (state.section === "comic" || state.section === "shelf" || state.section === "public-profile" || (state.section === "entity" && ["publisher", "imprint", "character"].includes(state.entityFilter?.kind)))) {
       loadCharacterWikiCarousel();
     }
   }
@@ -14118,7 +14964,7 @@
     const setting = state.characterSettings.get(key) || {};
     const hidden = setting.is_hidden !== true;
     button.disabled = true;
-    const next = { character_key: key, character_name: name, cover_url: setting.cover_url || null, wikipedia_url: setting.wikipedia_url || null, authored_text: setting.authored_text || null, is_pinned: setting.is_pinned === true, is_hidden: hidden };
+    const next = { character_key: key, character_name: name, character_type: setting.character_type === "team" ? "team" : "character", character_alignment: setting.character_alignment || null, cover_url: setting.cover_url || null, wikipedia_url: setting.wikipedia_url || null, authored_text: setting.authored_text || null, is_pinned: setting.is_pinned === true, is_hidden: hidden, deviantart_fanarts_enabled: setting.deviantart_fanarts_enabled === true, deviantart_gallery_url: setting.deviantart_gallery_url || null, deviantart_fanart_image_urls: setting.deviantart_fanart_image_urls || null };
     const result = await sb.from("character_settings").upsert(next, { onConflict: "character_key" });
     if (result.error) {
       button.disabled = false;
@@ -14136,8 +14982,30 @@
     const isAdmin = state.profile?.plan === "admin";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal publisher-settings-modal"><div class="section-head"><div><h2>Configurar personagem</h2><div class="section-subtitle">${escapeHTML(name)}</div></div><button class="small-btn" data-close>Fechar</button></div><form id="character-settings-form"><div class="field"><label>Enviar imagem do personagem</label><input name="coverFile" type="file" accept="image/png,image/jpeg,image/webp"><small class="format-hint">Imagem alternativa, usada somente se a Wikipédia/Fandom não fornecer uma imagem.</small></div><div class="field"><label>Ou use uma URL de imagem</label><input name="coverUrl" type="url" value="${escapeHTML(setting.cover_url || "")}" placeholder="https://.../imagem.jpg"></div>${isAdmin ? `<div class="field character-settings-wikipedia-field"><label>Link da Wikipédia ou Fandom (prioridade)</label><input name="wikipediaUrl" type="url" value="${escapeHTML(setting.wikipedia_url || "")}" placeholder="https://.../Personagem"><small class="format-hint">Disponível apenas para administradores. Aceita artigos da Wikipédia ou do Fandom.</small></div>` : ""}<label class="checkbox-inline"><input name="isPinned" type="checkbox" ${setting.is_pinned ? "checked" : ""}> Fixar no carrossel de destaque</label><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar configuração</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal publisher-settings-modal"><div class="section-head"><div><h2>Configurar personagem</h2><div class="section-subtitle">${escapeHTML(name)}</div></div><button class="small-btn" data-close>Fechar</button></div><form id="character-settings-form"><div class="field"><label>Nome exibido</label><input name="characterName" type="text" maxlength="120" required value="${escapeHTML(setting.character_name || name)}"><small class="format-hint">Atualiza a página e o nome deste personagem nas edições em que ele aparece.</small></div><div class="field"><label>Enviar imagem do personagem</label><input name="coverFile" type="file" accept="image/png,image/jpeg,image/webp"><small class="format-hint">Imagem alternativa, usada somente se a Wikipédia/Fandom não fornecer uma imagem.</small></div><div class="field"><label>Ou use uma URL de imagem</label><input name="coverUrl" type="url" value="${escapeHTML(setting.cover_url || "")}" placeholder="https://.../imagem.jpg"></div>${isAdmin ? `<div class="field character-settings-wikipedia-field"><label>Link da Wikipédia ou Fandom (prioridade)</label><input name="wikipediaUrl" type="url" value="${escapeHTML(setting.wikipedia_url || "")}" placeholder="https://.../Personagem"><small class="format-hint">Disponível apenas para administradores. Aceita artigos da Wikipédia ou do Fandom.</small></div>` : ""}<label class="checkbox-inline"><input name="isPinned" type="checkbox" ${setting.is_pinned ? "checked" : ""}> Fixar no carrossel de destaque</label><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar configuração</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
+    const characterTypeField = document.createElement("div");
+    characterTypeField.className = "field";
+    characterTypeField.innerHTML = `<label>Tipo de entidade</label><select name="characterType"><option value="character">Personagem</option><option value="team">Equipe</option></select><small class="format-hint">Equipes não aparecem nas listas e carrosséis de personagens.</small>`;
+    const characterTypeAnchor = $("[name=isPinned]", overlay)?.closest("label");
+    characterTypeAnchor?.before(characterTypeField);
+    const characterAlignmentField = document.createElement("div");
+    characterAlignmentField.className = "field";
+    characterAlignmentField.innerHTML = `<label>Categoria</label><select name="characterAlignment"><option value="">Sem categoria</option><option value="hero">Herói</option><option value="villain">Vilão</option><option value="antihero">Anti-herói</option><option value="support">Secundário / apoio</option></select><small class="format-hint">Define em qual seção temática a entidade aparecerá.</small>`;
+    characterTypeAnchor?.before(characterAlignmentField);
+    $(`[name=characterAlignment]`, characterAlignmentField).value = setting.character_alignment || "";
+    const knownCharacters = [...new Set([...state.characterSettings.values(), ...state.db.library.flatMap(item => characterNames(item).map(character_name => ({ character_name })))].map(entry => String(entry.character_name || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const redirectField = document.createElement("div");
+    redirectField.className = "field";
+    redirectField.innerHTML = `<label>Redirecionar para</label><input name="redirectCharacter" type="text" placeholder="Digite o nome do personagem ou equipe"><small class="format-hint">Digite o nome exato. Oculta esta página e faz as edições usarem o personagem principal.</small>`;
+    characterTypeAnchor?.before(redirectField);
+    $(`[name=redirectCharacter]`, redirectField).value = state.characterSettings.get(setting.redirect_character_key)?.character_name || setting.redirect_character_key || "";
+    const assignedField = document.createElement("div");
+    assignedField.className = "field";
+    assignedField.innerHTML = `<label>Personagens atribuídos</label><textarea name="assignedCharacters" rows="4" placeholder="Um personagem ou equipe por linha"></textarea><small class="format-hint">A atribuição é recíproca e aparece no final das duas páginas.</small>`;
+    characterTypeAnchor?.before(assignedField);
+    $(`[name=assignedCharacters]`, assignedField).value = (setting.assigned_character_keys || []).map(assignedKey => state.characterSettings.get(assignedKey)?.character_name || assignedKey).join("\n");
+    $("[name=characterType]", characterTypeField).value = setting.character_type === "team" ? "team" : "character";
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     const authoredField = document.createElement("div");
@@ -14146,7 +15014,14 @@
     $("#character-settings-form", overlay)?.prepend(authoredField);
     const wikipediaField = $("[name=wikipediaUrl]", overlay);
     if (wikipediaField) wikipediaField.value = setting.wikipedia_url || defaultWikiReferenceForEntity("character", name);
-    $("[name=authoredText]", authoredField).value = setting.authored_text || "";
+     $("[name=authoredText]", authoredField).value = setting.authored_text || "";
+     const fanartField = document.createElement("div");
+     fanartField.className = "field character-fanart-settings";
+     fanartField.innerHTML = `<label class="checkbox-inline"><input name="deviantartFanartsEnabled" type="checkbox"> Exibir seção de fanarts do DeviantArt</label><input name="deviantartGalleryUrl" type="url" placeholder="https://www.deviantart.com/..." aria-label="Link da galeria no DeviantArt"><textarea name="deviantartFanartImageUrls" rows="4" placeholder="Cole uma URL de imagem por linha"></textarea><small class="format-hint">Use imagens autorizadas pelos artistas e mantenha o link da publicação/galeria para crédito.</small>`;
+     $("#character-settings-form .modal-actions", overlay)?.before(fanartField);
+     $("[name=deviantartFanartsEnabled]", fanartField).checked = setting.deviantart_fanarts_enabled === true;
+     $("[name=deviantartGalleryUrl]", fanartField).value = setting.deviantart_gallery_url || "";
+     $("[name=deviantartFanartImageUrls]", fanartField).value = setting.deviantart_fanart_image_urls || "";
     const coverFileField = $("[name=coverFile]", overlay)?.closest(".field");
     const coverUrlField = $("[name=coverUrl]", overlay)?.closest(".field");
     if (coverFileField && coverUrlField) {
@@ -14169,9 +15044,30 @@
         if (upload.error) return toast("Não foi possível enviar a imagem. Verifique o bucket publisher-covers no Supabase.");
         coverUrl = sb.storage.from("publisher-covers").getPublicUrl(path).data.publicUrl;
       }
-      const next = { character_key: key, character_name: name, cover_url: coverUrl, wikipedia_url: wikipediaUrl, authored_text: authoredText, is_pinned: form.get("isPinned") === "on", is_hidden: setting.is_hidden === true };
+       const fanartImageUrls = String(form.get("deviantartFanartImageUrls") || "").split(/\r?\n/).map(url => url.trim()).filter(Boolean).filter(url => /^https:\/\//i.test(url)).join("\n") || null;
+       const galleryUrl = String(form.get("deviantartGalleryUrl") || "").trim();
+       if (galleryUrl && !/^https:\/\/(?:www\.)?deviantart\.com\//i.test(galleryUrl)) return toast("Informe um link válido do DeviantArt.");
+       const redirectName = String(form.get("redirectCharacter") || "").trim();
+       const redirectEntry = knownCharacters.find(character => publisherKey(character) === publisherKey(redirectName) && publisherKey(character) !== key);
+       if (redirectName && !redirectEntry) return toast("Informe o nome de um personagem ou equipe existente.");
+       const assignedNames = [...new Set(String(form.get("assignedCharacters") || "").split(/\r?\n|,/).map(value => value.trim()).filter(Boolean))];
+       const assignedKeys = assignedNames.map(value => publisherKey(value)).filter(assignedKey => assignedKey && assignedKey !== key);
+       const renamedName = String(form.get("characterName") || "").trim();
+       if (!renamedName) return toast("Informe um nome para o personagem.");
+       const next = { character_key: key, character_name: renamedName, character_type: form.get("characterType") === "team" ? "team" : "character", character_alignment: ["hero", "villain", "antihero", "support"].includes(form.get("characterAlignment")) ? form.get("characterAlignment") : null, redirect_character_key: redirectEntry ? publisherKey(redirectEntry) : null, assigned_character_keys: assignedKeys, cover_url: coverUrl, wikipedia_url: wikipediaUrl, authored_text: authoredText, is_pinned: form.get("isPinned") === "on", is_hidden: setting.is_hidden === true, deviantart_fanarts_enabled: form.get("deviantartFanartsEnabled") === "on", deviantart_gallery_url: galleryUrl || null, deviantart_fanart_image_urls: fanartImageUrls };
       const result = await sb.from("character_settings").upsert(next, { onConflict: "character_key" });
-      if (result.error) return toast("Não foi possível salvar a configuração do personagem. Execute a atualização do schema no Supabase.");
+       if (result.error) return toast("Não foi possível salvar a configuração do personagem. Execute a atualização do schema no Supabase.");
+       const oldAssignedKeys = Array.isArray(setting.assigned_character_keys) ? setting.assigned_character_keys : [];
+       const reciprocalKeys = [...new Set([...oldAssignedKeys, ...assignedKeys])];
+       await Promise.all(reciprocalKeys.map(async assignedKey => {
+         const assignedName = assignedNames.find(value => publisherKey(value) === assignedKey) || state.characterSettings.get(assignedKey)?.character_name || assignedKey;
+         const assignedSetting = state.characterSettings.get(assignedKey) || { character_key: assignedKey, character_name: assignedName, character_type: "character" };
+         const values = new Set(Array.isArray(assignedSetting.assigned_character_keys) ? assignedSetting.assigned_character_keys : []);
+         if (assignedKeys.includes(assignedKey)) values.add(key); else values.delete(key);
+          const reciprocalResult = await sb.from("character_settings").upsert({ character_key: assignedKey, character_name: assignedSetting.character_name || assignedName, character_type: assignedSetting.character_type || "character", assigned_character_keys: [...values] }, { onConflict: "character_key" });
+          if (reciprocalResult.error) throw reciprocalResult.error;
+          state.characterSettings.set(assignedKey, { ...assignedSetting, assigned_character_keys: [...values] });
+       }));
       state.characterSettings.set(key, next);
       wikiCharacterImageCache.clear();
       overlay.remove();
@@ -14180,7 +15076,108 @@
     };
   }
 
+  async function loadDeviantArtFanarts(root = document) {
+    const normalizeFanartText = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const fanartCharacterMatches = (character, title) => {
+      const aliases = { "super choque": ["super choque", "static shock"] };
+      const terms = aliases[normalizeFanartText(character)] || [character];
+      const haystack = normalizeFanartText(title).split(/\s+/).filter(Boolean);
+      return terms.some(term => {
+        const words = normalizeFanartText(term).split(/\s+/).filter(word => word.length >= 3);
+        return words.length > 0 && words.every(word => haystack.includes(word));
+      });
+    };
+    const characterPage = root.querySelector(".character-page");
+    const automaticCharacter = state.entityFilter?.kind === "character" ? String(state.entityFilter.value || "").trim() : "";
+    const automaticSetting = automaticCharacter ? state.characterSettings.get(publisherKey(automaticCharacter)) : null;
+    if (characterPage && automaticCharacter && automaticSetting?.deviantart_fanarts_enabled && !automaticSetting.deviantart_gallery_url && !String(automaticSetting.deviantart_fanart_image_urls || "").trim() && !characterPage.querySelector(".character-fanart-section")) {
+      const section = document.createElement("section");
+      section.className = "section character-fanart-section";
+      section.innerHTML = `<div class="section-head"><div><div class="eyebrow">Arte da comunidade</div><h2 class="section-title">Fanarts de ${escapeHTML(automaticCharacter)}</h2><div class="section-subtitle">Quatro imagens aleatórias encontradas no DeviantArt.</div></div></div><div class="character-fanart-grid"><div class="character-fanart-empty-card" data-deviantart-search="${escapeHTML(automaticCharacter)}"><strong>Buscando fanarts...</strong><span>Selecionando quatro imagens aleatórias.</span></div></div>`;
+      characterPage.appendChild(section);
+    }
+    const searches = [...root.querySelectorAll("[data-deviantart-search]")];
+    await Promise.all(searches.map(async card => {
+      try {
+        const endpoint = `${window.BANCA_SUPABASE_URL}/functions/v1/deviantart-fanarts?character=${encodeURIComponent(card.dataset.deviantartSearch || "")}`;
+        const response = await fetch(endpoint, { headers: { apikey: window.BANCA_SUPABASE_KEY || "" } });
+        const payload = await response.json();
+        const relevantResults = (payload.results || []).filter(result => fanartCharacterMatches(card.dataset.deviantartSearch || "", result.title));
+        if (!response.ok || !relevantResults.length) throw new Error(payload.error || "Nenhuma fanart identificada para este personagem");
+        const grid = card.closest(".character-fanart-grid");
+        card.remove();
+        relevantResults.slice(0, 4).forEach(result => {
+          const item = document.createElement("div");
+          item.className = "character-fanart-card";
+          item.innerHTML = `<img src="${escapeHTML(result.image || "")}" alt="${escapeHTML(result.title || "Fanart do personagem")}" loading="lazy"><span>Fanart de ${escapeHTML(result.author || "artista da comunidade")}</span>`;
+          grid?.appendChild(item);
+        });
+      } catch (error) {
+        card.innerHTML = `<strong>Não foi possível buscar fanarts.</strong><span>${escapeHTML(error.message || "Tente novamente mais tarde.")}</span>`;
+      }
+    }));
+    const cards = [...root.querySelectorAll("[data-deviantart-oembed]")];
+    await Promise.all(cards.map(async card => {
+      const sourceUrl = card.dataset.deviantartOembed;
+      if (!sourceUrl) return;
+      try {
+        const data = await new Promise((resolve, reject) => {
+          const callbackName = `deviantArtOembed_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          const script = document.createElement("script");
+          const cleanup = () => { delete window[callbackName]; script.remove(); };
+          const timer = setTimeout(() => { cleanup(); reject(new Error("oEmbed indisponível")); }, 10000);
+          window[callbackName] = payload => { clearTimeout(timer); cleanup(); resolve(payload); };
+          script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error("oEmbed indisponível")); };
+          script.src = `https://backend.deviantart.com/oembed?url=${encodeURIComponent(sourceUrl)}&format=jsonp&callback=${callbackName}`;
+          document.head.appendChild(script);
+        });
+        const imageUrl = data.fullsize_url || data.thumbnail_url;
+        if (!imageUrl) throw new Error("Imagem não encontrada");
+        const highResolutionImageUrl = imageUrl.replace(/\/v1\/fit\/w_\d+,h_\d+,q_\d+,strp\/([^?]+)-(?:\d+)w\.(jpg|jpeg|png|webp)(\?[^?]*)?$/i, "/v1/fit/w_1024,h_1024,q_90,strp/$1-1024w.$2$3");
+        card.className = "character-fanart-card character-fanart-card-loaded";
+        card.innerHTML = `<img src="${escapeHTML(highResolutionImageUrl)}" alt="${escapeHTML(data.title || "Fanart do personagem")}" loading="lazy"><span>Fanart de ${escapeHTML(data.author_name || "artista da comunidade")}</span>`;
+      } catch (error) {
+        card.innerHTML = `<strong>Não foi possível carregar esta fanart.</strong><span>Verifique a publicação do DeviantArt configurada.</span>`;
+        console.warn("Fanart do DeviantArt indisponível", error);
+      }
+    }));
+  }
+
+  function openFanartImageModal(image) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop fanart-image-backdrop";
+    overlay.innerHTML = `<div class="fanart-image-modal" role="dialog" aria-modal="true" aria-label="Fanart ampliada"><button type="button" class="small-btn fanart-image-close" data-close aria-label="Fechar imagem">Fechar</button><img src="${escapeHTML(image.currentSrc || image.src)}" alt="${escapeHTML(image.alt || "Fanart ampliada")}"></div>`;
+    $("#modal-root").appendChild(overlay);
+    const close = () => { document.removeEventListener("keydown", onKey); overlay.remove(); };
+    const onKey = event => { if (event.key === "Escape") close(); };
+    $("[data-close]", overlay).onclick = close;
+    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
+    document.addEventListener("keydown", onKey);
+  }
+
   function bind() {
+    loadDeviantArtFanarts();
+    if (!document.body.dataset.catalogSeriesToggleBound) {
+      document.body.dataset.catalogSeriesToggleBound = "true";
+      document.addEventListener("click", event => {
+        const button = event.target.closest?.("[data-catalog-series-toggle]");
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        state.comicSeriesCollapsed = !state.comicSeriesCollapsed;
+        try { localStorage.setItem("bancaDigitalComicSeriesCollapsed", String(state.comicSeriesCollapsed)); } catch { /* armazenamento bloqueado pelo navegador */ }
+        render();
+      });
+    }
+    if (!document.body.dataset.fanartImageModalBound) {
+      document.body.dataset.fanartImageModalBound = "true";
+      document.addEventListener("click", event => {
+        const image = event.target.closest?.(".character-fanart-card img");
+        if (!image) return;
+        event.preventDefault();
+        openFanartImageModal(image);
+      });
+    }
     hydrateProfileStickerHeaders();
     if (!document.body.dataset.factionRoleCommentBound) {
       document.body.dataset.factionRoleCommentBound = "true";
@@ -14299,8 +15296,8 @@
         });
       }
       const directory = $(".ranking-directory", rankingPage);
-      if (false) {
-        if (false) directory.insertAdjacentHTML("afterbegin", `<label class="ranking-user-search-wrap"><span>Pesquisar usuários</span><input class="ranking-user-search" type="search" value="${escapeHTML(state.rankingSearch || "")}" placeholder="Nome ou título..." autocomplete="off"></label>`);
+      if (directory) {
+        if (!$(".ranking-user-search", directory)) directory.insertAdjacentHTML("afterbegin", `<label class="ranking-user-search-wrap"><span>Pesquisar usuários</span><input class="ranking-user-search" type="search" value="${escapeHTML(state.rankingSearch || "")}" placeholder="Nome ou título..." autocomplete="off"></label>`);
         const searchInput = $(".ranking-user-search", directory);
         const applyRankingSearch = () => {
           state.rankingSearch = searchInput.value;
@@ -14313,7 +15310,10 @@
             group.hidden = Boolean(query) && !$$('a.ranking-member:not([hidden])', group).length;
           });
         };
-        searchInput.addEventListener("input", applyRankingSearch);
+        if (!searchInput.dataset.rankingSearchBound) {
+          searchInput.dataset.rankingSearchBound = "true";
+          searchInput.addEventListener("input", applyRankingSearch);
+        }
         applyRankingSearch();
       }
     }
@@ -14346,7 +15346,7 @@
     if (state.section === "shelf" && state.session) {
       const shelfHead = $(".content > .section-head");
       if (shelfHead && !$(".shelf-media-tabs")) {
-        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Coleções salvas</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
+        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Coleções salvas</button><button class="small-btn" data-shelf-media="top10">Top 10</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
         $("[data-action=open-local-box]", shelfHead.nextElementSibling)?.addEventListener("click", () => { state.localBoxVisible = true; setSection("local-box"); });
         $("[data-shelf-tab-panel=wall]")?.setAttribute("hidden", "");
         $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
@@ -14385,13 +15385,17 @@
         button.before(actions);
         actions.append(wikiButton, button);
       });
-      const showSpecialShelfTab = ["wall", "saved-public"].includes(state.shelfTab);
+      const top10Panel = $("[data-shelf-tab-panel=top10]");
+      if (top10Panel) top10Panel.innerHTML = top10Markup(state.top10Lists, true);
+      const showSpecialShelfTab = ["wall", "saved-public", "top10"].includes(state.shelfTab);
       $$(".shelf-page > .shelf-collection, .shelf-page > .shelf-categories, .shelf-page > .local-box-notice").forEach(element => { element.hidden = showSpecialShelfTab; });
       $$('[data-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.shelfTabPanel !== state.shelfTab; });
       $$('[data-shelf-media]').forEach(button => button.classList.toggle("is-active", button.dataset.shelfMedia === state.shelfTab));
     }
     if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
       const publicProfile = state.publicProfile.profile;
+      const publicShelfHeading = $(".public-profile-page > .section-head .section-title");
+      if (publicShelfHeading) publicShelfHeading.textContent = "Perfil público";
       const wallVisible = publicProfile.profile_wall_public !== false;
       const savedPublicCollectionsVisible = publicProfile.shelf_saved_public_collections !== false;
       const activityVisible = publicProfile.profile_activity_public !== false;
@@ -14403,13 +15407,13 @@
       if (publicBanner && publicXp && !publicBanner.contains(publicXp)) publicBanner.appendChild(publicXp);
       const publicSummary = $(".public-profile-page > .section-head .section-subtitle");
       const publicHeading = $(".public-profile-page > .section-head .section-title");
-      if (publicHeading) publicHeading.textContent = "Minha estante";
+      if (publicHeading) publicHeading.textContent = "Perfil";
       if (publicSummary) publicSummary.textContent = "Coleções fixas para organizar seus quadrinhos e séries";
       const publicHead = $(".public-profile-page > .section-head");
       const publicAlbumAvailable = canAccessStickerAlbum(publicProfile);
       if (publicHead && !$("[data-public-album-link]")) publicHead.querySelector(".profile-actions")?.insertAdjacentHTML("afterbegin", `<a class="small-btn" data-public-album-link href="${escapeHTML(publicProfileHref(publicProfile.username, "", true))}">Álbum</a>`);
       if (publicHead && !publicHead.classList.contains("public-profile-actions-head") && !$(".public-shelf-media-tabs")) {
-        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Coleções salvas</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
+        publicHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs public-shelf-media-tabs"><button class="small-btn is-active" data-public-shelf-media="collections">Coleções</button><button class="small-btn" data-public-shelf-media="wall">Mural</button><button class="small-btn" data-public-shelf-media="saved-public">Coleções salvas</button><button class="small-btn" data-public-shelf-media="top10">Top 10</button></div><div class="shelf-tab-panel public-wall-panel" data-public-shelf-tab-panel="wall">${profileWallMarkup(state.publicProfile)}</div><div class="shelf-tab-panel public-saved-public-panel" data-public-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.publicProfile.savedPublicCollections || [])}</div>`);
       }
       if (false && $(".public-shelf-media-tabs") && !$("[data-public-shelf-media=activity]")) {
         $(".public-shelf-media-tabs").insertAdjacentHTML("beforeend", '<button class="small-btn" data-public-shelf-media="activity">Histórico</button>');
@@ -14430,7 +15434,7 @@
        }
        if (publicAlbumLink && publicShelfMediaTabs) publicShelfMediaTabs.appendChild(publicAlbumLink);
        const publicSavedTab = $("[data-public-shelf-media=saved-public]", publicShelfMediaTabs);
-       if (publicAlbumLink && publicSavedTab) publicSavedTab.after(publicAlbumLink);
+      if (publicAlbumLink && publicSavedTab) ( $("[data-public-shelf-media=top10]", publicShelfMediaTabs) || publicSavedTab ).after(publicAlbumLink);
       const publicSavedPublicPanel = $("[data-public-shelf-tab-panel=saved-public]");
       if (publicSavedPublicPanel && !$(".saved-publishers", publicSavedPublicPanel)) publicSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.publicProfile.savedPublishers || []));
       if (publicSavedPublicPanel && !$(".saved-imprints", publicSavedPublicPanel)) publicSavedPublicPanel.insertAdjacentHTML("beforeend", savedImprintsMarkup(state.publicProfile.savedImprints || []));
@@ -14479,9 +15483,24 @@
         $("[data-public-shelf-media=activity]")?.remove();
         $("[data-public-shelf-tab-panel=activity]")?.remove();
       }
-      const showSpecialPublicTab = ["wall", "saved-public"].includes(state.publicShelfTab);
+      const publicTop10Panel = $("[data-public-shelf-tab-panel=top10]") || $("[data-shelf-tab-panel=top10]");
+      const isOwnPublicProfile = String(state.session?.user?.id || "") === String(publicProfile.id || "");
+      if (publicTop10Panel) publicTop10Panel.innerHTML = top10Markup((state.publicProfile.top10Lists || []).filter(list => isOwnPublicProfile || list.is_public !== false), isOwnPublicProfile);
+      if (publicTop10Panel && !isOwnPublicProfile) {
+        $(".top10-items", publicTop10Panel)?.querySelectorAll(".top10-item").forEach(row => {
+          const characterName = $("strong", row)?.textContent?.trim();
+          if (!characterName) return;
+          row.dataset.top10PublicCharacter = characterName;
+          row.setAttribute("role", "link");
+          row.setAttribute("tabindex", "0");
+          const openCharacter = () => openEntityPage("character", characterName);
+          row.addEventListener("click", openCharacter);
+          row.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openCharacter(); } });
+        });
+      }
+      const showSpecialPublicTab = ["wall", "saved-public", "top10"].includes(state.publicShelfTab);
       $$(".public-profile-page > .shelf-collection, .public-profile-page > .shelf-categories, .public-profile-page > .local-box-notice").forEach(element => { element.hidden = showSpecialPublicTab; });
-      $$('[data-public-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.publicShelfTabPanel !== state.publicShelfTab; });
+      $$('[data-public-shelf-tab-panel], [data-shelf-tab-panel=top10]').forEach(panel => { panel.hidden = (panel.dataset.publicShelfTabPanel || panel.dataset.shelfTabPanel) !== state.publicShelfTab; });
       $$('[data-public-shelf-media]').forEach(button => button.classList.toggle("is-active", button.dataset.publicShelfMedia === state.publicShelfTab));
     }
     if (false && state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId && !$(".public-profile-actions-head")) {
@@ -14574,6 +15593,11 @@
     $$('[data-hide-item]').forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       toggleCatalogItemVisibility(el.dataset.hideItem);
+    }));
+    $$('[data-edit-item]').forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isAdminProfile()) openEditForm(el.dataset.editItem);
     }));
     $$('[data-download]').forEach(el => {
       const entry = downloaded(el.dataset.download);
@@ -14675,7 +15699,7 @@
       syncControls();
     });
     $$('[data-publishers-carousel]').forEach(carousel => {
-      const section = carousel.closest(".publisher-all-section");
+      const section = carousel.closest(".publisher-all-section, .search-publishers-section");
       const previous = $("[data-publishers-carousel-prev]", section);
       const next = $("[data-publishers-carousel-next]", section);
       const step = () => Math.max(carousel.clientWidth * 0.82, 220);
@@ -15158,6 +16182,139 @@
     $$('[data-shelf-expand]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); state.shelfExpanded[el.dataset.shelfExpand] = !state.shelfExpanded[el.dataset.shelfExpand]; render(); }));
     $$('[data-shelf-media]').forEach(el => el.addEventListener("click", () => { state.shelfTab = el.dataset.shelfMedia; render(); }));
     $$('[data-public-shelf-media]').forEach(el => el.addEventListener("click", () => { state.publicShelfTab = el.dataset.publicShelfMedia; render(); }));
+    $('[data-top10-new-list]')?.addEventListener("click", async () => {
+      if (!state.session?.user?.id || !sb) return openAuthPage();
+      const name = String(await openSiteInput("Dê um nome para o seu ranking (ex.: Heróis favoritos):", "", { title: "Novo Top 10", label: "Nome do ranking" }) || "").trim();
+      if (!name) return;
+      const result = await sb.from("profile_top10_lists").insert({ owner_id: state.session.user.id, name, is_public: true }).select("id, owner_id, name, is_public, created_at, updated_at").single();
+      if (result.error) return toast(result.error.message || "Não foi possível criar o Top 10. Aplique a migração do Top 10 no Supabase.");
+      replaceEditableTop10Lists([...editableTop10Lists(), { ...result.data, items: [] }]);
+      render();
+    });
+    $$('[data-top10-search-list]').forEach(input => input.addEventListener("input", () => {
+      const query = input.value.trim().toLocaleLowerCase("pt-BR");
+      const suggestions = input.closest(".top10-add-form")?.querySelector(".top10-suggestions");
+      if (!suggestions) return;
+      if (!query) { suggestions.innerHTML = ""; return; }
+      const existing = new Set((editableTop10Lists().find(list => String(list.id) === String(input.dataset.top10SearchList))?.items || []).map(item => item.character_key));
+      const matches = top10CharacterEntries().filter(([key, name]) => !existing.has(key)).map(([key, name]) => ({ key, name, score: name.toLocaleLowerCase("pt-BR").startsWith(query) ? 0 : name.toLocaleLowerCase("pt-BR").includes(query) ? 1 : 2 })).filter(item => item.score < 2).sort((a, b) => a.score - b.score || a.name.localeCompare(b.name, "pt-BR")).slice(0, 3);
+      suggestions.innerHTML = matches.map(item => `<button type="button" class="top10-suggestion" data-top10-suggestion-key="${escapeHTML(item.key)}" data-top10-suggestion-name="${escapeHTML(item.name)}" data-top10-suggestion-list="${escapeHTML(input.dataset.top10SearchList)}">${escapeHTML(item.name)}</button>`).join("") || '<span class="top10-no-suggestions">Nenhum personagem parecido encontrado.</span>';
+    }));
+    $$('[data-top10-suggestions]').forEach(suggestions => suggestions.addEventListener("click", async event => {
+      const button = event.target.closest?.('[data-top10-suggestion-key]');
+      if (!button) return;
+      const list = editableTop10Lists().find(item => String(item.id) === String(button.dataset.top10SuggestionList));
+      await addTop10Character(list, button.dataset.top10SuggestionKey, button.dataset.top10SuggestionName);
+    }));
+    $$('[data-top10-add-form]').forEach(form => form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const list = editableTop10Lists().find(item => String(item.id) === String(form.dataset.top10AddForm));
+      const key = String(new FormData(form).get("character") || "");
+      const name = $("option:checked", form)?.dataset.characterName || "";
+      if (!list || !key || !name || (list.items || []).length >= 10) return;
+      if ((list.items || []).some(item => item.character_key === key)) return toast("Esse personagem já está neste ranking.");
+      const items = [...(list.items || []), { character_key: key, character_name: name }];
+      await updateTop10Items(list, items, "Não foi possível atualizar o ranking.");
+    }));
+    $$('[data-top10-remove]').forEach(button => button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(item => String(item.id) === String(button.dataset.top10List));
+      if (!list) return;
+      const items = (list.items || []).filter(item => String(item.id) !== String(button.dataset.top10Remove));
+      await updateTop10Items(list, items, "Não foi possível remover o personagem.");
+    }));
+    $$('[data-top10-move]').forEach(button => button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(item => String(item.id) === String(button.dataset.top10List));
+      if (!list) return;
+      const items = [...(list.items || [])].sort((a, b) => a.rank - b.rank);
+      const index = items.findIndex(item => String(item.id) === String(button.dataset.top10Item));
+      const target = button.dataset.top10Move === "up" ? index - 1 : index + 1;
+      if (index < 0 || target < 0 || target >= items.length) return;
+      [items[index], items[target]] = [items[target], items[index]];
+      await updateTop10Items(list, items, "Não foi possível reordenar o ranking.");
+    }));
+    $$('[data-top10-list-card] .top10-items').forEach(bindTop10DragRows);
+    $$('[data-top10-list-card]').forEach(card => {
+      const deleteButton = $("[data-top10-delete-list]", card);
+      if (!deleteButton || $("[data-top10-rename-list]", card)) return;
+      const renameButton = document.createElement("button");
+      renameButton.type = "button";
+      renameButton.className = "small-btn";
+      renameButton.dataset.top10RenameList = deleteButton.dataset.top10DeleteList;
+      renameButton.textContent = "Renomear";
+      deleteButton.before(renameButton);
+    });
+    $$('[data-top10-rename-list]').forEach(button => button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10RenameList));
+      if (!list) return;
+      const name = String(await openSiteInput("Digite o novo nome do Top 10:", list.name || "", { title: "Renomear Top 10", label: "Nome do ranking" }) || "").trim();
+      if (!name || name === list.name) return;
+      const previousName = list.name;
+      list.name = name;
+      $("h3", button.closest("[data-top10-list-card]"))?.replaceChildren(document.createTextNode(name));
+      const result = await sb.from("profile_top10_lists").update({ name }).eq("id", list.id).eq("owner_id", state.session.user.id);
+      if (result.error) {
+        list.name = previousName;
+        $("h3", button.closest("[data-top10-list-card]"))?.replaceChildren(document.createTextNode(previousName));
+        toast("Não foi possível renomear o Top 10.");
+      }
+    }));
+    $$('[data-top10-list-card] .top10-item').forEach(row => {
+      const removeButton = $("[data-top10-remove]", row);
+      if (!removeButton || $("[data-top10-edit-item]", row)) return;
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "small-btn";
+      editButton.dataset.top10EditItem = removeButton.dataset.top10Remove;
+      editButton.dataset.top10EditList = removeButton.dataset.top10List;
+      editButton.textContent = "Editar";
+      removeButton.before(editButton);
+    });
+    $$('[data-top10-edit-item]').forEach(button => button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10EditList));
+      const item = list?.items?.find(entry => String(entry.id) === String(button.dataset.top10EditItem));
+      if (!list || !item) return;
+      const row = button.closest(".top10-item");
+      const displayedImageUrl = $("img", row)?.getAttribute("src") || "";
+      const retainedImageUrl = item.image_url || (displayedImageUrl && displayedImageUrl !== "assets/batmanicon.jpg" ? displayedImageUrl : "");
+      const edited = await openTop10ItemEditor({ ...item, image_url: retainedImageUrl });
+      if (!edited?.name) return;
+      const name = edited.name;
+      const previousImageUrl = retainedImageUrl;
+      const imageUrl = edited.imageUrl || previousImageUrl;
+      if (imageUrl && !/^https?:\/\//i.test(imageUrl)) return toast("Use um link de imagem começando com http:// ou https://.");
+      const previous = { name: item.character_name, imageUrl: retainedImageUrl };
+      item.character_name = name;
+      item.image_url = imageUrl;
+      $("strong", row)?.replaceChildren(document.createTextNode(name));
+      const image = $("img", row);
+      if (image) { image.src = imageUrl || "assets/batmanicon.jpg"; image.alt = `Imagem de ${name}`; image.dataset.top10CharacterImage = name; }
+      const result = await sb.from("profile_top10_items").update({ character_name: name, image_url: imageUrl || null }).eq("id", item.id).eq("list_id", list.id);
+      if (result.error) {
+        item.character_name = previous.name;
+        item.image_url = previous.imageUrl;
+        $("strong", row)?.replaceChildren(document.createTextNode(previous.name));
+        if (image) { image.src = previous.imageUrl || "assets/batmanicon.jpg"; image.alt = `Imagem de ${previous.name}`; image.dataset.top10CharacterImage = previous.name; }
+        toast("Não foi possível editar o personagem neste Top 10.");
+      }
+    }));
+    $$('[data-top10-delete-list]').forEach(button => button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const listId = button.dataset.top10DeleteList;
+      if (!await openSiteConfirm("Excluir este Top 10? Esta ação não pode ser desfeita.", { title: "Excluir Top 10", confirmLabel: "Excluir ranking" })) return;
+      const previousLists = editableTop10Lists();
+      replaceEditableTop10Lists(editableTop10Lists().filter(list => String(list.id) !== String(listId)));
+      requestAnimationFrame(() => render());
+      const result = await sb.from("profile_top10_lists").delete().eq("id", listId).eq("owner_id", state.session.user.id);
+      if (result.error) {
+        replaceEditableTop10Lists(previousLists);
+        render();
+        return toast("Não foi possível excluir o ranking.");
+      }
+    }));
     $$('[data-profile-wall-comment-form]').forEach(form => form.onsubmit = async event => {
       event.preventDefault();
       if (!state.session || !sb) return openAuthPage();
@@ -15416,12 +16573,9 @@
       if (a === "focus-search") { setSection("search"); setTimeout(() => $("#search-input")?.focus(), 30); }
       if (a === "do-search") { state.search = $("#search-input")?.value || ""; navigate({ pagina: "pesquisar", q: state.search }); }
       if (a === "open-admin") { if (isAdminProfile()) openAdmin(); }
-      if (a === "open-auth") state.session ? setSection("shelf") : openAuthPage();
+      if (a === "open-auth") state.session ? openOwnPublicProfile() : openAuthPage();
       if (a === "open-profile-page") {
-        if (!state.session?.user || !state.profile?.username) return openAuthPage();
-        const profileUrl = publicProfileHref(state.profile.username);
-        if (`${window.location.pathname}${window.location.search}` !== profileUrl) window.history.pushState({ [ROUTE_HISTORY_KEY]: true, [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1 }, "", profileUrl);
-        loadPublicProfile(state.profile.username);
+        openOwnPublicProfile();
       }
       if (a === "messages") openChat();
       if (a === "downloads") setSection("downloads");
@@ -15734,7 +16888,7 @@
       }
     }));
     $("#search-input")?.addEventListener("keydown", e => {
-      if (e.key === "Enter") { state.search = e.target.value; render(); $("#search-input")?.focus(); }
+      if (e.key === "Enter") { state.search = e.target.value; loadSearchUsers(state.search); $("#search-input")?.focus(); }
     });
     $$('[data-search-collapse]').forEach(button => {
       const content = button.closest(".search-group-summary, .search-initial-head")?.nextElementSibling;
@@ -15791,7 +16945,7 @@
       }
       if (mode === "signup" && !result.data.session) { message.textContent = "Conta criada. Desative a confirmação de email no Supabase para entrar sem email."; return; }
       await loadAccount();
-      setSection("shelf");
+      openOwnPublicProfile();
     });
     $$('[data-auth-mode]').forEach(button => button.addEventListener("click", () => {
       $("#auth-form").dataset.authMode = button.dataset.authMode;
@@ -16325,6 +17479,11 @@
   function openEditForm(id = null) {
     const old = id ? state.db.library.find(x => x.id === id) : null;
     const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [] };
+    const secondaryCharacters = Array.isArray(x.secondaryCharacters)
+      ? x.secondaryCharacters
+      : Array.isArray(x.characters)
+        ? x.characters.map(value => typeof value === "object" ? (value.name || value.character || "") : value).filter(value => String(value).trim() && String(value).trim() !== String(x.character || "").trim())
+        : [];
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `
       <div class="modal"><div class="section-head"><div><h2>${id ? "Editar edição" : "Nova edição"}</h2><div class="section-subtitle">A capa será extraída da primeira página</div></div><button class="small-btn" data-close>Fechar</button></div>
@@ -16333,7 +17492,7 @@
           <div class="field full"><label>Série (deixe vazio para oneshot)</label><input name="seriesTitle" value="${escapeHTML(x.seriesTitle || "")}" placeholder="Ex.: Homem-Aranha, Universo Casulo"></div>
           <div class="field"><label>Número da edição / volume</label><input name="volume" type="number" min="1" step="1" inputmode="numeric" value="${escapeHTML(String(x.issue || "").match(/\d+/)?.[0] || "")}" placeholder="Ex.: 1"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
-          <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
+          <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
           <div class="field full"><label>Link direto do arquivo</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="arquivo.pdf, arquivo.cbz, arquivo.cbr..."><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://.../capa-do-destaque.jpg"><small class="format-hint">Use uma imagem horizontal ou uma capa em alta resolução para controlar melhor o destaque.</small></div>
@@ -16347,6 +17506,15 @@
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
     $("#edit-form", overlay).onsubmit = event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const sourceUrl = String(fd.get("sourceUrl") || "").trim(); const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean); const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim(); const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, ""); const item = { ...x, title: String(fd.get("title") || "").trim(), seriesTitle, seriesId: seriesTitle ? seriesKey(seriesTitle) : "", issue: volumeNumber, type: fd.get("type"), year: Number(fd.get("year")) || new Date().getFullYear(), publisher: String(fd.get("publisher") || "").trim(), imprint: String(fd.get("imprint") || "").trim(), character: String(fd.get("character") || "").trim(), author: String(fd.get("author") || "").trim(), format: detectFormat(sourceUrl), fileUrl: sourceUrl, backupUrls, telegramUrl: "", featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(), description: String(fd.get("description") || "").trim(), tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean), featured: fd.get("featured") === "on" }; delete item.randomWeight; const index = state.db.library.findIndex(i => i.id === item.id); if (index >= 0) state.db.library[index] = item; else state.db.library.push(item); saveCatalog("Edição salva."); overlay.remove(); render(); };
+    $("#edit-form", overlay)?.addEventListener("submit", event => {
+      const form = event.currentTarget;
+      const item = state.db.library.find(entry => entry.id === x.id);
+      if (!item) return;
+      const character = String($("[name=character]", form)?.value || "").trim();
+      item.secondaryCharacters = [...new Set(String($("[name=secondaryCharacters]", form)?.value || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
+      if (Array.isArray(item.characters)) item.characters = [character, ...item.secondaryCharacters];
+      save();
+    });
   }
 
   function renderCatalogLegacyAdmin2(type = null) {
@@ -16388,7 +17556,13 @@
     const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
     const series = uniqueCatalogItems(items.filter(x => x.seriesId));
     const oneshots = uniqueCatalogItems(items.filter(x => !x.seriesId));
-    const group = (title, groupItems, isSeries = false) => groupItems.length ? `<section class="section"><div class="section-head"><div><h2 class="section-title">${title}</h2><div class="section-subtitle">${groupItems.length} obra(s)</div></div></div><div class="results-grid${type === "comic" && isSeries ? " catalog-series-grid" : ""}">${groupItems.map(item => isSeries ? seriesCard(item) : card(item)).join("")}</div></section>` : "";
+    const group = (title, groupItems, isSeries = false) => {
+      if (!groupItems.length) return "";
+      const isComicSeries = type === "comic" && isSeries;
+      const seriesCollapsed = isComicSeries && state.comicSeriesCollapsed;
+      const seriesToggle = isComicSeries ? `<button class="small-btn catalog-series-toggle" type="button" data-catalog-series-toggle aria-expanded="${!seriesCollapsed}" aria-controls="catalog-series-grid">${seriesCollapsed ? "Expandir séries" : "Recolher séries"}</button>` : "";
+      return `<section class="section"><div class="section-head"><div><h2 class="section-title">${title}</h2><div class="section-subtitle">${groupItems.length} obra(s)</div></div>${seriesToggle}</div><div id="${isComicSeries ? "catalog-series-grid" : ""}" class="results-grid${isComicSeries ? " catalog-series-grid" : ""}"${seriesCollapsed ? " hidden" : ""}>${groupItems.map(item => isSeries ? seriesCard(item) : card(item)).join("")}</div></section>`;
+    };
     const publishers = new Map();
     items.filter(item => String(item.publisher || "").trim()).forEach(item => { const name = String(item.publisher).trim(); if (!publishers.has(name)) publishers.set(name, []); publishers.get(name).push(item); });
     const publisherEntries = [...publishers.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
@@ -16410,7 +17584,7 @@
     const publisherCarousel = type === "comic" && publisherEntries.length ? `<section class="section publisher-all-section"><div class="section-head"><div><h2 class="section-title">Editoras</h2><div class="section-subtitle">Explore todos os quadrinhos por editora.</div></div><div class="carousel-controls" aria-label="Navegação das editoras"><button class="carousel-control" type="button" data-publishers-carousel-prev aria-label="Editora anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-publishers-carousel-next aria-label="Próxima editora" title="Próximo">›</button></div></div><div class="publisher-carousel" data-publishers-carousel aria-label="Todas as editoras">${publisherEntries.map(publisherCard).join("")}</div></section>` : "";
     const popularCollections = state.popularPublicCollections || [];
     const popularCollectionsMarkup = type === "comic" && popularCollections.length ? `<section class="section popular-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções públicas mais curtidas</h2><div class="section-subtitle">Descubra listas públicas da comunidade</div></div><div class="carousel-controls" aria-label="Navegação das coleções públicas"><button class="carousel-control" type="button" data-collections-carousel-prev aria-label="Coleção anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-collections-carousel-next aria-label="Próxima coleção" title="Próximo">›</button></div></div><div class="collections-carousel" data-collections-carousel aria-label="Coleções públicas mais curtidas"><div class="collections-carousel-track">${popularCollections.map(collection => `<div class="feature-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username)}"><div class="cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover_url || ""))}')"></div><div class="gradient"></div><div class="feature-info"><h3>${escapeHTML(collection.name)}</h3><p>${collection.likes} curtida(s) · @${escapeHTML(collection.username)}</p></div></div>`).join("")}</div></div></section>` : "";
-    const characterCarousel = type === "comic" ? characterWikiCarouselMarkup(items) : "";
+    const characterCarousel = type === "comic" ? `${characterWikiCarouselMarkup(items)}${teamWikiCarouselMarkup(items)}` : "";
     const heading = type === "manga" ? "Mangás" : type === "comic" ? "Quadrinhos" : "Catálogo";
     const catalogHeader = type === "comic" ? "" : `<div class="section-head"><div><h1 class="section-title">${heading}</h1><div class="section-subtitle">${items.length} edição(ões)</div></div></div>`;
     const legendarySundayDay = isLegendarySunday();
@@ -16423,7 +17597,7 @@
     const legendarySundayCovers = legendaryWeeklyCovers(items);
     const legendarySundayStatus = isAdminProfile() ? `<div class="legendary-sunday-status"><span>${legendarySundayDay ? (legendarySundayEnabled ? "Evento automático ativo" : "Evento automático desativado") : (legendaryManualActive ? "Evento ativo hoje" : "Evento oculto fora do dia automático")}</span><button type="button" class="small-btn" data-legendary-event-toggle>${legendarySundayDay ? (legendarySundayEnabled ? "Desativar evento" : "Ativar evento") : (legendaryManualActive ? "Desativar evento" : `Ativar ${escapeHTML(legendaryEventName)}`)}</button></div>` : "";
     const legendarySundayBanner = showLegendarySundayBanner ? `<section class="legendary-sunday-banner ${legendarySundayActive ? "is-active" : "is-preview"}" role="status"><div class="legendary-sunday-art" aria-hidden="true">${legendarySundayCovers}</div><div class="legendary-sunday-copy"><div class="legendary-sunday-badge">★ ${escapeHTML(legendaryEventName)}</div><h1>Hoje todo membro comum é Lenda</h1><p>Aproveite o acesso liberado ${legendarySundayDay ? "durante todo o domingo" : "neste dia"}. O plano normal volta automaticamente quando o dia terminar.</p><div class="legendary-sunday-benefits"><span>✓ Capas variantes</span><span>✓ Estilos visuais de capa</span><span>✓ Escolha de capa por série</span><span>✓ Recursos exclusivos da estante</span><span>✓ Benefícios de Lenda no ranking</span></div></div></section>${legendarySundayStatus}` : "";
-    return `<div class="content">${legendarySundayBanner}${catalogHeader}${imprintCarousel}${group("Séries", series, true)}${group("Oneshots", oneshots)}${!items.length ? `<div class="empty">Nenhuma edição cadastrada.</div>` : ""}${publisherCarousel}${characterCarousel}${popularCollectionsMarkup}</div>`;
+     return `<div class="content">${legendarySundayBanner}${catalogHeader}${imprintCarousel}${group("Séries", series, true)}${group("Oneshots", oneshots)}${!items.length ? `<div class="empty">Nenhuma edição cadastrada.</div>` : ""}${publisherCarousel}${characterCarousel}${popularCollectionsMarkup}${type === "comic" ? alignmentWikiCarouselsMarkup(items) : ""}</div>`;
   }
 
   function seriesDefinitionFor(item) {
@@ -16556,6 +17730,7 @@
   const routeParts = siteBasePaths.has(pathParts[0]?.toLowerCase()) ? pathParts.slice(1) : pathParts;
   const queryProfile = new URLSearchParams(window.location.search).get("perfil");
   const queryPublicCollection = new URLSearchParams(window.location.search).get("lista");
+  const legacyShelfRoute = new URLSearchParams(window.location.search).get("pagina") === "estante";
   const initialPublicUsername = queryProfile
     ? cleanUsername(queryProfile)
     : routeParts.length === 1 && routeParts[0].toLowerCase() !== "index.html"
@@ -16564,6 +17739,10 @@
   if (initialPublicUsername && /^[a-z0-9_]{3,24}$/.test(initialPublicUsername)) {
     state.section = "public-profile";
     state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, album: new URLSearchParams(window.location.search).get("album") === "1" };
+  } else if (legacyShelfRoute) {
+    // Evita que a rota antiga pisque a home enquanto a sessão é recuperada.
+    state.section = "public-profile";
+    state.publicProfile = { loading: true, username: "" };
   }
   const bootOfflineAccount = readOfflineAccount();
   if (!initialPublicUsername && navigator.onLine === false && bootOfflineAccount?.user) {
@@ -16576,6 +17755,12 @@
   } else if (initialPublicUsername) render();
   else applyRoute();
   syncTopAvatar();
+  // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
+  // a rota pública não fique bloqueada pelas consultas globais do aplicativo.
+  const earlyPublicProfileLoad = initialPublicUsername && sb
+    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { basicOnly: true })
+      .catch(error => console.warn("Perfil público inicial indisponível:", error))
+    : null;
   const warmLibarchive = () => loadLibarchiveModule().catch(error => console.warn("Biblioteca CBR indisponível:", error));
   // A biblioteca é pequena perto dos arquivos CBR e precisa estar pronta
   // antes do primeiro clique para não competir com o download.
@@ -16652,6 +17837,7 @@
   accountBootstrap
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
+      if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1");
       pumpDownloadQueue();
     })

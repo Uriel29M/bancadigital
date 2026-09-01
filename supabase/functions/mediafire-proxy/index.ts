@@ -98,7 +98,14 @@ Deno.serve(async request => {
     if (requestedMethod === "HEAD" && !upstream.response.body) {
       upstream.response = new Response(new Uint8Array(0), { status: upstream.response.status, headers: upstream.response.headers });
     }
-    if (!upstream.response.ok) return responseBody(`Download indisponível (HTTP ${upstream.response.status}).`, 502);
+    if (!upstream.response.ok) {
+      // Preserve missing/expired-link statuses so the client can stop retrying
+      // a source that MediaFire has definitively rejected.
+      const status = upstream.response.status >= 400 && upstream.response.status < 500
+        ? upstream.response.status
+        : 502;
+      return responseBody(`Download indisponível (HTTP ${upstream.response.status}).`, status);
+    }
 
     const length = Number(upstream.response.headers.get("content-length") || 0);
     if (length > MAX_FILE_BYTES) return responseBody("Arquivo excede o limite permitido.", 413);

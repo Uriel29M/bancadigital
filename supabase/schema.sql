@@ -751,6 +751,10 @@ create index if not exists imprint_saves_user_idx on public.imprint_saves(user_i
 create table if not exists public.character_settings (
   character_key text primary key,
   character_name text not null,
+  character_type text not null default 'character' check (character_type in ('character', 'team')),
+  character_alignment text check (character_alignment in ('hero', 'villain', 'antihero', 'support')),
+  redirect_character_key text,
+  assigned_character_keys text[] not null default '{}',
   cover_url text,
   wikipedia_url text,
   authored_text text,
