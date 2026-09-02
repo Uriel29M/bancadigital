@@ -82,17 +82,21 @@ Deno.serve(async (request) => {
     if (!user) return json({ error: 'not_authenticated' }, 401);
     const { message_id } = await request.json();
     const admin = createClient(env('SUPABASE_URL'), supabaseAdminKey());
-    const { data: message } = await admin.from('chat_messages').select('id,sender_id,recipient_id,body').eq('id', message_id).maybeSingle();
+    const { data: message } = await admin.from('chat_messages').select('id,sender_id,recipient_id,room_id,body').eq('id', message_id).maybeSingle();
     if (!message || message.sender_id !== user.id) return json({ error: 'message_not_owned' }, 403);
     const { data: guria } = await admin.from('profiles').select('id').eq('username', 'guria').eq('is_bot', true).eq('is_official', true).maybeSingle();
-    if (!guria || message.recipient_id !== guria.id) return json({ error: 'not_guria_message' }, 400);
-    const { data: historyRows } = await admin.from('chat_messages')
-      .select('sender_id,body,created_at')
+    const isPublicMention = Boolean(message.room_id && /(^|\s)@guria\b/i.test(message.body || ''));
+    if (!guria || (!isPublicMention && message.recipient_id !== guria.id)) return json({ error: 'not_guria_message' }, 400);
+    const historyQuery = message.room_id
+      ? admin.from('chat_messages').select('sender_id,body,created_at').eq('room_id', message.room_id)
+      : admin.from('chat_messages').select('sender_id,body,created_at')
       .or(`and(sender_id.eq.${user.id},recipient_id.eq.${guria.id}),and(sender_id.eq.${guria.id},recipient_id.eq.${user.id})`)
+    const { data: historyRows } = await historyQuery
       .neq('id', message.id)
       .order('created_at', { ascending: false })
       .limit(12);
     const history = (historyRows || []).reverse();
+    const delivery = message.room_id ? { room_id: message.room_id, recipient_id: null } : { room_id: null, recipient_id: user.id };
     const { data: existingJob } = await admin.from('guria_ai_jobs').select('id,status').eq('source_message_id', message.id).maybeSingle();
     if (existingJob?.status === 'completed' || existingJob?.status === 'processing') return json({ ok: true, duplicate: true });
     const { data: job, error: jobError } = await admin.from('guria_ai_jobs').upsert({ source_message_id: message.id, status: 'queued' }, { onConflict: 'source_message_id' }).select('id,status').single();
@@ -105,20 +109,19 @@ Deno.serve(async (request) => {
     if (!withinQuota) {
       const dayStart = new Date();
       dayStart.setUTCHours(0, 0, 0, 0);
-      const { data: previousRestNotice } = await admin.from('chat_messages')
+      let restNoticeQuery = admin.from('chat_messages')
         .select('id')
         .eq('sender_id', guria.id)
-        .eq('recipient_id', user.id)
         .eq('metadata->>guria_type', 'quota_fallback')
         .gte('created_at', dayStart.toISOString())
-        .limit(1)
-        .maybeSingle();
+      restNoticeQuery = message.room_id ? restNoticeQuery.eq('room_id', message.room_id) : restNoticeQuery.eq('recipient_id', user.id);
+      const { data: previousRestNotice } = await restNoticeQuery.limit(1).maybeSingle();
       if (previousRestNotice) {
         await admin.from('guria_ai_jobs').update({ status: 'completed', provider: 'quota', completed_at: new Date().toISOString() }).eq('id', job.id);
         return json({ ok: true, fallback: true, repeated: true });
       }
       const reply = 'Eu já conversei bastante por hoje e estou ficando cansada. Vou descansar um pouco, mas amanhã volto para falar de quadrinhos com você.';
-      const inserted = await admin.from('chat_messages').insert({ sender_id: guria.id, recipient_id: user.id, body: reply, metadata: { guria_type: 'quota_fallback', official_ai: true }, guria_event_key: `answer:${message.id}` }).select('id').single();
+      const inserted = await admin.from('chat_messages').insert({ sender_id: guria.id, ...delivery, body: reply, metadata: { guria_type: 'quota_fallback', official_ai: true }, guria_event_key: `answer:${message.id}` }).select('id').single();
       await admin.from('guria_ai_jobs').update({ status: 'completed', provider: 'quota', response_message_id: inserted.data?.id || null, completed_at: new Date().toISOString() }).eq('id', job.id);
       return json({ ok: true, fallback: true, quota: true });
     }
@@ -170,7 +173,11 @@ Deno.serve(async (request) => {
             : /\b(?:caixa local|meus arquivos|arquivo do computador)\b/i.test(message.body)
               ? 'A caixa local é o cantinho dos seus arquivos: [abrir caixa local](/?pagina=caixa).'
               : null;
-    const directReply = navigationReply || siteReply || (
+    const { data: quickReplies } = await admin.from('guria_quick_replies').select('patterns,response').eq('enabled', true).order('priority', { ascending: false });
+    const databaseReply = !repeatedUserQuestion
+      ? (quickReplies || []).find((entry: any) => (entry.patterns || []).some((pattern: string) => { try { return new RegExp(pattern, 'i').test(message.body); } catch { return false; } }))?.response || null
+      : null;
+    const directReply = navigationReply || siteReply || databaseReply || (
       /\b(solteir[ao]s?|namorando|namora|relacionamento|casad[ao])\b/i.test(message.body)
       ? (repeatedUserQuestion
         ? 'Você já perguntou isso, hein? Continua sendo solteira. Minha companhia mais constante ainda é uma boa história em quadrinhos, pelo menos ela não insiste na mesma pergunta. Quer trocar de assunto?'
@@ -191,7 +198,7 @@ Deno.serve(async (request) => {
     if (errorCode && /(banca|site|estante|perfil|mensagem|quadrinho|leitura|funciona)/i.test(message.body)) reply = SITE_FALLBACK;
     reply = (reply || FALLBACK).replace(/[—–]/g, ',').slice(0, 4000);
     const replyParts = splitReply(reply);
-    const inserted = await admin.from('chat_messages').insert(replyParts.map((part, index) => ({ sender_id: guria.id, recipient_id: user.id, body: part, metadata: { guria_type: 'answer', official_ai: true, source_urls: (context || []).map((row: any) => row.source_url).filter(Boolean), part_index: index, part_count: replyParts.length }, guria_event_key: `answer:${message.id}:${index}` }))).select('id').order('id', { ascending: true });
+    const inserted = await admin.from('chat_messages').insert(replyParts.map((part, index) => ({ sender_id: guria.id, ...delivery, body: part, metadata: { guria_type: 'answer', official_ai: true, source_urls: (context || []).map((row: any) => row.source_url).filter(Boolean), part_index: index, part_count: replyParts.length }, guria_event_key: `answer:${message.id}:${index}` }))).select('id').order('id', { ascending: true });
     await admin.from('guria_ai_jobs').update({ status: 'completed', provider, error_code: errorCode, response_message_id: inserted.data?.[0]?.id || null, completed_at: new Date().toISOString() }).eq('id', job.id);
     return json({ ok: true, fallback: provider === 'disabled' || Boolean(errorCode) });
   } catch (error) { console.error('[guria-chat]', error instanceof Error ? error.message : 'unexpected'); return json({ error: 'internal_error' }, 500); }

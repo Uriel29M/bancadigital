@@ -11387,9 +11387,12 @@
       const button = $("button[type=submit]", composeForm);
       if (!body || button.disabled) return;
       button.disabled = true;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }).select("id").single();
       if (result.error) { console.error("[chat room] erro ao enviar mensagem", result.error); toast(result.error.message || "Não foi possível enviar a mensagem."); }
-      else { awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); getReply.clear(); await renderMessages(); }
+      else {
+        if (/@guria\b/i.test(body) && result.data?.id) sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] menção pública indisponível", error?.message || error));
+        awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); getReply.clear(); await renderMessages();
+      }
       button.disabled = false;
     };
     chatInput?.addEventListener("keydown", event => {
