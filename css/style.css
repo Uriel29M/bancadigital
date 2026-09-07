@@ -3341,3 +3341,7 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
 .shelf-fixed-collection.shelf-style-wood::after {
   display: none;
 }
+
+/* Keep the three series-cover actions together; wrap only on narrow screens. */
+.series-cover-choice-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.series-cover-choice-actions > button { max-width: 100%; white-space: normal; }

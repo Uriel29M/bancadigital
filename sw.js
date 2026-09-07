@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v584";
+const CACHE_VERSION = "banca-digital-shell-v585";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
