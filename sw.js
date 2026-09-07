@@ -1,11 +1,12 @@
-const CACHE_VERSION = "banca-digital-shell-v581";
+const CACHE_VERSION = "banca-digital-shell-v582";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./css/style.css?v=2.2.10.225",
-  "./js/app.js?v=2.2.10.445",
+  "./css/style.css?v=2.2.10.226",
+  "./js/app.js?v=2.2.10.447",
+  "./js/catalog-sync.js?v=1",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
   "./js/data/dc-comics/black-label.js?v=1.0.14",
@@ -64,16 +65,15 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  // O app muda com frequência; tente sempre a versão publicada antes
-  // de recorrer ao cache offline. O catálogo publicado (recentes.js e
-  // companhia) também: alterações de edições/capas feitas por admins
-  // precisam chegar a todos no primeiro recarregamento.
+  // Application code and published catalog data must be fetched from the
+  // network first. The cache is only a fallback for offline reading.
   const isCatalogData =
     url.pathname.endsWith("/js/data.js") ||
     url.pathname.includes("/js/data/");
 
   if (
     url.pathname.endsWith("/js/app.js") ||
+    url.pathname.endsWith("/js/catalog-sync.js") ||
     url.pathname.endsWith("/css/style.css") ||
     isCatalogData
   ) {
@@ -103,8 +103,6 @@ self.addEventListener("fetch", event => {
       }
       return response;
     } catch {
-      // Somente navegações usam index.html como fallback. Para assets, um
-      // HTML retornado com status 200 mascara o erro e quebra a aplicação.
       return new Response("Offline", {
         status: 503,
         statusText: "Offline",
