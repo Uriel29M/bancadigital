@@ -3857,6 +3857,8 @@
     const editions = seriesEditions({ seriesId });
     if (!editions.length) return;
     const current = state.seriesCoverChoices.get(seriesId);
+    const editorialDefault = window.BancaSeriesDefaults?.get(seriesId);
+    const canSetDefault = state.profile?.plan === "admin";
     const options = [];
     editions.forEach(edition => {
       if (edition.coverUrl) options.push({ key: `standard:${edition.id}`, itemId: edition.id, coverUrl: edition.coverUrl, label: `${itemDisplayTitle(edition)} · Capa padrão`, isVariant: false });
@@ -3866,7 +3868,7 @@
     const seriesModalEffects = `<div class="series-cover-modal-effects"><span>Estilo da capa:</span>${coverStyleControl(seriesId, seriesStyle)}</div>`;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal series-cover-choice-modal"><div class="section-head"><div><h2>Escolher capa da série</h2><div class="section-subtitle">Escolha uma capa entre as edições desta série.</div></div><button class="small-btn" data-close>Fechar</button></div>${seriesModalEffects}<form id="series-cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="seriesCoverKey" value="${escapeHTML(option.key)}" ${current?.item_id === option.itemId && Boolean(current?.is_variant) === option.isVariant && (option.isVariant ? current?.variant_key === option.variantKey : true) || (!current && option.key === `standard:${editions[0].id}`) || (current?.is_variant && !["premium", "moderator", "banca", "admin"].includes(state.profile?.plan) && option.key === `standard:${editions[0].id}`) ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.coverUrl))}" alt=""><span>${escapeHTML(option.label)}</span></label>`).join("")}</div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal series-cover-choice-modal"><div class="section-head"><div><h2>Escolher capa da série</h2><div class="section-subtitle">Escolha uma capa entre as edições desta série.</div></div><button class="small-btn" data-close>Fechar</button></div>${seriesModalEffects}<form id="series-cover-choice-form"><div class="cover-choice-options">${options.map(option => `<label class="cover-choice-option"><input type="radio" name="seriesCoverKey" value="${escapeHTML(option.key)}" ${current?.item_id === option.itemId && Boolean(current?.is_variant) === option.isVariant && (option.isVariant ? current?.variant_key === option.variantKey : true) || (!current && editorialDefault?.item_id === option.itemId && Boolean(editorialDefault?.is_variant) === option.isVariant && (option.isVariant ? editorialDefault?.variant_key === option.variantKey : true)) || (!current && !editorialDefault && option.key === `standard:${editions[0].id}`) || (current?.is_variant && !["premium", "moderator", "banca", "admin"].includes(state.profile?.plan) && option.key === `standard:${editions[0].id}`) ? "checked" : ""}><img src="${escapeHTML(proxiedImageUrl(option.coverUrl))}" alt=""><span>${escapeHTML(option.label)}</span></label>`).join("")}</div>${canSetDefault ? `<div class="series-cover-editorial-actions"><button type="button" class="small-btn" data-set-series-default>Definir como capa padrão da série</button><p class="format-hint" data-series-default-status role="status" aria-live="polite">A capa padrão aparece para quem ainda não escolheu uma capa pessoal.</p></div>` : ""}<div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar capa</button></div></form></div>`;
     $("#modal-root").appendChild(overlay);
     overlay.addEventListener("click", event => {
       if (event.target === overlay) overlay.remove();
@@ -3879,6 +3881,29 @@
       cycleCoverStyle(button.dataset.coverEffectItem, button.dataset.coverEffectCollection || "");
       };
     });
+    const defaultButton = $('[data-set-series-default]', overlay);
+    if (defaultButton) defaultButton.onclick = async () => {
+      if (state.profile?.plan !== "admin" || !state.session?.user?.id) return toast("Somente administradores podem definir a capa padrão.");
+      const form = $("#series-cover-choice-form", overlay);
+      const selected = options.find(option => option.key === String(new FormData(form).get("seriesCoverKey")));
+      if (!selected) return toast("Selecione uma capa antes de definir o padrão.");
+      const status = $('[data-series-default-status]', overlay);
+      defaultButton.disabled = true;
+      defaultButton.textContent = "Definindo capa padrão…";
+      try {
+        await window.BancaSeriesDefaults.setDefault(seriesId, selected, state.session.user.id);
+        if (status) status.textContent = "Capa padrão da série atualizada para todos os usuários sem escolha pessoal.";
+        toast("Capa padrão da série atualizada.");
+        updateSeriesCoverImages(seriesId);
+        render();
+      } catch (error) {
+        if (status) status.textContent = error.message || "Não foi possível definir a capa padrão.";
+        toast(error.message || "Não foi possível definir a capa padrão.");
+      } finally {
+        defaultButton.disabled = false;
+        defaultButton.textContent = "Definir como capa padrão da série";
+      }
+    };
     $("#series-cover-choice-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const selected = options.find(option => option.key === String(new FormData(event.currentTarget).get("seriesCoverKey")));
@@ -8910,6 +8935,8 @@
     const activeChoices = seriesCoverChoices || (state.section === "public-profile" ? state.publicProfile?.seriesCoverChoices : state.seriesCoverChoices);
     const selectedCover = activeChoices?.get?.(item?.seriesId)?.cover_url;
     if (selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover))) return proxiedImageUrl(selectedCover);
+    const editorialDefault = window.BancaSeriesDefaults?.get(item?.seriesId)?.cover_url;
+    if (editorialDefault) return proxiedImageUrl(editorialDefault);
     return coverFor(item);
   }
 
@@ -19026,6 +19053,10 @@
       armOfflineHistoryGuard();
     }
   });
+  window.BancaSeriesDefaults?.start(sb, seriesId => {
+    if (seriesId) updateSeriesCoverImages(seriesId);
+    if (state.authReady && state.section !== "reader" && !readerIsOpen) render();
+  })?.catch(error => console.warn("Capas padrão compartilhadas indisponíveis:", error));
   BancaCatalogSync.start(sb, refreshSharedCatalog);
   refreshSharedCatalog()
     .catch(error => console.warn("Catálogo compartilhado indisponível; usando cópia local:", error));
