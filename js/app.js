@@ -38,7 +38,7 @@
   // O snapshot publicado tem prioridade sobre duplicatas e mutações dos selos.
   window.DEFAULT_SERIES = [...new Map([...(window.DEFAULT_SERIES || []), ...(window.PUBLISHED_CATALOG?.series || [])].map(series => [series.id, series])).values()];
   window.DEFAULT_LIBRARY = [...new Map([...(window.DEFAULT_LIBRARY || []), ...(window.PUBLISHED_CATALOG?.library || [])].map(item => [item.id, item])).values()];
-  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "backupUrls", "format"];
+  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "backupUrls", "format"];
   function mergeCatalogEdition(item, published) {
     if (!published) return item;
     // Não descarte a edição do ADM enquanto o deploy ainda entrega a versão anterior.
@@ -838,12 +838,7 @@
   }
   function isTelegramPostUrl(url) { return /^https?:\/\/(?:www\.)?t(?:elegram)?\.me\//i.test(String(url || "")); }
   function telegramProxyUrl(item) {
-    const postUrl = String(item?.telegramUrl || "").trim();
-    const fileId = String(item?.telegramFileId || "").trim();
-    if (!isTelegramPostUrl(postUrl) || !fileId || !window.BANCA_SUPABASE_URL) return "";
-    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-proxy`);
-    proxy.searchParams.set("file_id", fileId);
-    return proxy.toString();
+    return window.BancaTelegram?.proxyUrl(item) || "";
   }
   // A postagem identifica a edição; o file_id, capturado pelo bot, é o que
   // permite ao gateway pedir o binário à API oficial do Telegram.
@@ -6508,6 +6503,18 @@
   }
 
   function openReader(item, options = {}) {
+    if (!item) return;
+    if (!options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
+      if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
+      void window.BancaTelegram.published(item, sb).then(canonical => {
+        if (!canonical.telegramFileId && !canonical.fileUrl) {
+          toast("Esta postagem ainda não foi identificada pelo bot. Um administrador precisa salvar a edição novamente.");
+          return;
+        }
+        openReader(canonical, { ...options, telegramResolved: true });
+      }).catch(error => toast(`Não foi possível consultar a fonte do Telegram: ${error.message || error}`));
+      return;
+    }
     if (!item) return;
     if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
     if (!canViewCatalogItem(item)) {
@@ -18605,7 +18612,7 @@
           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
           <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
           <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
-          <div class="field full"><label>Telegram file_id (somente para postagem do Telegram)</label><input name="telegramFileId" value="${escapeHTML(x.telegramFileId || "")}" placeholder="BQACAg... (obtido pelo bot)"><small class="format-hint">O bot precisa estar no canal. Sem este ID, a postagem pode ser exibida, mas o leitor não consegue baixar o arquivo.</small></div>
+          <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
           <div class="field full"><label>Link da capa (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(x.coverUrl || "")}" placeholder="https://.../capa.jpg"><small class="format-hint">Se preenchido, será usada como capa da edição em vez da primeira página do arquivo.</small></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://.../capa-do-destaque.jpg"><small class="format-hint">Use uma imagem horizontal ou uma capa em alta resolução para controlar melhor o destaque.</small></div>
@@ -18618,6 +18625,7 @@
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
+    const telegramEditor = window.BancaTelegram.bindEditor($("#edit-form", overlay), sb, x);
     $("#edit-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -18664,6 +18672,11 @@
       submit.disabled = true;
       submit.textContent = "Publicando edição...";
       try {
+        if (isTelegram) {
+          submit.textContent = "Identificando arquivo…";
+          Object.assign(item, await telegramEditor.forSave(item, sourceUrl));
+        }
+        submit.textContent = "Publicando edição...";
         const published = await saveCatalog("Edição salva.", item);
         if (published) {
           overlay.remove();
@@ -18678,6 +18691,15 @@
           }
           status.textContent = "A publicação falhou. A edição permanece neste formulário; tente salvar novamente. Nenhuma alteração não confirmada foi publicada.";
         }
+      } catch (error) {
+        let status = form.querySelector('[data-publish-status]');
+        if (!status) {
+          status = document.createElement("p");
+          status.dataset.publishStatus = "";
+          status.setAttribute("role", "alert");
+          form.appendChild(status);
+        }
+        status.textContent = error.message || "Não foi possível salvar a edição.";
       } finally {
         form.dataset.saving = "false";
         submit.disabled = false;

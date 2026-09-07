@@ -1,12 +1,13 @@
-const CACHE_VERSION = "banca-digital-shell-v582";
+const CACHE_VERSION = "banca-digital-shell-v583";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
   "./css/style.css?v=2.2.10.226",
-  "./js/app.js?v=2.2.10.447",
+  "./js/app.js?v=2.2.10.448",
   "./js/catalog-sync.js?v=1",
+  "./js/telegram-auto.js?v=1",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
   "./js/data/dc-comics/black-label.js?v=1.0.14",
@@ -74,6 +75,7 @@ self.addEventListener("fetch", event => {
   if (
     url.pathname.endsWith("/js/app.js") ||
     url.pathname.endsWith("/js/catalog-sync.js") ||
+    url.pathname.endsWith("/js/telegram-auto.js") ||
     url.pathname.endsWith("/css/style.css") ||
     isCatalogData
   ) {
