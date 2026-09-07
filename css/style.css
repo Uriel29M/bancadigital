@@ -3345,3 +3345,9 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
 /* Keep the three series-cover actions together; wrap only on narrow screens. */
 .series-cover-choice-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .series-cover-choice-actions > button { max-width: 100%; white-space: normal; }
+
+/* Editorial series visibility. Existing cover and save buttons are unchanged. */
+.series-hide-toggle { border: 1px solid var(--border, #777); border-radius: 8px; padding: 6px 10px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.series-hide-toggle.is-hidden { border-style: dashed; }
+.series-card.is-hidden { opacity: .65; }
+.series-hide-toggle:disabled { opacity: .5; cursor: wait; }

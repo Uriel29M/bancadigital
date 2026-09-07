@@ -431,6 +431,7 @@
     comicMonthlyReadCounts: new Map(),
     comicMonthlyReadCountsLoaded: false,
     hiddenCatalogItemIds: new Set(),
+    hiddenCatalogSeriesIds: new Set(),
      homeSectionOrder: null,
      homeHiddenSectionKeys: new Set(),
      homeVisibleSectionKeys: [],
@@ -739,6 +740,54 @@
   function isHiddenCatalogItem(item) {
     return Boolean(item?.id && state.hiddenCatalogItemIds?.has(String(item.id)));
   }
+  function isHiddenCatalogSeries(seriesId) {
+    return Boolean(seriesId && state.hiddenCatalogSeriesIds?.has(String(seriesId)));
+  }
+  function canViewCatalogItem(item, includeHidden = false) {
+    const hiddenCharacter = characterNames(item).some(name => state.characterSettings.get(publisherKey(name))?.is_hidden);
+    return (!isHiddenCatalogItem(item) && !isHiddenCatalogSeries(item?.seriesId) && !hiddenCharacter) || (includeHidden && isAdminProfile());
+  }
+  function visibleCatalogItems(items = state.db.library, includeHidden = isAdminProfile()) {
+    return items.filter(item => canViewCatalogItem(item, includeHidden));
+  }
+  async function loadCatalogVisibility() {
+    if (!sb || navigator.onLine === false) return;
+    const [editions, series] = await Promise.all([
+      sb.from("catalog_item_visibility").select("item_id, is_hidden"),
+      sb.from("catalog_series_visibility").select("series_id, is_hidden")
+    ]);
+    if (editions.error) console.warn("Não foi possível carregar a visibilidade das edições:", editions.error.message);
+    else state.hiddenCatalogItemIds = new Set((editions.data || []).filter(row => row.is_hidden).map(row => String(row.item_id)));
+    if (series.error) console.warn("Não foi possível carregar a visibilidade das séries:", series.error.message);
+    else state.hiddenCatalogSeriesIds = new Set((series.data || []).filter(row => row.is_hidden).map(row => String(row.series_id)));
+  }
+  async function toggleCatalogItemVisibility(itemId) {
+    if (!isAdminProfile()) return toast("Apenas administradores podem ocultar edições.");
+    const id = String(itemId || "");
+    if (!id || !sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
+    const hidden = !state.hiddenCatalogItemIds.has(id);
+    const result = hidden
+      ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" })
+      : await sb.from("catalog_item_visibility").delete().eq("item_id", id);
+    if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade.");
+    if (hidden) state.hiddenCatalogItemIds.add(id); else state.hiddenCatalogItemIds.delete(id);
+    render();
+    toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
+  }
+  async function toggleCatalogSeriesVisibility(seriesId) {
+    if (!isAdminProfile() || state.session?.offline) return toast("Apenas administradores podem ocultar séries.");
+    const id = String(seriesId || "");
+    if (!id || !sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
+    const hidden = !state.hiddenCatalogSeriesIds.has(id);
+    const result = hidden
+      ? await sb.from("catalog_series_visibility").upsert({ series_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "series_id" })
+      : await sb.from("catalog_series_visibility").delete().eq("series_id", id);
+    if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade da série.");
+    if (hidden) state.hiddenCatalogSeriesIds.add(id); else state.hiddenCatalogSeriesIds.delete(id);
+    render();
+    toast(hidden ? "Série ocultada para usuários comuns." : "Série visível novamente para todos.");
+  }
+
   function canViewCatalogItem(item, includeHidden = false) {
     const hiddenCharacter = characterNames(item).some(name => state.characterSettings.get(publisherKey(name))?.is_hidden);
     return (!isHiddenCatalogItem(item) && !hiddenCharacter) || (includeHidden && isAdminProfile());
@@ -1346,7 +1395,7 @@
       return;
     }
     const section = params.get("colecao") ? "collection" : Object.keys(sectionRoutes).find(key => sectionRoutes[key] === page) || "home";
-    const item = readerId ? state.db.library.find(entry => entry.id === readerId) : null;
+    const item = readerId ? state.db.library.find(entry => entry.id === readerId && canViewCatalogItem(entry, isAdminProfile())) : null;
 
     // Eventos repetidos de clique, autenticação ou histórico podem reaplicar
     // a mesma rota enquanto o PDF ainda carrega. Preserve o leitor existente
@@ -4940,7 +4989,7 @@
 
   function seriesEditions(item) {
     if (!item?.seriesId) return [];
-    const current = visibleCatalogItems().filter(x => x.seriesId === item.seriesId);
+    const current = state.db.library.filter(x => x.seriesId === item.seriesId);
     const uniqueCurrent = [...new Map(current.map(entry => [entry.id, entry])).values()];
     if (uniqueCurrent.length !== current.length) {
       state.db.library = [
@@ -6529,6 +6578,10 @@
 
   function openReader(item, options = {}) {
     if (!item) return;
+    if (!canViewCatalogItem(item, isAdminProfile())) {
+      toast("Esta edição está temporariamente oculta.");
+      return;
+    }
     if (!options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
       if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
       void window.BancaTelegram.published(item, sb).then(canonical => {
@@ -6542,7 +6595,7 @@
     }
     if (!item) return;
     if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
-    if (!canViewCatalogItem(item)) {
+    if (!canViewCatalogItem(item, isAdminProfile())) {
       toast("Esta edição está temporariamente oculta.");
       return;
     }
@@ -16679,6 +16732,13 @@
       event.stopPropagation();
       toggleCatalogItemVisibility(el.dataset.hideItem);
     }));
+    $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (el.disabled) return;
+      el.disabled = true;
+      Promise.resolve(toggleCatalogSeriesVisibility(el.dataset.hideSeries)).finally(() => { if (el.isConnected) el.disabled = false; });
+    }));
     $$('[data-edit-item]').forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -18112,6 +18172,11 @@
   }
 
   function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null) {
+    if (isHiddenCatalogSeries(item?.seriesId) && !isAdminProfile()) {
+      toast("Esta série está temporariamente oculta.");
+      return;
+    }
+
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     const volumeGroups = new Map();
@@ -18836,9 +18901,11 @@
     const entityButton = (kind, value) => value ? `<button type="button" class="series-entity-link" data-entity-kind="${escapeHTML(kind)}" data-entity-value="${escapeHTML(value)}">${escapeHTML(value)}</button>` : "";
     const seriesCoverStyle = coverStyleFor({ id: item.seriesId });
     const saved = favoriteIds.has(item.seriesId);
+    const hidden = isHiddenCatalogSeries(item.seriesId);
     const canSetSeriesCover = Boolean(state.session) && favoriteIds === state.favoriteIds;
     const seriesCoverEffects = coverStyleControl(item.seriesId, seriesCoverStyle, canSetSeriesCover);
     const seriesCoverChoiceButton = canSetSeriesCover ? `<button type="button" class="series-cover-choice" data-series-cover-choice="${escapeHTML(item.seriesId)}" title="Capa da série">Capa</button>` : "";
+    const visibilityButton = isAdminProfile() ? `<button type="button" class="series-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-series="${escapeHTML(item.seriesId)}" title="${hidden ? "Mostrar série para todos" : "Ocultar série para usuários comuns"}" aria-label="${hidden ? "Mostrar série para todos" : "Ocultar série para usuários comuns"}">${hidden ? "◉ Mostrar série" : "⊘ Ocultar série"}</button>` : "";
     const seriesName = series.name || series.seriesTitle;
     const startYearValue = series.year ? String(series.year) : "";
     const startYear = startYearValue ? `<button type="button" class="series-card-year series-entity-link" data-entity-kind="year" data-entity-value="${escapeHTML(startYearValue)}">(${escapeHTML(startYearValue)})</button>` : "";
@@ -18847,7 +18914,7 @@
     const mainCover = seriesCoverFor(item);
     const stackCovers = [editions[1], editions[2]].map(edition => edition ? seriesCoverFor(edition) : mainCover);
     const stackMarkup = stackCovers.map((cover, index) => `<div class="series-card-stack-cover series-card-stack-cover-${index + 1}" style="background-image:url('${escapeHTML(cover)}')"></div>`).join("");
-    return `<article class="series-card" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
+    return `<article class="series-card ${hidden ? "is-hidden" : ""}" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série${hidden ? " · Oculta" : ""}</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}${visibilityButton}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
   }
 
   function handlePopState() {
@@ -19057,6 +19124,9 @@
     if (seriesId) updateSeriesCoverImages(seriesId);
     if (state.authReady && state.section !== "reader" && !readerIsOpen) render();
   })?.catch(error => console.warn("Capas padrão compartilhadas indisponíveis:", error));
+  if (sb) sb.channel("banca-series-visibility").on("postgres_changes", { event: "*", schema: "public", table: "catalog_series_visibility" }, () => {
+    loadCatalogVisibility().then(() => { if (!readerIsOpen) render(); }).catch(error => console.warn("Visibilidade das séries indisponível:", error));
+  }).subscribe();
   BancaCatalogSync.start(sb, refreshSharedCatalog);
   refreshSharedCatalog()
     .catch(error => console.warn("Catálogo compartilhado indisponível; usando cópia local:", error));
