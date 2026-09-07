@@ -7,12 +7,12 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.229">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.230">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=246", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=247", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
