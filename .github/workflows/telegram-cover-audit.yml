@@ -1,47 +1,40 @@
-name: Telegram cover integration verification
+name: Telegram cover production smoke test
 on:
   push:
     branches: [fix/telegram-image-covers]
     paths: [.github/workflows/telegram-cover-audit.yml]
 permissions:
-  contents: write
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 1
-      - name: Apply the isolated fix to current main
+      - name: Verify deployed frontend and gateway
         run: |
-          git fetch origin fix/telegram-image-covers
-          git show origin/fix/telegram-image-covers:scripts/apply-telegram-covers.py > scripts/apply-telegram-covers.py
-          git show origin/fix/telegram-image-covers:scripts/test-telegram-covers.mjs > scripts/test-telegram-covers.mjs
-          git show origin/fix/telegram-image-covers:js/telegram-covers.js > js/telegram-covers.js
-          python3 scripts/apply-telegram-covers.py
-      - name: Check JavaScript and existing catalog regressions
-        run: |
-          node --check js/app.js
-          node --check js/telegram-covers.js
-          node --check sw.js
-          node --test scripts/test-telegram-covers.mjs scripts/test-telegram-auto.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
-      - name: Validate the server source
-        run: |
-          git show origin/fix/telegram-image-covers:supabase/functions/telegram-cover/index.ts > /tmp/telegram-cover.ts
           python3 - <<'PY'
-          from pathlib import Path
-          text=Path('/tmp/telegram-cover.ts').read_text()
-          assert 'getFile' in text and 'telegram_cover_sources' in text
-          assert 'authorizedAdmin(request)' in text and 'selectImage(forwarded)' in text
-          assert 'MAX_BYTES = 10 * 1024 * 1024' in text
-          print('Server source security and image routing anchors verified.')
+          import urllib.request, urllib.error, json
+          site='https://uriel29m.github.io/bancadigital/'
+          base='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-cover'
+          with urllib.request.urlopen(site, timeout=30) as response:
+              html=response.read().decode()
+              assert 'js/telegram-covers.js?v=1' in html
+              assert 'js/app.js?v=2.2.10.449' in html
+              print('Live frontend: new cover integration and app version verified')
+          def check(request, expected):
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      status=response.status; data=json.load(response); headers=response.headers
+              except urllib.error.HTTPError as error:
+                  status=error.code; headers=error.headers; data=json.loads(error.read())
+              assert status==expected, (status,data)
+              assert headers.get('Access-Control-Allow-Origin')=='*'
+              assert data.get('error')
+              return data
+          check(urllib.request.Request(base+'?url=https%3A%2F%2Ft.me%2Fbancahq%2F999999999',headers={'Origin':site}),404)
+          print('Unregistered image: 404 with CORS verified')
+          check(urllib.request.Request(base,method='POST',data=b'{"url":"https://t.me/bancahq/2"}',headers={'Content-Type':'application/json','Origin':site}),401)
+          print('Unauthenticated registration: 401 verified')
+          check(urllib.request.Request(base+'?url=https%3A%2F%2Fevil.example%2Ffile',headers={'Origin':site}),400)
+          print('Invalid external source rejected')
           PY
-      - name: Save tested frontend on isolated branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add js/app.js js/telegram-covers.js index.html sw.js scripts/apply-telegram-covers.py scripts/test-telegram-covers.mjs
-          git commit -m "fix: resolve Telegram image covers before publishing editions"
-          git push origin HEAD:refs/heads/fix/telegram-image-covers-verified
