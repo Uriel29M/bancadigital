@@ -67,3 +67,16 @@ test('editor writes the shared record before changing the local catalog', () => 
   assert.match(app, /BancaCatalogSync\.start\(sb, refreshSharedCatalog\)/);
   assert.match(app, /const library = BancaCatalogSync\.merge\(state\.db\.library\)/);
 });
+
+test('catalog recovery remains registered if the first request fails', () => {
+  const app = readFileSync('js/app.js', 'utf8');
+  assert.match(app, /BancaCatalogSync\.start\(sb, refreshSharedCatalog\);\s*refreshSharedCatalog\(\)/);
+  assert.match(app, /window\.BancaCatalogSync\?\.applyEdition/);
+});
+test('server publisher reconciles shared records before writing GitHub', () => {
+  const server = readFileSync('supabase/functions/github-catalog/index.ts', 'utf8');
+  assert.match(server, /from\("catalog_edition_overrides"\)/);
+  assert.match(server, /const library = reconcile\(payload\.library/);
+  assert.match(server, /catalogEditedAt: record\.updated_at/);
+  assert.match(server, /profile\?\.plan !== "admin"/);
+});

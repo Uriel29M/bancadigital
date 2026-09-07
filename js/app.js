@@ -18998,8 +18998,8 @@
       armOfflineHistoryGuard();
     }
   });
+  BancaCatalogSync.start(sb, refreshSharedCatalog);
   refreshSharedCatalog()
-    .then(() => BancaCatalogSync.start(sb, refreshSharedCatalog))
     .catch(error => console.warn("Catálogo compartilhado indisponível; usando cópia local:", error));
   const accountBootstrap = initialPublicUsername
     ? Promise.race([
