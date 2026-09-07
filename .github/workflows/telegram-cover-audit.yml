@@ -1,0 +1,39 @@
+name: Telegram cover inspection
+on:
+  push:
+    branches: [fix/telegram-image-covers]
+    paths: [.github/workflows/telegram-cover-audit.yml]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('js/app.js').read_text()
+          out=Path('telegram-cover-audit'); out.mkdir(exist_ok=True)
+          for name in ['proxiedImageUrl','coverFor','coverCacheKey','loadCover','generateCover','openEditForm','saveCatalog']:
+              matches=list(re.finditer(r'\n  (?:async\s+)?function\s+'+name+r'\s*\(',text))
+              for n,m in enumerate(matches):
+                  following=re.search(r'\n  (?:async\s+)?function\s+\w+\s*\(',text[m.end():])
+                  end=m.end()+following.start() if following else len(text)
+                  out.joinpath(f'{name}-{n}.js').write_text(text[m.start():end])
+                  print(name,n,end-m.start())
+          for term in ['function proxiedImageUrl','function coverFor','data-cover-effect-item','featuredCoverUrl','coverUrl: String(fd.get','function loadGeneratedCover']:
+              for m in list(re.finditer(re.escape(term),text))[:8]:
+                  print('MATCH',term,text.count('\n',0,m.start())+1)
+          PY
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin fix/telegram-image-covers
+          git checkout fix/telegram-image-covers
+          git add telegram-cover-audit
+          git commit -m "chore: capture cover integration anchors" || true
+          git push origin HEAD:fix/telegram-image-covers
