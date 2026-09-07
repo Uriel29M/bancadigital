@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 
-function load(client, rows = new Map()) {
+function load(rows = new Map()) {
   const window = { BANCA_SUPABASE_URL: 'https://example.supabase.co', BancaCatalogSync: { rows } };
   vm.runInNewContext(readFileSync('js/telegram-auto.js', 'utf8'), { window, URL, Set, String, Number, Error });
   return window.BancaTelegram;
@@ -20,14 +20,14 @@ function form(initial = '') {
   return { elements, source, format, id, status, button, querySelector(selector) { return ({ '[data-telegram-status]': status, '[data-resolve-telegram]': button, '[data-format-preview]': preview })[selector] || null; } };
 }
 test('normalizes supported posts and rejects unrelated URLs', () => {
-  const api = load(client);
+  const api = load();
   assert.equal(api.normalized('https://t.me/BancaHQ/2?single'), 'https://t.me/bancahq/2');
   assert.equal(api.normalized('https://t.me/c/12345/6'), 'https://t.me/c/12345/6');
   assert.equal(api.normalized('https://evil.example/t.me/bancahq/2'), '');
   assert.equal(api.normalized('https://t.me/bancahq'), '');
 });
 test('identifies the document automatically and retains unrelated edition metadata', async () => {
-  const api = load(client), ui = form(metadata.telegramUrl);
+  const api = load(), ui = form(metadata.telegramUrl);
   const editor = api.bindEditor(ui, client);
   const original = { id: 'edition-5', title: 'All Star Western', coverUrl: 'cover.jpg', issue: '5', fileUrl: '', telegramUrl: metadata.telegramUrl };
   const result = await editor.forSave(original, metadata.telegramUrl);
@@ -41,16 +41,16 @@ test('identifies the document automatically and retains unrelated edition metada
   assert.equal(original.telegramFileId, undefined);
 });
 test('a failed identification cannot publish a stale file ID', async () => {
-  const api = load({ functions: { invoke: async () => ({ data: { error: 'Postagem não encontrada.' }, error: null }) } });
-  const ui = form(metadata.telegramUrl);
-  const editor = api.bindEditor(ui, client);
+  const failingClient = { functions: { invoke: async () => ({ data: { error: 'Postagem não encontrada.' }, error: null }) } };
+  const api = load(), ui = form(metadata.telegramUrl);
+  const editor = api.bindEditor(ui, failingClient);
   await assert.rejects(editor.forSave({ id: 'edition-5', telegramFileId: 'old' }, metadata.telegramUrl), /Postagem não encontrada/);
   assert.equal(ui.id.value, '');
 });
 test('changing the source invalidates pending identification', async () => {
   let complete;
-  const api = load({ functions: { invoke: () => new Promise(resolve => { complete = resolve; }) } });
-  const ui = form(metadata.telegramUrl), editor = api.bindEditor(ui, client);
+  const delayedClient = { functions: { invoke: () => new Promise(resolve => { complete = resolve; }) } };
+  const api = load(), ui = form(metadata.telegramUrl), editor = api.bindEditor(ui, delayedClient);
   const pending = editor.forSave({ id: 'edition-5' }, metadata.telegramUrl);
   ui.source.value = 'https://t.me/bancahq/3';
   ui.source.fire('input');
@@ -60,7 +60,7 @@ test('changing the source invalidates pending identification', async () => {
 });
 test('reader uses the canonical shared identifier rather than stale local metadata', async () => {
   const row = { item_id: 'edition-5', edition: { id: 'edition-5', ...metadata }, updated_at: '2026-09-07T22:05:24Z' };
-  const rows = new Map(), api = load(client, rows);
+  const rows = new Map(), api = load(rows);
   const db = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: row, error: null }) }) }) }) };
   const item = await api.published({ id: 'edition-5', telegramUrl: metadata.telegramUrl, telegramFileId: 'stale', format: 'auto', title: 'All Star Western' }, db);
   assert.equal(item.telegramFileId, metadata.telegramFileId);
@@ -70,7 +70,7 @@ test('reader uses the canonical shared identifier rather than stale local metada
   assert.equal(url.searchParams.has('file_id'), false);
 });
 test('existing direct file IDs remain compatible without a shared record', () => {
-  const api = load(client);
+  const api = load();
   const url = new URL(api.proxyUrl({ id: 'legacy', ...metadata }));
   assert.equal(url.searchParams.get('file_id'), metadata.telegramFileId);
 });
