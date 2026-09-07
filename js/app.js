@@ -10392,7 +10392,7 @@
     const missing = COMIC_SECTION_ORDER.filter(key => !unique.includes(key));
     const charactersIndex = unique.indexOf("characters");
     if (!unique.includes("teams") && charactersIndex >= 0) unique.splice(charactersIndex + 1, 0, "teams");
-    return [...unique, ...missing.filter(key => key !== "teams")];
+    return [...unique, ...missing.filter(key => !unique.includes(key))];
   }
 
   function moveComicSection(key, direction) {
@@ -10424,6 +10424,8 @@
     if (state.section !== "comic") return;
     const content = $("#main .content");
     if (!content) return;
+    const teamSection = document.querySelector("#main .wiki-team-carousel-section");
+    if (teamSection && teamSection.parentElement !== content) content.appendChild(teamSection);
     const legendaryBanner = $(".legendary-sunday-banner", content);
     const legendaryStatus = $(".legendary-sunday-status", content);
     if (legendaryBanner && legendaryStatus && legendaryBanner.parentElement === content && legendaryStatus.parentElement === content) {
@@ -10434,6 +10436,7 @@
     }
     const sections = [...content.children].filter(element => element.matches(".section, .comic-legendary-section-group, .legendary-sunday-banner"));
     const sectionKeyFor = element => {
+      if (element.classList.contains("wiki-team-carousel-section")) return "teams";
       if (element.classList.contains("comic-legendary-section-group") || element.classList.contains("legendary-sunday-banner")) return "legendary";
       const title = ($( ".section-title", element)?.textContent?.trim().toLocaleLowerCase("pt-BR") || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       if (title === "selos") return "imprints";
@@ -10454,6 +10457,10 @@
     state.comicVisibleSectionKeys = order.filter(key => keyedSections.some(entry => entry.key === key));
     keyedSections.forEach(({ element, key }) => {
       element.hidden = state.comicHiddenSectionKeys.has(key) && !canViewHiddenHomepageSections();
+    });
+    state.comicVisibleSectionKeys.forEach(key => {
+      const entry = keyedSections.find(item => item.key === key);
+      if (entry) content.appendChild(entry.element);
     });
     if (!canManageHomepageOrder()) return;
     keyedSections.forEach(({ element, key }) => {
