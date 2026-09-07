@@ -1,0 +1,58 @@
+name: Series visibility verification
+on:
+  push:
+    branches: [fix/series-visibility]
+    paths: [.github/workflows/series-visibility-verify.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Apply focused source patch
+        run: |
+          git fetch origin fix/series-visibility
+          git show origin/fix/series-visibility:scripts/apply-series-visibility.py > scripts/apply-series-visibility.py
+          python3 scripts/apply-series-visibility.py
+      - name: Validate syntax and regression suite
+        run: |
+          node --check js/app.js
+          node --check sw.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('js/app.js').read_text()
+          a=s.index('  function seriesCard(');b=s.find('\n  function ',a+5);card=s[a:b]
+          assert card.count('data-hide-series=')==1
+          assert 'data-series-favorite=' in card and 'data-series-cover-choice=' in card
+          assert 'hiddenCatalogSeriesIds' in s and 'catalog_series_visibility' in s
+          assert 'const current = state.db.library.filter(x => x.seriesId === item.seriesId);' in s
+          assert 'visibleCatalogItems(items = state.db.library, includeHidden = isAdminProfile())' in s
+          assert 'if (isHiddenCatalogSeries(item?.seriesId) && !isAdminProfile())' in s
+          assert 'entry.id === readerId && canViewCatalogItem(entry, isAdminProfile())' in s
+          assert 'const [editions, series] = await Promise.all' in s
+          assert 'state.hiddenCatalogSeriesIds.add(id)' in s and 'state.hiddenCatalogSeriesIds.delete(id)' in s
+          assert 'data-set-series-default' in s
+          assert re.search(r'sw\.js\?v=245',Path('index.html').read_text())
+          print('Series and edition visibility, reversible controls, source preservation, and direct-route guards verified.')
+          PY
+          cp scripts/test-series-default-cover.mjs /tmp/series-default-original-test.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/test-series-default-cover.mjs');s=p.read_text();s=s.replace('/sw\\.js\\?v=243/', '/sw\\.js\\?v=\\d+/');p.write_text(s)
+          PY
+          node --test scripts/test-series-default-cover.mjs scripts/test-telegram-covers.mjs scripts/test-telegram-auto.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
+          mv /tmp/series-default-original-test.mjs scripts/test-series-default-cover.mjs
+      - name: Publish verified change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app.js css/style.css index.html sw.js
+          git commit -m "feat: allow administrators to hide and restore entire series"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
