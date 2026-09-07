@@ -1,0 +1,36 @@
+name: Series default cover verification
+on:
+  push:
+    branches: [fix/series-default-cover]
+    paths: [.github/workflows/series-default-cover-verify.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Apply narrow patch to current main
+        run: |
+          git fetch origin fix/series-default-cover
+          git show origin/fix/series-default-cover:scripts/apply-series-default-cover.py > scripts/apply-series-default-cover.py
+          git show origin/fix/series-default-cover:scripts/test-series-default-cover.mjs > scripts/test-series-default-cover.mjs
+          git show origin/fix/series-default-cover:js/series-default-covers.js > js/series-default-covers.js
+          python3 scripts/apply-series-default-cover.py
+      - name: Validate JavaScript and regressions
+        run: |
+          node --check js/app.js
+          node --check js/series-default-covers.js
+          node --check sw.js
+          node --test scripts/test-series-default-cover.mjs scripts/test-telegram-covers.mjs scripts/test-telegram-auto.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
+      - name: Publish verified changes on isolated branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app.js js/series-default-covers.js index.html sw.js scripts/apply-series-default-cover.py scripts/test-series-default-cover.mjs
+          git commit -m "feat: let administrators define shared series cover defaults"
+          git push origin HEAD:refs/heads/fix/series-default-cover-verified
