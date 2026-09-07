@@ -1,0 +1,44 @@
+name: Inspect series default cover integration
+on:
+  push:
+    branches: [fix/catalog-sync-20260907]
+    paths: [.github/workflows/series-default-cover-audit.yml]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Extract the existing cover chooser and shared catalog paths
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('js/app.js').read_text(encoding='utf-8')
+          out=Path('series-default-audit');out.mkdir(exist_ok=True)
+          names=['openSeriesCoverChoice','seriesCoverFor','seriesCoverUrl','seriesCoverChoice','loadCoverChoices','loadSeriesCoverChoices','saveCatalog','seriesEditions','renderSeries','loadDatabase','loadData','loadProfile','loadSession','openSeries']
+          for name in names:
+              matches=list(re.finditer(r'\n  (?:async\s+)?function\s+'+name+r'\s*\(',text))
+              for n,m in enumerate(matches):
+                  following=re.search(r'\n  (?:async\s+)?function\s+\w+\s*\(',text[m.end():])
+                  end=m.end()+following.start() if following else len(text)
+                  out.joinpath(f'{name}-{n}.js').write_text(text[m.start():end],encoding='utf-8')
+          for term in ['user_series_cover_choices','coverChoices:','coverChoices =','seriesCoverFor(','seriesCoverUrl(','seriesCoverChoice(','series-cover-choice-form','series-cover-choice-modal','function seriesCover','function loadCover','function saveCatalog','function coverFor','function renderSeries','BancaCatalogSync.start','function init(']:
+              matches=list(re.finditer(re.escape(term),text))
+              for n,m in enumerate(matches[:12]):
+                  start=max(0,text.rfind('\n',0,m.start()-1000));end=min(len(text),text.find('\n',m.end()+1600))
+                  out.joinpath('reference-'+re.sub(r'[^a-zA-Z0-9]','-',term)+'-'+str(n)+'.txt').write_text(text[start:end],encoding='utf-8')
+          print('Extracted',len(list(out.iterdir())),'source excerpts')
+          PY
+      - name: Commit inspection excerpts to isolated branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin fix/catalog-sync-20260907
+          git checkout fix/catalog-sync-20260907
+          git add series-default-audit
+          git commit -m "chore: capture current series cover chooser" || true
+          git push origin HEAD:fix/catalog-sync-20260907
