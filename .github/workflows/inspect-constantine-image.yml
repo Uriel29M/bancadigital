@@ -16,35 +16,22 @@ jobs:
           filter: blob:none
           sparse-checkout: |
             js/app.js
-            js/data.js
-            js/data/dc-comics
           sparse-checkout-cone-mode: false
-      - name: Extrair código de resolução de imagens
+      - name: Extrair resolutores de imagens e perfis
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re, json, subprocess
+          import json, re, subprocess
           src = Path('js/app.js').read_text(encoding='utf-8')
           lines = src.splitlines()
-          patterns = [r'John Constantine',r'wikiCharacterImageCache',r'antiheroes',r'antihero',r'function .*Character',r'function .*character',r'characterSettings',r'wiki-character-card',r'character-card',r'character_name',r'cover_url',r'characterImage',r'imageForCharacter',r'function .*Wiki']
-          selected = set()
+          ranges = [(5285,5400),(13080,13310)]
+          report = {'app_sha': subprocess.check_output(['git','hash-object','js/app.js'],text=True).strip(), 'sections': {}}
+          for a,b in ranges:
+              report['sections'][f'{a}-{b}'] = '\n'.join(f'{i+1}: {lines[i]}' for i in range(a-1,min(b,len(lines))))
           for i,line in enumerate(lines):
-              if any(re.search(p,line,re.I) for p in patterns):
-                  selected.update(range(max(0,i-5),min(len(lines),i+9)))
-          report = {'app_sha': subprocess.check_output(['git','hash-object','js/app.js'],text=True).strip(), 'app_lines': len(lines), 'matches': []}
-          for i in sorted(selected):
-              line = lines[i]
-              if len(line) > 5000: line = line[:5000] + ' [truncated]'
-              report['matches'].append(f'{i+1}: {line}')
-          for path in [Path('js/data.js'), *Path('js/data/dc-comics').glob('*.js')]:
-              if not path.is_file(): continue
-              matches = []
-              for i,line in enumerate(path.read_text(encoding='utf-8').splitlines()):
-                  if re.search(r'John Constantine|Constantine|Hellblazer',line,re.I):
-                      matches.append(f'{i+1}: {line[:5000]}')
-              if matches: report.setdefault('catalog_matches',{})[str(path)] = matches[:10]
-          Path('constantine-diagnostic.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-          print('Diagnostic lines:',len(report['matches']))
+              if re.search(r'^  (?:async )?function (?:loadCharacterSettings|loadWikiQuickInfo|characterSettingForName|defaultWikiReferenceForEntity|fandomImageFromHtml|characterImage|renderWikiCharacterCarousel|wikiCharacterCarousel|hydrateWikiCharacter)',line):
+                  report['sections'][str(i+1)] = '\n'.join(f'{j+1}: {lines[j]}' for j in range(i,min(i+100,len(lines))))
+          Path('constantine-image-paths.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
           PY
       - name: Salvar diagnóstico na branch isolada
         run: |
@@ -52,6 +39,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin fix/constantine-image
           git checkout -B fix/constantine-image origin/fix/constantine-image
-          git add --sparse constantine-diagnostic.json
-          git commit -m "chore: collect Constantine image diagnostic"
+          git add --sparse constantine-image-paths.json
+          git commit -m "chore: inspect character image resolution"
           git push origin HEAD:fix/constantine-image
