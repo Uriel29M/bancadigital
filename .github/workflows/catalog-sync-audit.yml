@@ -12,22 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Integrate latest main without discarding other work
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git merge --no-edit origin/main
-      - name: Apply scoped application fix
-        run: python3 scripts/apply-catalog-sync.py
-      - name: Verify source and regression tests
+          fetch-depth: 1
+      - name: Finalize shared catalog recovery
+        run: python3 scripts/finalize-catalog-sync.py
+      - name: Verify application and regression tests
         run: |
           node --check js/app.js
           node --check js/catalog-sync.js
           node --test scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
-      - name: Save verified fix to isolated branch
+      - name: Save verified source to isolated branch
         run: |
-          git add js/app.js js/catalog-sync.js index.html scripts/apply-catalog-sync.py scripts/test-shared-catalog.mjs
-          git commit -m "fix: publish edition edits to shared catalog and reconcile caches"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app.js scripts/test-shared-catalog.mjs
+          git commit -m "fix: retry shared catalog loading and verify publisher protection"
           git push origin HEAD:fix/catalog-sync-20260907
