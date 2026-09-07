@@ -1100,16 +1100,28 @@ main { min-height: calc(100vh - 150px); }
 .imprint-pinned-section .publisher-card { border-radius: 12px; }
 .character-pinned-section .publisher-card { border-radius: 50%; }
 .character-pinned-section .publisher-card-info { right: 10px; bottom: 18px; left: 10px; justify-items: center; text-align: center; }
+.character-pinned-section .publisher-carousel { scroll-behavior: smooth; scroll-snap-type: x mandatory; scrollbar-color: #74747d #111114; }
+.character-pinned-section .publisher-card { scroll-snap-align: start; }
+.character-pinned-section .publisher-carousel::-webkit-scrollbar { width: 12px; height: 12px; }
+.character-pinned-section .publisher-carousel::-webkit-scrollbar-track { background: #111114; }
+.character-pinned-section .publisher-carousel::-webkit-scrollbar-thumb { border: 3px solid #111114; border-radius: 8px; background: #74747d; }
+.character-pinned-section .publisher-carousel::-webkit-scrollbar-thumb:hover { background: #92929b; }
 .carousel-controls { display: flex; gap: 8px; }
 .carousel-control { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0 0 3px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--text); font-size: 25px; line-height: 1; cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .carousel-control:hover { border-color: var(--accent); background: var(--surface-2); transform: translateY(-2px); }
-.imprint-carousel { overflow-x: auto; padding: 10px 2px 12px; scrollbar-width: thin; scroll-behavior: smooth; scroll-snap-type: x mandatory; }
+.imprint-carousel { overflow-x: auto; padding: 10px 2px 12px; scrollbar-width: thin; scrollbar-color: #74747d #111114; scroll-behavior: smooth; scroll-snap-type: x mandatory; }
+.imprint-carousel::-webkit-scrollbar { width: 12px; height: 12px; }
+.imprint-carousel::-webkit-scrollbar-track { background: #111114; }
+.imprint-carousel::-webkit-scrollbar-thumb { border: 3px solid #111114; border-radius: 8px; background: #74747d; }
+.imprint-carousel::-webkit-scrollbar-thumb:hover { background: #92929b; }
 .imprint-carousel-section { margin-top: 28px; }
 .imprint-carousel-track { display: flex; gap: 15px; width: max-content; }
 .imprint-carousel .publisher-card { scroll-snap-align: start; }
 @media (max-width: 600px) { .imprint-carousel-section .section-head { align-items: center; } .imprint-carousel .publisher-card { flex-basis: min(72vw, var(--media-card-width)); } }
 @media (max-width: 600px) { .related-imprints-publisher-suffix { display: none; } }
 .publisher-page-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.publisher-page.imprint-page { display: flex; flex-direction: column; }
+.publisher-page.imprint-page > .entity-wiki:not([data-wiki-quick]) { order: 10; margin-top: 28px; margin-bottom: 0; }
 .entity-wiki { margin: 0 0 26px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.025); }
 .entity-wiki-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .entity-wiki-heading .eyebrow { margin: 0; }
@@ -2299,6 +2311,10 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .series-download-button { position: static; top: auto; right: auto; z-index: auto; }
 .series-card:hover, .series-card:focus-visible { border-color: #e50914; box-shadow: 0 0 0 1px #e50914, 0 12px 28px rgba(229,9,20,.16); transform: translateY(-2px); outline: none; }
 .series-card-cover { position: absolute; inset: 0; background: center / cover no-repeat; opacity: .82; transition: opacity .18s ease; }
+.series-card-cover { overflow: hidden; }
+.series-card-stack-cover { position: absolute; inset: 0; background: center / cover no-repeat; opacity: .32; transform: translateX(18px) scale(.96); filter: saturate(.9); }
+.series-card-stack-cover-2 { transform: translateX(9px) scale(.98); opacity: .5; }
+.series-card-stack-cover-1 { transform: translateX(0) scale(1); opacity: .7; }
 .series-card-cover[data-cover-style="grayscale"] { filter: grayscale(1); }
 .series-card-cover[data-cover-style="gold"] { filter: sepia(1) saturate(2.2) hue-rotate(5deg) brightness(1.08); }
 .series-card:hover .series-card-cover, .series-card:focus-visible .series-card-cover { opacity: .92; }

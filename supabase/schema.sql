@@ -1997,8 +1997,8 @@ begin
   if v_target.plan = 'admin' and not public.is_admin() then raise exception 'Apenas administradores podem alterar administradores'; end if;
   if v_target.plan = 'banca' and not public.is_admin() then raise exception 'Apenas administradores podem alterar integrantes da Banca'; end if;
   if v_target.plan = 'moderator' and not (public.is_admin() or exists (select 1 from public.profiles where id = auth.uid() and plan = 'banca')) then raise exception 'Apenas a Banca e administradores podem alterar moderadores'; end if;
-  -- Moderadores e administradores nÃ£o participam de facÃ§Ãµes. Ao promover
-  -- um membro, remova tambÃ©m a associaÃ§Ã£o e qualquer cargo que ele possua.
+  -- Moderadores e administradores não participam de facções. Ao promover
+  -- um membro, remova também a associação e qualquer cargo que ele possua.
   if p_plan in ('moderator', 'banca') and v_target.faction_id is not null then
     delete from public.faction_roles where user_id = v_target.id;
     delete from public.faction_memberships where user_id = v_target.id;
@@ -2014,6 +2014,8 @@ begin
   end if;
   if v_target.plan is distinct from p_plan then
     perform public.create_notification(v_target.id, 'plan', 'Plano da conta atualizado', 'Seu plano mudou de ' || case v_target.plan when 'premium' then 'Lenda' when 'free' then 'Comum' when 'moderator' then 'Moderador' when 'admin' then 'Administrador' else v_target.plan end || ' para ' || case p_plan when 'premium' then 'Lenda' when 'free' then 'Comum' when 'moderator' then 'Moderador' when 'admin' then 'Administrador' else p_plan end || '.', auth.uid(), null, jsonb_build_object('old_plan', v_target.plan, 'new_plan', p_plan));
+    insert into public.moderation_actions(actor_id, target_id, action, details)
+    values (auth.uid(), v_target.id, 'change_plan', jsonb_build_object('old_plan', v_target.plan, 'new_plan', p_plan));
   end if;
 end;
 $$;
@@ -2346,7 +2348,7 @@ insert into public.faction_achievements(achievement_key, name, description, icon
   ('faction_loved', 'Querida da banca', 'Membros da facção precisam dar 250 curtidas em quadrinhos nesta temporada.', '♥', 'like', 250, 6),
   ('faction_network', 'Rede formada', 'Membros da facção precisam seguir 100 perfis nesta temporada.', '✧', 'follow', 100, 7),
   ('faction_legend', 'Lenda da temporada', 'A facção soma 10.000 XP nesta temporada. As atividades dos membros contribuem.', '🏆', 'xp', 10000, 8)
-  ,('faction_mandatory_readers', 'Clube da missÃ£o', 'Pelo menos 100 membros precisam comeÃ§ar uma das leituras obrigatÃ³rias da temporada.', 'ðŸ“š', 'mandatory_readers', 100, 9)
+  ,('faction_mandatory_readers', 'Clube da missão', 'Pelo menos 100 membros precisam começar uma das leituras obrigatórias da temporada.', '📚', 'mandatory_readers', 100, 9)
 on conflict (achievement_key) do update set name = excluded.name, description = excluded.description, icon = excluded.icon, metric = excluded.metric, threshold = excluded.threshold, sort_order = excluded.sort_order;
 
 create table if not exists public.faction_roles (

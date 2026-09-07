@@ -1,15 +1,16 @@
-const CACHE_VERSION = "banca-digital-shell-v560";
+const CACHE_VERSION = "banca-digital-shell-v581";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
   "./",
   "./index.html",
   "./css/style.css?v=2.2.10.225",
-  "./js/app.js?v=2.2.10.430",
+  "./js/app.js?v=2.2.10.445",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
   "./js/data/dc-comics/black-label.js?v=1.0.14",
   "./js/data/dc-comics/milestone.js?v=1.1.1",
+  "./js/data/dc-comics/novos-52.js?v=1.0.15",
   "./js/data/loading-tips.js?v=1.0.0",
   "./js/supabase.js",
   "./assets/barracabrancaicon.png?v=1",
@@ -58,14 +59,24 @@ self.addEventListener("fetch", event => {
           caches.open(SHELL_CACHE).then(cache => cache.put("./index.html", copy));
           return response;
         })
-        .catch(() => caches.match(request).then(cached => cached || caches.match("./index.html")))
+      .catch(() => caches.match(request, { ignoreSearch: true }).then(cached => cached || caches.match("./index.html", { ignoreSearch: true })))
     );
     return;
   }
 
   // O app muda com frequência; tente sempre a versão publicada antes
-  // de recorrer ao cache offline.
-  if (url.pathname.endsWith("/js/app.js") || url.pathname.endsWith("/css/style.css")) {
+  // de recorrer ao cache offline. O catálogo publicado (recentes.js e
+  // companhia) também: alterações de edições/capas feitas por admins
+  // precisam chegar a todos no primeiro recarregamento.
+  const isCatalogData =
+    url.pathname.endsWith("/js/data.js") ||
+    url.pathname.includes("/js/data/");
+
+  if (
+    url.pathname.endsWith("/js/app.js") ||
+    url.pathname.endsWith("/css/style.css") ||
+    isCatalogData
+  ) {
     event.respondWith((async () => {
       try {
         const response = await fetch(request, { cache: "no-store" });

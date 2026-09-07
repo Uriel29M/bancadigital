@@ -35,9 +35,22 @@
   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
   const PUBLIC_COLLECTION_COLOR_OPTIONS = [["#31202b", "Ameixa"], ["#542536", "Vinho"], ["#7d2630", "Bordô"], ["#9b3d27", "Terracota"], ["#b66b2b", "Âmbar"], ["#b28a27", "Mostarda"], ["#536b2b", "Oliva"], ["#236044", "Esmeralda"], ["#1f6670", "Turquesa"], ["#28528a", "Azul"], ["#393b82", "Índigo"], ["#663b91", "Violeta"], ["#8c426f", "Framboesa"], ["#59636f", "Ardósia"], ["#76523c", "Café"], ["#b3475b", "Coral"], ["#8a5a2b", "Cobre"], ["#397052", "Musgo"], ["#315f9b", "Cobalto"], ["#7651a3", "Lavanda"]];
   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
-  // Consolida entradas repetidas quando catálogos sobrepostos são carregados.
-  window.DEFAULT_SERIES = [...new Map((window.DEFAULT_SERIES || []).map(series => [series.id, series])).values()];
-  window.DEFAULT_LIBRARY = [...new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item])).values()];
+  // O snapshot publicado tem prioridade sobre duplicatas e mutações dos selos.
+  window.DEFAULT_SERIES = [...new Map([...(window.DEFAULT_SERIES || []), ...(window.PUBLISHED_CATALOG?.series || [])].map(series => [series.id, series])).values()];
+  window.DEFAULT_LIBRARY = [...new Map([...(window.DEFAULT_LIBRARY || []), ...(window.PUBLISHED_CATALOG?.library || [])].map(item => [item.id, item])).values()];
+  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "backupUrls", "format"];
+  function mergeCatalogEdition(item, published) {
+    if (!published) return item;
+    // Não descarte a edição do ADM enquanto o deploy ainda entrega a versão anterior.
+    if (item.catalogEditedAt && String(item.catalogEditedAt) > String(published.catalogEditedAt || "")) return { ...published, ...item };
+    const merged = { ...published, ...item };
+    EDITION_SOURCE_FIELDS.forEach(field => {
+      if (Object.prototype.hasOwnProperty.call(published, field)) merged[field] = published[field];
+      else if (published.catalogEditedAt) delete merged[field];
+    });
+    if (published.catalogEditedAt) merged.catalogEditedAt = published.catalogEditedAt;
+    return merged;
+  }
   // Fonte única das vantagens exibidas no banner de Lenda. Ao adicionar uma
   // nova vantagem ao produto, inclua-a aqui para atualizar o banner também.
   const LEGENDARY_BENEFITS = [
@@ -97,15 +110,32 @@
       }
       if (merged.seriesId === "series-sindicato-de-sangue-milestone-1993") {
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
-        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+        if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
       }
       if (merged.seriesId === "series-superchoque-milestone-1993") merged.character = "Super Choque";
       if (definition.imprint === "Black Label") {
         const issueNumber = Number(String(merged.issue || "").match(/\d+/)?.[0] || 0);
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
         merged.coverUrl = item.coverUrl || defaultItem?.coverUrl || (issueNumber === 1 ? definition.coverUrl : "");
+        // item.coverUrl tem prioridade: só cai para o padrão se o usuário não salvou uma capa.
         if (!merged.fileUrl) {
           if (defaultItem?.fileUrl) merged.fileUrl = defaultItem.fileUrl;
+        }
+      }
+      if (definition.imprint === "Novos 52") {
+        const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+        ["seriesTitle", "author", "publisher", "imprint", "description", "tags", "type", "publication", "status", "editions", "character"].forEach(field => {
+          if (definition[field] !== undefined) merged[field] = definition[field];
+        });
+        if (defaultItem) {
+          if (defaultItem.fileUrl && !item.fileUrl) merged.fileUrl = defaultItem.fileUrl;
+          if (defaultItem.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+          if (defaultItem.officialUrl) merged.officialUrl = defaultItem.officialUrl;
+          if (defaultItem.sourceUrl) merged.sourceUrl = defaultItem.sourceUrl;
+          if (defaultItem.issue !== undefined) merged.issue = defaultItem.issue;
+          if (defaultItem.sortOrder !== undefined) merged.sortOrder = defaultItem.sortOrder;
+          if (defaultItem.year !== undefined) merged.year = defaultItem.year;
+          if (defaultItem.format) merged.format = defaultItem.format;
         }
       }
       if (merged.id === "teen-titans-academy-anuario") {
@@ -126,15 +156,15 @@
       }
       if (merged.seriesId === "series-batman-urban-legends-2021") {
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
-        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+        if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
       }
       if (merged.seriesId === "series-absolute-power-2024") {
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
-        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+        if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
       }
       if (["series-stargirl-lost-children-2022-01", "series-stargirl-lost-children-2022-02"].includes(merged.id)) {
         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
-        if (defaultItem?.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+        if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
       }
       if (String(merged.id || "").startsWith("fury-of-firestorm-2026-") && !String(merged.fileUrl || "").endsWith("/file")) {
         merged.fileUrl = `${merged.fileUrl}/file`;
@@ -150,6 +180,10 @@
         merged.seriesTitle = definition.name;
         merged.title = definition.name;
       }
+      // Migrações históricas não podem substituir fontes/capas editadas pelo ADM.
+      if (item.catalogEditedAt) EDITION_SOURCE_FIELDS.forEach(field => {
+        if (Object.prototype.hasOwnProperty.call(item, field)) merged[field] = item[field];
+      });
       return merged;
     });
   }
@@ -161,7 +195,7 @@
       if (!definition) return item;
       const compact = { ...item };
       SERIES_FIELDS.forEach(field => {
-        if (field !== "type" && compact[field] === definition[field]) delete compact[field];
+        if (field !== "type" && !(item.catalogEditedAt && EDITION_SOURCE_FIELDS.includes(field)) && compact[field] === definition[field]) delete compact[field];
       });
       if (compact.seriesTitle === definition.name || compact.seriesTitle === definition.seriesTitle) delete compact.seriesTitle;
       if (compact.title === definition.name || compact.title === definition.seriesTitle) delete compact.title;
@@ -221,6 +255,18 @@
               .filter(item => item.id !== "series-absolute-power-2024-01")
               .map(item => oldAbsolutePowerIds.has(item.id) ? { ...item, id: oldAbsolutePowerIds.get(item.id) } : item);
           }
+          const actionAnnual3DuplicateId = "series-action-comics-2011-novos-52-Anual 03";
+          const actionAnnual3CanonicalId = "series-action-comics-2011-novos-52-2014";
+          if (saved.library.some(item => item.id === actionAnnual3DuplicateId)) {
+            const normalizedActionItems = saved.library.map(item => item.id === actionAnnual3DuplicateId
+              ? { ...item, id: actionAnnual3CanonicalId, issue: "Anual 03", year: 2014 }
+              : item);
+            saved.library = [...new Map(normalizedActionItems.map(item => [item.id, item])).values()];
+            saved.collections = saved.collections.map(collection => ({
+              ...collection,
+              issueIds: [...new Set((collection.issueIds || []).map(id => id === actionAnnual3DuplicateId ? actionAnnual3CanonicalId : id))]
+            }));
+          }
           const defaultsById = new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item]));
           const previousLibrary = saved.library;
           let updatedIcon13Url = false;
@@ -229,7 +275,7 @@
             return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
           });
           saved.library = saved.library.map(item => {
-            if (item.id !== "series-icone-milestone-1993-013") return item;
+            if (item.id !== "series-icone-milestone-1993-013" || item.catalogEditedAt) return item;
             const defaultItem = defaultsById.get(item.id);
             if (!defaultItem?.fileUrl || item.fileUrl === defaultItem.fileUrl) return item;
             updatedIcon13Url = true;
@@ -247,7 +293,9 @@
               seriesTitle: item.seriesTitle || definition?.name || definition?.seriesTitle || ""
             };
           });
-          saved.library = materializeSeriesItems(saved.library.map(item => ({ ...(defaultsById.get(item.id) || {}), ...item })));
+          saved.library = saved.library.map(item => mergeCatalogEdition(item, defaultsById.get(item.id)));
+          saved.library = materializeSeriesItems(saved.library);
+          this.save(saved);
           const milestoneSeriesIds = new Set((window.DEFAULT_SERIES || []).filter(series => series.imprint === "Milestone").map(series => series.id));
           const milestoneItemIds = new Set((window.DEFAULT_LIBRARY || []).filter(item => milestoneSeriesIds.has(item.seriesId)).map(item => item.id));
           const hadUnavailableMilestoneIssues = saved.library.some(item => milestoneSeriesIds.has(item.seriesId) && !milestoneItemIds.has(item.id));
@@ -255,7 +303,7 @@
           const hadObsoleteHardwareIssues = saved.library.some(item => item.seriesId === "series-hardware-milestone-1993" && Number(item.issue) > 16);
           saved.library = saved.library.filter(item => item.seriesId !== "series-hardware-milestone-1993" || Number(item.issue) <= 16);
           const hadLegacyIconCatalog = saved.library.some(item => item.seriesId === "series-icone-milestone-1993");
-          saved.library = saved.library.filter(item => item.seriesId !== "series-icone-milestone-1993");
+          saved.library = saved.library.filter(item => item.seriesId !== "series-icone-milestone-1993" || item.catalogEditedAt);
           const batgirlsCharacterChanged = saved.library.some(item => item.seriesId === "series-batgirls-2022" && item.character !== "Batgirl");
           if (batgirlsCharacterChanged) {
             saved.library = saved.library.map(item => item.seriesId === "series-batgirls-2022" ? { ...item, character: "Batgirl" } : item);
@@ -772,7 +820,7 @@
         if (state.section === "downloads") render();
       }
     } catch (error) {
-      console.warn("NÃ£o foi possÃ­vel validar os arquivos offline:", error);
+      console.warn("Não foi possível validar os arquivos offline:", error);
     }
   }
   function persistDownloads() {
@@ -788,7 +836,21 @@
       if (account) localStorage.setItem(OFFLINE_ACCOUNT_KEY, JSON.stringify({ ...account, downloads: rows, savedAt: Date.now() }));
     } catch {}
   }
-  function downloadSource(item) { return item?.fileUrl || (!/^https?:\/\/(?:www\.)?t(?:elegram)?\.me\//i.test(item?.telegramUrl || "") ? item?.telegramUrl : "") || ""; }
+  function isTelegramPostUrl(url) { return /^https?:\/\/(?:www\.)?t(?:elegram)?\.me\//i.test(String(url || "")); }
+  function telegramProxyUrl(item) {
+    const postUrl = String(item?.telegramUrl || "").trim();
+    const fileId = String(item?.telegramFileId || "").trim();
+    if (!isTelegramPostUrl(postUrl) || !fileId || !window.BANCA_SUPABASE_URL) return "";
+    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-proxy`);
+    proxy.searchParams.set("file_id", fileId);
+    return proxy.toString();
+  }
+  // A postagem identifica a edição; o file_id, capturado pelo bot, é o que
+  // permite ao gateway pedir o binário à API oficial do Telegram.
+  function downloadSource(item) { return telegramProxyUrl(item) || item?.fileUrl || (!isTelegramPostUrl(item?.telegramUrl) ? item?.telegramUrl : "") || ""; }
+  function isExternalArchiveLink(url) {
+    return /^(?:https?:\/\/)(?:(?:www\.)?mediafire\.com\/\?|mega\.co\.nz\/#!)/i.test(String(url || ""));
+  }
   function downloadCacheKey(url) { const proxy = proxiedFileUrl(url); return `${proxy}${proxy.includes("?") ? "&" : "?"}v=240`; }
   async function downloadCoverDataUrl(item) {
     const selectedChoice = state.coverChoices?.get?.(item?.id) || state.coverChoices?.get?.(String(item?.id));
@@ -807,7 +869,7 @@
         try {
           const cache = await caches.open(OFFLINE_COVER_CACHE);
           await cache.put(offlineCoverCacheKey(item.id), new Response(blob, { headers: { "Content-Type": blob.type || "image/jpeg" } }));
-        } catch (error) { console.warn("NÃ£o foi possÃ­vel salvar a capa offline:", error); }
+        } catch (error) { console.warn("Não foi possível salvar a capa offline:", error); }
       }
       return dataUrl;
     } catch { return ""; }
@@ -853,6 +915,10 @@
     if (!state.session) return openAuthPage();
     const url = downloadSource(item);
     if (!url) return toast("Este quadrinho não possui um arquivo direto para baixar.");
+    if (isExternalArchiveLink(url)) {
+      window.open(url, "_blank", "noopener");
+      return;
+    }
     const id = String(item.id);
     const previous = downloaded(id);
     if (previous?.status === "downloading") return;
@@ -861,7 +927,7 @@
     state.downloads.set(id, { id, url, status: shouldWait ? "waiting" : "downloading", progress: Number(previous?.progress) || 0, title: itemDisplayTitle(item), snapshot: { ...(previous?.snapshot || item), file: undefined, local: undefined }, startedAt });
     persistDownloads(); updateDownloadButtons(id); render();
     if (shouldWait) return;
-    const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("NÃ£o foi possÃ­vel preparar a capa offline:", error); return ""; });
+    const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("Não foi possível preparar a capa offline:", error); return ""; });
     try {
       await fetchFileArrayBuffer(url, (received, total) => {
         const current = state.downloads.get(id); if (!current) return;
@@ -1045,7 +1111,7 @@
         for (const { item } of items) updateDownloadCoverImage(item.id);
       }
     } catch (error) {
-      console.warn("NÃ£o foi possÃ­vel carregar as capas offline:", error);
+      console.warn("Não foi possível carregar as capas offline:", error);
     } finally {
       offlineCoverHydrationRunning = false;
       if (offlineCoverHydrationQueued) {
@@ -1141,7 +1207,7 @@
   function prefetchReaderFile(item) {
     if (!item || item.local) return null;
     if (navigator.onLine === false || state.session?.offline) return null;
-    const url = item.fileUrl || item.telegramUrl || "";
+    const url = downloadSource(item);
     const format = String(item.format || extension(url)).toLowerCase();
     if (!/^https?:\/\//i.test(url) || !["pdf", "cbz", "cbr"].includes(format)) return null;
     if (readerFilePrefetches.has(url)) return readerFilePrefetches.get(url);
@@ -1250,7 +1316,10 @@
     if (offlineNavigation) params = { pagina: "downloads" };
     const url = routeUrl(params);
     const currentUrl = `${window.location.pathname}${window.location.search}`;
-    if (currentUrl === url) return applyRoute();
+    if (currentUrl === url) {
+      if (params?.ler && readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(params.ler)) return;
+      return applyRoute();
+    }
     const historyState = {
       [ROUTE_HISTORY_KEY]: true,
       [ROUTE_HISTORY_INDEX_KEY]: replace ? currentRouteHistoryIndex() : currentRouteHistoryIndex() + 1,
@@ -1283,6 +1352,14 @@
     }
     const section = params.get("colecao") ? "collection" : Object.keys(sectionRoutes).find(key => sectionRoutes[key] === page) || "home";
     const item = readerId ? state.db.library.find(entry => entry.id === readerId) : null;
+
+    // Eventos repetidos de clique, autenticação ou histórico podem reaplicar
+    // a mesma rota enquanto o PDF ainda carrega. Preserve o leitor existente
+    // em vez de destruí-lo e iniciar outra transferência do mesmo arquivo.
+    if (readerId && item && readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(readerId) && document.querySelector(".reader-overlay")) {
+      state.section = "reader";
+      return;
+    }
 
     activeReaderCleanup?.();
     activeReaderCleanup = null;
@@ -1335,7 +1412,7 @@
     if (!sb || navigator.onLine === false) return;
     const result = await sb.from("comic_read_counts").select("item_id, clicks");
     if (result.error) {
-      console.warn("NÃ£o foi possÃ­vel carregar as quantidades de leitura:", result.error.message);
+      console.warn("Não foi possível carregar as quantidades de leitura:", result.error.message);
       return;
     }
     const counts = new Map((result.data || []).map(row => [String(row.item_id), Number(row.clicks) || 0]));
@@ -1437,7 +1514,7 @@
     }
     const result = await sb.rpc("increment_comic_read", { p_item_id: String(item.id) });
     if (result.error) {
-      console.warn("NÃ£o foi possÃ­vel registrar a leitura:", result.error.message);
+      console.warn("Não foi possível registrar a leitura:", result.error.message);
       return;
     }
     item.clicks = Number(result.data) || 0;
@@ -1465,7 +1542,7 @@
       } catch (error) {
         const message = String(error?.message || error || "");
         if (/network|fetch|address unreachable|offline|failed/i.test(message)) return false;
-        console.warn("NÃ£o foi possÃ­vel atualizar a presenÃ§a:", message);
+        console.warn("Não foi possível atualizar a presença:", message);
         return true;
       }
     };
@@ -2155,19 +2232,24 @@
     return result.data;
   }
 
-  function saveCatalog(message = "Catálogo salvo.") {
-    save();
-    publishCatalog()
-      .then(result => {
-        if (!result?.skipped) toast(`${message} GitHub atualizado.`);
-      })
-      .catch(error => {
-        console.error("[CATALOG] Falha ao publicar no GitHub:", error);
-        const detail = /failed to send a request to the edge function/i.test(error.message || "")
-          ? "a Edge Function github-catalog não respondeu. Implante-a no projeto Supabase."
-          : (error.message || "não foi possível publicar.");
-        toast(`${message} GitHub: ${detail}`);
-      });
+  async function saveCatalog(message = "Catálogo salvo.") {
+    try {
+      save();
+      const result = await publishCatalog();
+      if (result?.skipped) {
+        toast("Alteração salva somente neste navegador. A publicação exige conexão com o Supabase e uma conta de administrador.");
+        return false;
+      }
+      toast(`${message} GitHub atualizado. Os demais usuários receberão a alteração após a publicação do site e ao recarregar a página.`);
+      return true;
+    } catch (error) {
+      console.error("[CATALOG] Falha ao publicar no GitHub:", error);
+      const detail = /failed to send a request to the edge function/i.test(error.message || "")
+        ? "a Edge Function github-catalog não respondeu. Implante-a no projeto Supabase."
+        : (error.message || "não foi possível publicar.");
+      toast(`Não foi possível publicar a alteração para os demais usuários. GitHub: ${detail}`);
+      return false;
+    }
   }
 
   function authEmail(username) {
@@ -2320,7 +2402,7 @@
     const image2Url = normalizeBlogImageUrl(data.get("image2"));
     const image3Url = normalizeBlogImageUrl(data.get("image3"));
     if (title.length < 3) return toast("Informe um título para o blog.");
-    if (coverUrl === false) return toast("Informe uma URL vÃ¡lida para a capa principal.");
+    if (coverUrl === false) return toast("Informe uma URL válida para a capa principal.");
     if (image2Url === false || image3Url === false) return toast("Confira as URLs das imagens laterais.");
     if (!content) return toast("Escreva o conteúdo do blog antes de publicar.");
     const button = $("button[type=submit]", form);
@@ -3061,7 +3143,7 @@
     // A rota pode ter sido renderizada antes de character_settings terminar.
     // Nesse caso render() pode considerar o HTML idêntico e não reexecutar a
     // hidratação da Wiki rápida; inicie-a explicitamente após as configurações.
-    if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["SÃ©rie Mensal", "Recentes", "VÃ¡rios autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
+    if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["Série Mensal", "Recentes", "Vários autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
     }
     if (state.session && canChooseFaction() && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
@@ -3167,7 +3249,7 @@
     state.staffActivities = [
       ...rows.map(row => ({ ...row, kind: "moderation", actorName: names.get(row.actor_id) || "monitor", targetName: names.get(row.target_id) || "usuário" })),
       ...(bots.data || []).map(row => ({ ...row, kind: "bot", reviewerName: names.get(row.reviewed_by) || "Administrador" })),
-      ...(reports.data || []).map(row => ({ ...row, kind: "file_report", reporterName: names.get(row.reporter_id) || "usuÃ¡rio", reviewerName: names.get(row.reviewed_by) || "" }))
+      ...(reports.data || []).map(row => ({ ...row, kind: "file_report", reporterName: names.get(row.reporter_id) || "usuário", reviewerName: names.get(row.reviewed_by) || "" }))
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     // Candidatas de capas têm contador próprio na tela "Examinar capas variantes".
     state.fileReports = (reports.data || []).map(row => ({ ...row, reporterName: names.get(row.reporter_id) || "" }));
@@ -3193,7 +3275,7 @@
       .eq("actor_id", contactId)
       .in("type", ["message", "chat_mention"])
       .is("read_at", null);
-    if (result.error) console.warn("NÃ£o foi possÃ­vel marcar as notificaÃ§Ãµes da conversa como lidas:", result.error.message);
+    if (result.error) console.warn("Não foi possível marcar as notificações da conversa como lidas:", result.error.message);
   }
 
   async function markChatMentionsRead(roomId = null) {
@@ -4185,7 +4267,7 @@
       p_cover_item_id: String(selected.itemId),
       p_cover_url: selected.url
     });
-    if (result.error) return console.warn("NÃ£o foi possÃ­vel conceder a figurinha da leitura:", result.error.message);
+    if (result.error) return console.warn("Não foi possível conceder a figurinha da leitura:", result.error.message);
     const award = Array.isArray(result.data) ? result.data[0] : result.data;
     if (award && !state.stickerAwards.some(entry => entry.id === award.id)) state.stickerAwards.unshift(award);
     state.stickerClaimKeys.add(claimKey);
@@ -4481,7 +4563,7 @@
     updateCompletionCards(item, row.completed);
     if (row.completed && isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
     const result = sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
-    result.then(response => { if (response.error) console.warn("NÃ£o foi possÃ­vel atualizar o status de leitura:", response.error.message); });
+    result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
     const nextCompleted = row.completed;
     result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
     return nextCompleted;
@@ -4528,12 +4610,30 @@
     }[c]));
   }
 
+  const WINDOWS_1252_BYTES = new Map([
+    [0x20ac, 0x80], [0x201a, 0x82], [0x0192, 0x83], [0x201e, 0x84], [0x2026, 0x85],
+    [0x2020, 0x86], [0x2021, 0x87], [0x02c6, 0x88], [0x2030, 0x89], [0x0160, 0x8a],
+    [0x2039, 0x8b], [0x0152, 0x8c], [0x017d, 0x8e], [0x2018, 0x91], [0x2019, 0x92],
+    [0x201c, 0x93], [0x201d, 0x94], [0x2022, 0x95], [0x2013, 0x96], [0x2014, 0x97],
+    [0x02dc, 0x98], [0x2122, 0x99], [0x0161, 0x9a], [0x203a, 0x9b], [0x0153, 0x9c],
+    [0x017e, 0x9e], [0x0178, 0x9f]
+  ]);
+
   function decodeNewsText(value = "") {
     let text = String(value);
-    if (/[ÃÂâ]/.test(text)) {
-      try {
-        text = new TextDecoder("utf-8").decode(Uint8Array.from(text, char => char.charCodeAt(0)));
-      } catch {}
+    for (let pass = 0; pass < 2; pass += 1) {
+      const decoded = text.replace(/[ÃÂ]./g, pair => {
+        try {
+          return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(pair, char => {
+            const code = char.charCodeAt(0);
+            return WINDOWS_1252_BYTES.get(code) ?? code;
+          }));
+        } catch {
+          return pair;
+        }
+      });
+      if (decoded === text) break;
+      text = decoded;
     }
     return text
       .replace(/&#0?39;/gi, "'")
@@ -4588,6 +4688,14 @@
 
   function isReaderEndPage(page, totalPages) {
     return page === totalPages + 1;
+  }
+
+  function readerEndPageImage() {
+    const image = document.createElement("img");
+    image.className = "reader-image";
+    image.alt = "Página final";
+    image.src = READER_END_PAGE_URL;
+    return image;
   }
 
   function formatType(type) {
@@ -4819,7 +4927,10 @@
     const previousEdition = navigationEditions[current - 1];
     const nextEdition = navigationEditions[current + 1];
     const lastEdition = navigationEditions[navigationEditions.length - 1];
-    const editionButtonLabel = edition => edition?.issue ? `#${escapeHTML(String(edition.issue))}` : "Edição";
+    const editionButtonLabel = edition => {
+      const label = itemIssueDisplay(edition);
+      return label ? (/^\d+(?:\.\d+)?$/.test(label) ? `#${escapeHTML(label)}` : escapeHTML(label)) : "Edição";
+    };
     const createNavigation = (host, html) => {
       if (!host || host.querySelector("[data-series-nav]")) return;
       const nav = document.createElement("span");
@@ -4842,8 +4953,8 @@
         });
       });
     };
-    if (current > 0) createNavigation(previousHost, `${current > 1 ? `<button title="Primeira edição${firstEdition?.issue ? ` — ${String(firstEdition.issue)}` : ""}" data-series-target="0">« ${editionButtonLabel(firstEdition)}</button>` : ""}<button title="Edição anterior${previousEdition?.issue ? ` — ${String(previousEdition.issue)}` : ""}" data-series-target="${current - 1}">‹ ${editionButtonLabel(previousEdition)}</button>`);
-    if (current < editions.length - 1) createNavigation(nextHost, `<button title="Próxima edição${nextEdition?.issue ? ` — ${String(nextEdition.issue)}` : ""}" data-series-target="${current + 1}">${editionButtonLabel(nextEdition)} ›</button>${current < editions.length - 2 ? `<button title="Última edição${lastEdition?.issue ? ` — ${String(lastEdition.issue)}` : ""}" data-series-target="${editions.length - 1}">${editionButtonLabel(lastEdition)} »</button>` : ""}`);
+    if (current > 0) createNavigation(previousHost, `${current > 1 ? `<button title="Primeira edição${firstEdition?.issue ? ` — ${itemIssueDisplay(firstEdition)}` : ""}" data-series-target="0">« ${editionButtonLabel(firstEdition)}</button>` : ""}<button title="Edição anterior${previousEdition?.issue ? ` — ${itemIssueDisplay(previousEdition)}` : ""}" data-series-target="${current - 1}">‹ ${editionButtonLabel(previousEdition)}</button>`);
+    if (current < editions.length - 1) createNavigation(nextHost, `<button title="Próxima edição${nextEdition?.issue ? ` — ${itemIssueDisplay(nextEdition)}` : ""}" data-series-target="${current + 1}">${editionButtonLabel(nextEdition)} ›</button>${current < editions.length - 2 ? `<button title="Última edição${lastEdition?.issue ? ` — ${itemIssueDisplay(lastEdition)}` : ""}" data-series-target="${editions.length - 1}">${editionButtonLabel(lastEdition)} »</button>` : ""}`);
   }
 
   function openEntityPage(kind, value) {
@@ -5405,7 +5516,7 @@
       if (!response.ok) return [];
       return newsSearchMarkdownItems(await response.text(), site);
     } catch (error) {
-      console.warn("Busca alternativa indisponÃ­vel", error);
+      console.warn("Busca alternativa indisponível", error);
       return [];
     }
   }
@@ -5474,8 +5585,8 @@
     const cbrPromoIndex = value.search(/\n(?:\[\s*\]\([^)]*repackz\.cbr\.com|##\s*\[Adriano Di Benedetto)/i);
     if (cbrPromoIndex >= 0) value = value.slice(0, cbrPromoIndex);
     // O CBR representa cards e players de vídeo como links Markdown.
-    value = value.replace(/\n[^\n]*(?:Visit|WATCH|NEXT)[^\n]*\n(?:\[(?:Video|VÃ­deo) \d+\][^\n]*\n)?[\s\S]*?(?=\n(?:Following|The series|A nova coleÃ§Ã£o|Scott Snyder's All Star))/gi, "\n");
-    value = value.replace(/\n\[(?:Video|VÃ­deo) \d+\][^\n]*\n?/gi, "\n");
+    value = value.replace(/\n[^\n]*(?:Visit|WATCH|NEXT)[^\n]*\n(?:\[(?:Video|Vídeo) \d+\][^\n]*\n)?[\s\S]*?(?=\n(?:Following|The series|A nova coleção|Scott Snyder's All Star))/gi, "\n");
+    value = value.replace(/\n\[(?:Video|Vídeo) \d+\][^\n]*\n?/gi, "\n");
     const infoBoxIndex = value.search(/\n\\?#{1,6}\s*(?:Batman|\[Batman\]\([^)]*tag\/batman[^)]*\))\s*\n/i);
     if (infoBoxIndex >= 0) value = value.slice(0, infoBoxIndex);
     value = value.replace(/\n\*\*Google is updating how content is shown\.[\s\S]*$/i, "");
@@ -5486,8 +5597,8 @@
     return value.split("\n").map(line => {
       const normalized = line.trim();
       if (!normalized) return "";
-      if (/^\[(?:Video|VÃ­deo) \d+\]\(https?:\/\/[^)]+\)$/i.test(normalized)
-        || /^\[[^\]]*(?:Visit|WATCH|NEXT|Remover anÃºncios)[^\]]*\]\(https?:\/\/[^)]+\)$/i.test(normalized)
+      if (/^\[(?:Video|Vídeo) \d+\]\(https?:\/\/[^)]+\)$/i.test(normalized)
+        || /^\[[^\]]*(?:Visit|WATCH|NEXT|Remover anúncios)[^\]]*\]\(https?:\/\/[^)]+\)$/i.test(normalized)
         || /^Scott Snyder's Complete All Star Batman Returns In Paperback$/i.test(normalized)) return "";
       const cbrInterfaceNoise = /^(?:Menu|Sign in(?: now)?|Log in|Create account|Add Us|Follow|Like|Listen|Thread|More Action|Preferred Source|Upgrade to Premium|Remove Ads|Remover anúncios|Advertisement|Advertise|Now Playing|Video Player is loading\.|Play|Pause|Mute|Unmute|Current Time|Hora actual|Duration|Duração|Loaded:|Carregado:|Stream Type|Tipo de Fluxo|Seek to live|Procurar viver|Playback Rate|Chapters|Capítulos|Descriptions|descrições desligadas, selecionadas|Audio Track|Faixa de áudio|Picture-in-Picture|Fullscreen|Tela cheia|This is a modal window\.|The media could not be loaded|Não foi possível carregar a multimédia|Here is a fact-based summary of the story contents:|Try something different:|Share this article|Compartilhar|Subscribe|Newsletter|Image via .*)$/i.test(normalized)
         || /^(?:•\s*)?(?:Chapters|Capítulos|descriptions off, selected|descrições desligadas, selecionadas|captions off, selected|legendas desligadas, seleccionadas|English|Português)$/i.test(normalized)
@@ -5637,8 +5748,8 @@
         if (!linkedTitle || linkedTitle.startsWith("Especial:")) return;
         event.preventDefault();
         openWikiReaderByTitle(linkedTitle, overlay, url.href).catch(error => {
-          console.warn("Link da WikipÃ©dia indisponÃ­vel", error);
-          toast("NÃ£o foi possÃ­vel carregar este artigo da WikipÃ©dia.");
+          console.warn("Link da Wikipédia indisponível", error);
+          toast("Não foi possível carregar este artigo da Wikipédia.");
         });
       });
     }
@@ -6325,9 +6436,9 @@
   }
 
   function readerSourceCandidates(item) {
-    const primary = item?.fileUrl || (!/^https?:\/\/(www\.)?t(?:elegram)?\.me\//i.test(item?.telegramUrl || "") ? item?.telegramUrl : "") || "";
+    const primary = downloadSource(item);
     const backups = Array.isArray(item?.backupUrls) ? item.backupUrls : (item?.backupUrl ? [item.backupUrl] : []);
-    return [primary, ...backups].map(value => String(value || "").trim()).filter((value, index, values) => value && values.indexOf(value) === index);
+    return [primary, item?.fileUrl, ...backups].map(value => String(value || "").trim()).filter((value, index, values) => value && values.indexOf(value) === index);
   }
 
   async function probeReaderSource(url) {
@@ -6358,12 +6469,18 @@
 
   function openReader(item, options = {}) {
     if (!item) return;
+    if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
     if (!canViewCatalogItem(item)) {
       toast("Esta edição está temporariamente oculta.");
       return;
     }
     if (!downloadSource(item) && item?.officialUrl) {
       window.open(item.officialUrl, "_blank", "noopener");
+      return;
+    }
+    const sourceUrl = downloadSource(item);
+    if (isExternalArchiveLink(sourceUrl)) {
+      window.open(sourceUrl, "_blank", "noopener");
       return;
     }
 
@@ -6389,15 +6506,11 @@
     activeReaderCleanup = null;
 
     recordComicRead(item);
-    const isTelegramLink = (url) => /^https?:\/\/(www\.)?t(elegram)?\.me\//.test(url || "");
-
-    // A URL direta (fileUrl) tem prioridade. Se não houver, usamos a 'telegramUrl'
-    // somente se ela NÃO for um link real do Telegram (ou seja, é um caminho de arquivo).
     const sourceCandidates = readerSourceCandidates(item);
     let resolvedUrl = sourceCandidates[0] || "";
 
     if (!resolvedUrl) {
-      toast(item.telegramUrl ? "Links do Telegram não são suportados sem um servidor de ponte." : "Esta edição não tem uma URL de arquivo direto.");
+      toast(item.telegramUrl ? "Esta edição do Telegram ainda não tem o file_id do bot configurado." : "Esta edição não tem uma URL de arquivo direto.");
       return;
     }
 
@@ -7000,7 +7113,7 @@
       const pdfjs = await (window.pdfjsReady || Promise.resolve(window.pdfjsLib));
       // PDF.js 4.x via module pode não expor global em alguns navegadores.
       if (!pdfjs?.getDocument) {
-        throw Object.assign(new Error("PDF.js nÃ£o estÃ¡ disponÃ­vel nesta pÃ¡gina."), { name: "PDFJS_MISSING" });
+        throw Object.assign(new Error("PDF.js não está disponível nesta página."), { name: "PDFJS_MISSING" });
       }
 
       // Fetch the PDF data manually to have better control over errors.
@@ -7033,19 +7146,28 @@
       if (pdfData && !pdfData.byteLength) throw new Error("PDF vazio.");
 
       // Pass the data as a typed array.
-      body.innerHTML = `<div class="empty" style="margin:auto">Abrindo PDFâ€¦</div>`;
+      body.innerHTML = `<div class="empty" style="margin:auto">Abrindo PDF…</div>`;
       const pdf = await pdfjs.getDocument(pdfUrl ? { url: pdfUrl } : { data: new Uint8Array(pdfData) }).promise;
 
       const currentReadingMode = state.readingMode;
 
       if (currentReadingMode === 'single-page') {
         const firstPage = skipCover && pdf.numPages > 1 ? 2 : 1;
-        let page = Math.max(firstPage, Math.min(resumePage, pdf.numPages));
+        const totalPages = pdf.numPages + 1;
+        let page = Math.max(firstPage, Math.min(resumePage, totalPages));
         const canvas = document.createElement("canvas");
         canvas.className = "reader-canvas";
         body.replaceChildren(canvas);
 
         async function drawSinglePage() {
+          if (page === totalPages) {
+            body.replaceChildren(readerEndPageImage());
+            controls.innerHTML = `<button data-prev>‹</button><span class="reader-page">${page} / ${totalPages}</span><button data-next disabled>›</button>`;
+            $("[data-prev]", controls)?.addEventListener("click", async () => { page--; await drawSinglePage(); });
+            onPageChange(item, page, totalPages);
+            return;
+          }
+          if (!canvas.isConnected) body.replaceChildren(canvas);
           const p = await pdf.getPage(page);
           const baseViewport = p.getViewport({ scale: 1 });
           const availableWidth = Math.max(240, body.clientWidth - 40);
@@ -7066,12 +7188,17 @@
           await p.render({ canvasContext: ctx, viewport }).promise;
           controls.innerHTML = `
             <button data-prev ${page <= firstPage ? "disabled" : ""}>‹</button>
-            <span class="reader-page">${page} / ${pdf.numPages}</span>
+            <span class="reader-page">${page} / ${totalPages}</span>
             <button data-next ${page >= pdf.numPages ? "disabled" : ""}>›</button>
           `;
           $("[data-prev]", controls)?.addEventListener("click", async () => { if(page > 1){page--; await drawSinglePage();} });
           $("[data-next]", controls)?.addEventListener("click", async () => { if(page < pdf.numPages){page++; await drawSinglePage();} });
-          onPageChange(item, page, pdf.numPages);
+          if (page === pdf.numPages) {
+            const nextButton = $("[data-next]", controls);
+            nextButton?.removeAttribute("disabled");
+            nextButton?.addEventListener("click", async () => { page++; await drawSinglePage(); }, { once: true });
+          }
+          onPageChange(item, page, totalPages);
         }
         await drawSinglePage();
       } else if (currentReadingMode === 'double-page') {
@@ -7081,13 +7208,22 @@
         body.replaceChildren(spreadContainer);
 
         async function drawSpread() {
-          const pagesToRender = getReaderSpreadPages(pdf.numPages, spread, skipCover);
+          const totalPages = pdf.numPages + 1;
+          const pagesToRender = getReaderSpreadPages(totalPages, spread, skipCover);
           const page2Number = pagesToRender[pagesToRender.length - 1];
 
           spreadContainer.innerHTML = "";
           const pages = [];
 
           for (const pageNumber of pagesToRender) {
+            if (pageNumber === totalPages) {
+              const wrapper = document.createElement("div");
+              wrapper.className = "double-page";
+              wrapper.appendChild(readerEndPageImage());
+              spreadContainer.appendChild(wrapper);
+              pages.push(pageNumber);
+              continue;
+            }
             const page = await pdf.getPage(pageNumber);
             const baseViewport = page.getViewport({ scale: 1 });
             const availableWidth = Math.max(240, (body.clientWidth - 70) / pagesToRender.length);
@@ -7121,7 +7257,7 @@
           controls.innerHTML = `
             <button data-prev ${spread === 0 ? "disabled" : ""}>‹</button>
             <span class="reader-page">
-              ${displayedPages[0]}${displayedPages[1] ? `–${displayedPages[1]}` : ""} / ${pdf.numPages}
+              ${displayedPages[0]}${displayedPages[1] ? `–${displayedPages[1]}` : ""} / ${totalPages}
             </span>
             <button data-next ${page2Number >= pdf.numPages ? "disabled" : ""}>›</button>
           `;
@@ -7139,7 +7275,12 @@
               await drawSpread();
             }
           });
-          onPageChange(item, pagesToRender[0], pdf.numPages);
+          if (page2Number === pdf.numPages) {
+            const nextButton = $("[data-next]", controls);
+            nextButton?.removeAttribute("disabled");
+            nextButton?.addEventListener("click", async () => { spread++; await drawSpread(); }, { once: true });
+          }
+          onPageChange(item, pagesToRender[0], totalPages);
         }
 
         await drawSpread();
@@ -7153,6 +7294,7 @@
         const observer = new IntersectionObserver(async (entries) => {
           for (const entry of entries) {
             if (entry.isIntersecting) {
+              if (entry.target.dataset.readerEndPage === "true") continue;
               const pageNum = parseInt(entry.target.dataset.pageNum);
               if (!renderedPages.has(pageNum)) {
                 renderedPages.add(pageNum);
@@ -7188,6 +7330,14 @@
           pageElements.push(pageWrapper);
           observer.observe(pageWrapper);
         }
+        const endPageWrapper = document.createElement("div");
+        endPageWrapper.className = "pdf-page-wrapper";
+        endPageWrapper.dataset.pageNum = pdf.numPages + 1;
+        endPageWrapper.dataset.readerEndPage = "true";
+        endPageWrapper.appendChild(readerEndPageImage());
+        pageContainer.appendChild(endPageWrapper);
+        pageElements.push(endPageWrapper);
+        observer.observe(endPageWrapper);
 
         let currentPageIndex = 0; // 0-indexed
         const updateControls = () => {
@@ -7197,11 +7347,11 @@
           }) || pageElements[0]; // Default to first page if none are clearly visible
 
           currentPageIndex = pageElements.indexOf(visiblePage);
-          onPageChange(item, Number(visiblePage.dataset.pageNum), pdf.numPages);
+          onPageChange(item, Number(visiblePage.dataset.pageNum), pdf.numPages + 1);
 
           controls.innerHTML = `
             <button data-prev ${currentPageIndex <= 0 ? "disabled" : ""}>↑</button>
-            <span class="reader-page">${pageElements[currentPageIndex].dataset.pageNum} / ${pdf.numPages}</span>
+            <span class="reader-page">${pageElements[currentPageIndex].dataset.pageNum} / ${pdf.numPages + 1}</span>
             <button data-next ${currentPageIndex >= pageElements.length - 1 ? "disabled" : ""}>↓</button>
           `;
           $("[data-prev]", controls)?.addEventListener("click", () => {
@@ -7245,8 +7395,8 @@
       let message = "Ocorreu um erro inesperado. Verifique o console do navegador para mais detalhes.";
 
       if (err.name === 'PDFJS_MISSING') {
-        title = "PDF.js nÃ£o carregado.";
-        message = "A biblioteca necessÃ¡ria para renderizar o PDF nÃ£o estÃ¡ disponÃ­vel nesta pÃ¡gina.";
+        title = "PDF.js não carregado.";
+        message = "A biblioteca necessária para renderizar o PDF não está disponível nesta página.";
       } else if (err.name === 'MissingPDFException') {
         title = "Arquivo PDF não encontrado.";
         message = `O navegador não conseguiu carregar o arquivo a partir do link fornecido. Verifique se o caminho no cadastro está correto.`;
@@ -7469,13 +7619,24 @@
 
       if (currentReadingMode === 'single-page') {
         const firstIndex = skipCover && names.length > 1 ? 1 : 0;
-        let page = Math.max(firstIndex, Math.min(resumePage - 1, names.length - 1));
+        const totalPages = names.length + 1;
+        let page = Math.max(firstIndex, Math.min(resumePage - 1, totalPages - 1));
         const pageCache = createArchivePageCache(names, name => zip.files[name].async("blob"));
         const img = document.createElement("img");
         img.className = "reader-image";
         body.replaceChildren(img);
 
         async function draw() {
+          if (page === names.length) {
+            if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+            delete img.dataset.url;
+            img.src = READER_END_PAGE_URL;
+            img.alt = "Página final";
+            controls.innerHTML = `<button data-prev>‹</button><span class="reader-page">${page + 1} / ${totalPages}</span><button data-next disabled>›</button>`;
+            $("[data-prev]", controls)?.addEventListener("click", async () => { page--; await draw(); });
+            onPageChange(item, page + 1, totalPages);
+            return;
+          }
           const currentThird = Math.floor(page / pageCache.thirdSize);
           const blob = await pageCache.get(page);
           // Exibe a página atual primeiro; o restante do terço é pré-carregado
@@ -7493,7 +7654,12 @@
           `;
           $("[data-prev]", controls)?.addEventListener("click", async () => { if(page>0){page--;await draw();} });
           $("[data-next]", controls)?.addEventListener("click", async () => { if(page<names.length-1){page++;await draw();} });
-          onPageChange(item, page + 1, names.length);
+          if (page === names.length - 1) {
+            const nextButton = $("[data-next]", controls);
+            nextButton?.removeAttribute("disabled");
+            nextButton?.addEventListener("click", async () => { page++; await draw(); }, { once: true });
+          }
+          onPageChange(item, page + 1, totalPages);
         }
         await draw();
         $("[data-close-reader]", overlay).addEventListener('click', () => {
@@ -7515,10 +7681,18 @@
           spreadUrls.length = 0;
           spreadContainer.innerHTML = "";
 
-          const indexesToRender = getReaderSpreadIndexes(names.length, spread, skipCover);
+          const totalPages = names.length + 1;
+          const indexesToRender = getReaderSpreadIndexes(totalPages, spread, skipCover);
           const second = indexesToRender[indexesToRender.length - 1];
 
           for (const index of indexesToRender) {
+            if (index === names.length) {
+              const wrapper = document.createElement("div");
+              wrapper.className = "double-page";
+              wrapper.appendChild(readerEndPageImage());
+              spreadContainer.appendChild(wrapper);
+              continue;
+            }
             const blob = await zip.files[names[index]].async("blob");
             const objectUrl = URL.createObjectURL(blob);
             spreadUrls.push(objectUrl);
@@ -7552,7 +7726,12 @@
           $("[data-next]", controls)?.addEventListener("click", async () => {
             if (second < names.length - 1) { spread++; await drawSpread(); }
           });
-          onPageChange(item, indexesToRender[0] + 1, names.length);
+          if (second === names.length - 1) {
+            const nextButton = $("[data-next]", controls);
+            nextButton?.removeAttribute("disabled");
+            nextButton?.addEventListener("click", async () => { spread++; await drawSpread(); }, { once: true });
+          }
+          onPageChange(item, indexesToRender[0] + 1, totalPages);
         }
 
         await drawSpread();
@@ -7566,10 +7745,10 @@
         const pageContainer = document.createElement("div");
         pageContainer.className = "image-continuous-scroll-container"; // Note: class name was correct
         body.replaceChildren(pageContainer);
- 
+
         const objectUrls = [];
         const pageElements = [];
- 
+
         // Extrai páginas somente quando se aproximam da viewport.
         const pageStates = new Map();
         // Pages are extracted on demand below.
@@ -7582,10 +7761,11 @@
           showCbzProgress("Extraindo páginas do CBZ…", Math.round(extractedPages / names.length * 100), `${extractedPages} de ${names.length} páginas`);
           return { src: url };
         */
- 
+
         body.replaceChildren(pageContainer); // Clear status message
- 
+
         const loadPage = async pageWrapper => {
+          if (pageWrapper.dataset.readerEndPage === "true") return;
           const index = Number(pageWrapper.dataset.pageNum) - 1;
           const state = pageStates.get(index);
           if (!state || state.url || state.loading) return state?.loading;
@@ -7598,6 +7778,7 @@
           return state.loading;
         };
         const releasePage = pageWrapper => {
+          if (pageWrapper.dataset.readerEndPage === "true") return;
           const state = pageStates.get(Number(pageWrapper.dataset.pageNum) - 1);
           if (!state?.url) return;
           URL.revokeObjectURL(state.url);
@@ -7619,12 +7800,19 @@
           pageElements.push(pageWrapper);
           pageStates.set(index, { img, url: null, loading: null });
         });
+        const endPageWrapper = document.createElement("div");
+        endPageWrapper.className = "image-page-wrapper";
+        endPageWrapper.dataset.pageNum = names.length + 1;
+        endPageWrapper.dataset.readerEndPage = "true";
+        endPageWrapper.appendChild(readerEndPageImage());
+        pageContainer.appendChild(endPageWrapper);
+        pageElements.push(endPageWrapper);
 
         const observer = new IntersectionObserver(entries => {
           entries.forEach(entry => entry.isIntersecting ? loadPage(entry.target) : releasePage(entry.target));
         }, { root: pageContainer, rootMargin: "150% 0px" });
         pageElements.forEach(page => observer.observe(page));
- 
+
         let currentPageIndex = 0;
         const updateControls = () => {
           const visiblePage = pageElements.find(el => {
@@ -7635,13 +7823,13 @@
             // Check if any part of the element is visible in the viewport
             return rect.bottom > 0 && rect.top < window.innerHeight;
           }) || pageElements[0];
- 
+
           if (!visiblePage) {
             // If no page is visible (e.g., during initial load or very fast scroll), default to the first page
             currentPageIndex = 0;
             return;
           }
- 
+
           currentPageIndex = pageElements.indexOf(visiblePage);
           controls.innerHTML = `
             <button data-prev ${currentPageIndex <= 0 ? "disabled" : ""}>↑</button>
@@ -8035,115 +8223,115 @@
       // =========================================================
       // 9. ENCONTRAR IMAGENS
       // =========================================================
-      
-      
+
+
       function findArchiveImages(obj, path = "") {
         const images = [];
-      
-      
+
+
         if (!obj || typeof obj !== "object") {
           return images;
         }
-      
-      
+
+
         for (const [key, value] of Object.entries(obj)) {
-      
-      
+
+
           const currentPath = path
             ? `${path}/${key}`
             : key;
-      
-      
+
+
           // Arquivo do libarchive.js
           if (
             value &&
             typeof value === "object" &&
             typeof value.extract === "function"
           ) {
-      
-      
+
+
             const fileName =
               value.name ||
               key;
-      
-      
+
+
             if (
               /\.(jpg|jpeg|png|webp|gif)$/i.test(
                 fileName
               )
             ) {
-      
-      
+
+
               images.push({
                 name: fileName,
                 path: currentPath,
                 file: value
               });
-      
-      
+
+
             }
-      
-      
+
+
             continue;
           }
-      
-      
+
+
           // Pasta / diretório
           if (
             value &&
             typeof value === "object"
           ) {
-      
-      
+
+
             images.push(
               ...findArchiveImages(
                 value,
                 currentPath
               )
             );
-      
-      
+
+
           }
         }
-      
-      
+
+
         return images;
       }
-      
-      
+
+
       const imageEntries =
         findArchiveImages(files);
-      
-      
+
+
       console.log(
         "[CBR] Imagens encontradas:",
         imageEntries.length
       );
-      
-      
+
+
       console.log(
         "[CBR] Lista de imagens:",
         imageEntries.map(
           entry => entry.path
         )
       );
-      
-      
+
+
       if (!imageEntries.length) {
         throw new Error(
           "CBR_NO_IMAGES"
         );
       }
-      
-      
+
+
       // O restante do leitor trabalha diretamente
       // com os objetos do libarchive.js.
       const imageFiles =
         imageEntries.map(
           entry => entry.file
         );
-      
-      
+
+
       console.log(
         "[CBR] Páginas detectadas:",
         imageFiles.map(
@@ -8157,7 +8345,7 @@
         const firstIndex = skipCover && imageFiles.length > 1 ? 1 : 0;
         const totalPages = imageFiles.length + 1;
         let page = Math.max(firstIndex, Math.min(resumePage - 1, totalPages - 1));
-        const pageCache = createArchivePageCache(imageFiles, file => withTimeout(file.extract(), 120000, "A pÃ¡gina demorou mais de 120 segundos para ser extraÃ­da."));
+        const pageCache = createArchivePageCache(imageFiles, file => withTimeout(file.extract(), 120000, "A página demorou mais de 120 segundos para ser extraída."));
         const img = document.createElement("img");
         img.className = "reader-image";
         img.alt = "Página do quadrinho";
@@ -8580,9 +8768,9 @@
     const localCover = [item.coverUrl, item.selectedCoverUrl, item.cover].find(value => /^data:/i.test(String(value || "")));
     if (localCover) return localCover;
     const cachedCover = state.offlineCoverData?.get?.(String(item.id));
-    if (cachedCover) return cachedCover;
+    if (cachedCover && (state.session?.offline || navigator.onLine === false)) return cachedCover;
     if (state.session?.offline) return instantCover(item);
-    // O hero jÃ¡ Ã© conhecido no primeiro render: libere sua capa imediatamente.
+    // O hero já é conhecido no primeiro render: libere sua capa imediatamente.
     if (variant === "hero" || variant === "hero-background") {
       const earlyBlockedGcdCover = value => /^https:\/\/files1\.comics\.org\//i.test(String(value || ""));
       const earlyDefaultItemCover = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === item.id)?.coverUrl;
@@ -8687,8 +8875,24 @@
     return /^https?:\/\//i.test(url) || url ? url : "";
   }
 
-  function proxiedFileUrl(url) {
+  function directGoogleDriveUrl(url) {
     const source = String(url || "");
+    let parsed;
+    try { parsed = new URL(source); } catch { return source; }
+    if (!/^(?:drive|docs)\.google\.com$/i.test(parsed.hostname)) return source;
+    const pathId = parsed.pathname.match(/^\/file\/d\/([^/]+)/i)?.[1] || "";
+    const fileId = pathId || parsed.searchParams.get("id") || "";
+    if (!fileId) return source;
+    const direct = new URL("https://drive.usercontent.google.com/download");
+    direct.searchParams.set("id", fileId);
+    direct.searchParams.set("export", "download");
+    const resourceKey = parsed.searchParams.get("resourcekey");
+    if (resourceKey) direct.searchParams.set("resourcekey", resourceKey);
+    return direct.toString();
+  }
+
+  function proxiedFileUrl(url) {
+    const source = directGoogleDriveUrl(url);
     let parsed;
     try { parsed = new URL(source); } catch { return source; }
     const host = parsed.hostname.toLowerCase();
@@ -8698,8 +8902,10 @@
       /^download\d+\.mediafire\.com$/.test(host)
     );
     const isMega = parsed.protocol === "https:" && (host === "mega.nz" || host === "www.mega.nz") && parsed.pathname.startsWith("/file/");
-    if ((!isMediaFire && !isMega) || !window.BANCA_SUPABASE_URL) return source;
-    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/${isMega ? "mega-proxy" : "mediafire-proxy"}`);
+    const isGoogleDrive = parsed.protocol === "https:" && host === "drive.usercontent.google.com";
+    if ((!isMediaFire && !isMega && !isGoogleDrive) || !window.BANCA_SUPABASE_URL) return source;
+    const proxyName = isGoogleDrive ? "drive-proxy" : isMega ? "mega-proxy" : "mediafire-proxy";
+    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/${proxyName}`);
     proxy.searchParams.set("url", source);
     return proxy.toString();
   }
@@ -8875,7 +9081,7 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const buffer = await readResponseBuffer(response, (received, total) => onProgress(received, total));
         if (!buffer.byteLength) throw new Error("Arquivo vazio.");
-        if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("NÃ£o foi possÃ­vel salvar o arquivo offline.");
+        if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("Não foi possível salvar o arquivo offline.");
         onComplete();
         return buffer;
       } catch (error) {
@@ -8924,7 +9130,7 @@
       chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
       if (total && received !== total) throw new Error(`Download incompleto: ${received} de ${total} bytes.`);
       onProgress(received, total || received);
-      if (!await writeReaderFileCache(cacheKey, bytes.buffer)) throw new Error("NÃ£o foi possÃ­vel salvar o arquivo offline.");
+      if (!await writeReaderFileCache(cacheKey, bytes.buffer)) throw new Error("Não foi possível salvar o arquivo offline.");
       onComplete();
       return bytes.buffer;
     }
@@ -9012,7 +9218,7 @@
       partial?.total || 0
     );
     onProgress(buffer.byteLength, buffer.byteLength);
-    if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("NÃ£o foi possÃ­vel salvar o arquivo offline.");
+    if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("Não foi possível salvar o arquivo offline.");
     onComplete();
     return buffer;
   }
@@ -9373,14 +9579,24 @@
       if (filename && !/^(quadrinho|hq)$/i.test(filename)) base = filename;
     }
     base ||= "Quadrinho";
-    const issue = String(item?.issue || "").trim();
+    const issue = itemIssueDisplay(item);
     if (!issue) return base;
-    const number = issue.match(/\d+/)?.[0];
+    const number = issue.match(/^\d+(?:\.\d+)?$/)?.[0];
     return number ? `${base} #${Number(number)}` : `${base} — ${issue}`;
   }
 
-  function itemIssueLabel(item) {
+  function itemIssueDisplay(item) {
     const issue = String(item?.issue || "").trim();
+    if (item?.seriesId !== "series-action-comics-2011-novos-52") return issue;
+    return ({
+      "2012": "Anual 01",
+      "2013": "Anual 02",
+      "2014": "Anual 03"
+    })[issue] || issue;
+  }
+
+  function itemIssueLabel(item) {
+    const issue = itemIssueDisplay(item);
     if (!item?.seriesId || !issue || !/^\d+(?:\.\d+)?$/.test(issue)) return issue;
     const availableTotal = state.db.library.filter(entry => entry.seriesId === item.seriesId && (!item.volume || entry.volume === item.volume)).length;
     return availableTotal > 1 ? `${issue}/${availableTotal}` : issue;
@@ -9502,7 +9718,7 @@
     const series = isSeries ? seriesDefinitionFor(item) : null;
     const title = isSeries ? (series.name || item.seriesTitle || item.title) : itemDisplayTitle(item);
     const editions = isSeries ? seriesEditions(item).length : 0;
-    const meta = isSeries ? `${editions || 1} ${editions === 1 ? "edição" : "edições"}` : [item.issue ? `Edição ${item.issue}` : "Edição única", item.year].filter(Boolean).join(" · ");
+    const meta = isSeries ? `${editions || 1} ${editions === 1 ? "edição" : "edições"}` : [itemIssueDisplay(item) ? `Edição ${itemIssueDisplay(item)}` : "Edição única", item.year].filter(Boolean).join(" · ");
     const action = isSeries ? `data-view-series="${escapeHTML(item.seriesId)}"` : `data-open="${escapeHTML(item.id)}" data-open-direct="true"`;
     const cover = isSeries ? seriesCoverFor(item) : coverFor(item, "card");
     return `<article class="global-recommendation-card global-recommendation-${accent}" ${action} tabindex="0"><div class="global-recommendation-glow"></div><div class="global-recommendation-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="global-recommendation-copy"><div class="global-recommendation-label"><span>${escapeHTML(label)}</span><i></i></div><span class="global-recommendation-xp">✦ +25 XP ao concluir a leitura</span><h3>${escapeHTML(title || "Recomendação da banca")}</h3><p>${escapeHTML(description)}</p><div class="global-recommendation-meta">${escapeHTML(meta)}</div><span class="global-recommendation-cta">${isSeries ? "Explorar série" : "Ler edição"} <b>→</b></span></div></article>`;
@@ -10057,7 +10273,7 @@
     return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}"${disabled}>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
   }
 
-  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "teams", "collections", "heroes", "villains", "antiheroes"];
+  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "teams", "collections", "heroes", "villains", "antiheroes", "support"];
 
   const FIXED_SHELF_SECTION_ORDER = ["saved", "series-saved", "read", "completed", "liked"];
 
@@ -10300,7 +10516,9 @@
     const orderedItems = sortShelfItems(items, sortOrder, addedAtMap, progressMap);
     const visibleItems = fixedCollection || expanded ? orderedItems : orderedItems.slice(0, SHELF_PREVIEW_LIMIT);
     const likedCollection = key === "read" && state.section === "shelf" ? shelfCollectionMarkup("Curtidas", shelfItemsByIds([...state.comicLikeIds]), "liked") : "";
-    const directOpen = state.section === "shelf" || (state.section === "public-profile" && state.publicProfile?.collectionId);
+    // Nas estantes (própria ou pública), um card de edição deve ir direto
+    // para a leitura. O seletor permanece apenas para cards de série.
+    const directOpen = state.section === "shelf" || state.section === "public-profile";
     const publicCategoryId = key.startsWith("public-category:") ? key.slice("public-category:".length) : "";
     const publicCategory = publicCategoryId ? state.publicProfile?.collections?.find(category => category.id === publicCategoryId) : null;
     const shelfStyleProfile = publicState?.profile || state.profile;
@@ -10432,7 +10650,7 @@
 
   function publicProfileActivityMarkup(profileState) {
     const activities = profileState?.activity || [];
-    const activityMarkup = activities.map(activity => `<article class="profile-activity-item"><span class="profile-activity-icon">${activity.icon}</span><div class="profile-activity-copy"><div><strong>${escapeHTML(activity.label)}</strong> ${activity.href ? `<a href="${escapeHTML(activity.href)}">${escapeHTML(activity.subject)}</a>` : `<span>${escapeHTML(activity.subject)}</span>`}</div>${activity.detail ? `<p>${escapeHTML(activity.detail)}</p>` : ""}<time datetime="${escapeHTML(activity.created_at)}">${escapeHTML(formatCommentDate(activity.created_at))}</time></div></article>`).join("");
+    const activityMarkup = activities.map(activity => `<article class="profile-activity-item"><span class="profile-activity-icon">${escapeHTML(decodeNewsText(activity.icon))}</span><div class="profile-activity-copy"><div><strong>${escapeHTML(decodeNewsText(activity.label))}</strong> ${activity.href ? `<a href="${escapeHTML(activity.href)}">${escapeHTML(decodeNewsText(activity.subject))}</a>` : `<span>${escapeHTML(decodeNewsText(activity.subject))}</span>`}</div>${activity.detail ? `<p>${escapeHTML(decodeNewsText(activity.detail))}</p>` : ""}<time datetime="${escapeHTML(activity.created_at)}">${escapeHTML(formatCommentDate(activity.created_at))}</time></div></article>`).join("");
     return `<section class="section profile-activity"><div class="section-head"><div><h2 class="section-title">Histórico</h2><div class="section-subtitle">Atividades recentes de @${escapeHTML(profileState?.profile?.username || "usuário")}.</div></div></div><div class="profile-activity-list">${activityMarkup || '<div class="empty">Nenhuma atividade pública registrada.</div>'}</div></section>`;
   }
 
@@ -10481,7 +10699,7 @@
     const key = publisherKey(characterName);
     const pinned = button.dataset.factionCharacterPinned === "true";
     const result = await sb.rpc("toggle_faction_character_pin", { p_faction_id: factionId, p_character_key: key, p_character_name: characterName, p_pinned: !pinned });
-    if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque do personagem.");
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar o destaque do personagem.");
     const mapKey = `${factionId}:${key}`;
     if (pinned) state.factionPinnedCharacters.delete(mapKey);
     else state.factionPinnedCharacters.set(mapKey, { faction_id: factionId, character_key: key, character_name: characterName });
@@ -10493,7 +10711,7 @@
     if (!factionId || !collectionId || !state.session?.user?.id) return;
     const pinned = button.dataset.factionPublicCatalogPinned === "true";
     const result = await sb.rpc("toggle_faction_public_collection_pin", { p_faction_id: factionId, p_collection_id: collectionId, p_pinned: !pinned });
-    if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque da coleÃ§Ã£o pÃºblica.");
+    if (result.error) return toast(result.error.message || "Não foi possível atualizar o destaque da coleção pública.");
     const mapKey = `${factionId}:${collectionId}`;
     if (pinned) state.factionPinnedPublicCollections.delete(mapKey);
     else state.factionPinnedPublicCollections.set(mapKey, { faction_id: factionId, collection_id: collectionId });
@@ -11604,8 +11822,8 @@
     const update = await sb?.from("profiles").update({ shelf_styles: shelfStyles }).eq("id", state.session.user.id);
     if (update?.error) {
       const message = String(update.error.message || "");
-      if (/shelf_style|column|schema cache/i.test(message)) return toast("Execute a migraÃ§Ã£o add_shelf_style.sql no Supabase para ativar os estilos.");
-      return toast(`NÃ£o foi possÃ­vel salvar: ${message}`);
+      if (/shelf_style|column|schema cache/i.test(message)) return toast("Execute a migração add_shelf_style.sql no Supabase para ativar os estilos.");
+      return toast(`Não foi possível salvar: ${message}`);
     }
     state.profile = { ...state.profile, shelf_styles: shelfStyles };
     if (state.publicProfile?.profile?.id === state.session.user.id) state.publicProfile.profile = { ...state.publicProfile.profile, shelf_styles: shelfStyles };
@@ -11806,6 +12024,12 @@
 
   function renderShelfLikePage({ profile, own, savedItems, savedSeries, readItems, completedItems, likedItems, categories = [], profileState = null, profileActions = "" }) {
     const canEditPersonalCollections = own || isOwnShelfProfile();
+    // Em perfis de outras pessoas, mostre somente os salvos de quem está
+    // visitando: assim o item começa desmarcado, mas fica marcado ao salvá-lo.
+    const isCurrentUsersProfile = own || String(profile?.id || "") === String(state.session?.user?.id || "");
+    const displayedFavoriteIds = isCurrentUsersProfile
+      ? (own ? state.favoriteIds : (profileState?.favoriteIds || state.favoriteIds))
+      : state.favoriteIds;
     const actions = own
       ? '<button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button>'
       : profileActions;
@@ -11823,12 +12047,12 @@
         extra += `<button class="small-btn ${liked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${liked ? "♥" : "♡"} ${likes}</button>`;
       }
       extra += personalCollectionControls(category.id, categories, isOwnShelfProfile());
-      return shelfCollectionMarkup(category.name, items, `${publicPrefix}category:${category.id}`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, extra, null, category.isSeries === true);
+      return shelfCollectionMarkup(category.name, items, `${publicPrefix}category:${category.id}`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, extra, null, category.isSeries === true);
     }).join("");
     if (own || categories.length) categoryMarkup = `<section class="section shelf-categories"><div class="section-head shelf-categories-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div>${canEditPersonalCollections ? '<button class="small-btn" data-shelf-new-category>+ Nova coleção</button>' : ""}</div>${categoryMarkup || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>`;
     const ownTop10Profile = own || String(profile?.id || "") === String(state.session?.user?.id || "");
     const profileTop10Lists = (own ? state.top10Lists : (profileState?.top10Lists || [])).filter(list => ownTop10Profile || list.is_public !== false);
-    return `<div class="content shelf-page${own ? "" : " public-profile-page"}"><div class="profile-header">${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile?.username || "")}</div>${profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : own ? "" : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(own ? state.achievements : profileState?.achievements)} </div><div class="profile-actions">${actions}</div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div>${own ? '<button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button>' : ""}</div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${savedItems.visible !== false ? shelfCollectionMarkup("Salvos", savedItems.items || savedItems, `${publicPrefix}saved`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${savedSeries.visible !== false ? shelfCollectionMarkup("Séries salvas", savedSeries.items || savedSeries, `${publicPrefix}series-saved`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, "", null, true) : ""}${readItems.visible !== false ? shelfCollectionMarkup("Lidos", readItems.items || readItems, `${publicPrefix}read`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${completedItems.visible !== false ? shelfCollectionMarkup("Concluídos", completedItems.items || completedItems, `${publicPrefix}completed`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds, "", null, true) : ""}${likedItems.visible !== false ? shelfCollectionMarkup("Curtidos", likedItems.items || likedItems, `${publicPrefix}liked`, own ? state.readingProgress : profileState?.readingProgress, own ? state.favoriteIds : profileState?.favoriteIds) : ""}${categoryMarkup}<div class="shelf-tab-panel shelf-top10-panel" data-shelf-tab-panel="top10">${top10Markup(profileTop10Lists, ownTop10Profile)}</div></div>`;
+    return `<div class="content shelf-page${own ? "" : " public-profile-page"}"><div class="profile-header">${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile?.username || "")}</div>${profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : own ? "" : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(own ? state.achievements : profileState?.achievements)} </div><div class="profile-actions">${actions}</div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div>${own ? '<button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button>' : ""}</div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${savedItems.visible !== false ? shelfCollectionMarkup("Salvos", savedItems.items || savedItems, `${publicPrefix}saved`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${savedSeries.visible !== false ? shelfCollectionMarkup("Séries salvas", savedSeries.items || savedSeries, `${publicPrefix}series-saved`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, "", null, true) : ""}${readItems.visible !== false ? shelfCollectionMarkup("Lidos", readItems.items || readItems, `${publicPrefix}read`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${completedItems.visible !== false ? shelfCollectionMarkup("Concluídos", completedItems.items || completedItems, `${publicPrefix}completed`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, "", null, true) : ""}${likedItems.visible !== false ? shelfCollectionMarkup("Curtidos", likedItems.items || likedItems, `${publicPrefix}liked`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${categoryMarkup}<div class="shelf-tab-panel shelf-top10-panel" data-shelf-tab-panel="top10">${top10Markup(profileTop10Lists, ownTop10Profile)}</div></div>`;
   }
 
   function renderShelfPage() {
@@ -13769,7 +13993,7 @@
       // Compatibilidade com bancos que ainda não receberam a função nova.
       if (result.error && (result.error.code === "PGRST202" || /remove_faction_abafac_catalog/i.test(result.error.message || ""))) {
         const deleted = await sb.from("faction_abafac_catalogs").delete().eq("id", catalogId).eq("faction_id", factionId);
-        if (deleted.error) return toast(deleted.error.message || "NÃ£o foi possÃ­vel excluir este catÃ¡logo.");
+        if (deleted.error) return toast(deleted.error.message || "Não foi possível excluir este catálogo.");
         const order = factionAbafacOrder(factionId).filter(item => item !== rawKey);
         result = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
       }
@@ -14038,7 +14262,7 @@
       const catalogId = String(button.dataset.factionCatalogPin || "");
       const pinned = button.dataset.factionCatalogPinned === "true";
       const result = await sb.rpc("toggle_faction_collection_pin", { p_faction_id: factionId, p_catalog_id: catalogId, p_pinned: !pinned });
-      if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque da coleÃ§Ã£o.");
+      if (result.error) return toast(result.error.message || "Não foi possível atualizar o destaque da coleção.");
       const mapKey = `${factionId}:${catalogId}`;
       if (pinned) state.factionPinnedCollections.delete(mapKey);
       else state.factionPinnedCollections.set(mapKey, { faction_id: factionId, catalog_id: catalogId });
@@ -14049,7 +14273,7 @@
       const pinned = button.dataset.factionPublicCatalogPinned === "true";
       const collectionId = String(button.dataset.factionPublicCatalogPin || "");
       const result = await sb.rpc("toggle_faction_public_collection_pin", { p_faction_id: factionId, p_collection_id: collectionId, p_pinned: !pinned });
-      if (result.error) return toast(result.error.message || "NÃ£o foi possÃ­vel atualizar o destaque da coleÃ§Ã£o pÃºblica.");
+      if (result.error) return toast(result.error.message || "Não foi possível atualizar o destaque da coleção pública.");
       const mapKey = `${factionId}:${collectionId}`;
       if (pinned) state.factionPinnedPublicCollections.delete(mapKey);
       else state.factionPinnedPublicCollections.set(mapKey, { faction_id: factionId, collection_id: collectionId });
@@ -14260,13 +14484,13 @@
             const order = factionAbafacOrder(factionId);
             if (!order.includes("pinned-characters")) order.push("pinned-characters");
             const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
-            if (orderResult.error) return toast(orderResult.error.message || "NÃ£o foi possÃ­vel ativar a abafac de personagens em destaque.");
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de personagens em destaque.");
           }
           if (values.pinnedCollections) {
             const order = factionAbafacOrder(factionId);
             if (!order.includes("pinned-collections")) order.push("pinned-collections");
             const orderResult = await sb.rpc("update_faction_abafac_order", { p_faction_id: factionId, p_order: order });
-            if (orderResult.error) return toast(orderResult.error.message || "NÃ£o foi possÃ­vel ativar a abafac de coleÃ§Ãµes em destaque.");
+            if (orderResult.error) return toast(orderResult.error.message || "Não foi possível ativar a abafac de coleções em destaque.");
           }
           const catalogUrl = await validatePublicCatalogLink(values.catalogUrl);
           if (catalogUrl === false) return toast("Informe o link de uma coleção pública de quadrinhos deste site.");
@@ -14328,7 +14552,7 @@
       const role = state.factionRoles.find(item => item.faction_id === faction.id && item.user_id === state.session?.user?.id);
       const canManage = ["leader", "curator"].includes(role?.role);
       const isFactionPinned = state.factionPinnedCollections.has(`${faction.id}:${catalog.id}`);
-      const manageActions = canManage ? `<button type="button" class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-catalog-pin="${catalog.id}" data-faction-catalog-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "â˜… Destaque da facÃ§Ã£o" : "â˜† Destacar na facÃ§Ã£o"}</button><button type="button" class="small-btn" data-faction-catalog-edit-inline="${catalog.id}">Editar</button><button type="button" class="small-btn danger" data-faction-catalog-delete="${catalog.id}">Excluir</button><label class="shelf-sort-control"><span>Ordenar</span><select data-faction-catalog-sort="${catalog.id}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${catalog.sort_order === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>` : "";
+      const manageActions = canManage ? `<button type="button" class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-catalog-pin="${catalog.id}" data-faction-catalog-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "★ Destaque da facção" : "☆ Destacar na facção"}</button><button type="button" class="small-btn" data-faction-catalog-edit-inline="${catalog.id}">Editar</button><button type="button" class="small-btn danger" data-faction-catalog-delete="${catalog.id}">Excluir</button><label class="shelf-sort-control"><span>Ordenar</span><select data-faction-catalog-sort="${catalog.id}">${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${catalog.sort_order === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>` : "";
       const catalogKey = String(catalog.id);
       const isLiked = state.factionCatalogLikeIds.has(catalogKey);
       const likes = state.factionCatalogLikeCounts.get(catalogKey) || 0;
@@ -14554,8 +14778,8 @@
       });
     });
     const entries = pinned.map(row => { const items = groups.get(row.character_name) || [...groups.entries()].find(([name]) => publisherKey(name) === row.character_key)?.[1] || []; return [row.character_name, items]; }).filter(([, items]) => items.length);
-    const body = entries.length ? `<div class="publisher-carousel">${entries.map(([name, items]) => { const setting = state.characterSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative) || "assets/batmanicon.jpg"; return `<button class="publisher-card character-card" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} ediÃ§Ã£o(Ãµes)</span></div></button>`; }).join("")}</div>` : '<div class="empty">Nenhum personagem foi fixado nesta facÃ§Ã£o.</div>';
-    const subtitle = publisher ? `Personagens destacados dentro da editora ${escapeHTML(faction.publisher_name)}.` : "Personagens destacados pelos lÃ­deres e curadores da facÃ§Ã£o.";
+    const body = entries.length ? `<div class="publisher-carousel">${entries.map(([name, items]) => { const setting = state.characterSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative) || "assets/batmanicon.jpg"; return `<button class="publisher-card character-card" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`; }).join("")}</div>` : '<div class="empty">Nenhum personagem foi fixado nesta facção.</div>';
+    const subtitle = publisher ? `Personagens destacados dentro da editora ${escapeHTML(faction.publisher_name)}.` : "Personagens destacados pelos líderes e curadores da facção.";
     return `<section class="section faction-extra-abafac faction-pinned-characters-abafac" data-faction-abafac="pinned-characters" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Personagens em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
   }
 
@@ -14564,9 +14788,9 @@
     const pinned = [...state.factionPinnedCollections.values()].filter(row => String(row.faction_id) === String(faction.id));
     const catalogs = pinned.map(row => state.factionCatalogs.find(catalog => String(catalog.id) === String(row.catalog_id))).filter(Boolean).map(catalog => ({ ...catalog, item_ids: (Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []).map(id => state.db.library.find(item => String(item.id) === id)).filter(item => item && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).map(item => item.id) })).filter(catalog => catalog.item_ids.length);
     if (!catalogs.length) return "";
-    const body = catalogs.length ? `<div class="publisher-carousel faction-featured-collections">${catalogs.map(catalog => { const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []; const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean); const cover = catalog.cover_url || (items[0] ? coverFor(items[0]) : "assets/batmanicon.jpg"); const href = `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`; return `<a class="publisher-card faction-collection-card" href="${escapeHTML(href)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(catalog.name)}</strong><span>${items.length} ediÃ§Ã£o(Ãµes)</span></div></a>`; }).join("")}</div>` : '<div class="empty">Nenhuma coleÃ§Ã£o foi fixada nesta facÃ§Ã£o.</div>';
-    const subtitle = publisher ? `ColeÃ§Ãµes com ediÃ§Ãµes da editora ${escapeHTML(faction.publisher_name)}.` : "ColeÃ§Ãµes escolhidas pelos lÃ­deres e curadores da facÃ§Ã£o.";
-    return `<section class="section faction-extra-abafac faction-pinned-collections-abafac" data-faction-abafac="pinned-collections" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">ColeÃ§Ãµes de quadrinhos em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+    const body = catalogs.length ? `<div class="publisher-carousel faction-featured-collections">${catalogs.map(catalog => { const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []; const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean); const cover = catalog.cover_url || (items[0] ? coverFor(items[0]) : "assets/batmanicon.jpg"); const href = `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`; return `<a class="publisher-card faction-collection-card" href="${escapeHTML(href)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(catalog.name)}</strong><span>${items.length} edição(ões)</span></div></a>`; }).join("")}</div>` : '<div class="empty">Nenhuma coleção foi fixada nesta facção.</div>';
+    const subtitle = publisher ? `Coleções com edições da editora ${escapeHTML(faction.publisher_name)}.` : "Coleções escolhidas pelos líderes e curadores da facção.";
+    return `<section class="section faction-extra-abafac faction-pinned-collections-abafac" data-faction-abafac="pinned-collections" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Coleções de quadrinhos em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
   }
 
   function factionPinnedCollectionsMarkup(faction) {
@@ -15281,7 +15505,7 @@
       const result = await sb.functions.invoke("cover-variants-bot", { body: { action: "approve_banner", action_id: actionId, series_id: candidateItem?.seriesId || "" } });
       if (result.error) {
         button.disabled = false;
-        let detail = result.error.message || "NÃ£o foi possÃ­vel aprovar o banner.";
+        let detail = result.error.message || "Não foi possível aprovar o banner.";
         try { const body = await result.error.context?.json?.(); if (body?.error) detail = body.error; } catch {}
         return toast(detail);
       }
@@ -15289,7 +15513,7 @@
       await loadStaffActivities();
       overlay.remove();
       openCoverVariantsReviewPopup();
-      toast("Banner aprovado para a pÃ¡gina inicial.");
+      toast("Banner aprovado para a página inicial.");
     });
   }
 
@@ -15298,7 +15522,7 @@
     state.notifications = state.notifications.map(notification => notification.type === "plan"
       ? { ...notification, body: String(notification.body || "").replace(/\bpremium\b/gi, "Lenda").replace(/\bfree\b/gi, "Comum") }
       : notification);
-    return `<div class="content notifications-page"><div class="section-head"><div><div class="eyebrow">Central da conta</div><h1 class="section-title">Notificações</h1><div class="section-subtitle">${state.notificationUnreadCount} não lida(s)</div></div><button class="small-btn" data-mark-all-notifications>Marcar todas como lidas</button></div><div class="notification-list">${state.notifications.map(notification => { const actor = notification.actor; const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "A Banca Digital"; const actorMarkup = actor?.username ? `<a class="notification-actor" href="${escapeHTML(publicProfileHref(actor.username))}" data-notification-profile="${escapeHTML(actor.username)}">${avatarMarkup(actor, "notification-actor-avatar")}<span><b>${actorName}</b>${actor.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(actor.title)}</small>` : ""}</span></a>` : `<span class="notification-system-actor"><span class="notification-icon">${notificationIcon(notification.type)}</span><b>${actorName}</b></span>`; return `<div class="notification-item ${notification.read_at ? "" : "is-unread"}" role="button" tabindex="0" data-notification-open="${escapeHTML(notification.id)}"><span class="notification-icon">${notificationIcon(notification.type)}</span><span class="notification-copy">${actorMarkup}<strong>${escapeHTML(notification.title)}</strong><span>${escapeHTML(notification.body)}</span><small>${escapeHTML(formatCommentDate(notification.created_at))}</small></span></div>`; }).join("") || '<div class="empty">Você ainda não recebeu notificações.</div>'}</div></div>`;
+    return `<div class="content notifications-page"><div class="section-head"><div><div class="eyebrow">Central da conta</div><h1 class="section-title">Notificações</h1><div class="section-subtitle">${state.notificationUnreadCount} não lida(s)</div></div><button class="small-btn" data-mark-all-notifications>Marcar todas como lidas</button></div><div class="notification-list">${state.notifications.map(notification => { const actor = notification.actor; const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "A Banca Digital"; const actorMarkup = actor?.username ? `<a class="notification-actor" href="${escapeHTML(publicProfileHref(actor.username))}" data-notification-profile="${escapeHTML(actor.username)}">${avatarMarkup(actor, "notification-actor-avatar")}<span><b>${actorName}</b>${actor.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(decodeNewsText(actor.title))}</small>` : ""}</span></a>` : `<span class="notification-system-actor"><span class="notification-icon">${notificationIcon(notification.type)}</span><b>${actorName}</b></span>`; return `<div class="notification-item ${notification.read_at ? "" : "is-unread"}" role="button" tabindex="0" data-notification-open="${escapeHTML(notification.id)}"><span class="notification-icon">${notificationIcon(notification.type)}</span><span class="notification-copy">${actorMarkup}<strong>${escapeHTML(decodeNewsText(notification.title))}</strong><span>${escapeHTML(decodeNewsText(notification.body))}</span><small>${escapeHTML(formatCommentDate(notification.created_at))}</small></span></div>`; }).join("") || '<div class="empty">Você ainda não recebeu notificações.</div>'}</div></div>`;
   }
 
   function communityActivityContext(activity) {
@@ -15322,7 +15546,7 @@
       const actor = activity.actor;
       const actorName = actor?.username ? `@${escapeHTML(actor.username)}` : "Alguém da comunidade";
       const icon = activity.event_type === "comment" ? "💬" : activity.event_type === "completed" ? "🏁" : "♥";
-      return `<div class="notification-item community-activity-item"><span class="notification-icon">${icon}</span><span class="notification-copy"><span class="notification-actor">${actor ? avatarMarkup(actor, "notification-actor-avatar") : ""}<span><b>${actorName}</b>${actor?.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(actor.title)}</small>` : ""}</span></span><strong>${escapeHTML(activity.title)}</strong><span>${escapeHTML(activity.body)}</span><small>${escapeHTML(communityActivityContext(activity))} · ${escapeHTML(formatCommentDate(activity.created_at))}</small></span></div>`;
+      return `<div class="notification-item community-activity-item"><span class="notification-icon">${icon}</span><span class="notification-copy"><span class="notification-actor">${actor ? avatarMarkup(actor, "notification-actor-avatar") : ""}<span><b>${actorName}</b>${actor?.title ? `<small style="--title-bg:${safeTitleColor(actor.title_color)}">${escapeHTML(decodeNewsText(actor.title))}</small>` : ""}</span></span><strong>${escapeHTML(decodeNewsText(activity.title))}</strong><span>${escapeHTML(decodeNewsText(activity.body))}</span><small>${escapeHTML(decodeNewsText(communityActivityContext(activity)))} · ${escapeHTML(formatCommentDate(activity.created_at))}</small></span></div>`;
     }).join("");
     return `<div class="content notifications-page community-activity-page"><div class="section-subtitle community-activity-note">Registro das atividades recentes da comunidade. Os registros desaparecem após 24 horas.</div><div class="notification-list">${rows || '<div class="empty">Nenhuma atividade recente da comunidade.</div>'}</div></div>`;
   }
@@ -16544,7 +16768,7 @@
           button.className = `small-btn ${pinned ? "is-liked" : ""}`;
           button.dataset.factionCharacterPin = characterName;
           button.dataset.factionCharacterPinned = pinned ? "true" : "false";
-          button.textContent = pinned ? "â˜… Fixado na facÃ§Ã£o" : "â˜† Fixar na facÃ§Ã£o";
+          button.textContent = pinned ? "★ Fixado na facção" : "☆ Fixar na facção";
           actions.appendChild(button);
         }
       }
@@ -16788,7 +17012,7 @@
       const selection = window.getSelection();
       state.blogEditorRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
       const url = normalizeBlogImageUrl(await openSiteInput("Cole a URL da imagem para inserir no artigo:", "", { title: "Inserir imagem", label: "URL da imagem" }) || "");
-      if (url === false) return toast("Informe uma URL de imagem vÃ¡lida.");
+      if (url === false) return toast("Informe uma URL de imagem válida.");
       if (!url) return;
       const editor = $("#blog-editor");
       if (!editor) return;
@@ -17716,7 +17940,7 @@
         await requestSticker(button.dataset.stickerRequestCharacter, button.dataset.stickerRequestOwner, button.dataset.stickerRequestType);
       } catch (error) {
         console.error('Falha ao enviar pedido ou proposta de figurinha:', error);
-        toast(error?.message || 'NÃ£o foi possÃ­vel iniciar esse pedido. Atualize o Ã¡lbum e tente novamente.');
+        toast(error?.message || 'Não foi possível iniciar esse pedido. Atualize o álbum e tente novamente.');
       } finally {
         button.disabled = false;
       }
@@ -17901,6 +18125,11 @@
     $$('[data-favorite]', overlay).forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       toggleFavorite(el.dataset.favorite);
+    }));
+    $$('[data-edit-item]', overlay).forEach(el => el.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isAdminProfile()) openEditForm(el.dataset.editItem);
     }));
     $$('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
@@ -18312,7 +18541,7 @@
 
   function openEditForm(id = null) {
     const old = id ? state.db.library.find(x => x.id === id) : null;
-    const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [] };
+    const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", telegramFileId: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [] };
     const secondaryCharacters = Array.isArray(x.secondaryCharacters)
       ? x.secondaryCharacters
       : Array.isArray(x.characters)
@@ -18324,11 +18553,14 @@
         <form id="edit-form"><div class="form-grid">
           <div class="field"><label>Título da edição</label><input name="title" required value="${escapeHTML(x.title)}"></div>
           <div class="field full"><label>Série (deixe vazio para oneshot)</label><input name="seriesTitle" value="${escapeHTML(x.seriesTitle || "")}" placeholder="Ex.: Homem-Aranha, Universo Casulo"></div>
-          <div class="field"><label>Número da edição / volume</label><input name="volume" type="number" min="1" step="1" inputmode="numeric" value="${escapeHTML(String(x.issue || "").match(/\d+/)?.[0] || "")}" placeholder="Ex.: 1"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
+          <div class="field"><label>Número da edição / volume</label><input name="volume" type="text" value="${escapeHTML(String(x.issue || ""))}" placeholder="Ex.: 0, 1, Anuário"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
-          <div class="field full"><label>Link direto do arquivo</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="arquivo.pdf, arquivo.cbz, arquivo.cbr..."><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
+          <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
+          <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
+          <div class="field full"><label>Telegram file_id (somente para postagem do Telegram)</label><input name="telegramFileId" value="${escapeHTML(x.telegramFileId || "")}" placeholder="BQACAg... (obtido pelo bot)"><small class="format-hint">O bot precisa estar no canal. Sem este ID, a postagem pode ser exibida, mas o leitor não consegue baixar o arquivo.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
+          <div class="field full"><label>Link da capa (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(x.coverUrl || "")}" placeholder="https://.../capa.jpg"><small class="format-hint">Se preenchido, será usada como capa da edição em vez da primeira página do arquivo.</small></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://.../capa-do-destaque.jpg"><small class="format-hint">Use uma imagem horizontal ou uma capa em alta resolução para controlar melhor o destaque.</small></div>
           <div class="field full"><label>Descrição</label><textarea name="description">${escapeHTML(x.description || "")}</textarea></div><div class="field full"><label>Tags</label><input name="tags" value="${escapeHTML((x.tags || []).join(", "))}"></div><div class="field full"><label><input name="featured" type="checkbox" ${x.featured ? "checked" : ""}> Mostrar como destaque</label></div>
         </div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar edição</button></div></form>
@@ -18339,14 +18571,17 @@
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
-    $("#edit-form", overlay).onsubmit = event => {
+    $("#edit-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const form = event.currentTarget;
+      if (form.dataset.saving === "true") return;
       const fd = new FormData(form);
       const sourceUrl = String(fd.get("sourceUrl") || "").trim();
+      const isTelegram = isTelegramPostUrl(sourceUrl);
+      const telegramFileId = String(fd.get("telegramFileId") || "").trim();
       const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
       const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim();
-      const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").replace(/\D/g, "");
+      const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").trim();
       const character = String(fd.get("character") || "").trim();
       const secondaryCharacters = [...new Set(String(fd.get("secondaryCharacters") || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
       const item = {
@@ -18362,10 +18597,14 @@
         character,
         secondaryCharacters,
         author: String(fd.get("author") || "").trim(),
-        format: detectFormat(sourceUrl),
-        fileUrl: sourceUrl,
+        format: String(fd.get("format") || "auto").toLowerCase() === "auto" ? detectFormat(sourceUrl) : String(fd.get("format")).toLowerCase(),
+        fileUrl: isTelegram ? "" : sourceUrl,
         backupUrls,
-        telegramUrl: "",
+        telegramUrl: isTelegram ? sourceUrl : "",
+        telegramFileId: isTelegram ? telegramFileId : "",
+        catalogEditedAt: new Date().toISOString(),
+        cover: "",
+        coverUrl: String(fd.get("coverUrl") || "").trim(),
         featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(),
         description: String(fd.get("description") || "").trim(),
         tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean),
@@ -18375,9 +18614,30 @@
       delete item.randomWeight;
       const index = state.db.library.findIndex(i => i.id === item.id);
       if (index >= 0) state.db.library[index] = item; else state.db.library.push(item);
-      saveCatalog("Edição salva.");
-      overlay.remove();
-      render();
+      const submit = form.querySelector('button.btn');
+      form.dataset.saving = "true";
+      submit.disabled = true;
+      submit.textContent = "Publicando edição...";
+      try {
+        const published = await saveCatalog("Edição salva.");
+        if (published) {
+          overlay.remove();
+          render();
+        } else {
+          let status = form.querySelector('[data-publish-status]');
+          if (!status) {
+            status = document.createElement("p");
+            status.dataset.publishStatus = "";
+            status.setAttribute("role", "alert");
+            form.appendChild(status);
+          }
+          status.textContent = "A edição ficou salva somente neste navegador. A publicação falhou; tente salvar novamente para disponibilizá-la aos demais usuários.";
+        }
+      } finally {
+        form.dataset.saving = "false";
+        submit.disabled = false;
+        submit.textContent = "Salvar edição";
+      }
     };
   }
 
@@ -18632,7 +18892,7 @@
   warmLibarchive();
   loadComicReadCounts()
     .then(() => { if (state.section !== "reader") render(); })
-    .catch(error => console.warn("Contadores de leitura indisponÃ­veis:", error));
+    .catch(error => console.warn("Contadores de leitura indisponíveis:", error));
   loadComicDownloadCounts()
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de download indisponíveis:", error));

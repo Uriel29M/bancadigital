@@ -48,6 +48,27 @@ supabase functions deploy mediafire-proxy --no-verify-jwt
 
 O limite atual do proxy é de 512 MB. O leitor ainda carrega o arquivo inteiro na memória do navegador e não armazena os quadrinhos no Storage do Supabase.
 
+## Proxy Google Drive
+
+Links compartilhados do Google Drive são convertidos em URLs de download e encaminhados pela Edge Function `drive-proxy`, permitindo que o PDF.js abra o arquivo dentro do leitor sem bloqueio de CORS.
+
+Para publicar a função:
+
+supabase functions deploy drive-proxy --no-verify-jwt
+
+## Gateway Telegram
+
+Postagens públicas do Telegram não fornecem uma URL de download ao navegador. Para ler um arquivo do canal, cadastre na edição a URL da postagem em `telegramUrl` e o `telegramFileId` recebido pelo bot ao publicar o documento. O leitor prioriza essa fonte e chama a Edge Function `telegram-proxy`, que usa a Bot API e devolve o arquivo com CORS.
+
+Crie um bot, adicione-o como administrador do canal e configure o token exclusivamente nos secrets do Supabase:
+
+```bash
+supabase secrets set TELEGRAM_BOT_TOKEN=SEU_TOKEN
+supabase functions deploy telegram-proxy --no-verify-jwt
+```
+
+O `file_id` não pode ser deduzido de `https://t.me/canal/mensagem`: ele deve vir de uma atualização recebida pelo bot (campo `message.document.file_id` ou `channel_post.document.file_id`). A Bot API hospedada pelo Telegram limita downloads a 20 MB; para arquivos maiores, use um servidor local da Bot API ou mantenha uma fonte reserva.
+
 ## Rodar
 
 Por ser JavaScript no navegador, é melhor abrir com um servidor local em vez de `file://`.
