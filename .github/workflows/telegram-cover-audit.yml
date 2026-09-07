@@ -1,4 +1,4 @@
-name: Telegram cover inspection
+name: Telegram cover integration verification
 on:
   push:
     branches: [fix/telegram-image-covers]
@@ -6,34 +6,42 @@ on:
 permissions:
   contents: write
 jobs:
-  inspect:
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - run: |
+          fetch-depth: 1
+      - name: Apply the isolated fix to current main
+        run: |
+          git fetch origin fix/telegram-image-covers
+          git show origin/fix/telegram-image-covers:scripts/apply-telegram-covers.py > scripts/apply-telegram-covers.py
+          git show origin/fix/telegram-image-covers:scripts/test-telegram-covers.mjs > scripts/test-telegram-covers.mjs
+          git show origin/fix/telegram-image-covers:js/telegram-covers.js > js/telegram-covers.js
+          python3 scripts/apply-telegram-covers.py
+      - name: Check JavaScript and existing catalog regressions
+        run: |
+          node --check js/app.js
+          node --check js/telegram-covers.js
+          node --check sw.js
+          node --test scripts/test-telegram-covers.mjs scripts/test-telegram-auto.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
+      - name: Validate the server source
+        run: |
+          git show origin/fix/telegram-image-covers:supabase/functions/telegram-cover/index.ts > /tmp/telegram-cover.ts
           python3 - <<'PY'
           from pathlib import Path
-          import re
-          text=Path('js/app.js').read_text()
-          out=Path('telegram-cover-audit'); out.mkdir(exist_ok=True)
-          for name in ['proxiedImageUrl','coverFor','coverCacheKey','loadCover','generateCover','openEditForm','saveCatalog']:
-              matches=list(re.finditer(r'\n  (?:async\s+)?function\s+'+name+r'\s*\(',text))
-              for n,m in enumerate(matches):
-                  following=re.search(r'\n  (?:async\s+)?function\s+\w+\s*\(',text[m.end():])
-                  end=m.end()+following.start() if following else len(text)
-                  out.joinpath(f'{name}-{n}.js').write_text(text[m.start():end])
-                  print(name,n,end-m.start())
-          for term in ['function proxiedImageUrl','function coverFor','data-cover-effect-item','featuredCoverUrl','coverUrl: String(fd.get','function loadGeneratedCover']:
-              for m in list(re.finditer(re.escape(term),text))[:8]:
-                  print('MATCH',term,text.count('\n',0,m.start())+1)
+          text=Path('/tmp/telegram-cover.ts').read_text()
+          assert 'getFile' in text and 'telegram_cover_sources' in text
+          assert 'authorizedAdmin(request)' in text and 'selectImage(forwarded)' in text
+          assert 'MAX_BYTES = 10 * 1024 * 1024' in text
+          print('Server source security and image routing anchors verified.')
           PY
-      - run: |
+      - name: Save tested frontend on isolated branch
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin fix/telegram-image-covers
-          git checkout fix/telegram-image-covers
-          git add telegram-cover-audit
-          git commit -m "chore: capture cover integration anchors" || true
-          git push origin HEAD:fix/telegram-image-covers
+          git add js/app.js js/telegram-covers.js index.html sw.js scripts/apply-telegram-covers.py scripts/test-telegram-covers.mjs
+          git commit -m "fix: resolve Telegram image covers before publishing editions"
+          git push origin HEAD:refs/heads/fix/telegram-image-covers-verified
