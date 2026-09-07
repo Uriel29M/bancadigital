@@ -1,29 +1,30 @@
-name: Catalog sync verification
+name: Telegram message verification
 on:
   push:
     branches: [fix/catalog-sync-20260907]
     paths: [.github/workflows/catalog-sync-audit.yml]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  fix:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Finalize shared catalog recovery
-        run: python3 scripts/finalize-catalog-sync.py
-      - name: Verify application and regression tests
+      - name: Resolve the existing channel message
         run: |
-          node --check js/app.js
-          node --check js/catalog-sync.js
-          node --test scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
-      - name: Save verified source to isolated branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add js/app.js scripts/test-shared-catalog.mjs
-          git commit -m "fix: retry shared catalog loading and verify publisher protection"
-          git push origin HEAD:fix/catalog-sync-20260907
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error
+          url = 'https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-file-diagnostic?check=bancahq-2'
+          try:
+              with urllib.request.urlopen(url, timeout=45) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              result = json.loads(error.read().decode())
+              print('HTTP status:', error.code)
+          # Telegram file IDs are never printed to public workflow logs.
+          result.pop('file_id', None)
+          result.pop('file_unique_id', None)
+          print(json.dumps(result, ensure_ascii=False, indent=2))
+          if not result.get('ok'):
+              raise SystemExit(1)
+          PY
