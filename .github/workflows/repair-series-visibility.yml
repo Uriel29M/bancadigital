@@ -1,0 +1,52 @@
+name: Repair series visibility
+on:
+  push:
+    branches: [fix/series-visibility]
+    paths: [.github/workflows/repair-series-visibility.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Apply focused repair
+        run: |
+          git fetch origin fix/series-visibility
+          git show origin/fix/series-visibility:scripts/repair-series-visibility.py > scripts/repair-series-visibility.py
+          python3 scripts/repair-series-visibility.py
+      - name: Verify syntax and regression behavior
+        run: |
+          node --check js/app.js
+          node --check sw.js
+          node --test scripts/test-telegram-auto.mjs scripts/test-telegram-covers.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('js/app.js').read_text()
+          for name in ('canViewCatalogItem','visibleCatalogItems','loadCatalogVisibility','toggleCatalogItemVisibility','toggleCatalogSeriesVisibility'):
+              assert len(re.findall(r'(?m)^  (?:async )?function '+name+r'\(',s)) == 1, name
+          assert 'isHiddenCatalogSeries(item.seriesId)' in s
+          assert 'series?.seriesId || series?.id' in s
+          assert '${hidden ? "◉" : "⊘"}</button>' in s
+          assert '◉ Mostrar série' not in s and '⊘ Ocultar série' not in s
+          assert 'data-set-series-default' in s
+          assert 'data-series-favorite=' in s
+          assert 'data-series-cover-choice=' in s
+          assert 'data-hide-item=' in s
+          assert 'sw.js?v=246' in Path('index.html').read_text()
+          assert 'catalog_series_visibility' in s
+          print('Series visibility repair checks passed.')
+          PY
+      - name: Publish verified repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app.js css/style.css index.html sw.js
+          git commit -m "fix: restore series visibility and use icon-only action"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
