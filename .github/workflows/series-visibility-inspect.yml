@@ -1,0 +1,44 @@
+name: Inspect series visibility integration
+on:
+  push:
+    branches: [fix/catalog-sync-20260907]
+    paths: [.github/workflows/series-visibility-inspect.yml]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Extract relevant application sections
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('js/app.js').read_text(encoding='utf-8')
+          out=Path('series-visibility-audit');out.mkdir(exist_ok=True)
+          names=['seriesCard','seriesDefinitionFor','seriesEditions','renderSeriesDetail','renderSeriesPage','renderSeriesList','renderComics','renderCatalog','renderAdmin','renderAdminCatalog','renderAdminPage','renderSearch','renderReader','openReader','canViewCatalogItem','visibleCatalogItems','loadCatalogVisibility','toggleCatalogItemVisibility','loadAccount','refreshSharedCatalog','applyRoute','render','bindEvents','bindActions','isAdminProfile','groupBySeries','seriesGroups','navigate']
+          starts=[m for m in re.finditer(r'(?m)^  (?:async\s+)?function\s+([A-Za-z0-9_]+)\s*\(',text)]
+          for i,m in enumerate(starts):
+              if m.group(1) in names:
+                  end=starts[i+1].start() if i+1<len(starts) else len(text)
+                  out.joinpath(m.group(1)+'.js').write_text(text[m.start():end],encoding='utf-8')
+          terms=['data-hide-item','data-series-id','data-series-cover','seriesCard(','visibleCatalogItems(','canViewCatalogItem(','loadCatalogVisibility(','catalog_item_visibility','state.db.library.filter','state.db.library.find','function series','function renderAdmin','function renderSearch','function renderReader','function renderComics','function renderSeries','function openSeries','function openReader','function applyRoute','function render()','loadCatalogVisibility()','hiddenCatalogItemIds','function renderCard']
+          report=[]
+          for term in terms:
+              matches=list(re.finditer(re.escape(term),text))
+              report.append(f'{term}: '+', '.join(str(text.count('\n',0,m.start())+1) for m in matches))
+          out.joinpath('locations.txt').write_text('\n'.join(report)+'\n',encoding='utf-8')
+          print('\n'.join(report))
+          PY
+      - name: Save inspection excerpts on isolated branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+Uriel29M@users.noreply.github.com"
+          git fetch origin fix/catalog-sync-20260907
+          git checkout fix/catalog-sync-20260907
+          git add series-visibility-audit
+          git commit -m "chore: capture catalog visibility source" || true
+          git push origin HEAD:fix/catalog-sync-20260907
