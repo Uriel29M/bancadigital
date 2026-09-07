@@ -184,7 +184,7 @@
       if (item.catalogEditedAt) EDITION_SOURCE_FIELDS.forEach(field => {
         if (Object.prototype.hasOwnProperty.call(item, field)) merged[field] = item[field];
       });
-      return merged;
+      return window.BancaCatalogSync?.applyEdition(merged, window.BancaCatalogSync.rows.get(String(merged.id))?.edition) || merged;
     });
   }
 
@@ -2212,10 +2212,33 @@
     $('[data-faction-auto]', overlay).onclick = () => choose(null);
   }
 
+  let sharedCatalogRefresh = null;
+  async function refreshSharedCatalog(options = {}) {
+    if (!sb || navigator.onLine === false) return false;
+    if (sharedCatalogRefresh) return sharedCatalogRefresh;
+    sharedCatalogRefresh = (async () => {
+      await BancaCatalogSync.read(sb);
+      const merged = BancaCatalogSync.merge(state.db.library);
+      const changed = JSON.stringify(merged) !== JSON.stringify(state.db.library);
+      if (changed) {
+        state.db.library = merged;
+        DataStore.save(state.db);
+        clearGeneratedCoverCache();
+        if (options.renderPage !== false && state.section !== "reader" && !readerIsOpen) render();
+      }
+      return changed;
+    })();
+    try { return await sharedCatalogRefresh; }
+    finally { sharedCatalogRefresh = null; }
+  }
+
   async function publishCatalog() {
     if (!sb || state.profile?.plan !== "admin") return { skipped: true };
+    // Never let a stale browser snapshot overwrite canonical edition sources.
+    await refreshSharedCatalog({ renderPage: false });
+    const library = BancaCatalogSync.merge(state.db.library);
     const result = await sb.functions.invoke("github-catalog", {
-      body: { library: compactSeriesItems(state.db.library), series: window.DEFAULT_SERIES || [], collections: state.db.collections },
+      body: { library: compactSeriesItems(library), series: window.DEFAULT_SERIES || [], collections: state.db.collections },
     });
     if (result.error) {
       let detail = result.error.message || "Não foi possível publicar o catálogo.";
@@ -2232,22 +2255,39 @@
     return result.data;
   }
 
-  async function saveCatalog(message = "Catálogo salvo.") {
+  async function saveCatalog(message = "Catálogo salvo.", edition = null) {
+    let sharedPublished = false;
     try {
+      if (edition) {
+        if (!sb || state.profile?.plan !== "admin" || !state.session?.user?.id) throw new Error("É necessária uma sessão de administrador para publicar a edição.");
+        const record = await BancaCatalogSync.publish(sb, edition, state.session.user.id);
+        const canonical = { ...record.edition, catalogEditedAt: record.updated_at };
+        BancaCatalogSync.rows.set(String(canonical.id), { ...record, edition: canonical });
+        const index = state.db.library.findIndex(item => String(item.id) === String(canonical.id));
+        if (index >= 0) state.db.library[index] = canonical;
+        else state.db.library.push(canonical);
+        sharedPublished = true;
+        clearGeneratedCoverCache();
+      }
       save();
       const result = await publishCatalog();
       if (result?.skipped) {
-        toast("Alteração salva somente neste navegador. A publicação exige conexão com o Supabase e uma conta de administrador.");
-        return false;
+        if (!sharedPublished) {
+          toast("Alteração salva somente neste navegador. A publicação exige conexão com o Supabase e uma conta de administrador.");
+          return false;
+        }
+        toast(`${message} Alteração compartilhada com todos os usuários.`);
+        return true;
       }
-      toast(`${message} GitHub atualizado. Os demais usuários receberão a alteração após a publicação do site e ao recarregar a página.`);
+      toast(`${message} Alteração compartilhada com todos os usuários. O catálogo estático também foi atualizado.`);
       return true;
     } catch (error) {
-      console.error("[CATALOG] Falha ao publicar no GitHub:", error);
-      const detail = /failed to send a request to the edge function/i.test(error.message || "")
-        ? "a Edge Function github-catalog não respondeu. Implante-a no projeto Supabase."
-        : (error.message || "não foi possível publicar.");
-      toast(`Não foi possível publicar a alteração para os demais usuários. GitHub: ${detail}`);
+      console.error("[CATALOG] Falha ao publicar:", error);
+      if (sharedPublished) {
+        toast(`${message} Alteração compartilhada com todos os usuários. A cópia estática do GitHub não foi atualizada: ${error.message || "erro desconhecido"}`);
+        return true;
+      }
+      toast(`Não foi possível publicar a alteração para os demais usuários: ${error.message || "erro desconhecido"}`);
       return false;
     }
   }
@@ -18619,14 +18659,12 @@
       };
       if (Array.isArray(item.characters)) item.characters = [character, ...secondaryCharacters];
       delete item.randomWeight;
-      const index = state.db.library.findIndex(i => i.id === item.id);
-      if (index >= 0) state.db.library[index] = item; else state.db.library.push(item);
       const submit = form.querySelector('button.btn');
       form.dataset.saving = "true";
       submit.disabled = true;
       submit.textContent = "Publicando edição...";
       try {
-        const published = await saveCatalog("Edição salva.");
+        const published = await saveCatalog("Edição salva.", item);
         if (published) {
           overlay.remove();
           render();
@@ -18638,7 +18676,7 @@
             status.setAttribute("role", "alert");
             form.appendChild(status);
           }
-          status.textContent = "A edição ficou salva somente neste navegador. A publicação falhou; tente salvar novamente para disponibilizá-la aos demais usuários.";
+          status.textContent = "A publicação falhou. A edição permanece neste formulário; tente salvar novamente. Nenhuma alteração não confirmada foi publicada.";
         }
       } finally {
         form.dataset.saving = "false";
@@ -18960,6 +18998,9 @@
       armOfflineHistoryGuard();
     }
   });
+  refreshSharedCatalog()
+    .then(() => BancaCatalogSync.start(sb, refreshSharedCatalog))
+    .catch(error => console.warn("Catálogo compartilhado indisponível; usando cópia local:", error));
   const accountBootstrap = initialPublicUsername
     ? Promise.race([
       loadAccount(),
