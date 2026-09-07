@@ -18,47 +18,40 @@ jobs:
             js/app.js
             js/data.js
             js/data/dc-comics
-            index.html
           sparse-checkout-cone-mode: false
-      - name: Extrair somente os trechos necessários para o diagnóstico
+      - name: Extrair código de resolução de imagens
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re, json, subprocess
           src = Path('js/app.js').read_text(encoding='utf-8')
           lines = src.splitlines()
-          patterns = [r'John Constantine',r'wikiCharacterImageCache',r'antiheroes',r'antihero',r'function .*Character',r'function .*character',r'characterSettings',r'function .*Wiki',r'function .*wiki',r'function .*Image',r'function .*image',r'wiki-character-card',r'character-card',r'character_name',r'cover_url']
+          patterns = [r'John Constantine',r'wikiCharacterImageCache',r'antiheroes',r'antihero',r'function .*Character',r'function .*character',r'characterSettings',r'wiki-character-card',r'character-card',r'character_name',r'cover_url',r'characterImage',r'imageForCharacter',r'function .*Wiki']
           selected = set()
           for i,line in enumerate(lines):
               if any(re.search(p,line,re.I) for p in patterns):
-                  selected.update(range(max(0,i-7),min(len(lines),i+11)))
-          # Exclude unrelated sections and oversized lines while preserving context.
+                  selected.update(range(max(0,i-5),min(len(lines),i+9)))
           report = {'app_sha': subprocess.check_output(['git','hash-object','js/app.js'],text=True).strip(), 'app_lines': len(lines), 'matches': []}
           for i in sorted(selected):
               line = lines[i]
-              if len(line) > 12000: line = line[:12000] + ' [truncated]'
+              if len(line) > 5000: line = line[:5000] + ' [truncated]'
               report['matches'].append(f'{i+1}: {line}')
           for path in [Path('js/data.js'), *Path('js/data/dc-comics').glob('*.js')]:
               if not path.is_file(): continue
-              text = path.read_text(encoding='utf-8')
               matches = []
-              for i,line in enumerate(text.splitlines()):
+              for i,line in enumerate(path.read_text(encoding='utf-8').splitlines()):
                   if re.search(r'John Constantine|Constantine|Hellblazer',line,re.I):
-                      matches.append(f'{i+1}: {line[:14000]}')
-              if matches: report.setdefault('catalog_matches',{})[str(path)] = matches[:30]
-          # Keep the diagnostic bounded and never include credentials or environment variables.
-          report['matches'] = report['matches'][:1400]
+                      matches.append(f'{i+1}: {line[:5000]}')
+              if matches: report.setdefault('catalog_matches',{})[str(path)] = matches[:10]
           Path('constantine-diagnostic.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
           print('Diagnostic lines:',len(report['matches']))
           PY
       - name: Salvar diagnóstico na branch isolada
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin fix/constantine-image
           git checkout -B fix/constantine-image origin/fix/constantine-image
-          git add constantine-diagnostic.json
+          git add --sparse constantine-diagnostic.json
           git commit -m "chore: collect Constantine image diagnostic"
           git push origin HEAD:fix/constantine-image
