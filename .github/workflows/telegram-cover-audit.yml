@@ -10,17 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify deployed frontend and gateway
+      - name: Verify published source and gateway
         run: |
           python3 - <<'PY'
           import urllib.request, urllib.error, json
           site='https://uriel29m.github.io/bancadigital/'
           base='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-cover'
-          with urllib.request.urlopen(site, timeout=30) as response:
+          source='https://raw.githubusercontent.com/Uriel29M/bancadigital/main/index.html'
+          with urllib.request.urlopen(source, timeout=30) as response:
               html=response.read().decode()
               assert 'js/telegram-covers.js?v=1' in html
               assert 'js/app.js?v=2.2.10.449' in html
-              print('Live frontend: new cover integration and app version verified')
+          print('Published main contains cover integration.')
+          with urllib.request.urlopen(site+'?cover-check=242', timeout=30) as response:
+              html=response.read().decode()
+              print('Pages contains new script:', 'js/telegram-covers.js?v=1' in html)
           def check(request, expected):
               try:
                   with urllib.request.urlopen(request, timeout=30) as response:
