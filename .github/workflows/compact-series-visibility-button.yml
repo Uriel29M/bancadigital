@@ -1,0 +1,55 @@
+name: Compact series visibility button
+on:
+  push:
+    branches: [fix/series-visibility]
+    paths: [.github/workflows/compact-series-visibility-button.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Reduce only the series visibility button
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          css_path = Path('css/style.css')
+          css = css_path.read_text(encoding='utf-8')
+          old = '.series-card-footer-actions .series-hide-toggle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 34px; height: 34px; padding: 0; line-height: 1; font-size: 20px; }'
+          new = '.series-card-footer-actions .series-hide-toggle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 26px; height: 26px; min-width: 26px; min-height: 26px; padding: 0; line-height: 1; font-size: 15px; }'
+          assert css.count(old) == 1, 'The current button rule differs from the expected source'
+          css_path.write_text(css.replace(old, new, 1), encoding='utf-8')
+          html_path = Path('index.html')
+          html = html_path.read_text(encoding='utf-8')
+          def bump(match):
+              parts = match.group(2).split('.')
+              parts[-1] = str(int(parts[-1]) + 1)
+              return match.group(1) + '.'.join(parts)
+          html, count = re.subn(r'(css/style\.css\?v=)([0-9.]+)', bump, html, count=1)
+          assert count == 1
+          html, count = re.subn(r'(sw\.js\?v=)(\d+)', lambda m: m.group(1) + str(int(m.group(2)) + 1), html, count=1)
+          assert count == 1
+          html_path.write_text(html, encoding='utf-8')
+          sw_path = Path('sw.js')
+          sw = sw_path.read_text(encoding='utf-8')
+          sw, count = re.subn(r'(banca-digital-shell-v)(\d+)', lambda m: m.group(1) + str(int(m.group(2)) + 1), sw, count=1)
+          assert count == 1
+          sw_path.write_text(sw, encoding='utf-8')
+          assert new in css_path.read_text(encoding='utf-8')
+          assert old not in css_path.read_text(encoding='utf-8')
+          print('Verified: button reduced from 34×34 to 26×26 px, icon from 20 to 15 px; no application logic or other buttons changed.')
+          PY
+          git diff --check
+      - name: Publish isolated CSS change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add css/style.css index.html sw.js
+          git commit -m "style: reduce series visibility button to 26px"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
