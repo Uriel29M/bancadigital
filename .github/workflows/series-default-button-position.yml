@@ -1,0 +1,54 @@
+name: Series cover footer placement
+on:
+  push:
+    branches: [fix/series-default-cover-actions]
+    paths: [.github/workflows/series-default-button-position.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Apply isolated layout change
+        run: |
+          git fetch origin fix/series-default-cover-actions
+          git show origin/fix/series-default-cover-actions:scripts/position-series-default-button.py > scripts/position-series-default-button.py
+          python3 scripts/position-series-default-button.py
+      - name: Verify original actions and layout
+        run: |
+          node --check js/app.js
+          node --check sw.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          source=Path('js/app.js').read_text()
+          start=source.index('  function openSeriesCoverChoice(seriesId) {')
+          end=source.find('\n  function ',start+5)
+          chooser=source[start:end]
+          footer=re.search(r'<div class="modal-actions series-cover-choice-actions">(.*?)</div>',chooser)
+          assert footer, 'Missing shared footer'
+          content=footer.group(1)
+          assert content.index('data-set-series-default') < content.index('data-close>Cancelar') < content.index('Salvar capa')
+          assert content.count('data-set-series-default') == 1
+          assert content.count('data-close>Cancelar') == 1
+          assert content.count('Salvar capa') == 1
+          assert 'series-cover-editorial-actions' not in chooser
+          assert 'if (defaultButton) defaultButton.onclick = async () =>' in chooser
+          assert '$("#series-cover-choice-form", overlay).onsubmit = async event =>' in chooser
+          assert 'user_series_cover_choices' in chooser
+          print('All three actions share the original footer; both existing actions and handlers are preserved.')
+          PY
+          node --test scripts/test-series-default-cover.mjs scripts/test-telegram-covers.mjs scripts/test-telegram-auto.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
+      - name: Publish verified narrow change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app.js css/style.css index.html sw.js
+          git commit -m "fix: align series default button with existing footer actions"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
