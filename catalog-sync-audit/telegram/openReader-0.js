@@ -1,0 +1,1 @@
+function openReader(item, options = {}
