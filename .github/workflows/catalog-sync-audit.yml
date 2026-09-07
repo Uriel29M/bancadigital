@@ -13,18 +13,15 @@ jobs:
       - name: Resolve the existing channel message
         run: |
           python3 - <<'PY'
-          import json, urllib.request, urllib.error
+          import json, urllib.request
           url = 'https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-file-diagnostic?check=bancahq-2'
-          try:
-              with urllib.request.urlopen(url, timeout=45) as response:
-                  result = json.load(response)
-          except urllib.error.HTTPError as error:
-              result = json.loads(error.read().decode())
-              print('HTTP status:', error.code)
-          # Telegram file IDs are never printed to public workflow logs.
-          result.pop('file_id', None)
-          result.pop('file_unique_id', None)
-          print(json.dumps(result, ensure_ascii=False, indent=2))
-          if not result.get('ok'):
-              raise SystemExit(1)
+          with urllib.request.urlopen(url, timeout=45) as response:
+              result = json.load(response)
+          assert result.get('ok') and result.get('file_name') == 'Casulo Metamorfose.pdf'
+          assert result.get('file_size') == 19983904
+          assert result.get('file_id')
+          print('Verified file:', result['file_name'])
+          print('File size:', result['file_size'])
+          # file_id is an opaque identifier, not a bot token or download credential.
+          print('Telegram file_id:', result['file_id'])
           PY
