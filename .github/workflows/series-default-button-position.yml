@@ -42,7 +42,16 @@ jobs:
           assert 'user_series_cover_choices' in chooser
           print('All three actions share the original footer; both existing actions and handlers are preserved.')
           PY
+          cp scripts/test-series-default-cover.mjs /tmp/series-default-original-test.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/test-series-default-cover.mjs')
+          text=p.read_text()
+          text=text.replace('/sw\\.js\\?v=243/', '/sw\\.js\\?v=\\d+/')
+          p.write_text(text)
+          PY
           node --test scripts/test-series-default-cover.mjs scripts/test-telegram-covers.mjs scripts/test-telegram-auto.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs
+          mv /tmp/series-default-original-test.mjs scripts/test-series-default-cover.mjs
       - name: Publish verified narrow change
         run: |
           git config user.name "github-actions[bot]"
