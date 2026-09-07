@@ -1,0 +1,17 @@
+
+      return `<article class="staff-activity-item file-report-item"><header><span>${origin}</span><span>${escapeHTML(formatCommentDate(report.created_at))}</span></header><strong>${escapeHTML(title)}</strong><p>${escapeHTML(report.reason || "O arquivo não abriu.")}</p><small>Status: ${status}</small><div class="staff-activity-actions">${report.reporterName && report.source !== "bot" ? `<button class="small-btn" data-report-reporter="${escapeHTML(report.reporterName)}">Ver quem relatou</button>` : ""}${item ? `<button class="small-btn" data-report-open="${escapeHTML(item.id)}">Ver edição</button>` : ""}${report.status === "pending" ? `<button class="small-btn" data-report-status="resolved" data-report-id="${report.id}">Marcar resolvido</button><button class="small-btn danger" data-report-status="ignored" data-report-id="${report.id}">Ignorar</button>` : `<button class="small-btn" data-report-status="pending" data-report-id="${report.id}" data-report-item-id="${escapeHTML(report.item_id)}" data-report-reporter-id="${escapeHTML(report.reporter_id || "")}">Reabrir</button>`}</div></article>`;
+    }).join("") || '<div class="empty">Nenhum relato de arquivo aguardando atenção.</div>'}</div>`;
+  }
+
+  function renderSeriesLinkDiscoveries() {
+    if (!state.session || state.profile?.plan !== "admin") return '<div class="empty">Área restrita aos administradores.</div>';
+    const selectedTab = ["pending", "approved", "rejected"].includes(state.seriesLinkMonitorTab) ? state.seriesLinkMonitorTab : "pending";
+    const rows = [...(state.seriesLinkDiscoveries || [])]
+      .filter(row => row.status === selectedTab)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const cards = rows.map(row => {
+      const series = (window.DEFAULT_SERIES || []).find(entry => entry.id === row.series_id);
+      const existing = state.db.library.find(item => item.seriesId === row.series_id && String(item.issue).trim() === String(row.issue).trim());
+      const seriesItem = state.db.library.find(item => item.seriesId === row.series_id);
+      const status = row.status === "pending" ? "Pendente" : row.status === "approved" ? "Aprovada" : "Rejeitada";
+      return `<article class="staff-activity-item series-link-discovery-item"><header><span>🔎 ${escapeHTML(series?.name || row.series_id)}</span><span>${escapeHTML(formatCommentDate(row.created_at))}</span></header><strong>${escapeHTML(row.title || `Edição ${row.issue}`)}</strong><p>${existing ? "Já existe uma edição com este número; a aprovação atualizará o link." : "Nova edição encontrada na página fonte."}</p><small>Fonte: <a href="${escapeHTML(row.source_url)}" target="_blank" rel="noopener">abrir Blogspot</a> · Status: ${status}</small><div class="staff-activity-actions"><a class="small-btn" href="${escapeHTML(row.file_url)}" target="_blank" rel="noopener">Abrir arquivo</a>${state.profile?.plan === "admin" && row.status === "pending" ? `<button class="small-btn" data-series-link-review="${row.id}" data-status="approved">Aprovar</button><button class="small-btn danger" data-series-link-review="${row.id}" data-status="rejected">Rejeitar</button>` : row.status !== "pending" ? `<button class="small-btn" data-series-link-review="${row.id}" data-status="pending">Voltar para pendentes</button>` : ""}${seriesItem ? `<button class="small-btn" data-series-link-series="${escapeHTML(row.series_id)}">Ver série</button>` : ""}</div></article>`;

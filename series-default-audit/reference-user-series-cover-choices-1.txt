@@ -1,0 +1,29 @@
+
+      sb.from("user_achievements").select("achievements(name, description, icon)").eq("user_id", profile.data.id),
+      sb.from("shelf_collection_likes").select("collection_id, user_id").eq("owner_id", profile.data.id),
+      sb.from("profile_follows").select("follower_id").eq("following_id", profile.data.id),
+      sb.from("profile_follows").select("following_id").eq("follower_id", profile.data.id),
+      ["moderator", "banca", "admin"].includes(state.profile?.plan)
+        ? sb.from("moderation_actions").select("id, actor_id, action, duration_until, reason, internal_note, details, created_at").eq("target_id", profile.data.id).order("created_at", { ascending: false })
+        : { data: [] },
+      ["premium", "moderator", "banca", "admin"].includes(profile.data.plan)
+        ? sb.from("user_cover_choices").select("item_id, variant_key, label, cover_url").eq("user_id", profile.data.id)
+        : { data: [] },
+      sb.from("user_cover_styles").select("item_id, style").eq("user_id", profile.data.id),
+      sb.from("user_series_cover_choices").select("series_id, item_id, cover_url, variant_key, is_variant").eq("user_id", profile.data.id),
+      sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", profile.data.id)
+    ]);
+    const top10Lists = await loadTop10Lists(profile.data.id);
+    const currentPublicProfile = state.publicProfile?.profile || state.publicProfile;
+    const samePublicProfile = cleanUsername(currentPublicProfile?.username || "") === cleanUsername(username);
+    const preservedTop10Lists = samePublicProfile && top10LoadRevision !== state.top10Revision
+      ? (state.publicProfile?.top10Lists || top10Lists)
+      : top10Lists;
+    const isFollowing = state.session?.user?.id ? (followers.data || []).some(row => row.follower_id === state.session.user.id) : false;
+    const actorIds = [...new Set((moderationHistory.data || []).map(entry => entry.actor_id).filter(Boolean))];
+    const actors = actorIds.length ? await sb.from("profiles").select("id, username").in("id", actorIds) : { data: [] };
+    const actorNames = new Map((actors.data || []).map(actor => [actor.id, actor.username]));
+    const collectionLikes = new Set((likes.data || []).filter(row => row.user_id === state.session?.user?.id).map(row => row.collection_id));
+    const collectionLikeCounts = (likes.data || []).reduce((counts, row) => counts.set(row.collection_id, (counts.get(row.collection_id) || 0) + 1), new Map());
+    const publicCoverChoices = new Map((publicCoverChoicesResult.data || []).map(choice => [choice.item_id, choice]));
+    const publicCoverStyles = new Map((publicCoverStylesResult.data || []).map(choice => [choice.item_id, choice.style]));

@@ -1,0 +1,31 @@
+
+        resignCurator.className = "small-btn";
+        resignCurator.dataset.factionResignCurator = "true";
+        resignCurator.textContent = "Renunciar à curadoria";
+        resignCurator.onclick = async () => {
+          const result = await sb.rpc("resign_faction_curator");
+          if (result.error) return toast(result.error.message || "Não foi possível renunciar à curadoria.");
+          await loadFactions();
+          render();
+        };
+        detailActions.appendChild(resignCurator);
+      }
+    }
+  }
+
+  function factionCatalogMarkup(faction) {
+    return [...state.factionAbafacCatalogs.entries()].filter(([, catalog]) => catalog.faction_id === faction.id).map(([key, catalog]) => {
+      const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : [];
+      const items = ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean);
+      const collectionContext = { id: catalog.id, ownerId: catalog.owner_id, coverStyles: new Map(Object.entries(catalog.cover_styles || {})), coverChoices: new Map(Object.entries(catalog.cover_choices || {})) };
+      const creatorHref = publicProfileHref(catalog.username, catalog.id);
+      return `<section class="section faction-catalog-abafac" data-faction-abafac="${escapeHTML(key)}" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Catálogo público</div><h2 class="section-title">${escapeHTML(catalog.name)}</h2><div class="section-subtitle">Coleção de <a class="faction-catalog-creator" href="${escapeHTML(creatorHref)}">@${escapeHTML(catalog.username)}</a> · ${items.length} item(ns)</div></div></div><div class="rail-viewport faction-catalog-carousel"><div class="rail faction-catalog-rail">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, false, collectionContext)).join("") || '<div class="empty">Nenhuma edição nesta coleção pública.</div>'}</div></div></section>`;
+    }).join("");
+  }
+
+  function factionOwnedCatalogMarkup(faction, standalone = false, onlyCatalogId = null) {
+    return state.factionCatalogs.filter(catalog => catalog.faction_id === faction.id && (onlyCatalogId === null || String(catalog.id) === String(onlyCatalogId))).map(catalog => {
+      const ids = Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : [];
+      const items = sortShelfItems(ids.map(id => state.db.library.find(item => String(item.id) === id)).filter(Boolean), catalog.sort_order || "added_desc");
+      const key = `faction-catalog:${catalog.id}`;
+      const factionHref = `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`;

@@ -1,0 +1,65 @@
+
+      libarchiveModulePromise = import(appAssetUrl("libarchive/libarchive.js")).catch(error => {
+        libarchiveModulePromise = null;
+        throw error;
+      });
+    }
+    return libarchiveModulePromise;
+  }
+
+  function publicProfileHref(username, collectionId = "", album = false) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("perfil", cleanUsername(username));
+    if (collectionId) url.searchParams.set("lista", collectionId);
+    if (album) url.searchParams.set("album", "1");
+    return `${url.pathname}?${url.searchParams.toString()}`;
+  }
+
+  function openOwnPublicProfile() {
+    if (!state.session?.user || !state.profile?.username) return openAuthPage();
+    const profileUrl = publicProfileHref(state.profile.username);
+    if (`${window.location.pathname}${window.location.search}` !== profileUrl) {
+      window.history.pushState({ [ROUTE_HISTORY_KEY]: true, [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1 }, "", profileUrl);
+    }
+    loadPublicProfile(state.profile.username);
+  }
+
+  async function loadCoverCatalog() {
+    if (!sb) return;
+    const result = await sb.from("comic_cover_variants").select("item_id, variant_key, label, cover_url, source_url").order("label", { ascending: true });
+    if (result.error) {
+      console.warn("Não foi possível carregar as capas variantes do Supabase:", result.error.message);
+      state.coverVariants = new Map();
+      return;
+    }
+    state.coverVariants = (result.data || []).reduce((map, variant) => {
+      // Compatibilidade com as linhas antigas gravadas com três dígitos.
+      const itemId = {
+        "war-earth-3-2022-001": "war-earth-3-2022-01",
+        "war-earth-3-2022-002": "war-earth-3-2022-02"
+      }[variant.item_id] || variant.item_id;
+      const normalizedVariant = itemId === variant.item_id ? variant : { ...variant, item_id: itemId };
+      if (!map.has(itemId)) map.set(itemId, []);
+      map.get(itemId).push(normalizedVariant);
+      return map;
+    }, new Map());
+  }
+
+  async function loadCoverChoices(userId) {
+    if (!sb || !userId) {
+      state.coverChoices = new Map();
+      return;
+    }
+    const result = await sb.from("user_cover_choices").select("item_id, variant_key, label, cover_url").eq("user_id", userId);
+    state.coverChoices = result.error ? new Map() : new Map((result.data || []).map(choice => [choice.item_id, choice]));
+  }
+
+  async function loadCoverStyles(userId) {
+    if (!userId) {
+      state.coverStyles = new Map();
+      return;
+    }
+    const result = await sb.from("user_cover_styles").select("item_id, style").eq("user_id", userId);
+    state.coverStyles = result.error ? new Map() : new Map((result.data || []).map(choice => [choice.item_id, choice.style]));

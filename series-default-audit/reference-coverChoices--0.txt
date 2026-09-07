@@ -1,0 +1,79 @@
+
+        } catch (retryError) {
+          console.warn("Catálogo local maior que a cota do navegador; alterações locais não foram persistidas.", retryError);
+        }
+      }
+    }
+  };
+
+  const state = {
+    db: DataStore.load(),
+    section: "home",
+    authMode: "login",
+    publicProfile: null,
+    search: "",
+    searchUsers: [],
+    searchUsersQuery: "",
+    searchUsersLoading: false,
+    entityFilter: null,
+    collectionId: null,
+    editingId: null,
+    // Reading mode for PDF, CBZ, and CBR readers
+    readingMode: localStorage.getItem("readingMode") || "single-page", // 'single-page', 'double-page', or 'continuous-scroll'
+    readingDirection: localStorage.getItem("readingDirection") || "western" // 'western' or 'eastern'
+    ,session: null,
+    authReady: false,
+    profile: null,
+    favoriteIds: new Set(),
+    favoriteAddedAt: new Map(),
+    collectionSortOrders: {},
+    coverVariants: new Map(),
+    homepageBanners: [],
+    homepageBannerOverrideId: null,
+    homepageBannerOverrideDay: null,
+    coverChoices: new Map(),
+    previewCoverChoices: new Map(),
+    coverStyles: new Map(),
+    seriesCoverChoices: new Map(),
+    offlineCoverData: new Map(),
+    readingProgress: new Map(),
+    recentlyOpenedIds: (() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("bancaDigitalRecentlyOpened") || "[]");
+        return Array.isArray(stored) ? stored.map(String).slice(0, 20) : [];
+      } catch { return []; }
+    })(),
+    shelfSnapshot: null,
+    shelfExpanded: { saved: false, read: false },
+    shelfCategories: [],
+    savedPublicCollections: [],
+    savedPublisherKeys: new Set(),
+    savedPublishers: [],
+    publisherFans: { key: "", users: [], loading: false, loaded: false },
+    savedImprintKeys: new Set(),
+    savedImprints: [],
+    savedCharacterKeys: new Set(),
+    savedCharacters: [],
+    top10Lists: [],
+    top10PendingOperations: 0,
+    top10Revision: 0,
+    blogShelfCategories: [],
+    shelfTab: "collections",
+    publicShelfTab: "collections",
+    blogSaveIds: new Set(),
+    authoredBlogPosts: [],
+    savedBlogPosts: [],
+    collectionFilter: { field: "all", query: "" },
+    comicLikeIds: new Set(),
+    comicLikeAddedAt: new Map(),
+    comicLikeCounts: new Map(),
+    comicMonthlyReadCounts: new Map(),
+    comicMonthlyReadCountsLoaded: false,
+    hiddenCatalogItemIds: new Set(),
+     homeSectionOrder: null,
+     homeHiddenSectionKeys: new Set(),
+     homeVisibleSectionKeys: [],
+     comicSectionOrder: (() => {
+       try { return JSON.parse(localStorage.getItem("bancaDigitalComicSectionOrder") || "null"); } catch { return null; }
+     })(),
+     comicHiddenSectionKeys: (() => {

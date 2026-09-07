@@ -1,0 +1,25 @@
+
+    const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
+    const options = shelfStyleOptionsFor(profile);
+    const current = options.some(([value]) => value === selected) ? selected : "none";
+    return `<div class="shelf-style-picker"><button type="button" class="small-btn shelf-style-menu-toggle" data-shelf-style-toggle aria-expanded="false">✦ Estilo</button><select class="shelf-style-native-select" data-shelf-style-native aria-label="Estilo da prateleira">${options.map(([value, label]) => `<option value="${value}" ${current === value ? "selected" : ""}>${label}</option>`).join("")}</select><div class="shelf-style-menu" hidden><span class="shelf-style-menu-title">Estilo das prateleiras</span>${options.map(([value, label]) => `<button type="button" class="shelf-style-option${current === value ? " is-selected" : ""}" data-shelf-style="${value}">${label}</button>`).join("")}</div></div>`;
+  }
+
+  function shelfCollectionMarkup(title, items, key, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, actions = "", coverChoices = null, renderSeriesCards = false) {
+    const expanded = Boolean(state.shelfExpanded[key]);
+    const fixedCollection = ["saved", "series-saved", "read", "completed", "liked", "public-saved", "public-series-saved", "public-read", "public-completed", "public-liked"].includes(key)
+      || key.startsWith("category:")
+      || key.startsWith("public-category:");
+    const publicState = state.section === "public-profile" ? state.publicProfile : null;
+    const sortOrders = publicState?.profile?.shelf_sort_orders || state.collectionSortOrders || {};
+    const sortCategoryId = key.startsWith("public-category:") ? key.slice("public-category:".length) : "";
+    const publicCategorySortOrder = sortCategoryId ? publicState?.collections?.find(category => category.id === sortCategoryId)?.sortOrder : "";
+    const sortOrder = sortOrders[key] || sortOrders[key.replace(/^public-/, "")] || publicCategorySortOrder || "added_desc";
+    const addedAtMap = key === "saved" || key === "series-saved" || key === "public-saved" || key === "public-series-saved"
+      ? (publicState?.favoriteAddedAt || state.favoriteAddedAt)
+      : key === "liked" || key === "public-liked"
+        ? (publicState?.comicLikeAddedAt || state.comicLikeAddedAt)
+        : null;
+    const orderedItems = sortShelfItems(items, sortOrder, addedAtMap, progressMap);
+    const visibleItems = fixedCollection || expanded ? orderedItems : orderedItems.slice(0, SHELF_PREVIEW_LIMIT);
+    const likedCollection = key === "read" && state.section === "shelf" ? shelfCollectionMarkup("Curtidas", shelfItemsByIds([...state.comicLikeIds]), "liked") : "";

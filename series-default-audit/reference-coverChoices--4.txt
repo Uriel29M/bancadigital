@@ -1,0 +1,37 @@
+
+    };
+    const priorityJobs = priority.map(load).filter(Boolean);
+    homeHeroReady = !priorityJobs.length;
+    if (priorityJobs.length) {
+      Promise.allSettled(priorityJobs).then(() => {
+        homeHeroReady = true;
+        observeDeferred();
+        releaseLazyBackgrounds();
+      });
+    } else {
+      observeDeferred();
+      releaseLazyBackgrounds();
+    }
+  }
+
+  function card(item, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, directOpen = false, coverChoices = null, seriesContext = false, collectionContext = null) {
+    const publicCollection = state.section === "public-profile" && state.publicProfile?.collectionId
+      ? state.publicProfile.collections?.find(collection => collection.id === state.publicProfile.collectionId)
+      : null;
+    const activeCollectionContext = collectionContext || (publicCollection ? { id: publicCollection.id, ownerId: state.publicProfile.profile.id, coverStyles: new Map(Object.entries(publicCollection.coverStyles || {})), coverChoices: new Map(Object.entries(publicCollection.coverChoices || {})) } : null);
+    const completed = progressFor(item, progressMap)?.completed;
+    const displayTitle = itemDisplayTitle(item);
+    const issueLabel = itemIssueLabel(item);
+    const coverVariants = usableCoverVariants(item);
+    const hasCoverVariants = coverVariants.length > 0;
+    const savedForCover = favoriteIds.has(item.id) || (seriesContext && item.seriesId && favoriteIds.has(item.seriesId));
+    const collectionOwner = activeCollectionContext?.ownerId === state.session?.user?.id;
+    const adminCanChooseCover = state.profile?.plan === "admin" && !activeCollectionContext?.id;
+    const canChooseCover = state.session && hasLegendaryAccess() && (collectionOwner || adminCanChooseCover || (favoriteIds === state.favoriteIds && savedForCover)) && hasCoverVariants;
+    const coverStyle = coverStyleFor(item, activeCollectionContext?.coverStyles || null);
+    const hidden = isHiddenCatalogItem(item);
+    const canSetCoverStyle = collectionOwner || (Boolean(state.session) && favoriteIds === state.favoriteIds);
+    const coverEffects = coverStyleControl(item.id, coverStyle, canSetCoverStyle, activeCollectionContext?.id || "");
+    const authors = String(item.author || "").split(/\s*(?:\/|&|\be\b)\s*/i).map(value => value.trim()).filter(Boolean);
+    const entityButton = (kind, value, label = value) => value ? `<button type="button" class="card-entity-link" data-entity-kind="${escapeHTML(kind)}" data-entity-value="${escapeHTML(value)}">${escapeHTML(label)}</button>` : "";
+    const characterButtons = entityButton("character", characterNames(item)[0]);

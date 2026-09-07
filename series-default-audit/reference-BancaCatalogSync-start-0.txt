@@ -1,0 +1,64 @@
+
+        // sessão volte ao fluxo normal, em vez de reativar o modo offline.
+        window.setTimeout(() => window.location.reload(), 100);
+        return;
+      }
+      const refreshed = await sb.auth.refreshSession();
+      if (!refreshed.error && refreshed.data?.session) {
+        sb.auth.startAutoRefresh?.();
+        await loadAccount();
+        pumpDownloadQueue();
+        if (forcedOfflineDownloads) {
+          forcedOfflineDownloads = false;
+          navigate({}, true);
+        }
+      }
+    } catch (error) {
+      console.warn("Não foi possível retomar a sessão online:", error);
+    } finally {
+      reconnecting = false;
+    }
+  });
+  window.addEventListener("offline", () => {
+    if (state.session) {
+      if (readerIsOpen) {
+        // Atualiza o estado offline sem trocar a rota enquanto o leitor está aberto.
+        activateOfflineMode();
+        return;
+      }
+      forcedOfflineDownloads = true;
+      navigate({ pagina: "downloads" }, true);
+      armOfflineHistoryGuard();
+    }
+  });
+  BancaCatalogSync.start(sb, refreshSharedCatalog);
+  refreshSharedCatalog()
+    .catch(error => console.warn("Catálogo compartilhado indisponível; usando cópia local:", error));
+  const accountBootstrap = initialPublicUsername
+    ? Promise.race([
+      loadAccount(),
+      new Promise((_, reject) => window.setTimeout(() => reject(new Error("Account bootstrap timeout")), 15000))
+    ])
+    : loadAccount();
+  accountBootstrap
+    .then(async () => {
+      if (state.section === "reader" && !activeReaderCleanup) applyRoute();
+      if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
+      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
+      pumpDownloadQueue();
+    })
+    .catch(error => console.warn("Supabase indisponível:", error))
+    .then(async () => {
+      if (!initialPublicUsername || !state.publicProfile?.loading) return;
+      try {
+        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
+      } catch (error) {
+        console.warn("Public profile load failed:", error);
+        state.publicProfile = { error: "Não foi possível carregar este perfil agora.", username: initialPublicUsername };
+        render();
+      }
+    })
+    .finally(() => {
+      if (appRoot) appRoot.style.visibility = "";
+    });
+})();

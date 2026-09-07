@@ -1,0 +1,36 @@
+
+  const isFactionChatSheriff = (room, userId) => Boolean(room?.factionId && userId && state.factionRoles.some(role => role.faction_id === room.factionId && role.user_id === userId && ["leader", "curator"].includes(role.role)));
+  const factionChatSheriffIds = room => new Set((state.factionRoles || []).filter(role => role.faction_id === room?.factionId && ["leader", "curator"].includes(role.role)).map(role => String(role.user_id)));
+
+  function canOpenChatRoom(room) {
+    if (room.factionId) return ["moderator", "banca", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
+    return room.access === "public"
+      || (room.access === "premium" && hasLegendaryAccess())
+      || (room.access === "staff" && ["moderator", "banca", "admin"].includes(state.profile?.plan));
+  }
+
+  function chatRoomLabel(room) {
+    if (room.factionId) return "Exclusivo";
+    return room.access === "premium" ? "Lenda" : room.access === "staff" ? "Staff" : "Público";
+  }
+
+  async function loadChatSenderVisuals(senderIds) {
+    const ids = [...new Set(senderIds.filter(Boolean))];
+    const visuals = new Map(ids.map(id => [id, { coverChoices: new Map(), coverStyles: new Map() }]));
+    if (!ids.length || !sb) return visuals;
+    const [choicesResult, stylesResult] = await Promise.all([
+      sb.from("user_cover_choices").select("user_id, item_id, variant_key, cover_url").in("user_id", ids),
+      sb.from("user_cover_styles").select("user_id, item_id, style").in("user_id", ids)
+    ]);
+    (choicesResult.data || []).forEach(choice => visuals.get(choice.user_id)?.coverChoices.set(choice.item_id, choice));
+    (stylesResult.data || []).forEach(style => visuals.get(style.user_id)?.coverStyles.set(style.item_id, style.style));
+    return visuals;
+  }
+
+  function chatTop10PreviewMarkup(preview, url) {
+    const story = preview.list.list_type === "story";
+    const items = (preview.items || []).slice(0, 3);
+    const rows = items.map((item, index) => {
+      const storyEntry = story ? state.db.library.find(entry => String(entry.id) === String(item.character_key)) : null;
+      const image = item.image_url || (storyEntry ? coverFor(storyEntry) : characterSettingForName(item.character_name)?.cover_url) || "assets/batmanicon.jpg";
+      return `<li class="chat-top10-preview-item" data-chat-top10-preview-item="${escapeHTML(item.id)}" data-chat-top10-preview-type="${story ? "story" : "character"}" data-chat-top10-preview-key="${escapeHTML(item.character_key || item.character_name)}"><span>${index + 1}</span><img src="${escapeHTML(image)}" alt="${escapeHTML(item.character_name)}" loading="lazy"><strong>${escapeHTML(item.character_name)}</strong><span class="top10-vote-actions"><button type="button" class="small-btn" data-chat-top10-vote="1">👍 ${item.likes || 0}</button><button type="button" class="small-btn" data-chat-top10-vote="-1">👎 ${item.dislikes || 0}</button></span></li>`;

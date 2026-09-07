@@ -1,0 +1,49 @@
+
+      if (!map.has(itemId)) map.set(itemId, []);
+      map.get(itemId).push(normalizedVariant);
+      return map;
+    }, new Map());
+  }
+
+  async function loadCoverChoices(userId) {
+    if (!sb || !userId) {
+      state.coverChoices = new Map();
+      return;
+    }
+    const result = await sb.from("user_cover_choices").select("item_id, variant_key, label, cover_url").eq("user_id", userId);
+    state.coverChoices = result.error ? new Map() : new Map((result.data || []).map(choice => [choice.item_id, choice]));
+  }
+
+  async function loadCoverStyles(userId) {
+    if (!userId) {
+      state.coverStyles = new Map();
+      return;
+    }
+    const result = await sb.from("user_cover_styles").select("item_id, style").eq("user_id", userId);
+    state.coverStyles = result.error ? new Map() : new Map((result.data || []).map(choice => [choice.item_id, choice.style]));
+  }
+
+  async function loadSeriesCoverChoices(userId) {
+    if (!userId) {
+      state.seriesCoverChoices = new Map();
+      return;
+    }
+    const result = await sb.from("user_series_cover_choices").select("series_id, item_id, cover_url, variant_key, is_variant").eq("user_id", userId);
+    state.seriesCoverChoices = result.error ? new Map() : new Map((result.data || []).map(choice => [choice.series_id, choice]));
+  }
+
+  async function loadProfileWallComments(profileId) {
+    if (!sb || !profileId) return [];
+    let result = await sb.from("profile_wall_comments").select("id, profile_id, user_id, parent_id, body, created_at, profiles(username, avatar_url, title, title_color, faction_id, plan)").eq("profile_id", profileId).order("created_at", { ascending: false });
+    if (!result.error) return result.data || [];
+    let fallback = await sb.from("profile_wall_comments").select("id, profile_id, user_id, parent_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
+    if (fallback.error && /parent_id|schema cache|column/i.test(fallback.error.message || "")) {
+      const legacy = await sb.from("profile_wall_comments").select("id, profile_id, user_id, body, created_at").eq("profile_id", profileId).order("created_at", { ascending: false });
+      fallback = { ...legacy, data: (legacy.data || []).map(comment => ({ ...comment, parent_id: null })) };
+    }
+    if (fallback.error) {
+      console.warn("Não foi possível carregar os comentários do mural:", fallback.error.message);
+      return [];
+    }
+    const userIds = [...new Set((fallback.data || []).map(comment => comment.user_id).filter(Boolean))];
+    const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan").in("id", userIds) : { data: [] };

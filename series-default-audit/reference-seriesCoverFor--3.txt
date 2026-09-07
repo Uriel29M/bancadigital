@@ -1,0 +1,20 @@
+
+    const seriesCoverStyle = coverStyleFor({ id: item.seriesId });
+    const saved = favoriteIds.has(item.seriesId);
+    const canSetSeriesCover = Boolean(state.session) && favoriteIds === state.favoriteIds;
+    const seriesCoverEffects = coverStyleControl(item.seriesId, seriesCoverStyle, canSetSeriesCover);
+    const seriesCoverChoiceButton = canSetSeriesCover ? `<button type="button" class="series-cover-choice" data-series-cover-choice="${escapeHTML(item.seriesId)}" title="Capa da série">Capa</button>` : "";
+    const seriesName = series.name || series.seriesTitle;
+    const startYearValue = series.year ? String(series.year) : "";
+    const startYear = startYearValue ? `<button type="button" class="series-card-year series-entity-link" data-entity-kind="year" data-entity-value="${escapeHTML(startYearValue)}">(${escapeHTML(startYearValue)})</button>` : "";
+    const description = String(series.description || "");
+    const descriptionTitle = description ? ` title="${escapeHTML(description)}"` : "";
+    const mainCover = seriesCoverFor(item);
+    const stackCovers = [editions[1], editions[2]].map(edition => edition ? seriesCoverFor(edition) : mainCover);
+    const stackMarkup = stackCovers.map((cover, index) => `<div class="series-card-stack-cover series-card-stack-cover-${index + 1}" style="background-image:url('${escapeHTML(cover)}')"></div>`).join("");
+    return `<article class="series-card" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
+  }
+
+  function handlePopState() {
+    if (navigator.onLine === false && readerIsOpen) {
+      // Mantém o leitor aberto durante uma queda de conexão, inclusive para

@@ -1,0 +1,53 @@
+
+      element.classList.toggle("has-cover-filter", style !== "normal" && element.classList.contains("is-favorite"));
+    });
+    $$('[data-cover-style-item]').filter(element => element.dataset.coverStyleItem === itemId).forEach(element => { element.dataset.coverStyle = style; });
+    $$('[data-cover-effect-item]').filter(element => element.dataset.coverEffectItem === itemId).forEach(element => {
+      const premium = hasLegendaryAccess();
+      const nextLabel = style === "normal" ? "Aplicar preto e branco" : style === "grayscale" && premium ? "Aplicar capa dourada" : "Voltar à capa normal";
+      element.classList.remove("cover-effect-normal", "cover-effect-grayscale", "cover-effect-gold");
+      element.classList.add(`cover-effect-${style}`);
+      element.classList.toggle("is-active", style !== "normal");
+      element.title = nextLabel;
+      element.setAttribute("aria-label", nextLabel);
+    });
+  }
+
+  function updateSeriesCoverImages(seriesId) {
+    const item = state.db.library.find(entry => entry.seriesId === seriesId);
+    if (!item) return;
+    const cover = seriesCoverFor(item);
+    $$('[data-series-cover-id]').filter(element => element.dataset.seriesCoverId === seriesId).forEach(element => { element.style.backgroundImage = `url("${cover}")`; });
+  }
+
+  function updateFavoriteButtons(itemId) {
+    const favorite = state.favoriteIds.has(itemId);
+    $$('[data-favorite]').filter(button => button.dataset.favorite === itemId).forEach(button => {
+      button.classList.toggle("is-favorite", favorite);
+      button.textContent = favorite ? "★" : "☆";
+    });
+  }
+
+  function updateComicLikeButtons(itemId) {
+    const liked = state.comicLikeIds.has(itemId);
+    const count = state.comicLikeCounts.get(itemId) || 0;
+    $$('[data-like-item]').filter(button => button.dataset.likeItem === itemId).forEach(button => {
+      button.classList.toggle("is-liked", liked);
+      button.textContent = `${liked ? "♥" : "♡"} ${count}`;
+    });
+  }
+
+  async function toggleComicLike(itemId) {
+    if (!state.session) return openAuthPage();
+    const liked = state.comicLikeIds.has(itemId);
+    const result = liked
+      ? await sb.from("comic_likes").delete().eq("user_id", state.session.user.id).eq("item_id", itemId)
+      : await sb.from("comic_likes").insert({ user_id: state.session.user.id, item_id: itemId });
+    if (result.error) return toast("Não foi possível atualizar a curtida.");
+    if (liked) {
+      state.comicLikeIds.delete(itemId);
+      state.comicLikeAddedAt?.delete(itemId);
+      state.comicLikeCounts.set(itemId, Math.max(0, (state.comicLikeCounts.get(itemId) || 1) - 1));
+    } else {
+      state.comicLikeIds.add(itemId);
+      state.comicLikeAddedAt ||= new Map();

@@ -1,0 +1,44 @@
+
+        overlay.remove();
+        toast(`${Number(result.data?.removed || botVariants.length)} capa(s) do bot removida(s).`);
+      });
+    });
+    $("#cover-choice-form", overlay).onsubmit = async event => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const selectedKey = String(form.get("variantKey") || "__default");
+      let choice = variants.find(option => option.variant_key === selectedKey);
+      if (selectedKey === "__default") {
+        const nextChoices = collectionId ? { ...collectionChoices } : null;
+        if (collectionId) delete nextChoices[itemId];
+        const result = collectionId
+          ? await sb.from("shelf_collections").update({ cover_choices: nextChoices }).eq("id", collectionId).eq("owner_id", state.session.user.id)
+          : await sb.from("user_cover_choices").delete().eq("user_id", state.session.user.id).eq("item_id", itemId);
+        if (result.error) return toast(result.error.message);
+        if (collectionId) collection.coverChoices = nextChoices;
+        else state.coverChoices.delete(itemId);
+      } else if (choice) {
+        const nextChoice = { item_id: itemId, variant_key: choice.variant_key, label: choice.label, cover_url: choice.cover_url };
+        const nextChoices = collectionId ? { ...collectionChoices, [itemId]: nextChoice } : null;
+        const result = collectionId
+          ? await sb.from("shelf_collections").update({ cover_choices: nextChoices }).eq("id", collectionId).eq("owner_id", state.session.user.id)
+          : await sb.from("user_cover_choices").upsert({ user_id: state.session.user.id, ...nextChoice, updated_at: new Date().toISOString() }, { onConflict: "user_id,item_id" });
+        if (result.error) return toast(result.error.message);
+        if (collectionId) collection.coverChoices = nextChoices;
+        else state.coverChoices.set(itemId, { item_id: itemId, ...choice });
+      } else return toast("Essa capa variante não está cadastrada para esta edição.");
+      state.previewCoverChoices.delete(itemId);
+      overlay.remove();
+      if (collectionId) await loadPublicProfile(state.publicProfile.profile.username, collectionId);
+      else updateCoverChoiceImages(itemId);
+      toast("Capa atualizada.");
+    };
+  }
+
+  function openSeriesCoverChoice(seriesId) {
+    const existingOverlay = $("#modal-root .series-cover-choice-modal")?.closest(".modal-backdrop");
+    if (existingOverlay) return;
+    if (!state.session) return openAuthPage();
+    const editions = seriesEditions({ seriesId });
+    if (!editions.length) return;
+    const current = state.seriesCoverChoices.get(seriesId);

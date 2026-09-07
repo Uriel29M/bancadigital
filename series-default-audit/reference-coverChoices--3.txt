@@ -1,0 +1,48 @@
+
+      blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
+      authoredBlogPosts: authoredBlogs.data || [],
+      savedBlogPosts: savedBlogs.data || [],
+      collectionBlogPosts: collectionBlogs.data || [],
+      favoriteIds: new Set((favorites.data || []).map(row => row.item_id)),
+      favoriteAddedAt: new Map((favorites.data || []).map(row => [row.item_id, row.created_at])),
+      comicLikeAddedAt: new Map((comicLikes.data || []).map(row => [row.item_id, row.created_at])),
+      savedPublishers: savedPublishersResult.data || [],
+      savedImprints: savedImprintsResult.data || [],
+      savedCharacters: savedCharactersResult.data || [],
+      comicLikeIds: new Set((comicLikes.data || []).map(row => row.item_id)),
+      readingProgress: new Map((progress.data || []).map(row => [row.item_id, row])),
+      achievements: (achievements.data || []).map(row => row.achievements).filter(Boolean),
+      collectionLikes,
+      collectionLikeCounts,
+      coverChoices: publicCoverChoices
+      ,coverStyles: publicCoverStyles
+      ,seriesCoverChoices: publicSeriesCoverChoices
+      ,savedPublicCollections
+      ,top10Lists: preservedTop10Lists
+      ,wallComments: wallCommentsResult
+      ,activity
+      ,moderationHistory: (moderationHistory.data || []).map(entry => ({ ...entry, actor_username: actorNames.get(entry.actor_id) || "moderador" }))
+      ,isFollowing
+      ,followerCount: (followers.data || []).length
+      ,followingCount: (following.data || []).length
+      ,detailsLoading: false
+    };
+    subscribePublicStickerUpdates(profile.data.id);
+    render();
+    if (options.top10ListId) requestAnimationFrame(() => $(`[data-top10-list-card="${options.top10ListId}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
+
+  async function loadCommunityActivity() {
+    state.communityActivities = [];
+    if (!sb || !state.session?.user?.id || state.session?.offline || navigator.onLine === false) return;
+    const result = await sb.from("community_activity")
+      .select("id, actor_id, event_type, title, body, metadata, created_at, expires_at")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (result.error) return;
+    const actorIds = [...new Set((result.data || []).map(activity => activity.actor_id).filter(Boolean))];
+    const actorsResult = actorIds.length
+      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
+      : { data: [] };
+    const actors = new Map((actorsResult.data || []).map(actor => [actor.id, actor]));

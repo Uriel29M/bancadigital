@@ -1,0 +1,54 @@
+
+    await loadPublicProfile(state.publicProfile.profile.username, collectionId);
+  }
+
+  async function setPublicCollectionColor(collectionId, color) {
+    if (!state.session || state.publicProfile?.profile?.id !== state.session.user.id) return toast("Somente o criador pode alterar esta coleção.");
+    if (!/^#[0-9a-f]{6}$/i.test(String(color || ""))) return;
+    const collection = state.publicProfile?.collections?.find(entry => String(entry.id) === String(collectionId));
+    if (!collection) return;
+    const coverStyles = { ...(collection.coverStyles || {}), __themeColor: color };
+    const result = await sb.from("shelf_collections").update({ cover_styles: coverStyles }).eq("id", collectionId).eq("owner_id", state.session.user.id);
+    if (result.error) return toast(result.error.message || "Não foi possível mudar a cor da coleção.");
+    collection.coverStyles = coverStyles;
+    const hero = $(".public-collection-hero");
+    hero?.style.setProperty("--public-collection-color", color);
+    toast("Cor da coleção atualizada.");
+  }
+
+  function seriesCoverFor(item, seriesCoverChoices = null) {
+    const activeChoices = seriesCoverChoices || (state.section === "public-profile" ? state.publicProfile?.seriesCoverChoices : state.seriesCoverChoices);
+    const selectedCover = activeChoices?.get?.(item?.seriesId)?.cover_url;
+    if (selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover))) return proxiedImageUrl(selectedCover);
+    return coverFor(item);
+  }
+
+  function coverCacheKey(item, maxWidth) {
+    return `banca-cover:v3:${maxWidth}:${item.id}:${item.fileUrl || item.telegramUrl || ""}`;
+  }
+
+  function directFileUrl(item) {
+    const url = item?.fileUrl || "";
+    return /^https?:\/\//i.test(url) || url ? url : "";
+  }
+
+  function directGoogleDriveUrl(url) {
+    const source = String(url || "");
+    let parsed;
+    try { parsed = new URL(source); } catch { return source; }
+    if (!/^(?:drive|docs)\.google\.com$/i.test(parsed.hostname)) return source;
+    const pathId = parsed.pathname.match(/^\/file\/d\/([^/]+)/i)?.[1] || "";
+    const fileId = pathId || parsed.searchParams.get("id") || "";
+    if (!fileId) return source;
+    const direct = new URL("https://drive.usercontent.google.com/download");
+    direct.searchParams.set("id", fileId);
+    direct.searchParams.set("export", "download");
+    const resourceKey = parsed.searchParams.get("resourcekey");
+    if (resourceKey) direct.searchParams.set("resourcekey", resourceKey);
+    return direct.toString();
+  }
+
+  function proxiedFileUrl(url) {
+    const source = directGoogleDriveUrl(url);
+    let parsed;
+    try { parsed = new URL(source); } catch { return source; }

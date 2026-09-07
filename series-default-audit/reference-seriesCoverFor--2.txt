@@ -1,0 +1,34 @@
+
+      const featured = entries.some(item => item.featured) ? 0.35 : 0;
+      return { item: entries[0], score: popularity * 0.08 + featured + recommendationHash(`${periodKey}:${key}`), key };
+    }).sort((a, b) => b.score - a.score || String(a.key).localeCompare(String(b.key), "pt-BR"))[0]?.item || null;
+  }
+
+  function globalRecommendationCard(item, label, description, accent, isSeries = false) {
+    if (!item) return "";
+    const series = isSeries ? seriesDefinitionFor(item) : null;
+    const title = isSeries ? (series.name || item.seriesTitle || item.title) : itemDisplayTitle(item);
+    const editions = isSeries ? seriesEditions(item).length : 0;
+    const meta = isSeries ? `${editions || 1} ${editions === 1 ? "edição" : "edições"}` : [itemIssueDisplay(item) ? `Edição ${itemIssueDisplay(item)}` : "Edição única", item.year].filter(Boolean).join(" · ");
+    const action = isSeries ? `data-view-series="${escapeHTML(item.seriesId)}"` : `data-open="${escapeHTML(item.id)}" data-open-direct="true"`;
+    const cover = isSeries ? seriesCoverFor(item) : coverFor(item, "card");
+    return `<article class="global-recommendation-card global-recommendation-${accent}" ${action} tabindex="0"><div class="global-recommendation-glow"></div><div class="global-recommendation-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="global-recommendation-copy"><div class="global-recommendation-label"><span>${escapeHTML(label)}</span><i></i></div><span class="global-recommendation-xp">✦ +25 XP ao concluir a leitura</span><h3>${escapeHTML(title || "Recomendação da banca")}</h3><p>${escapeHTML(description)}</p><div class="global-recommendation-meta">${escapeHTML(meta)}</div><span class="global-recommendation-cta">${isSeries ? "Explorar série" : "Ler edição"} <b>→</b></span></div></article>`;
+  }
+
+  function isGlobalRecommendationItem(item) {
+    if (!item?.id || item.local) return false;
+    const library = state.db?.library || [];
+    const periods = recommendationPeriodKeys();
+    const day = globalRecommendation(library, periods.day);
+    const week = globalRecommendation(library, periods.week);
+    const month = globalRecommendation(library, periods.month, true);
+    return [day, week].some(entry => String(entry?.id || "") === String(item.id))
+      || Boolean(month?.seriesId && String(month.seriesId) === String(item.seriesId));
+  }
+
+  function globalRecommendationsSection(lib) {
+    const periods = recommendationPeriodKeys();
+    const day = globalRecommendation(lib, periods.day);
+    const week = globalRecommendation(lib, periods.week);
+    const month = globalRecommendation(lib, periods.month, true);
+    if (!day && !week && !month) return "";

@@ -1,0 +1,34 @@
+
+    const activity = await buildPublicProfileActivity(profile.data, activityResults.map(result => result.data || []), [...(collections.data || []), ...(savedCollectionsResult.data || [])]);
+    state.publicProfile = {
+      profile: profile.data,
+      collectionId,
+      album,
+      top10ListId: options.top10ListId || null,
+      stickerAwards: stickerAwards.data || [],
+      profileDisplayStickers: profileDisplayStickersResult.data || [],
+      stickerSlotPreferences: new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }])),
+      collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], sortOrder: collection.sort_order || "added_desc", coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
+      blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
+      authoredBlogPosts: authoredBlogs.data || [],
+      savedBlogPosts: savedBlogs.data || [],
+      collectionBlogPosts: collectionBlogs.data || [],
+      favoriteIds: new Set((favorites.data || []).map(row => row.item_id)),
+      favoriteAddedAt: new Map((favorites.data || []).map(row => [row.item_id, row.created_at])),
+      comicLikeAddedAt: new Map((comicLikes.data || []).map(row => [row.item_id, row.created_at])),
+      savedPublishers: savedPublishersResult.data || [],
+      savedImprints: savedImprintsResult.data || [],
+      savedCharacters: savedCharactersResult.data || [],
+      comicLikeIds: new Set((comicLikes.data || []).map(row => row.item_id)),
+      readingProgress: new Map((progress.data || []).map(row => [row.item_id, row])),
+      achievements: (achievements.data || []).map(row => row.achievements).filter(Boolean),
+      collectionLikes,
+      collectionLikeCounts,
+      coverChoices: publicCoverChoices
+      ,coverStyles: publicCoverStyles
+      ,seriesCoverChoices: publicSeriesCoverChoices
+      ,savedPublicCollections
+      ,top10Lists: preservedTop10Lists
+      ,wallComments: wallCommentsResult
+      ,activity
+      ,moderationHistory: (moderationHistory.data || []).map(entry => ({ ...entry, actor_username: actorNames.get(entry.actor_id) || "moderador" }))

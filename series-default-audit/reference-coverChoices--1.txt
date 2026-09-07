@@ -1,0 +1,56 @@
+
+      state.publicProfile = { profile: profile.data, username, collectionId, album, top10ListId: options.top10ListId || null, blocked: true, blockedByMe: block.blocker_id === viewerId };
+      render();
+      return;
+    }
+    // O cabeçalho não precisa esperar a estante inteira. Mostra o perfil básico
+    // assim que a primeira consulta termina e preenche os dados abaixo em lote.
+    state.publicProfile = {
+      profile: profile.data,
+      username,
+      collectionId,
+      album,
+      top10ListId: options.top10ListId || null,
+      loading: false,
+      detailsLoading: true,
+      stickerAwards: [],
+      profileDisplayStickers: [],
+      stickerSlotPreferences: new Map(),
+      collections: [],
+      blogCollections: [],
+      authoredBlogPosts: [],
+      savedBlogPosts: [],
+      collectionBlogPosts: [],
+      favoriteIds: new Set(),
+      favoriteAddedAt: new Map(),
+      comicLikeAddedAt: new Map(),
+      savedPublishers: [],
+      savedImprints: [],
+      savedCharacters: [],
+      comicLikeIds: new Set(),
+      readingProgress: new Map(),
+      achievements: [],
+      collectionLikes: new Set(),
+      collectionLikeCounts: new Map(),
+      coverChoices: new Map(),
+      coverStyles: new Map(),
+      seriesCoverChoices: new Map(),
+      savedPublicCollections: [],
+      top10Lists: [],
+      wallComments: [],
+      activity: [],
+      moderationHistory: [],
+      isFollowing: false,
+      followerCount: 0,
+      followingCount: 0,
+    };
+    render();
+    if (options.basicOnly) return;
+    const [favorites, savedPublishersResult, savedImprintsResult, savedCharactersResult, progress, stickerAwards, stickerSlotPreferences, profileDisplayStickersResult, activityResults] = await Promise.all([
+      sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id),
+      sb.from("publisher_saves").select("publisher_key, publisher_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
+      sb.from("imprint_saves").select("imprint_key, imprint_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
+      sb.from("character_saves").select("character_key, character_name, created_at").eq("user_id", profile.data.id).order("created_at", { ascending: false }),
+      sb.from("reading_progress").select("item_id, page, total_pages, completed, completion_source, updated_at").eq("user_id", profile.data.id),
+      sb.from("sticker_awards").select("id, user_id, character_id, character_name, publisher_name, edition_fingerprint, cover_item_id, cover_url, rarity, requests_blocked, gum_placed_by, album_section, awarded_at").eq("user_id", profile.data.id).order("awarded_at", { ascending: false }),
+      sb.from("sticker_slot_preferences").select("character_id, blocked, placed_by").eq("user_id", profile.data.id),
