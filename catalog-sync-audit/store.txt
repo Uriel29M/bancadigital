@@ -1,0 +1,330 @@
+1: (() => {
+2:   "use strict";
+3: 
+4:   // --- Inicialização de Bibliotecas ---
+5:   // --- Fim da Inicialização ---
+6:   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
+7:   const DEFAULT_AVATAR_URL = "assets/semfoto.jpg?v=1";
+8:   const RANDOM_AVATAR_BASE_URL = "https://api.dicebear.com/9.x/thumbs/svg";
+9:   function randomAvatarUrl(userId, characterColor = "#e85b68", backgroundColor = "#f3f4f6") {
+10:     const colorValue = color => encodeURIComponent(String(color).replace(/^#/, ""));
+11:     return userId ? `${RANDOM_AVATAR_BASE_URL}?seed=${encodeURIComponent(userId)}&backgroundColor=${colorValue(backgroundColor)}&shapeColor=${colorValue(characterColor)}` : DEFAULT_AVATAR_URL;
+12:   }
+13:   function factionColorForProfile(profile = {}) {
+14:     const profileId = profile?.id || profile?.user_id;
+15:     const factionId = profile?.faction_id || state.factionByUser.get(profileId);
+16:     return state.factions.find(item => item.id === factionId)?.color || "#777777";
+17:   }
+18:   function generatedAvatarForProfile(profile = {}) {
+19:     const profileId = profile?.id || profile?.user_id;
+20:     return hasLegendaryAccess(profile) ? (profile?.avatar_url || randomAvatarUrl(profileId)) : randomAvatarUrl(profileId, "#ffffff", factionColorForProfile(profile));
+21:   }
+22:   function officialAiBadge(profile = {}) {
+23:     return "";
+24:   }
+25:   const FACTION_COLOR_OPTIONS = [
+26:     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
+27:     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
+28:     { family: "gold", label: "Dourado", light: "#e7b94b", dark: "#9a6c12" },
+29:     { family: "violet", label: "Violeta", light: "#ae79e8", dark: "#6f3ca5" },
+30:     { family: "silver", label: "Prata", light: "#b8c2cc", dark: "#59636f" },
+31:     { family: "orange", label: "Âmbar", light: "#ec8b55", dark: "#a84c21" },
+32:     { family: "lime", label: "Lima", light: "#b8d957", dark: "#6b821d" },
+33:     { family: "pink", label: "Rosa", light: "#e17ab3", dark: "#9b3f72" }
+34:   ];
+35:   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
+36:   const PUBLIC_COLLECTION_COLOR_OPTIONS = [["#31202b", "Ameixa"], ["#542536", "Vinho"], ["#7d2630", "Bordô"], ["#9b3d27", "Terracota"], ["#b66b2b", "Âmbar"], ["#b28a27", "Mostarda"], ["#536b2b", "Oliva"], ["#236044", "Esmeralda"], ["#1f6670", "Turquesa"], ["#28528a", "Azul"], ["#393b82", "Índigo"], ["#663b91", "Violeta"], ["#8c426f", "Framboesa"], ["#59636f", "Ardósia"], ["#76523c", "Café"], ["#b3475b", "Coral"], ["#8a5a2b", "Cobre"], ["#397052", "Musgo"], ["#315f9b", "Cobalto"], ["#7651a3", "Lavanda"]];
+37:   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
+38:   // O snapshot publicado tem prioridade sobre duplicatas e mutações dos selos.
+39:   window.DEFAULT_SERIES = [...new Map([...(window.DEFAULT_SERIES || []), ...(window.PUBLISHED_CATALOG?.series || [])].map(series => [series.id, series])).values()];
+40:   window.DEFAULT_LIBRARY = [...new Map([...(window.DEFAULT_LIBRARY || []), ...(window.PUBLISHED_CATALOG?.library || [])].map(item => [item.id, item])).values()];
+41:   const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "backupUrls", "format"];
+42:   function mergeCatalogEdition(item, published) {
+43:     if (!published) return item;
+44:     // Não descarte a edição do ADM enquanto o deploy ainda entrega a versão anterior.
+45:     if (item.catalogEditedAt && String(item.catalogEditedAt) > String(published.catalogEditedAt || "")) return { ...published, ...item };
+46:     const merged = { ...published, ...item };
+47:     EDITION_SOURCE_FIELDS.forEach(field => {
+48:       if (Object.prototype.hasOwnProperty.call(published, field)) merged[field] = published[field];
+49:       else if (published.catalogEditedAt) delete merged[field];
+50:     });
+51:     if (published.catalogEditedAt) merged.catalogEditedAt = published.catalogEditedAt;
+52:     return merged;
+53:   }
+54:   // Fonte única das vantagens exibidas no banner de Lenda. Ao adicionar uma
+55:   // nova vantagem ao produto, inclua-a aqui para atualizar o banner também.
+56:   const LEGENDARY_BENEFITS = [
+57:     "Capas variantes",
+58:     "Estilos visuais de capa",
+59:     "Escolha de capa por s\u00e9rie",
+60:     "Recursos exclusivos da estante",
+61:     "Acesso ao chat premium",
+62:     "Benef\u00edcios de Lenda no ranking"
+63:   ];
+64:   function legendaryBenefitsMarkup() {
+65:     return LEGENDARY_BENEFITS.map(benefit => `<span>\u2713 ${escapeHTML(benefit)}</span>`).join("");
+66:   }
+67:   let lazyCoverObserver = null;
+68:   const wikiCharacterImageCache = new Map();
+69:   let wikiCharacterCarouselPromise = null;
+70:   try { localStorage.removeItem("bancaSavedWikiArticles"); } catch {}
+71:   let characterSettingsReady = false;
+72:   let readerIsOpen = false;
+73:   const KNIGHT_TERRORS_VOLUME_GROUPS = [
+74:     ["Principal", 7], ["Batman", 2], ["Devastadora", 2], ["Coringa", 2],
+75:     ["Hera Venenosa", 2], ["Adão Negro", 2], ["Robin", 2], ["Flash", 2],
+76:     ["Zatanna", 2], ["Shazam", 2], ["Lanterna Verde", 2], ["Mulher-Maravilha", 2],
+77:     ["Superman", 2], ["Asa Noturna", 2], ["Mulher-Gato", 2], ["Anedota", 2],
+78:     ["Titãs", 2], ["Action Comics", 2], ["Detective Comics", 2], ["Arlequina", 2],
+79:     ["Algoz dos Anjos", 2]
+80:   ];
+81: 
+82:   function knightTerrorsVolume(item) {
+83:     if (item?.seriesId !== "series-knight-terrors-2023") return null;
+84:     const issueIndex = Number(String(item.id || "").match(/-(\d+)$/)?.[1]) - 1;
+85:     if (!Number.isInteger(issueIndex) || issueIndex < 0) return null;
+86:     let offset = 0;
+87:     for (const [name, size] of KNIGHT_TERRORS_VOLUME_GROUPS) {
+88:       if (issueIndex < offset + size) return name;
+89:       offset += size;
+90:     }
+91:     return null;
+92:   }
+93: 
+94:   function materializeSeriesItems(items = []) {
+95:     const series = new Map((window.DEFAULT_SERIES || []).map(entry => [entry.id, entry]));
+96:     return items.map(item => {
+97:       const inferredSeriesId = String(item.id || "").startsWith("harley-quinn-2021-")
+98:         ? "series-harley-quinn-2021"
+99:         : item.seriesId;
+100:       const definition = series.get(inferredSeriesId);
+101:       if (!definition) return item;
+102:       const merged = { ...definition, ...item, seriesId: inferredSeriesId };
+103:       SERIES_FIELDS.forEach(field => {
+104:         if (item[field] === undefined || item[field] === null || item[field] === "") merged[field] = definition[field];
+105:       });
+106:       if (merged.seriesId === "series-hardware-milestone-1993") merged.character = "Hardware";
+107:       if (merged.seriesId === "series-icone-milestone-1993") {
+108:         merged.character = "\u00cdcone";
+109:         merged.secondaryCharacters = ["Foguete"];
+110:       }
+111:       if (merged.seriesId === "series-sindicato-de-sangue-milestone-1993") {
+112:         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+113:         if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+114:       }
+115:       if (merged.seriesId === "series-superchoque-milestone-1993") merged.character = "Super Choque";
+116:       if (definition.imprint === "Black Label") {
+117:         const issueNumber = Number(String(merged.issue || "").match(/\d+/)?.[0] || 0);
+118:         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+119:         merged.coverUrl = item.coverUrl || defaultItem?.coverUrl || (issueNumber === 1 ? definition.coverUrl : "");
+120:         // item.coverUrl tem prioridade: só cai para o padrão se o usuário não salvou uma capa.
+121:         if (!merged.fileUrl) {
+122:           if (defaultItem?.fileUrl) merged.fileUrl = defaultItem.fileUrl;
+123:         }
+124:       }
+125:       if (definition.imprint === "Novos 52") {
+126:         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+127:         ["seriesTitle", "author", "publisher", "imprint", "description", "tags", "type", "publication", "status", "editions", "character"].forEach(field => {
+128:           if (definition[field] !== undefined) merged[field] = definition[field];
+129:         });
+130:         if (defaultItem) {
+131:           if (defaultItem.fileUrl && !item.fileUrl) merged.fileUrl = defaultItem.fileUrl;
+132:           if (defaultItem.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+133:           if (defaultItem.officialUrl) merged.officialUrl = defaultItem.officialUrl;
+134:           if (defaultItem.sourceUrl) merged.sourceUrl = defaultItem.sourceUrl;
+135:           if (defaultItem.issue !== undefined) merged.issue = defaultItem.issue;
+136:           if (defaultItem.sortOrder !== undefined) merged.sortOrder = defaultItem.sortOrder;
+137:           if (defaultItem.year !== undefined) merged.year = defaultItem.year;
+138:           if (defaultItem.format) merged.format = defaultItem.format;
+139:         }
+140:       }
+141:       if (merged.id === "teen-titans-academy-anuario") {
+142:         merged.issue = "Anuário";
+143:         merged.sortOrder = 4.5;
+144:       }
+145:       if (merged.id === "harley-quinn-2021-annual") {
+146:         merged.issue = "Anuário";
+147:         merged.sortOrder = 6.5;
+148:       }
+149:       if (merged.id === "harley-quinn-2021-003") {
+150:         merged.seriesId = "series-harley-quinn-2021";
+151:         merged.issue = "3";
+152:         merged.fileUrl = "https://www.mediafire.com/file/jixe3r7igaresw9/Arlequina_003_%25282021%2529_%2528S%25C3%25B3Quadrinhos%2529.cbr/file";
+153:       }
+154:       if (merged.id === "series-justice-godzilla-kong-2023-08") {
+155:         merged.fileUrl = "https://mega.nz/file/XNISCRga#5NQNVbiHZER9AT6iE-8KG7nOEWBR3bpk2XxWKhFNO9s";
+156:       }
+157:       if (merged.seriesId === "series-batman-urban-legends-2021") {
+158:         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+159:         if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+160:       }
+161:       if (merged.seriesId === "series-absolute-power-2024") {
+162:         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+163:         if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+164:       }
+165:       if (["series-stargirl-lost-children-2022-01", "series-stargirl-lost-children-2022-02"].includes(merged.id)) {
+166:         const defaultItem = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === merged.id);
+167:         if (defaultItem?.coverUrl && !item.coverUrl) merged.coverUrl = defaultItem.coverUrl;
+168:       }
+169:       if (String(merged.id || "").startsWith("fury-of-firestorm-2026-") && !String(merged.fileUrl || "").endsWith("/file")) {
+170:         merged.fileUrl = `${merged.fileUrl}/file`;
+171:       }
+172:       const knightVolume = knightTerrorsVolume(merged);
+173:       if (knightVolume) {
+174:         merged.volume = knightVolume;
+175:         merged.volumeTitle = knightVolume;
+176:       }
+177:       merged.seriesTitle = item.seriesTitle || definition.name || definition.seriesTitle;
+178:       merged.title = item.title || merged.seriesTitle;
+179:       if (inferredSeriesId === "series-danger-street-2023") {
+180:         merged.seriesTitle = definition.name;
+181:         merged.title = definition.name;
+182:       }
+183:       // Migrações históricas não podem substituir fontes/capas editadas pelo ADM.
+184:       if (item.catalogEditedAt) EDITION_SOURCE_FIELDS.forEach(field => {
+185:         if (Object.prototype.hasOwnProperty.call(item, field)) merged[field] = item[field];
+186:       });
+187:       return merged;
+188:     });
+189:   }
+190: 
+191:   function compactSeriesItems(items = []) {
+192:     const series = new Map((window.DEFAULT_SERIES || []).map(entry => [entry.id, entry]));
+193:     return items.map(item => {
+194:       const definition = series.get(item.seriesId);
+195:       if (!definition) return item;
+196:       const compact = { ...item };
+197:       SERIES_FIELDS.forEach(field => {
+198:         if (field !== "type" && !(item.catalogEditedAt && EDITION_SOURCE_FIELDS.includes(field)) && compact[field] === definition[field]) delete compact[field];
+199:       });
+200:       if (compact.seriesTitle === definition.name || compact.seriesTitle === definition.seriesTitle) delete compact.seriesTitle;
+201:       if (compact.title === definition.name || compact.title === definition.seriesTitle) delete compact.title;
+202:       return compact;
+203:     });
+204:   }
+205: 
+206:   function clearGeneratedCoverCache() {
+207:     const keys = [];
+208:     for (let index = 0; index < localStorage.length; index += 1) {
+209:       const key = localStorage.key(index);
+210:       if (key?.startsWith("banca-cover:")) keys.push(key);
+211:     }
+212:     keys.forEach(key => localStorage.removeItem(key));
+213:   }
+214: 
+215:   function storageSafeLibrary(items = []) {
+216:     return compactSeriesItems(items).map(item => {
+217:       const safe = { ...item };
+218:       if (/^data:/i.test(String(safe.cover || ""))) delete safe.cover;
+219:       if (/^data:/i.test(String(safe.coverUrl || ""))) delete safe.coverUrl;
+220:       if (/^data:/i.test(String(safe.featuredCoverUrl || ""))) delete safe.featuredCoverUrl;
+221:       return safe;
+222:     });
+223:   }
+224: 
+225:   function isLegacyRemovedCatalogItem(item) {
+226:     const text = [item?.id, item?.seriesId, item?.title, item?.name, item?.seriesTitle, item?.originalTitle].join(" ");
+227:     return /tomoki-kun|onnanoko/i.test(text);
+228:   }
+229: 
+230:   const DataStore = {
+231:     load() {
+232:       try {
+233:         const saved = JSON.parse(localStorage.getItem(DB_KEY));
+234:         if (saved?.library && saved?.collections) {
+235:           const removedItemIds = new Set([
+236:             ...(window.REMOVED_DEFAULT_ITEM_IDS || []),
+237:             ...(Array.isArray(saved.removedItemIds) ? saved.removedItemIds : [])
+238:           ]);
+239:           const legacyRemovedSeriesIds = new Set(saved.library.filter(isLegacyRemovedCatalogItem).map(item => item.seriesId || item.id));
+240:           const isRemoved = item => removedItemIds.has(item.id) || isLegacyRemovedCatalogItem(item) || legacyRemovedSeriesIds.has(item.seriesId);
+241:           const hadRemovedItems = saved.library.some(isRemoved);
+242:           saved.library = saved.library.filter(item => !isRemoved(item));
+243:           saved.collections = saved.collections.map(collection => ({
+244:             ...collection,
+245:             issueIds: (collection.issueIds || []).filter(id => !removedItemIds.has(id) && !legacyRemovedSeriesIds.has(id))
+246:           }));
+247:           const oldAbsolutePowerIds = new Map([
+248:             ["series-absolute-power-2024-02", "series-absolute-power-2024-01"],
+249:             ["series-absolute-power-2024-03", "series-absolute-power-2024-02"],
+250:             ["series-absolute-power-2024-04", "series-absolute-power-2024-03"],
+251:             ["series-absolute-power-2024-05", "series-absolute-power-2024-04"]
+252:           ]);
+253:           if (saved.library.some(item => item.id === "series-absolute-power-2024-05")) {
+254:             saved.library = saved.library
+255:               .filter(item => item.id !== "series-absolute-power-2024-01")
+256:               .map(item => oldAbsolutePowerIds.has(item.id) ? { ...item, id: oldAbsolutePowerIds.get(item.id) } : item);
+257:           }
+258:           const actionAnnual3DuplicateId = "series-action-comics-2011-novos-52-Anual 03";
+259:           const actionAnnual3CanonicalId = "series-action-comics-2011-novos-52-2014";
+260:           if (saved.library.some(item => item.id === actionAnnual3DuplicateId)) {
+261:             const normalizedActionItems = saved.library.map(item => item.id === actionAnnual3DuplicateId
+262:               ? { ...item, id: actionAnnual3CanonicalId, issue: "Anual 03", year: 2014 }
+263:               : item);
+264:             saved.library = [...new Map(normalizedActionItems.map(item => [item.id, item])).values()];
+265:             saved.collections = saved.collections.map(collection => ({
+266:               ...collection,
+267:               issueIds: [...new Set((collection.issueIds || []).map(id => id === actionAnnual3DuplicateId ? actionAnnual3CanonicalId : id))]
+268:             }));
+269:           }
+270:           const defaultsById = new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item]));
+271:           const previousLibrary = saved.library;
+272:           let updatedIcon13Url = false;
+273:           saved.library = saved.library.map(item => {
+274:             if (!/^series-shazam-2023-\d{2}$/.test(String(item.id || ""))) return item;
+275:             return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
+276:           });
+277:           saved.library = saved.library.map(item => {
+278:             if (item.id !== "series-icone-milestone-1993-013" || item.catalogEditedAt) return item;
+279:             const defaultItem = defaultsById.get(item.id);
+280:             if (!defaultItem?.fileUrl || item.fileUrl === defaultItem.fileUrl) return item;
+281:             updatedIcon13Url = true;
+282:             return { ...item, fileUrl: defaultItem.fileUrl };
+283:           });
+284:           let normalizedSeriesIds = false;
+285:           saved.library = saved.library.map(item => {
+286:             const canonicalSeriesId = canonicalSeriesIdFor(item.seriesTitle, item.seriesId);
+287:             if (!canonicalSeriesId || item.seriesId === canonicalSeriesId) return item;
+288:             normalizedSeriesIds = true;
+289:             const definition = (window.DEFAULT_SERIES || []).find(series => series.id === canonicalSeriesId);
+290:             return {
+291:               ...item,
+292:               seriesId: canonicalSeriesId,
+293:               seriesTitle: item.seriesTitle || definition?.name || definition?.seriesTitle || ""
+294:             };
+295:           });
+296:           saved.library = saved.library.map(item => mergeCatalogEdition(item, defaultsById.get(item.id)));
+297:           saved.library = materializeSeriesItems(saved.library);
+298:           this.save(saved);
+299:           const milestoneSeriesIds = new Set((window.DEFAULT_SERIES || []).filter(series => series.imprint === "Milestone").map(series => series.id));
+300:           const milestoneItemIds = new Set((window.DEFAULT_LIBRARY || []).filter(item => milestoneSeriesIds.has(item.seriesId)).map(item => item.id));
+301:           const hadUnavailableMilestoneIssues = saved.library.some(item => milestoneSeriesIds.has(item.seriesId) && !milestoneItemIds.has(item.id));
+302:           saved.library = saved.library.filter(item => !milestoneSeriesIds.has(item.seriesId) || milestoneItemIds.has(item.id));
+303:           const hadObsoleteHardwareIssues = saved.library.some(item => item.seriesId === "series-hardware-milestone-1993" && Number(item.issue) > 16);
+304:           saved.library = saved.library.filter(item => item.seriesId !== "series-hardware-milestone-1993" || Number(item.issue) <= 16);
+305:           const hadLegacyIconCatalog = saved.library.some(item => item.seriesId === "series-icone-milestone-1993");
+306:           saved.library = saved.library.filter(item => item.seriesId !== "series-icone-milestone-1993" || item.catalogEditedAt);
+307:           const batgirlsCharacterChanged = saved.library.some(item => item.seriesId === "series-batgirls-2022" && item.character !== "Batgirl");
+308:           if (batgirlsCharacterChanged) {
+309:             saved.library = saved.library.map(item => item.seriesId === "series-batgirls-2022" ? { ...item, character: "Batgirl" } : item);
+310:           }
+311:           saved.library = saved.library.filter(item => item.seriesId !== "series-danger-street-2023" || Number(item.issue) <= 4);
+312:           saved.library = saved.library.filter(item => item.seriesId !== "series-joker-killer-smile-2019" || Number(item.issue) <= 1);
+313:           const hadStargirlAdvertisement = saved.library.some(item => item.id === "series-stargirl-lost-children-2022-03");
+314:           saved.library = saved.library.filter(item => item.id !== "series-stargirl-lost-children-2022-03");
+315:           if (hadStargirlAdvertisement) {
+316:             saved.collections = saved.collections.map(collection => ({
+317:               ...collection,
+318:               issueIds: (collection.issueIds || []).filter(id => id !== "series-stargirl-lost-children-2022-03")
+319:             }));
+320:           }
+321:           const knightVolumesChanged = saved.library.some(item => {
+322:             const previous = previousLibrary.find(entry => entry.id === item.id);
+323:             return previous && (previous.volume !== item.volume || previous.volumeTitle !== item.volumeTitle);
+324:           });
+325:           if (normalizedSeriesIds || updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
+326:           if (saved.library.some(item => item.id === "series-justice-godzilla-kong-2023-08" && String(item.fileUrl || "").includes("bpk2XxWKhFNO9s"))) this.save(saved);
+327:           const knownIds = new Set(saved.library.map(item => item.id));
+328:           const newDefaults = materializeSeriesItems(structuredClone(window.DEFAULT_LIBRARY)).filter(item => !knownIds.has(item.id) && !removedItemIds.has(item.id) && !isLegacyRemovedCatalogItem(item));
+329:           if (newDefaults.length) {
+330:             const merged = { ...saved, library: [...saved.library, ...newDefaults] };

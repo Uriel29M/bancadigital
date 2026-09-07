@@ -1,0 +1,744 @@
+1: (() => {
+2:   "use strict";
+3: 
+4:   // --- Inicialização de Bibliotecas ---
+5:   // --- Fim da Inicialização ---
+6:   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
+7:   const DEFAULT_AVATAR_URL = "assets/semfoto.jpg?v=1";
+8:   const RANDOM_AVATAR_BASE_URL = "https://api.dicebear.com/9.x/thumbs/svg";
+9:   function randomAvatarUrl(userId, characterColor = "#e85b68", backgroundColor = "#f3f4f6") {
+10:     const colorValue = color => encodeURIComponent(String(color).replace(/^#/, ""));
+11:     return userId ? `${RANDOM_AVATAR_BASE_URL}?seed=${encodeURIComponent(userId)}&backgroundColor=${colorValue(backgroundColor)}&shapeColor=${colorValue(characterColor)}` : DEFAULT_AVATAR_URL;
+12:   }
+13:   function factionColorForProfile(profile = {}) {
+14:     const profileId = profile?.id || profile?.user_id;
+15:     const factionId = profile?.faction_id || state.factionByUser.get(profileId);
+16:     return state.factions.find(item => item.id === factionId)?.color || "#777777";
+17:   }
+18:   function generatedAvatarForProfile(profile = {}) {
+19:     const profileId = profile?.id || profile?.user_id;
+20:     return hasLegendaryAccess(profile) ? (profile?.avatar_url || randomAvatarUrl(profileId)) : randomAvatarUrl(profileId, "#ffffff", factionColorForProfile(profile));
+21:   }
+22:   function officialAiBadge(profile = {}) {
+23:     return "";
+24:   }
+25:   const FACTION_COLOR_OPTIONS = [
+26:     { family: "ruby", label: "Rubi", light: "#e85b68", dark: "#a93345" },
+27:     { family: "cobalt", label: "Cobalto", light: "#5ca9e8", dark: "#2d6295" },
+28:     { family: "gold", label: "Dourado", light: "#e7b94b", dark: "#9a6c12" },
+29:     { family: "violet", label: "Violeta", light: "#ae79e8", dark: "#6f3ca5" },
+30:     { family: "silver", label: "Prata", light: "#b8c2cc", dark: "#59636f" },
+31:     { family: "orange", label: "Âmbar", light: "#ec8b55", dark: "#a84c21" },
+32:     { family: "lime", label: "Lima", light: "#b8d957", dark: "#6b821d" },
+33:     { family: "pink", label: "Rosa", light: "#e17ab3", dark: "#9b3f72" }
+34:   ];
+35:   const FACTION_EMBLEM_OPTIONS = ["🦁", "🐍", "🦊", "🐙", "⚡", "🕷️", "🔥", "🌀", "🦋", "🌵", "🦈", "🎸", "☀️", "🦉", "🐉", "🦅", "🐺", "🌿", "⚔️", "🛸"];
+36:   const PUBLIC_COLLECTION_COLOR_OPTIONS = [["#31202b", "Ameixa"], ["#542536", "Vinho"], ["#7d2630", "Bordô"], ["#9b3d27", "Terracota"], ["#b66b2b", "Âmbar"], ["#b28a27", "Mostarda"], ["#536b2b", "Oliva"], ["#236044", "Esmeralda"], ["#1f6670", "Turquesa"], ["#28528a", "Azul"], ["#393b82", "Índigo"], ["#663b91", "Violeta"], ["#8c426f", "Framboesa"], ["#59636f", "Ardósia"], ["#76523c", "Café"], ["#b3475b", "Coral"], ["#8a5a2b", "Cobre"], ["#397052", "Musgo"], ["#315f9b", "Cobalto"], ["#7651a3", "Lavanda"]];
+37:   const SERIES_FIELDS = ["seriesTitle", "author", "publisher", "imprint", "year", "description", "coverUrl", "telegramUrl", "tags", "type", "publication", "status", "editions", "character"];
+38:   // O snapshot publicado tem prioridade sobre duplicatas e mutações dos selos.
+39:   window.DEFAULT_SERIES = [...new Map([...(window.DEFAULT_SERIES || []), ...(window.PUBLISHED_CATALOG?.series || [])].map(series => [series.id, series])).values()];
+40:   window.DEFAULT_LIBRARY = [...new Map([...(window.DEFAULT_LIBRARY || []), ...(window.PUBLISHED_CATALOG?.library || [])].map(item => [item.id, item])).values()];
+41:   const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "backupUrls", "format"];
+42:   function mergeCatalogEdition(item, published) {
+43:     if (!published) return item;
+44:     // Não descarte a edição do ADM enquanto o deploy ainda entrega a versão anterior.
+45:     if (item.catalogEditedAt && String(item.catalogEditedAt) > String(published.catalogEditedAt || "")) return { ...published, ...item };
+46:     const merged = { ...published, ...item };
+47:     EDITION_SOURCE_FIELDS.forEach(field => {
+48:       if (Object.prototype.hasOwnProperty.call(published, field)) merged[field] = published[field];
+49:       else if (published.catalogEditedAt) delete merged[field];
+50:     });
+51:     if (published.catalogEditedAt) merged.catalogEditedAt = published.catalogEditedAt;
+52:     return merged;
+53:   }
+54:   // Fonte única das vantagens exibidas no banner de Lenda. Ao adicionar uma
+55:   // nova vantagem ao produto, inclua-a aqui para atualizar o banner também.
+56:   const LEGENDARY_BENEFITS = [
+57:     "Capas variantes",
+58:     "Estilos visuais de capa",
+59:     "Escolha de capa por s\u00e9rie",
+60:     "Recursos exclusivos da estante",
+61:     "Acesso ao chat premium",
+62:     "Benef\u00edcios de Lenda no ranking"
+63:   ];
+64:   function legendaryBenefitsMarkup() {
+65:     return LEGENDARY_BENEFITS.map(benefit => `<span>\u2713 ${escapeHTML(benefit)}</span>`).join("");
+66:   }
+67:   let lazyCoverObserver = null;
+68:   const wikiCharacterImageCache = new Map();
+69:   let wikiCharacterCarouselPromise = null;
+70:   try { localStorage.removeItem("bancaSavedWikiArticles"); } catch {}
+71:   let characterSettingsReady = false;
+72:   let readerIsOpen = false;
+73:   const KNIGHT_TERRORS_VOLUME_GROUPS = [
+74:     ["Principal", 7], ["Batman", 2], ["Devastadora", 2], ["Coringa", 2],
+174:         merged.volume = knightVolume;
+175:         merged.volumeTitle = knightVolume;
+176:       }
+177:       merged.seriesTitle = item.seriesTitle || definition.name || definition.seriesTitle;
+178:       merged.title = item.title || merged.seriesTitle;
+179:       if (inferredSeriesId === "series-danger-street-2023") {
+180:         merged.seriesTitle = definition.name;
+181:         merged.title = definition.name;
+182:       }
+183:       // Migrações históricas não podem substituir fontes/capas editadas pelo ADM.
+184:       if (item.catalogEditedAt) EDITION_SOURCE_FIELDS.forEach(field => {
+185:         if (Object.prototype.hasOwnProperty.call(item, field)) merged[field] = item[field];
+186:       });
+187:       return merged;
+188:     });
+189:   }
+190: 
+191:   function compactSeriesItems(items = []) {
+192:     const series = new Map((window.DEFAULT_SERIES || []).map(entry => [entry.id, entry]));
+193:     return items.map(item => {
+194:       const definition = series.get(item.seriesId);
+195:       if (!definition) return item;
+196:       const compact = { ...item };
+197:       SERIES_FIELDS.forEach(field => {
+198:         if (field !== "type" && !(item.catalogEditedAt && EDITION_SOURCE_FIELDS.includes(field)) && compact[field] === definition[field]) delete compact[field];
+199:       });
+200:       if (compact.seriesTitle === definition.name || compact.seriesTitle === definition.seriesTitle) delete compact.seriesTitle;
+201:       if (compact.title === definition.name || compact.title === definition.seriesTitle) delete compact.title;
+202:       return compact;
+203:     });
+204:   }
+205: 
+206:   function clearGeneratedCoverCache() {
+207:     const keys = [];
+208:     for (let index = 0; index < localStorage.length; index += 1) {
+209:       const key = localStorage.key(index);
+210:       if (key?.startsWith("banca-cover:")) keys.push(key);
+211:     }
+212:     keys.forEach(key => localStorage.removeItem(key));
+213:   }
+214: 
+215:   function storageSafeLibrary(items = []) {
+216:     return compactSeriesItems(items).map(item => {
+217:       const safe = { ...item };
+218:       if (/^data:/i.test(String(safe.cover || ""))) delete safe.cover;
+219:       if (/^data:/i.test(String(safe.coverUrl || ""))) delete safe.coverUrl;
+220:       if (/^data:/i.test(String(safe.featuredCoverUrl || ""))) delete safe.featuredCoverUrl;
+221:       return safe;
+268:             }));
+269:           }
+270:           const defaultsById = new Map((window.DEFAULT_LIBRARY || []).map(item => [item.id, item]));
+271:           const previousLibrary = saved.library;
+272:           let updatedIcon13Url = false;
+273:           saved.library = saved.library.map(item => {
+274:             if (!/^series-shazam-2023-\d{2}$/.test(String(item.id || ""))) return item;
+275:             return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
+276:           });
+277:           saved.library = saved.library.map(item => {
+278:             if (item.id !== "series-icone-milestone-1993-013" || item.catalogEditedAt) return item;
+279:             const defaultItem = defaultsById.get(item.id);
+280:             if (!defaultItem?.fileUrl || item.fileUrl === defaultItem.fileUrl) return item;
+281:             updatedIcon13Url = true;
+282:             return { ...item, fileUrl: defaultItem.fileUrl };
+283:           });
+284:           let normalizedSeriesIds = false;
+285:           saved.library = saved.library.map(item => {
+286:             const canonicalSeriesId = canonicalSeriesIdFor(item.seriesTitle, item.seriesId);
+287:             if (!canonicalSeriesId || item.seriesId === canonicalSeriesId) return item;
+288:             normalizedSeriesIds = true;
+289:             const definition = (window.DEFAULT_SERIES || []).find(series => series.id === canonicalSeriesId);
+290:             return {
+291:               ...item,
+292:               seriesId: canonicalSeriesId,
+293:               seriesTitle: item.seriesTitle || definition?.name || definition?.seriesTitle || ""
+294:             };
+295:           });
+296:           saved.library = saved.library.map(item => mergeCatalogEdition(item, defaultsById.get(item.id)));
+297:           saved.library = materializeSeriesItems(saved.library);
+298:           this.save(saved);
+299:           const milestoneSeriesIds = new Set((window.DEFAULT_SERIES || []).filter(series => series.imprint === "Milestone").map(series => series.id));
+300:           const milestoneItemIds = new Set((window.DEFAULT_LIBRARY || []).filter(item => milestoneSeriesIds.has(item.seriesId)).map(item => item.id));
+301:           const hadUnavailableMilestoneIssues = saved.library.some(item => milestoneSeriesIds.has(item.seriesId) && !milestoneItemIds.has(item.id));
+302:           saved.library = saved.library.filter(item => !milestoneSeriesIds.has(item.seriesId) || milestoneItemIds.has(item.id));
+303:           const hadObsoleteHardwareIssues = saved.library.some(item => item.seriesId === "series-hardware-milestone-1993" && Number(item.issue) > 16);
+304:           saved.library = saved.library.filter(item => item.seriesId !== "series-hardware-milestone-1993" || Number(item.issue) <= 16);
+305:           const hadLegacyIconCatalog = saved.library.some(item => item.seriesId === "series-icone-milestone-1993");
+306:           saved.library = saved.library.filter(item => item.seriesId !== "series-icone-milestone-1993" || item.catalogEditedAt);
+307:           const batgirlsCharacterChanged = saved.library.some(item => item.seriesId === "series-batgirls-2022" && item.character !== "Batgirl");
+308:           if (batgirlsCharacterChanged) {
+309:             saved.library = saved.library.map(item => item.seriesId === "series-batgirls-2022" ? { ...item, character: "Batgirl" } : item);
+310:           }
+311:           saved.library = saved.library.filter(item => item.seriesId !== "series-danger-street-2023" || Number(item.issue) <= 4);
+312:           saved.library = saved.library.filter(item => item.seriesId !== "series-joker-killer-smile-2019" || Number(item.issue) <= 1);
+313:           const hadStargirlAdvertisement = saved.library.some(item => item.id === "series-stargirl-lost-children-2022-03");
+314:           saved.library = saved.library.filter(item => item.id !== "series-stargirl-lost-children-2022-03");
+315:           if (hadStargirlAdvertisement) {
+316:             saved.collections = saved.collections.map(collection => ({
+317:               ...collection,
+318:               issueIds: (collection.issueIds || []).filter(id => id !== "series-stargirl-lost-children-2022-03")
+319:             }));
+320:           }
+321:           const knightVolumesChanged = saved.library.some(item => {
+322:             const previous = previousLibrary.find(entry => entry.id === item.id);
+323:             return previous && (previous.volume !== item.volume || previous.volumeTitle !== item.volumeTitle);
+324:           });
+325:           if (normalizedSeriesIds || updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
+326:           if (saved.library.some(item => item.id === "series-justice-godzilla-kong-2023-08" && String(item.fileUrl || "").includes("bpk2XxWKhFNO9s"))) this.save(saved);
+327:           const knownIds = new Set(saved.library.map(item => item.id));
+328:           const newDefaults = materializeSeriesItems(structuredClone(window.DEFAULT_LIBRARY)).filter(item => !knownIds.has(item.id) && !removedItemIds.has(item.id) && !isLegacyRemovedCatalogItem(item));
+329:           if (newDefaults.length) {
+361:         try {
+362:           localStorage.setItem(DB_KEY, payload);
+363:         } catch (retryError) {
+364:           console.warn("Catálogo local maior que a cota do navegador; alterações locais não foram persistidas.", retryError);
+365:         }
+366:       }
+367:     }
+368:   };
+369: 
+370:   const state = {
+371:     db: DataStore.load(),
+372:     section: "home",
+373:     authMode: "login",
+374:     publicProfile: null,
+375:     search: "",
+376:     searchUsers: [],
+377:     searchUsersQuery: "",
+378:     searchUsersLoading: false,
+379:     entityFilter: null,
+380:     collectionId: null,
+381:     editingId: null,
+382:     // Reading mode for PDF, CBZ, and CBR readers
+383:     readingMode: localStorage.getItem("readingMode") || "single-page", // 'single-page', 'double-page', or 'continuous-scroll'
+384:     readingDirection: localStorage.getItem("readingDirection") || "western" // 'western' or 'eastern'
+385:     ,session: null,
+386:     authReady: false,
+387:     profile: null,
+388:     favoriteIds: new Set(),
+389:     favoriteAddedAt: new Map(),
+390:     collectionSortOrders: {},
+391:     coverVariants: new Map(),
+392:     homepageBanners: [],
+393:     homepageBannerOverrideId: null,
+394:     homepageBannerOverrideDay: null,
+739:   function isHiddenCatalogItem(item) {
+740:     return Boolean(item?.id && state.hiddenCatalogItemIds?.has(String(item.id)));
+741:   }
+742:   function canViewCatalogItem(item, includeHidden = false) {
+743:     const hiddenCharacter = characterNames(item).some(name => state.characterSettings.get(publisherKey(name))?.is_hidden);
+744:     return (!isHiddenCatalogItem(item) && !hiddenCharacter) || (includeHidden && isAdminProfile());
+745:   }
+746:   function visibleCatalogItems(items = state.db.library, includeHidden = false) {
+747:     return items.filter(item => canViewCatalogItem(item, includeHidden));
+748:   }
+749:   async function loadCatalogVisibility() {
+750:     state.hiddenCatalogItemIds = new Set();
+751:     if (!sb || navigator.onLine === false) return;
+752:     const result = await sb.from("catalog_item_visibility").select("item_id, is_hidden");
+753:     if (result.error) {
+754:       console.warn("Não foi possível carregar a visibilidade das edições:", result.error.message);
+755:       return;
+756:     }
+757:     state.hiddenCatalogItemIds = new Set((result.data || []).filter(row => row.is_hidden).map(row => String(row.item_id)));
+758:   }
+759:   async function toggleCatalogItemVisibility(itemId) {
+760:     if (!isAdminProfile()) return toast("Apenas administradores podem ocultar edições.");
+761:     const id = String(itemId || "");
+762:     if (!id || !sb) return toast("A visibilidade precisa ser alterada com o banco online.");
+763:     const hidden = !state.hiddenCatalogItemIds.has(id);
+764:     const result = hidden
+765:       ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" })
+766:       : await sb.from("catalog_item_visibility").delete().eq("item_id", id);
+767:     if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade.");
+768:     if (hidden) state.hiddenCatalogItemIds.add(id); else state.hiddenCatalogItemIds.delete(id);
+769:     render();
+770:     toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
+771:   }
+772:   function loadDownloads() {
+2205:       await loadFactions();
+2206:       state.factionChoiceOpen = false;
+2207:       overlay.remove();
+2208:       render();
+2209:       toast(`Você agora faz parte de ${selected?.name || "uma nova facção"}.`);
+2210:     };
+2211:     $$('[data-faction-choose]', overlay).forEach(button => button.onclick = () => choose(button.dataset.factionChoose));
+2212:     $('[data-faction-auto]', overlay).onclick = () => choose(null);
+2213:   }
+2214: 
+2215:   async function publishCatalog() {
+2216:     if (!sb || state.profile?.plan !== "admin") return { skipped: true };
+2217:     const result = await sb.functions.invoke("github-catalog", {
+2218:       body: { library: compactSeriesItems(state.db.library), series: window.DEFAULT_SERIES || [], collections: state.db.collections },
+2219:     });
+2220:     if (result.error) {
+2221:       let detail = result.error.message || "Não foi possível publicar o catálogo.";
+2222:       try {
+2223:         const response = result.error.context;
+2224:         if (response?.clone) {
+2225:           const body = await response.clone().json();
+2226:           if (body?.error) detail = body.error;
+2227:         }
+2228:       } catch {}
+2229:       throw new Error(detail);
+2230:     }
+2231:     if (result.data?.error) throw new Error(result.data.error);
+2232:     return result.data;
+2233:   }
+2234: 
+2235:   async function saveCatalog(message = "Catálogo salvo.") {
+2236:     try {
+2237:       save();
+2238:       const result = await publishCatalog();
+2239:       if (result?.skipped) {
+2240:         toast("Alteração salva somente neste navegador. A publicação exige conexão com o Supabase e uma conta de administrador.");
+2241:         return false;
+2242:       }
+2243:       toast(`${message} GitHub atualizado. Os demais usuários receberão a alteração após a publicação do site e ao recarregar a página.`);
+2244:       return true;
+2245:     } catch (error) {
+2246:       console.error("[CATALOG] Falha ao publicar no GitHub:", error);
+2247:       const detail = /failed to send a request to the edge function/i.test(error.message || "")
+2248:         ? "a Edge Function github-catalog não respondeu. Implante-a no projeto Supabase."
+2249:         : (error.message || "não foi possível publicar.");
+2250:       toast(`Não foi possível publicar a alteração para os demais usuários. GitHub: ${detail}`);
+2251:       return false;
+2252:     }
+2253:   }
+2254: 
+2255:   function authEmail(username) {
+2256:     return `${String(username).replace(/^@/, '').toLowerCase()}@login.banca-digital.local`;
+2257:   }
+2258: 
+2259:   function cleanUsername(value) {
+2260:     return String(value || "").replace(/^@/, "").trim().toLowerCase();
+2261:   }
+2978:         return;
+2979:       }
+2980:       state.profile = offlineProfileFor(state.session.user, offlineAccount?.profile, offlineAccount?.username);
+2981:       loadDownloads();
+2982:       characterSettingsReady = true;
+2983:       state.authReady = true;
+2984:       syncTopAvatar();
+2985:       render();
+2986:       return;
+2987:     }
+2988:     await loadCatalogVisibility();
+2989:     await loadCoverCatalog();
+2990:     await loadCoverChoices(session?.user?.id);
+2991:     await loadCoverStyles(session?.user?.id);
+2992:     await loadSeriesCoverChoices(session?.user?.id);
+2993:     const publisherSettings = await sb.from("publisher_settings").select("publisher_key, publisher_name, cover_url, is_pinned");
+2994:     state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
+2995:     const imprintSettings = await sb.from("imprint_settings").select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned");
+2996:     state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
+2997:     const characterSettings = await sb.from("character_settings").select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls");
+2998:     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
+2999:     characterSettingsReady = true;
+3000:     wikiCharacterImageCache.clear();
+3001:     const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
+3002:     const publicCollections = publicCollectionsResult.data || [];
+3003:     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
+3004:     const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", collectionOwnerIds) : { data: [] };
+3005:     const collectionOwners = new Map((collectionOwnersResult.data || []).map(profile => [profile.id, profile.username]));
+3006:     const collectionLikesResult = await sb.from("shelf_collection_likes").select("owner_id, collection_id");
+3007:     const collectionLikeCounts = (collectionLikesResult.data || []).reduce((counts, like) => {
+3008:       const key = `${like.owner_id}:${like.collection_id}`;
+3009:       counts.set(key, (counts.get(key) || 0) + 1);
+3010:       return counts;
+3011:     }, new Map());
+4696:     image.alt = "Página final";
+4697:     image.src = READER_END_PAGE_URL;
+4698:     return image;
+4699:   }
+4700: 
+4701:   function formatType(type) {
+4702:     return type === "manga" ? "Mangá" : "Quadrinho";
+4703:   }
+4704: 
+4705:   function save() {
+4706:     DataStore.save(state.db);
+4707:   }
+4708: 
+4709:   function toast(message) {
+4710:     if (state.suppressDownloadReadyToast && String(message).includes("Quadrinho")) {
+4711:       state.suppressDownloadReadyToast = false;
+4712:       return;
+4713:     }
+4714:     const el = document.createElement("div");
+4715:     el.className = "toast";
+4716:     el.textContent = message;
+4717:     $("#toast-root").appendChild(el);
+4718:     setTimeout(() => el.remove(), 2800);
+4719:   }
+4720: 
+4721:   function openPasswordRecoveryModal() {
+4722:     const overlay = document.createElement("div");
+4723:     overlay.className = "modal-backdrop";
+4724:     overlay.innerHTML = `
+4725:       <div class="modal auth-modal">
+4726:         <div class="section-head">
+4727:           <div>
+4728:             <h2>Recuperar acesso</h2>
+4729:             <div class="section-subtitle">Informe o email associado à sua conta para receber o link de recuperação.</div>
+4880: 
+4881:   function seriesEditions(item) {
+4882:     if (!item?.seriesId) return [];
+4883:     const current = visibleCatalogItems().filter(x => x.seriesId === item.seriesId);
+4884:     const uniqueCurrent = [...new Map(current.map(entry => [entry.id, entry])).values()];
+4885:     if (uniqueCurrent.length !== current.length) {
+4886:       state.db.library = [
+4887:         ...state.db.library.filter(entry => entry.seriesId !== item.seriesId),
+4888:         ...uniqueCurrent
+4889:       ];
+4890:       DataStore.save(state.db);
+4891:     }
+4892:     if (item.seriesId === "series-shazam-2023") {
+4893:       const defaults = (window.DEFAULT_LIBRARY || []).filter(entry => entry.seriesId === item.seriesId);
+4894:       const currentById = new Map(uniqueCurrent.map(entry => [entry.id, entry]));
+4895:       const reconciled = defaults.map(entry => ({ ...structuredClone(entry), ...(currentById.get(entry.id) || {}) }));
+4896:       const extras = uniqueCurrent.filter(entry => !defaults.some(defaultEntry => defaultEntry.id === entry.id));
+4897:       if (reconciled.length !== uniqueCurrent.length || reconciled.some((entry, index) => entry.id !== uniqueCurrent[index]?.id)) {
+4898:         state.db.library = [
+4899:           ...state.db.library.filter(entry => entry.seriesId !== item.seriesId),
+4900:           ...reconciled,
+4901:           ...extras
+4902:         ];
+4903:         DataStore.save(state.db);
+4904:       }
+4905:       return visibleCatalogItems([...reconciled, ...extras]).sort((a, b) => issueSortValue(a) - issueSortValue(b));
+4906:     }
+4907:     return visibleCatalogItems(uniqueCurrent)
+4908:       .sort((a, b) => issueSortValue(a) - issueSortValue(b));
+4909:   }
+4910: 
+4911:   function appendSeriesNavigation(item, controls, overlay) {
+4912:     const editions = seriesEditions(item);
+4913:     const previousHost = $("#reader-series-prev", overlay);
+4914:     const nextHost = $("#reader-series-next", overlay);
+4915:     if (editions.length < 2 || (!previousHost && !nextHost)) return;
+4916:     const offlineReader = navigator.onLine === false || state.session?.offline;
+4917:     const navigationEditions = offlineReader
+4918:       ? editions.filter(edition => edition.id === item.id || downloaded(edition.id)?.status === "completed")
+4919:       : editions;
+4920:     if (offlineReader && navigationEditions.length < 2) {
+4921:       if (previousHost) previousHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">‹ Anterior</button>';
+4922:       if (nextHost) nextHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">Próxima ›</button>';
+4923:       return;
+4924:     }
+4925:     const current = navigationEditions.findIndex(x => x.id === item.id);
+4926:     const firstEdition = navigationEditions[0];
+9543:     const authors = String(item.author || "").split(/\s*(?:\/|&|\be\b)\s*/i).map(value => value.trim()).filter(Boolean);
+9544:     const entityButton = (kind, value, label = value) => value ? `<button type="button" class="card-entity-link" data-entity-kind="${escapeHTML(kind)}" data-entity-value="${escapeHTML(value)}">${escapeHTML(label)}</button>` : "";
+9545:     const characterButtons = entityButton("character", characterNames(item)[0]);
+9546:     const cardActions = `<div class="card-actions"><button class="card-like ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}" title="Curtir quadrinho">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="card-share" data-share-item="${escapeHTML(item.id)}" title="Compartilhar quadrinho">Compartilhar</button><button class="card-comment" data-comment-item="${escapeHTML(item.id)}" title="Ver comentarios">Comentários</button>${item.seriesId ? `<button class="card-series" data-view-series="${escapeHTML(item.seriesId)}" title="Ver serie">Série</button>` : ""}</div>`;
+9547:     return `
+9548:       <div class="card-wrap"><article class="card ${hidden ? "is-hidden-catalog-item" : ""}" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
+9549:           <div class="cover" data-cover-id="${escapeHTML(item.id)}" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(coverFor(item, "card", activeCollectionContext?.coverChoices || coverChoices))}')">
+9550:           <span class="cover-number">${escapeHTML(issueLabel)}</span>
+9551:           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
+9552:           <button class="card-favorite ${favoriteIds.has(item.id) ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="Salvar na estante">★</button>
+9553:           ${isAdminProfile() ? `<button type="button" class="card-metadata-toggle" data-edit-item="${escapeHTML(item.id)}" title="Ver e editar metadados" aria-label="Ver e editar metadados">✎</button>` : ""}
+9554:         </div>
+9555:         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
+9556:         ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${isAdminProfile() ? "card-download-admin-offset" : ""} ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
+9557:         ${isAdminProfile() ? `<button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
+9558:         <div class="card-body">
+9559:           <div class="card-title">${escapeHTML(displayTitle)}</div>
+9560:           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${characterButtons}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
+9561:           ${authors.length ? `<div class="card-authors">${authors.map(author => entityButton("author", author)).join(" ")}</div>` : ""}
+9562:           <div class="card-stats"><span>♥ ${Number(item.clicks || 0).toLocaleString("pt-BR")} leituras</span>${canChooseCover ? `<button type="button" class="card-cover-choice" data-cover-choice="${escapeHTML(item.id)}" ${activeCollectionContext?.id ? `data-cover-choice-collection="${escapeHTML(activeCollectionContext.id)}"` : ""} title="${activeCollectionContext?.id ? "Capa variante somente nesta coleção" : "Escolher capa"}">${state.profile?.plan === "admin" && !activeCollectionContext?.id ? "Escolher capa" : "Capa"}</button>` : hasCoverVariants ? `<span class="card-variant-info" title="Esta edição possui capas variantes">Capa variante</span>` : ""}${coverEffects}</div>
+9563:           <div class="card-actions"><button class="card-like ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}" title="Curtir quadrinho">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="card-share" data-share-item="${escapeHTML(item.id)}" title="Compartilhar quadrinho">Compartilhar</button><button class="card-comment" data-comment-item="${escapeHTML(item.id)}" title="Ver comentários">Comentários</button>${item.seriesId ? `<button class="card-series" data-view-series="${escapeHTML(item.seriesId)}" title="Ver série">Série</button>` : ""}</div>
+9564:         </div>
+9565:       </article>${cardActions}</div>`;
+9566:   }
+9567: 
+9568:   function itemDisplayTitle(item) {
+9569:     const candidates = [item?.seriesTitle, item?.title, item?.name, item?.comicTitle, item?.displayTitle];
+9570:     let base = candidates.find(value => {
+9571:       const text = String(value || "").trim();
+9572:       return text && !/^(quadrinho|hq)$/i.test(text);
+9573:     });
+9574:     if (!base) {
+9575:       const source = item?.fileName || item?.filename || item?.originalName || item?.fileUrl;
+9576:       let filename = String(source || "").split(/[\\/?]/).pop() || "";
+15099:     if (existing) {
+15100:       existing.fileUrl = row.file_url;
+15101:       if (discoveredCoverUrl) existing.coverUrl = discoveredCoverUrl;
+15102:     }
+15103:     else state.db.library = [...state.db.library, { ...item, fileUrl: row.file_url }];
+15104:     try {
+15105:       save();
+15106:       const result = await sb.from("series_link_discoveries").update({ status: "approved", reviewed_by: state.session.user.id, reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending");
+15107:       if (result.error) throw result.error;
+15108:       try {
+15109:         await publishCatalog();
+15110:       } catch (error) {
+15111:         await sb.from("series_link_discoveries").update({ status: "pending", reviewed_by: null, reviewed_at: null, updated_at: new Date().toISOString() }).eq("id", row.id);
+15112:         throw error;
+15113:       }
+15114:       await loadStaffActivities();
+15115:       overlay.remove();
+15116:       openSeriesLinkMonitorPopup();
+15117:       toast(existing ? "Link da edição atualizado e catálogo publicado." : "Nova edição aprovada e catálogo publicado.");
+15118:     } catch (error) {
+15119:       state.db.library = previousLibrary;
+15120:       if (existing) { existing.fileUrl = previousFileUrl; existing.coverUrl = previousCoverUrl; }
+15121:       save();
+15122:       button.disabled = false;
+15123:       toast(error.message || "Não foi possível aprovar a descoberta.");
+15124:     }
+15125:   }
+15126: 
+15127:   function openSeriesLinkMonitorPopup(previousOverlay = null) {
+15128:     previousOverlay?.remove();
+15129:     closeNotificationsPopups();
+15130:     if (!state.session || state.profile?.plan !== "admin") return toast("Apenas administradores podem acessar este monitoramento.");
+15131:     const overlay = document.createElement("div");
+15132:     overlay.className = "modal-backdrop";
+15695:       overlay.remove();
+15696:       await loadPublicProfile(link.dataset.notificationProfile);
+15697:     });
+15698:     $('[data-mark-all-notifications]', overlay)?.addEventListener("click", async () => {
+15699:       await markAllNotificationsRead();
+15700:       overlay.remove();
+15701:       openNotificationsPopup();
+15702:     });
+15703:   }
+15704: 
+15705:   function render() {
+15706:     const isBlogTheme = state.section === "blog";
+15707:     document.querySelector(".topbar")?.classList.toggle("is-offline", Boolean(state.session?.offline));
+15708:     const factionsNav = document.querySelector('.nav-link[data-section="factions"]');
+15709:     if (factionsNav) factionsNav.style.display = "";
+15710:     document.body.classList.toggle("blogs-theme", isBlogTheme);
+15711:     const brandLogo = document.querySelector(".brand-logo");
+15712:     const brandName = document.querySelector(".brand > span:last-child");
+15713:     const footerTitle = document.querySelector(".footer > div:first-child > strong");
+15714:     const footerDescription = document.querySelector(".footer > div:first-child > span");
+15715:     if (brandLogo) {
+15716:       brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/barracabrancaicon.png?v=1";
+15717:       brandLogo.alt = isBlogTheme ? "Bobojaco" : "Banca Digital";
+15718:     }
+15719:     if (brandName) brandName.innerHTML = isBlogTheme ? 'Bobo<span class="brand-accent">jaco</span>' : 'Banca<span class="brand-accent">Digital</span>';
+15720:     if (footerTitle) footerTitle.textContent = isBlogTheme ? "Bobojaco" : "Banca Digital";
+15721:     if (footerDescription) footerDescription.textContent = isBlogTheme
+15722:       ? "Um espaço para publicar, descobrir e conversar sobre histórias."
+15723:       : "Uma biblioteca de quadrinhos feita para a era digital.";
+15724:     document.title = isBlogTheme ? "Bobojaco — Blogs" : "Banca Digital — Quadrinhos & Mangás";
+15725:     const metaDescription = document.querySelector('meta[name="description"]');
+15726:     if (metaDescription) metaDescription.content = isBlogTheme
+15727:       ? "Bobojaco: um espaço para publicar, descobrir e conversar sobre histórias."
+15728:       : "Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.";
+16597:       state.downloadsSeriesSortOrders = { ...(state.downloadsSeriesSortOrders || {}), [seriesId]: event.currentTarget.value };
+16598:       try { localStorage.setItem('bancaDigitalDownloadsSeriesSort', JSON.stringify(state.downloadsSeriesSortOrders)); } catch {}
+16599:       render();
+16600:     }));
+16601:     $$('[data-delete-download-series]').forEach(button => button.addEventListener('click', () => deleteSeriesDownloads(button.dataset.deleteDownloadSeries)));
+16602:     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
+16603:     $$('[data-hide-item]').forEach(el => el.addEventListener("click", event => {
+16604:       event.stopPropagation();
+16605:       toggleCatalogItemVisibility(el.dataset.hideItem);
+16606:     }));
+16607:     $$('[data-edit-item]').forEach(el => el.addEventListener("click", event => {
+16608:       event.preventDefault();
+16609:       event.stopPropagation();
+16610:       if (isAdminProfile()) openEditForm(el.dataset.editItem);
+16611:     }));
+16612:     $$('[data-download]').forEach(el => {
+16613:       const entry = downloaded(el.dataset.download);
+16614:       if (entry?.status === "waiting") { el.classList.add("is-downloading"); el.textContent = "…"; el.title = "Aguardando na fila"; }
+16615:       el.addEventListener("click", event => { event.stopPropagation(); const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.download)); const download = item && downloaded(item.id); if (!item || download?.status === "downloading" || download?.status === "waiting") return; download?.status === "completed" ? deleteDownload(item.id) : startDownload(item); });
+16616:     });
+16617:     $$('[data-download-row]').forEach(row => {
+16618:       const entry = downloaded(row.dataset.downloadRow);
+16619:       if (!entry?.preparing && entry?.status !== "waiting") return;
+16620:       const subtitle = $('.section-subtitle', row);
+16621:       const progress = $('progress', row);
+16622:       const button = $('[data-open-download]', row);
+16623:       if (entry.status === "waiting") {
+16624:         if (subtitle) subtitle.textContent = 'Aguardando na fila…';
+16625:         if (progress) progress.hidden = true;
+16626:         if (button) { button.disabled = true; button.textContent = 'Aguardando…'; }
+16627:       } else {
+16628:         if (subtitle) subtitle.textContent = 'Preparando leitura offline…';
+16629:         if (progress) progress.hidden = true;
+16630:         if (button) { button.disabled = true; button.textContent = 'Preparando…'; }
+18126:       el.dataset.coverChoiceBound = "true";
+18127:       el.addEventListener("click", event => {
+18128:         event.stopPropagation();
+18129:         openCoverChoice(el.dataset.coverChoice);
+18130:       });
+18131:     });
+18132:     $$('[data-favorite]', overlay).forEach(el => el.addEventListener("click", event => {
+18133:       event.stopPropagation();
+18134:       toggleFavorite(el.dataset.favorite);
+18135:     }));
+18136:     $$('[data-edit-item]', overlay).forEach(el => el.addEventListener("click", event => {
+18137:       event.preventDefault();
+18138:       event.stopPropagation();
+18139:       if (isAdminProfile()) openEditForm(el.dataset.editItem);
+18140:     }));
+18141:     $$('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
+18142:       event.stopPropagation();
+18143:       toggleComicLike(el.dataset.likeItem);
+18144:     }));
+18145:     $$('[data-share-item]', overlay).forEach(el => el.addEventListener("click", event => {
+18146:       event.stopPropagation();
+18147:       shareComic(el.dataset.shareItem);
+18148:     }));
+18149:     $$('[data-comment-item]', overlay).forEach(el => el.addEventListener("click", event => {
+18150:       event.stopPropagation();
+18151:       const item = state.db.library.find(entry => entry.id === el.dataset.commentItem);
+18152:       if (item) openCommentsPopup(item);
+18153:     }));
+18154:     $$('[data-series-volume-tab]', overlay).forEach(tab => tab.addEventListener("click", () => {
+18155:       const selected = tab.dataset.seriesVolumeTab;
+18156:       $$('[data-series-volume-tab]', overlay).forEach(button => button.classList.toggle("is-active", button === tab));
+18157:       $$('[data-series-volume-panel]', overlay).forEach(panel => { panel.hidden = panel.dataset.seriesVolumePanel !== selected; });
+18158:     }));
+18159:   }
+18232: 
+18233:         <table class="admin-table">
+18234:           <thead><tr><th>Edição</th><th>Tipo</th><th>Leituras</th><th>Ações</th></tr></thead>
+18235:           <tbody>
+18236:             ${state.db.library.map(x => `
+18237:               <tr>
+18238:                 <td><b>${escapeHTML(x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue||"")}</span></td>
+18239:                 <td>${formatType(x.type)}</td>
+18240:                 <td>${Number(x.clicks||0).toLocaleString("pt-BR")}</td>
+18241:                 <td><div class="admin-actions">
+18242:                   <button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button>
+18243:                   <button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button>
+18244:                 </div></td>
+18245:               </tr>`).join("")}
+18246:           </tbody>
+18247:         </table>
+18248:       </div>`;
+18249:     $("#modal-root").appendChild(overlay);
+18250: 
+18251:     $("[data-close]", overlay).onclick = () => overlay.remove();
+18252:     $("[data-cover-variants]", overlay).onclick = () => { overlay.remove(); openCoverVariantsAdmin(); };
+18253:     $("[data-new]", overlay).onclick = () => { overlay.remove(); openEditForm(); };
+18254:     $("[data-export]", overlay).onclick = exportDB;
+18255:     $("[data-import]", overlay).onclick = importDB;
+18256:     $$("[data-edit]", overlay).forEach(b => b.onclick = () => { overlay.remove(); openEditForm(b.dataset.edit); });
+18257:     $$("[data-delete]", overlay).forEach(b => b.onclick = () => {
+18258:       const itemId = b.dataset.delete;
+18259:       state.db.removedItemIds = Array.isArray(state.db.removedItemIds) ? state.db.removedItemIds : [];
+18260:       if (!state.db.removedItemIds.includes(itemId)) state.db.removedItemIds.push(itemId);
+18261:       state.db.library = state.db.library.filter(x => x.id !== itemId);
+18262:       state.db.collections.forEach(c => c.issueIds = c.issueIds.filter(i => i !== itemId));
+18263:       save(); overlay.remove(); render(); openAdmin(); toast("Edição excluída.");
+18264:     });
+18265:   }
+18266: 
+18267:   function openEditFormLegacy(id = null) {
+18268:     const x = id ? state.db.library.find(i => i.id === id) : {
+18269:       id: "item-" + Date.now(), addedAt: new Date().toISOString(), title:"", issue:"", type:"comic", author:"", year:new Date().getFullYear(),
+18270:       description:"", cover:"", fileUrl:"", telegramUrl:"", format:"pdf", clicks:0, featured:false, randomWeight:5, tags:[], collectionIds:[]
+18271:     };
+18272: 
+18273:     const overlay = document.createElement("div");
+18274:     overlay.className = "modal-backdrop";
+18275:     overlay.innerHTML = `
+18276:       <div class="modal">
+18277:         <h2>${id ? "Editar edição" : "Nova edição"}</h2>
+18278:         <form id="edit-form">
+18279:           <div class="form-grid">
+18478:     overlay.className = "modal-backdrop";
+18479:     overlay.innerHTML = `
+18480:       <div class="modal admin-modal">
+18481:         <div class="section-head"><div><h2>Administração</h2><div class="section-subtitle">Catálogo de obras, edições e coleções</div></div><button class="small-btn" data-close>Fechar</button></div>
+18482:         <div class="notice"><b>Oneshots e séries</b><br>Deixe o campo Série vazio para abrir uma edição diretamente. Use o mesmo nome de série em várias edições para criar a seleção de volumes.</div>
+18483:         <div class="admin-actions" style="margin-bottom:15px">
+18484:           <button class="btn btn-danger" data-new>+ Nova edição</button><button class="small-btn" data-new-collection>+ Criar coleção</button><button class="small-btn" data-achievements>Títulos</button><button class="small-btn" data-account-plan>Tipo de conta</button>
+18485:           <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
+18486:         </div>
+18487:         <table class="admin-table"><thead><tr><th>Série / edição</th><th>Editora</th><th>Selo</th><th>Personagem</th><th>Ano</th><th>Ações</th></tr></thead><tbody>
+18488:           ${state.db.library.map(x => `<tr><td><b>${escapeHTML(x.seriesTitle || x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue || (x.seriesId ? "Edição" : "Oneshot"))}</span></td><td>${escapeHTML(x.publisher || "—")}</td><td>${escapeHTML(x.imprint || "—")}</td><td>${escapeHTML(x.character || "—")}</td><td>${escapeHTML(String(x.year || "—"))}</td><td><div class="admin-actions"><button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button><button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button></div></td></tr>`).join("")}
+18489:         </tbody></table>
+18490:         <h3 style="margin-top:28px">Coleções</h3>
+18491:         <div class="admin-collection-list">${state.db.collections.map(c => `<div><b>${escapeHTML(c.title)}</b><span>${c.issueIds.length} edições</span><button class="small-btn danger" data-delete-collection="${escapeHTML(c.id)}">Excluir</button></div>`).join("") || "Nenhuma coleção criada."}</div>
+18492:       </div>`;
+18493:     $("#modal-root").appendChild(overlay);
+18494:     const filterBar = document.createElement("div");
+18495:     filterBar.className = "admin-catalog-filters";
+18496:     filterBar.style.cssText = "display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 15px";
+18497:     filterBar.innerHTML = '<label class="field"><span>Editora</span><select data-admin-publisher><option value="">Todas as editoras</option></select></label><label class="field"><span>Selo</span><select data-admin-imprint><option value="">Todos os selos</option></select></label><label class="field"><span>Personagem</span><select data-admin-character><option value="">Todos os personagens</option></select></label><label class="field"><span>Série</span><select data-admin-series><option value="">Todas as séries</option></select></label>';
+18498:     const adminTable = $(".admin-table", overlay);
+18499:     adminTable?.before(filterBar);
+18500:     const publisherFilter = $("[data-admin-publisher]", filterBar);
+18501:     const imprintFilter = $("[data-admin-imprint]", filterBar);
+18502:     const characterFilter = $("[data-admin-character]", filterBar);
+18503:     const seriesFilter = $("[data-admin-series]", filterBar);
+18504:     const catalogRows = $$('tbody tr', adminTable);
+18505:     const distinctValues = items => [...new Set(items.map(item => String(item || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+18506:     const setFilterOptions = (select, emptyLabel, values, currentValue = "") => {
+18507:       select.innerHTML = `<option value="">${emptyLabel}</option>${values.map(value => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join("")}`;
+18508:       select.value = values.includes(currentValue) ? currentValue : "";
+18509:     };
+18510:     const refreshCatalogFilters = () => {
+18511:       const publisher = publisherFilter.value;
+18534:     notificationButton.className = "small-btn";
+18535:     notificationButton.textContent = "Enviar notificação";
+18536:     $(".admin-actions", overlay)?.appendChild(notificationButton);
+18537:     notificationButton.onclick = () => { overlay.remove(); openAdminNotificationForm(); };
+18538:     $("[data-close]", overlay).onclick = closeAdmin;
+18539:     $("[data-new]", overlay).onclick = () => { overlay.remove(); openEditForm(); };
+18540:     $("[data-new-collection]", overlay).onclick = () => { overlay.remove(); openCollectionForm(); };
+18541:     $("[data-achievements]", overlay).onclick = () => { overlay.remove(); openAchievementAdmin(); };
+18542:     $("[data-account-plan]", overlay).onclick = () => { overlay.remove(); openAccountPlanAdmin(); };
+18543:     $("[data-export]", overlay).onclick = exportDB; $("[data-import]", overlay).onclick = importDB;
+18544:     $$('[data-edit]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openEditForm(button.dataset.edit); });
+18545:     $$('[data-delete]', overlay).forEach(button => button.onclick = () => { state.db.library = state.db.library.filter(x => x.id !== button.dataset.delete); state.db.collections.forEach(c => c.issueIds = c.issueIds.filter(id => id !== button.dataset.delete)); saveCatalog("Edição excluída."); overlay.remove(); render(); openAdmin(); });
+18546:     $$('[data-delete-collection]', overlay).forEach(button => button.onclick = () => { state.db.collections = state.db.collections.filter(c => c.id !== button.dataset.deleteCollection); saveCatalog("Coleção excluída."); overlay.remove(); openAdmin(); });
+18547:   }
+18548: 
+18549:   function openEditForm(id = null) {
+18550:     const old = id ? state.db.library.find(x => x.id === id) : null;
+18551:     const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", telegramFileId: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [] };
+18552:     const secondaryCharacters = Array.isArray(x.secondaryCharacters)
+18553:       ? x.secondaryCharacters
+18554:       : Array.isArray(x.characters)
+18555:         ? x.characters.map(value => typeof value === "object" ? (value.name || value.character || "") : value).filter(value => String(value).trim() && String(value).trim() !== String(x.character || "").trim())
+18556:         : [];
+18557:     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
+18558:     overlay.innerHTML = `
+18559:       <div class="modal"><div class="section-head"><div><h2>${id ? "Editar edição" : "Nova edição"}</h2><div class="section-subtitle">A capa será extraída da primeira página</div></div><button class="small-btn" data-close>Fechar</button></div>
+18560:         <form id="edit-form"><div class="form-grid">
+18561:           <div class="field"><label>Título da edição</label><input name="title" required value="${escapeHTML(x.title)}"></div>
+18562:           <div class="field full"><label>Série (deixe vazio para oneshot)</label><input name="seriesTitle" value="${escapeHTML(x.seriesTitle || "")}" placeholder="Ex.: Homem-Aranha, Universo Casulo"></div>
+18563:           <div class="field"><label>Número da edição / volume</label><input name="volume" type="text" value="${escapeHTML(String(x.issue || ""))}" placeholder="Ex.: 0, 1, Anuário"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
+18564:           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
+18565:           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
+18566:           <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
+18567:           <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
+18602:         publisher: String(fd.get("publisher") || "").trim(),
+18603:         imprint: String(fd.get("imprint") || "").trim(),
+18604:         character,
+18605:         secondaryCharacters,
+18606:         author: String(fd.get("author") || "").trim(),
+18607:         format: String(fd.get("format") || "auto").toLowerCase() === "auto" ? detectFormat(sourceUrl) : String(fd.get("format")).toLowerCase(),
+18608:         fileUrl: isTelegram ? "" : sourceUrl,
+18609:         backupUrls,
+18610:         telegramUrl: isTelegram ? sourceUrl : "",
+18611:         telegramFileId: isTelegram ? telegramFileId : "",
+18612:         catalogEditedAt: new Date().toISOString(),
+18613:         cover: "",
+18614:         coverUrl: String(fd.get("coverUrl") || "").trim(),
+18615:         featuredCoverUrl: String(fd.get("featuredCoverUrl") || "").trim(),
+18616:         description: String(fd.get("description") || "").trim(),
+18617:         tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean),
+18618:         featured: fd.get("featured") === "on"
+18619:       };
+18620:       if (Array.isArray(item.characters)) item.characters = [character, ...secondaryCharacters];
+18621:       delete item.randomWeight;
+18622:       const index = state.db.library.findIndex(i => i.id === item.id);
+18623:       if (index >= 0) state.db.library[index] = item; else state.db.library.push(item);
+18624:       const submit = form.querySelector('button.btn');
+18625:       form.dataset.saving = "true";
+18626:       submit.disabled = true;
+18627:       submit.textContent = "Publicando edição...";
+18628:       try {
+18629:         const published = await saveCatalog("Edição salva.");
+18630:         if (published) {
+18631:           overlay.remove();
+18632:           render();
+18633:         } else {
+18634:           let status = form.querySelector('[data-publish-status]');
+18635:           if (!status) {
