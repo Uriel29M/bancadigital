@@ -1,0 +1,134 @@
+name: Aplicar correção da ordem de Equipes
+
+on:
+  push:
+    paths:
+      - .github/workflows/fix-comic-teams.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'chore: apply comic teams order fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            index.html
+            js/app.js
+          sparse-checkout-cone-mode: false
+      - name: Corrigir a integração de Equipes sem substituir o restante do aplicativo
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import re
+
+          expected = {
+              'js/app.js': '0a16062b20c4e0973272dcbdafada9a0d5d66fc3',
+              'index.html': '16cdc5b77edde138fab0a520694e08da82ba7f59',
+          }
+          for path, sha in expected.items():
+              actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+              if actual != sha:
+                  raise RuntimeError(f'{path} mudou desde a análise; correção interrompida para preservar o trabalho existente.')
+
+          path = Path('js/app.js')
+          source = path.read_text(encoding='utf-8')
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: esperado um trecho, encontrados {count}.')
+              return text.replace(old, new, 1)
+
+          # A normalização antiga excluía teams da lista quando não havia uma
+          # ordem salva, deixando a seção fora do sistema de movimentação.
+          source = replace_once(source,
+              'return [...unique, ...missing.filter(key => key !== "teams")];',
+              'return [...unique, ...COMIC_SECTION_ORDER.filter(key => !unique.includes(key))];',
+              'Normalização da ordem de Quadrinhos')
+
+          start = source.index('  function bindComicSectionControls() {')
+          end = source.find('\n  }', start)
+          if end < 0:
+              raise RuntimeError('Não foi possível delimitar o organizador de Quadrinhos.')
+          end += len('\n  }')
+          binder = source[start:end]
+          if 'state.section !== "comic"' not in binder or 'comicVisibleSectionKeys' not in binder:
+              raise RuntimeError('O organizador de Quadrinhos não corresponde à versão analisada.')
+
+          # O carrossel era produzido fora de .content. Ele precisa entrar no
+          # mesmo contêiner das demais seções antes do reconhecimento e ordenação.
+          binder = replace_once(binder,
+              '    if (!content) return;\n',
+              '    if (!content) return;\n'
+              '    const teamSection = document.querySelector("#main .wiki-team-carousel-section");\n'
+              '    if (teamSection && teamSection.parentElement !== content) content.appendChild(teamSection);\n',
+              'Inclusão de Equipes no contêiner')
+          binder = replace_once(binder,
+              '    const sectionKeyFor = element => {\n',
+              '    const sectionKeyFor = element => {\n'
+              '      if (element.classList.contains("wiki-team-carousel-section")) return "teams";\n',
+              'Identificação da seção Equipes')
+
+          # A ordem também deve ser aplicada para visitantes. Somente os
+          # botões administrativos continuam restritos a quem pode gerenciar.
+          anchor = '    if (!canManageHomepageOrder()) return;\n    keyedSections.forEach(({ element, key }) => {'
+          reordered = (
+              '    state.comicVisibleSectionKeys.forEach(key => {\n'
+              '      const entry = keyedSections.find(item => item.key === key);\n'
+              '      if (entry) content.appendChild(entry.element);\n'
+              '    });\n'
+              '    if (!canManageHomepageOrder()) return;\n'
+              '    keyedSections.forEach(({ element, key }) => {'
+          )
+          binder = replace_once(binder, anchor, reordered, 'Aplicação da ordem para todos os usuários')
+          source = source[:start] + binder + source[end:]
+
+          html_path = Path('index.html')
+          html = html_path.read_text(encoding='utf-8')
+          html = replace_once(html,
+              '  <style>\n    /* O carrossel de equipes não pertence à página Quadrinhos. */\n    body:has(.main-nav [data-section="comics"].active) #main .wiki-team-carousel-section {\n      display: none !important;\n    }\n  </style>\n',
+              '', 'Remoção da regra de ocultação incorreta')
+          html = replace_once(html, 'js/app.js?v=2.2.10.445', 'js/app.js?v=2.2.10.446', 'Atualização da versão do aplicativo')
+          path.write_text(source, encoding='utf-8')
+          html_path.write_text(html, encoding='utf-8')
+          print('Correção aplicada: Equipes reconhecida, ordenável e visível; ocultação anterior removida.')
+          PY
+      - name: Verificar sintaxe e normalização da ordem
+        run: |
+          node --check js/app.js
+          node <<'JS'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert/strict');
+          const src = fs.readFileSync('js/app.js', 'utf8');
+          const order = JSON.parse(src.match(/const COMIC_SECTION_ORDER = (\[[^;]+\]);/)[1].replace(/'/g, '"'));
+          const fn = src.match(/  function normalizeComicSectionOrder\(value\) \{[\s\S]*?\n  \}/)[0];
+          const normalize = vm.runInNewContext(`(() => { const COMIC_SECTION_ORDER = ${JSON.stringify(order)}; ${fn}; return normalizeComicSectionOrder; })()`);
+          assert.deepEqual(Array.from(normalize(null)), order);
+          assert.equal(Array.from(normalize(['characters', 'teams', 'series']))[1], 'teams');
+          assert.equal(Array.from(normalize(['series', 'characters']))[2], 'teams');
+          assert.deepEqual(Array.from(normalize([...order].reverse())), [...order].reverse());
+          assert.equal(new Set(Array.from(normalize(['teams', 'teams']))).size, order.length);
+          const binder = src.slice(src.indexOf('  function bindComicSectionControls() {'), src.indexOf('  function bindComicSectionControls() {') + 16000);
+          assert.match(binder, /teamSection\.parentElement !== content\) content\.appendChild\(teamSection\)/);
+          assert.match(binder, /wiki-team-carousel-section"\)\) return "teams"/);
+          assert.match(binder, /state\.comicVisibleSectionKeys\.forEach\(key => \{[\s\S]*?content\.appendChild\(entry\.element\);[\s\S]*?if \(!canManageHomepageOrder\(\)\) return;/);
+          const html = fs.readFileSync('index.html', 'utf8');
+          assert.doesNotMatch(html, /O carrossel de equipes não pertence/);
+          assert.match(html, /js\/app\.js\?v=2\.2\.10\.446/);
+          console.log('PASSOU: ordem padrão, ordem salva, inclusão de Equipes, controles e visibilidade.');
+          JS
+      - name: Publicar a correção
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- js/app.js index.html
+          git commit -m "fix: integrar Equipes à ordem das seções de Quadrinhos"
+          git push origin HEAD:main
