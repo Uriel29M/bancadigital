@@ -30,14 +30,18 @@ jobs:
       - name: Verify real canonical PDF response
         run: |
           python3 - <<'PY'
-          import json, urllib.request
+          import json, urllib.request, urllib.error
           base = 'https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-proxy?item_id=series-all-star-western-2011-novos-52-005'
-          with urllib.request.urlopen(urllib.request.Request(base, headers={'Range':'bytes=0-1023'}), timeout=60) as response:
-              data=response.read()
-              assert response.status==206 and data.startswith(b'%PDF-')
-              assert response.headers.get('Content-Range')=='bytes 0-1023/19983904'
-              assert response.headers.get('Access-Control-Allow-Origin')=='*'
-              print('Canonical PDF range verified:', response.status, len(data), response.headers.get('Content-Range'))
+          try:
+              with urllib.request.urlopen(urllib.request.Request(base, headers={'Range':'bytes=0-1023'}), timeout=60) as response:
+                  data=response.read()
+                  assert response.status==206 and data.startswith(b'%PDF-')
+                  assert response.headers.get('Content-Range')=='bytes 0-1023/19983904'
+                  assert response.headers.get('Access-Control-Allow-Origin')=='*'
+                  print('Canonical PDF range verified:', response.status, len(data), response.headers.get('Content-Range'))
+          except urllib.error.HTTPError as error:
+              print('HTTP',error.code,error.read(4096).decode(errors='replace'))
+              raise
           PY
       - name: Save verified changes on isolated branch
         run: |
