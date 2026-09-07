@@ -19,32 +19,31 @@ jobs:
             js/data/dc-comics/recentes.js
             scripts/test-catalog-sync.mjs
           sparse-checkout-cone-mode: false
-      - name: Extract relevant source without changing application data
+      - name: Extract exact source functions
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re, subprocess
-          source = Path('js/app.js').read_text(encoding='utf-8')
-          lines = source.splitlines()
+          src = Path('js/app.js').read_text(encoding='utf-8')
           out = Path('catalog-sync-audit')
           out.mkdir(exist_ok=True)
-          def write(name, indexes):
-              indexes = sorted(set(i for i in indexes if 0 <= i < len(lines)))
-              (out / name).write_text('\n'.join(f'{i+1}: {lines[i]}' for i in indexes) + '\n', encoding='utf-8')
-          write('store.txt', range(0,330))
-          needles = re.compile(r'publishCatalog|catalogEditedAt|editEdition|edit-edition|edition-edit|saveEdition|save-edition|data-edit|DataStore\.load|DataStore\.save|function render\(|function init\(|function boot\(|loadCatalogVisibility|function saveDB|function persistDB|PUBLISHED_CATALOG|CATALOG_VERSION',re.I)
-          selected = set()
-          for i,line in enumerate(lines):
-              if needles.search(line): selected.update(range(i-10,i+24))
-          write('references.txt',selected)
-          names = re.findall(r'^  (?:async )?function ([A-Za-z_$][\w$]*)\(',source,re.M)
-          (out/'functions.txt').write_text('\n'.join(names)+'\n',encoding='utf-8')
+          names = ['publishCatalog','saveCatalog','openEditForm','save','render','loadAccount','loadCatalogVisibility','loadCoverChoices','loadSeriesCoverChoices','coverFor','seriesCoverFor','renderCatalog','renderCatalogLegacyBase']
+          for name in names:
+              matches = list(re.finditer(r'^  (?:async )?function '+name+r'\(', src, re.M))
+              for n,match in enumerate(matches):
+                  end = src.find('\n  }',match.start())
+                  if end < 0: raise RuntimeError('Function boundary missing: '+name)
+                  code = src[match.start():end+5]
+                  (out/f'{name}-{n}.js').write_text(code+'\n',encoding='utf-8')
+          lines=src.splitlines()
+          (out/'store-core.js').write_text('\n'.join(lines[225:370])+'\n',encoding='utf-8')
+          (out/'initialization.js').write_text('\n'.join(lines[-240:])+'\n',encoding='utf-8')
           (out/'metadata.txt').write_text('app_sha='+subprocess.check_output(['git','hash-object','js/app.js'],text=True).strip()+'\nlines='+str(len(lines))+'\n',encoding='utf-8')
           PY
-      - name: Save bounded audit to isolated branch
+      - name: Save audit on isolated branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --sparse catalog-sync-audit/
-          git commit -m "chore: collect catalog sync source excerpts"
+          git commit -m "chore: collect exact catalog sync functions"
           git push origin HEAD:fix/catalog-sync-20260907
