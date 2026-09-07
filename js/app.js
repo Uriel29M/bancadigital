@@ -744,8 +744,9 @@
     return Boolean(seriesId && state.hiddenCatalogSeriesIds?.has(String(seriesId)));
   }
   function canViewCatalogItem(item, includeHidden = false) {
+    if (!item) return false;
     const hiddenCharacter = characterNames(item).some(name => state.characterSettings.get(publisherKey(name))?.is_hidden);
-    return (!isHiddenCatalogItem(item) && !isHiddenCatalogSeries(item?.seriesId) && !hiddenCharacter) || (includeHidden && isAdminProfile());
+    return (!isHiddenCatalogItem(item) && !isHiddenCatalogSeries(item.seriesId) && !hiddenCharacter) || (includeHidden && isAdminProfile());
   }
   function visibleCatalogItems(items = state.db.library, includeHidden = isAdminProfile()) {
     return items.filter(item => canViewCatalogItem(item, includeHidden));
@@ -780,44 +781,15 @@
     if (!id || !sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
     const hidden = !state.hiddenCatalogSeriesIds.has(id);
     const result = hidden
-      ? await sb.from("catalog_series_visibility").upsert({ series_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "series_id" })
-      : await sb.from("catalog_series_visibility").delete().eq("series_id", id);
-    if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade da série.");
+      ? await sb.from("catalog_series_visibility").upsert({ series_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "series_id" }).select("series_id, is_hidden").single()
+      : await sb.from("catalog_series_visibility").delete().eq("series_id", id).select("series_id").single();
+    if (result.error || !result.data || String(result.data.series_id) !== id) return toast(result.error?.message || "Não foi possível confirmar a visibilidade da série.");
     if (hidden) state.hiddenCatalogSeriesIds.add(id); else state.hiddenCatalogSeriesIds.delete(id);
     render();
     toast(hidden ? "Série ocultada para usuários comuns." : "Série visível novamente para todos.");
   }
 
-  function canViewCatalogItem(item, includeHidden = false) {
-    const hiddenCharacter = characterNames(item).some(name => state.characterSettings.get(publisherKey(name))?.is_hidden);
-    return (!isHiddenCatalogItem(item) && !hiddenCharacter) || (includeHidden && isAdminProfile());
-  }
-  function visibleCatalogItems(items = state.db.library, includeHidden = false) {
-    return items.filter(item => canViewCatalogItem(item, includeHidden));
-  }
-  async function loadCatalogVisibility() {
-    state.hiddenCatalogItemIds = new Set();
-    if (!sb || navigator.onLine === false) return;
-    const result = await sb.from("catalog_item_visibility").select("item_id, is_hidden");
-    if (result.error) {
-      console.warn("Não foi possível carregar a visibilidade das edições:", result.error.message);
-      return;
-    }
-    state.hiddenCatalogItemIds = new Set((result.data || []).filter(row => row.is_hidden).map(row => String(row.item_id)));
-  }
-  async function toggleCatalogItemVisibility(itemId) {
-    if (!isAdminProfile()) return toast("Apenas administradores podem ocultar edições.");
-    const id = String(itemId || "");
-    if (!id || !sb) return toast("A visibilidade precisa ser alterada com o banco online.");
-    const hidden = !state.hiddenCatalogItemIds.has(id);
-    const result = hidden
-      ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" })
-      : await sb.from("catalog_item_visibility").delete().eq("item_id", id);
-    if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade.");
-    if (hidden) state.hiddenCatalogItemIds.add(id); else state.hiddenCatalogItemIds.delete(id);
-    render();
-    toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
-  }
+
   function loadDownloads() {
     const userId = state.session?.user?.id;
     if (!userId) { state.downloads = new Map(); return; }
@@ -18172,7 +18144,7 @@
   }
 
   function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null) {
-    if (isHiddenCatalogSeries(item?.seriesId) && !isAdminProfile()) {
+    if (isHiddenCatalogSeries(series?.seriesId || series?.id) && !isAdminProfile()) {
       toast("Esta série está temporariamente oculta.");
       return;
     }
@@ -18905,7 +18877,7 @@
     const canSetSeriesCover = Boolean(state.session) && favoriteIds === state.favoriteIds;
     const seriesCoverEffects = coverStyleControl(item.seriesId, seriesCoverStyle, canSetSeriesCover);
     const seriesCoverChoiceButton = canSetSeriesCover ? `<button type="button" class="series-cover-choice" data-series-cover-choice="${escapeHTML(item.seriesId)}" title="Capa da série">Capa</button>` : "";
-    const visibilityButton = isAdminProfile() ? `<button type="button" class="series-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-series="${escapeHTML(item.seriesId)}" title="${hidden ? "Mostrar série para todos" : "Ocultar série para usuários comuns"}" aria-label="${hidden ? "Mostrar série para todos" : "Ocultar série para usuários comuns"}">${hidden ? "◉ Mostrar série" : "⊘ Ocultar série"}</button>` : "";
+    const visibilityButton = isAdminProfile() ? `<button type="button" class="series-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-series="${escapeHTML(item.seriesId)}" title="${hidden ? "Mostrar série para todos" : "Ocultar série para usuários comuns"}" aria-label="${hidden ? "Mostrar série para todos" : "Ocultar série para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : "";
     const seriesName = series.name || series.seriesTitle;
     const startYearValue = series.year ? String(series.year) : "";
     const startYear = startYearValue ? `<button type="button" class="series-card-year series-entity-link" data-entity-kind="year" data-entity-value="${escapeHTML(startYearValue)}">(${escapeHTML(startYearValue)})</button>` : "";

@@ -3351,3 +3351,6 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
 .series-hide-toggle.is-hidden { border-style: dashed; }
 .series-card.is-hidden { opacity: .65; }
 .series-hide-toggle:disabled { opacity: .5; cursor: wait; }
+
+/* Compact series visibility control, without changing other footer actions. */
+.series-card-footer-actions .series-hide-toggle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 34px; height: 34px; padding: 0; line-height: 1; font-size: 20px; }
