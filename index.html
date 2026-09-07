@@ -8,6 +8,12 @@
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
     <link rel="stylesheet" href="css/style.css?v=2.2.10.226">
+  <style>
+    /* O carrossel de equipes não pertence à página Quadrinhos. */
+    body:has(.main-nav [data-section="comics"].active) #main .wiki-team-carousel-section {
+      display: none !important;
+    }
+  </style>
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
@@ -145,4 +151,3 @@
     <script src="js/app.js?v=2.2.10.445"></script>
 </body>
 </html>
-
