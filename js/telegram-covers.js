@@ -71,7 +71,7 @@ window.BancaTelegramCovers = (() => {
           if (!isPost(value)) continue;
           const data = await identify(name, value);
           if (normalized(field(name)?.value) !== normalized(value)) throw new Error('O link da capa mudou durante a identificação.');
-          changes[name] = data.sourceUrl;
+          changes[name] = data.url;
         }
         return { ...item, ...changes };
       }

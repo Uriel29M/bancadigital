@@ -36,7 +36,7 @@ test('both cover fields register before publication without changing unrelated e
   const api = load(), ui = form(), editor = api.bindEditor(ui, client);
   const original = { id: 'edition-5', title: 'All Star Western', issue: '5', coverUrl: metadata.sourceUrl, featuredCoverUrl: '', fileUrl: 'https://example.org/book.pdf' };
   const result = await editor.forSave(original, { coverUrl: metadata.sourceUrl, featuredCoverUrl: '' });
-  assert.equal(result.coverUrl, metadata.sourceUrl);
+  assert.equal(result.coverUrl, metadata.url);
   assert.equal(result.title, original.title);
   assert.equal(result.fileUrl, original.fileUrl);
   assert.equal(original.coverUrl, metadata.sourceUrl);
