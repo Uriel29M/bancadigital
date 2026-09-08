@@ -1,0 +1,13 @@
+  function factionPinnedCollectionsMarkup(faction) {
+    const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
+    const ownPins = [...state.factionPinnedCollections.values()].filter(row => String(row.faction_id) === String(faction.id));
+    const publicPins = [...state.factionPinnedPublicCollections.values()].filter(row => String(row.faction_id) === String(faction.id));
+    const own = ownPins.map(row => state.factionCatalogs.find(catalog => String(catalog.id) === String(row.catalog_id))).filter(Boolean).map(catalog => ({ ...catalog, publicCatalog: false }));
+    const publicCatalogs = publicPins.map(row => state.factionPublicPinnedCollectionDetails.get(String(row.collection_id))).filter(Boolean).map(catalog => ({ ...catalog, publicCatalog: true }));
+    const catalogs = [...own, ...publicCatalogs].map(catalog => ({ ...catalog, featuredItems: (Array.isArray(catalog.item_ids) ? catalog.item_ids.map(String) : []).map(id => state.db.library.find(item => String(item.id) === id)).filter(item => item && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)) })).filter(catalog => catalog.featuredItems.length);
+    if (!catalogs.length) return "";
+    const body = `<div class="publisher-carousel faction-featured-collections">${catalogs.map(catalog => { const items = catalog.featuredItems; const cover = catalog.cover_url || (items[0] ? coverFor(items[0]) : "assets/batmanicon.jpg"); const href = catalog.publicCatalog ? publicProfileHref(catalog.username, catalog.id) : `?pagina=faccoes&faccao=${encodeURIComponent(factionRouteKey(faction.id))}&catalogo=${encodeURIComponent(catalog.id)}`; return `<a class="publisher-card faction-collection-card" href="${escapeHTML(href)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(catalog.name)}</strong><span>${items.length} edi\u00e7\u00e3o(\u00f5es)</span></div></a>`; }).join("")}</div>`;
+    const subtitle = publisher ? `Cole\u00e7\u00f5es com edi\u00e7\u00f5es da editora ${escapeHTML(faction.publisher_name)}.` : "Cole\u00e7\u00f5es escolhidas pelos l\u00edderes e curadores da fac\u00e7\u00e3o.";
+    return `<section class="section faction-extra-abafac faction-pinned-collections-abafac" data-faction-abafac="pinned-collections" style="--faction-color:${escapeHTML(faction.color)}"><div class="section-head"><div><div class="eyebrow">Curadoria</div><h2 class="section-title">Cole\u00e7\u00f5es de quadrinhos em destaque</h2><div class="section-subtitle">${subtitle}</div></div></div>${body}</section>`;
+  }
+

@@ -1,0 +1,671 @@
+### shelf_collections — 24 matches
+1643:       if (!parts) return;
+1644:       const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+1645:       if (owner.error || !owner.data) return;
+1646:       const collection = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, cover_styles, cover_choices").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
+1647:       if (collection.error || !collection.data) return;
+1648:       const key = catalogRow.id ? `catalog:${catalogRow.id}` : "catalog";
+1649:       state.factionAbafacCatalogs.set(key, { ...collection.data, username: owner.data.username, faction_id: catalogRow.faction_id, catalog_id: catalogRow.id, catalog_url: catalogRow.catalog_url });
+1650:     }));
+1661:     const pinnedPublicCollections = await sb.from("faction_pinned_public_collections").select("faction_id, collection_id");
+1662:     state.factionPinnedPublicCollections = new Map((pinnedPublicCollections.data || []).map(row => [`${row.faction_id}:${row.collection_id}`, row]));
+1663:     const pinnedPublicIds = [...new Set((pinnedPublicCollections.data || []).map(row => String(row.collection_id)))];
+1664:     const publicPinnedDetails = pinnedPublicIds.length ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_public").in("id", pinnedPublicIds).eq("is_public", true).eq("collection_type", "comic") : { data: [] };
+1665:     const publicPinnedOwnerIds = [...new Set((publicPinnedDetails.data || []).map(collection => collection.owner_id).filter(Boolean))];
+1666:     const publicPinnedOwners = publicPinnedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", publicPinnedOwnerIds) : { data: [] };
+1667:     const publicPinnedOwnerNames = new Map((publicPinnedOwners.data || []).map(profile => [profile.id, profile.username]));
+1668:     state.factionPublicPinnedCollectionDetails = new Map((publicPinnedDetails.data || []).map(collection => [String(collection.id), { ...collection, username: publicPinnedOwnerNames.get(collection.owner_id) || "" }]));
+3054:     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
+3055:     characterSettingsReady = true;
+3056:     wikiCharacterImageCache.clear();
+3057:     const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
+3058:     const publicCollections = publicCollectionsResult.data || [];
+3059:     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
+3060:     const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", collectionOwnerIds) : { data: [] };
+3061:     const collectionOwners = new Map((collectionOwnersResult.data || []).map(profile => [profile.id, profile.username]));
+3129:         render();
+3130:         return toast("Sua conta está banida.");
+3131:       }
+3132:       const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, sort_order").eq("owner_id", session.user.id).order("created_at", { ascending: true });
+3133:       state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, sortOrder: collection.sort_order || "added_desc", itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
+3134:       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
+3135:       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3136:       const savedCollectionsResult = savedCollectionIds.length
+3134:       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
+3135:       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3136:       const savedCollectionsResult = savedCollectionIds.length
+3137:         ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+3138:         : { data: [] };
+3139:       const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
+3140:       const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+3141:       const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
+3498:     ]);
+3499:     // A atividade já traz a mesma lista de curtidas necessária para a estante.
+3500:     const comicLikes = { data: activityResults[0]?.data || [] };
+3501:     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3502:     if (collections.error) {
+3503:       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3504:     }
+3505:     const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", profile.data.id).eq("status", "published").order("published_at", { ascending: false });
+3500:     const comicLikes = { data: activityResults[0]?.data || [] };
+3501:     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3502:     if (collections.error) {
+3503:       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3504:     }
+3505:     const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", profile.data.id).eq("status", "published").order("published_at", { ascending: false });
+3506:     const publicCollectionBlogIds = [...new Set((collections.data || []).filter(collection => collection.collection_type === "blog" && collection.is_public !== false).flatMap(collection => Array.isArray(collection.blog_ids) ? collection.blog_ids : []))];
+3507:     const collectionBlogs = publicCollectionBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", publicCollectionBlogIds).eq("status", "published") : { data: [] };
+3540:     const publicSeriesCoverChoices = new Map((publicSeriesCoverChoicesResult.data || []).map(choice => [choice.series_id, choice]));
+3541:     const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3542:     const savedCollectionsResult = savedCollectionIds.length
+3543:       ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+3544:       : { data: [] };
+3545:     const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
+3546:     const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+3547:     const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
+3848:         const nextChoices = collectionId ? { ...collectionChoices } : null;
+3849:         if (collectionId) delete nextChoices[itemId];
+3850:         const result = collectionId
+3851:           ? await sb.from("shelf_collections").update({ cover_choices: nextChoices }).eq("id", collectionId).eq("owner_id", state.session.user.id)
+3852:           : await sb.from("user_cover_choices").delete().eq("user_id", state.session.user.id).eq("item_id", itemId);
+3853:         if (result.error) return toast(result.error.message);
+3854:         if (collectionId) collection.coverChoices = nextChoices;
+3855:         else state.coverChoices.delete(itemId);
+3857:         const nextChoice = { item_id: itemId, variant_key: choice.variant_key, label: choice.label, cover_url: choice.cover_url };
+3858:         const nextChoices = collectionId ? { ...collectionChoices, [itemId]: nextChoice } : null;
+3859:         const result = collectionId
+3860:           ? await sb.from("shelf_collections").update({ cover_choices: nextChoices }).eq("id", collectionId).eq("owner_id", state.session.user.id)
+3861:           : await sb.from("user_cover_choices").upsert({ user_id: state.session.user.id, ...nextChoice, updated_at: new Date().toISOString() }, { onConflict: "user_id,item_id" });
+3862:         if (result.error) return toast(result.error.message);
+3863:         if (collectionId) collection.coverChoices = nextChoices;
+3864:         else state.coverChoices.set(itemId, { item_id: itemId, ...choice });
+8937:     const nextStyle = currentStyle === "normal" ? "grayscale" : currentStyle === "grayscale" && premium ? "gold" : "normal";
+8938:     if (nextStyle === "normal") delete styles[itemId];
+8939:     else styles[itemId] = nextStyle;
+8940:     const result = await sb.from("shelf_collections").update({ cover_styles: styles }).eq("id", collectionId).eq("owner_id", state.session.user.id);
+8941:     if (result.error) return toast(result.error.message);
+8942:     await loadPublicProfile(state.publicProfile.profile.username, collectionId);
+8943:   }
+8944: 
+8948:     const collection = state.publicProfile?.collections?.find(entry => String(entry.id) === String(collectionId));
+8949:     if (!collection) return;
+8950:     const coverStyles = { ...(collection.coverStyles || {}), __themeColor: color };
+8951:     const result = await sb.from("shelf_collections").update({ cover_styles: coverStyles }).eq("id", collectionId).eq("owner_id", state.session.user.id);
+8952:     if (result.error) return toast(result.error.message || "Não foi possível mudar a cor da coleção.");
+8953:     collection.coverStyles = coverStyles;
+8954:     const hero = $(".public-collection-hero");
+8955:     hero?.style.setProperty("--public-collection-color", color);
+11019:       if (!preview.isConnected) return;
+11020:       const label = preview.dataset.chatProfileLabel || "Perfil público";
+11021:       if (preview.dataset.chatProfileCollection) {
+11022:         const collectionResult = await sb.from("shelf_collections").select("id, name, cover_url, is_public").eq("id", preview.dataset.chatProfileCollection).eq("owner_id", profile.id).eq("is_public", true).maybeSingle();
+11023:         if (collectionResult.error || !collectionResult.data || !preview.isConnected) return;
+11024:         const collection = collectionResult.data;
+11025:         const cover = collection.cover_url || "assets/estantepb.jpg";
+11026:         preview.outerHTML = `<a class="chat-internal-preview" data-chat-internal-hydrated="true" href="${escapeHTML(preview.dataset.chatProfileUrl)}" target="_blank" rel="noopener noreferrer"><img class="chat-internal-preview-cover" src="${escapeHTML(cover)}" alt="Capa da coleção"><span><b>${escapeHTML(collection.name)}</b><small>Coleção pública</small></span><span class="chat-internal-preview-arrow">›</span></a>`;
+11892:   async function saveShelfCategories(categories) {
+11893:     if (sb && state.session) {
+11894:       const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], sort_order: category.sortOrder || state.collectionSortOrders?.[`category:${category.id}`] || "added_desc", collection_type: "comic", blog_ids: [], is_featured: category.is_featured === true }));
+11895:       let result = rows.length ? await sb.from("shelf_collections").upsert(rows, { onConflict: "id" }) : { error: null };
+11896:       if (result.error && /sort_order|schema cache|column/i.test(result.error.message || "")) {
+11897:         result = rows.length ? await sb.from("shelf_collections").upsert(rows.map(({ sort_order, ...row }) => row), { onConflict: "id" }) : { error: null };
+11898:       }
+11899:       if (result.error) return toast("Não foi possível salvar a organização da estante.");
+11894:       const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], sort_order: category.sortOrder || state.collectionSortOrders?.[`category:${category.id}`] || "added_desc", collection_type: "comic", blog_ids: [], is_featured: category.is_featured === true }));
+11895:       let result = rows.length ? await sb.from("shelf_collections").upsert(rows, { onConflict: "id" }) : { error: null };
+11896:       if (result.error && /sort_order|schema cache|column/i.test(result.error.message || "")) {
+11897:         result = rows.length ? await sb.from("shelf_collections").upsert(rows.map(({ sort_order, ...row }) => row), { onConflict: "id" }) : { error: null };
+11898:       }
+11899:       if (result.error) return toast("Não foi possível salvar a organização da estante.");
+11900:       const ids = rows.map(row => row.id);
+11901:       const existing = await sb.from("shelf_collections").select("id").eq("owner_id", state.session.user.id).eq("collection_type", "comic");
+11898:       }
+11899:       if (result.error) return toast("Não foi possível salvar a organização da estante.");
+11900:       const ids = rows.map(row => row.id);
+11901:       const existing = await sb.from("shelf_collections").select("id").eq("owner_id", state.session.user.id).eq("collection_type", "comic");
+11902:       const removedIds = (existing.data || []).map(row => row.id).filter(id => !ids.includes(id));
+11903:       if (removedIds.length) await sb.from("shelf_collections").delete().eq("owner_id", state.session.user.id).in("id", removedIds);
+11904:     }
+11905:     render();
+11900:       const ids = rows.map(row => row.id);
+11901:       const existing = await sb.from("shelf_collections").select("id").eq("owner_id", state.session.user.id).eq("collection_type", "comic");
+11902:       const removedIds = (existing.data || []).map(row => row.id).filter(id => !ids.includes(id));
+11903:       if (removedIds.length) await sb.from("shelf_collections").delete().eq("owner_id", state.session.user.id).in("id", removedIds);
+11904:     }
+11905:     render();
+11906:     toast("Estante atualizada.");
+11907:   }
+11915:       const collectionId = storageKey.slice("category:".length);
+11916:       const category = state.shelfCategories.find(item => item.id === collectionId);
+11917:       if (category) category.sortOrder = order;
+11918:       await sb?.from("shelf_collections").update({ sort_order: order }).eq("id", collectionId).eq("owner_id", state.session.user.id);
+11919:     }
+11920:     if (result?.error) {
+11921:       try { localStorage.setItem(`bancaDigitalShelfSort:${state.session.user.id}`, JSON.stringify(state.collectionSortOrders)); } catch {}
+11922:     }
+12065:       const blogIds = form.getAll("blogIds");
+12066:       if (!name) return;
+12067:       const payload = { owner_id: state.session.user.id, name, cover_url: String(form.get("coverUrl") || "").trim() || null, is_public: form.get("isPublic") === "on", collection_type: "blog", blog_ids: blogIds, item_ids: [] };
+12068:       const result = existing ? await sb.from("shelf_collections").update(payload).eq("id", existing.id).eq("owner_id", state.session.user.id) : await sb.from("shelf_collections").insert({ id: `blog-shelf-${Date.now()}`, ...payload });
+12069:       if (result.error) return toast("Não foi possível criar a coleção de blogs.");
+12070:       overlay.remove();
+12071:       await loadAccount();
+12072:     };
+12073:   }
+12074: 
+12075:   async function deleteBlogShelfCollection(id) {
+12076:     const result = await sb.from("shelf_collections").delete().eq("id", id).eq("owner_id", state.session.user.id);
+12077:     if (result.error) return toast("Não foi possível excluir a coleção.");
+12078:     await loadAccount();
+12079:   }
+12080: 
+12090: 
+12091:   async function toggleShelfCollectionFeatured(id, featured) {
+12092:     if (!["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
+12093:     const result = await sb.from("shelf_collections").update({ is_featured: !featured }).eq("id", id);
+12094:     if (result.error) return toast("Não foi possível atualizar o destaque da coleção.");
+12095:     if (state.section === "public-profile" && state.publicProfile?.profile) await loadPublicProfile(state.publicProfile.profile.username, state.publicProfile.collectionId || null);
+12096:     else await loadAccount();
+12097:   }
+12464: 
+12465:   async function deletePublicCollection(ownerId, collectionId) {
+12466:     if (!["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
+12467:     const result = await sb.from("shelf_collections").delete().eq("owner_id", ownerId).eq("id", collectionId);
+12468:     if (result.error) return toast("Não foi possível excluir a coleção.");
+12469:     toast("Coleção pública excluída.");
+12470:     await loadPublicProfile(state.publicProfile.profile.username, null);
+12471:   }
+13871:     if (hasCollectionRoute) {
+13872:       const collectionId = String(url.searchParams.get("colecao") || "").trim();
+13873:       if (!collectionId) return false;
+13874:       const collection = await sb.from("shelf_collections").select("id").eq("id", collectionId).eq("is_public", true).maybeSingle();
+13875:       return !collection.error && Boolean(collection.data);
+13876:     }
+13877:     if (page === "faccoes" && url.searchParams.has("faccao")) {
+13878:       const factionKey = String(url.searchParams.get("faccao") || "");
+13909:     if (!parts) return false;
+13910:     const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+13911:     if (owner.error || !owner.data) return false;
+13912:     const collection = await sb.from("shelf_collections").select("id, is_public, collection_type").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
+13913:     if (collection.error || !collection.data) return false;
+13914:     return publicProfileHref(owner.data.username, collection.data.id);
+13915:   }
+13916: 
+### Criar coleção — 3 matches
+12054:     const posts = [...new Map([...state.authoredBlogPosts, ...state.savedBlogPosts].map(post => [String(post.id), post])).values()];
+12055:     const overlay = document.createElement("div");
+12056:     overlay.className = "modal-backdrop";
+12057:     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>${existing ? "Editar coleção de blogs" : "Nova coleção de blogs"}</h2><div class="section-subtitle">Organize blogs escritos ou salvos.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="blog-shelf-collection-form"><div class="field"><label>Nome da coleção</label><input name="name" maxlength="60" required value="${escapeHTML(existing?.name || "")}" placeholder="Ex.: Notícias favoritas"></div><div class="field"><label>Imagem da coleção (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(existing?.coverUrl || "")}" placeholder="https://..."></div><div class="field"><label><input name="isPublic" type="checkbox" ${existing?.isPublic !== false ? "checked" : ""}> Coleção pública</label></div><div class="field"><label>Blogs</label><div class="collection-picker">${posts.map(post => `<label><input type="checkbox" name="blogIds" value="${escapeHTML(post.id)}" ${existing?.blogIds?.includes(String(post.id)) ? "checked" : ""}> ${escapeHTML(post.title)}</label>`).join("") || "Salve ou escreva algum blog primeiro."}</div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger" type="submit">${existing ? "Salvar alterações" : "Criar coleção"}</button></div></form></div>`;
+12058:     $("#modal-root").appendChild(overlay);
+12059:     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+12060:     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+12061:     $("#blog-shelf-collection-form", overlay).onsubmit = async event => {
+18547:               ${state.db.library.map(x => `<label><input type="checkbox" name="issueIds" value="${escapeHTML(x.id)}"> ${escapeHTML(x.seriesTitle || x.title)} — ${escapeHTML(x.issue || "Oneshot")}</label>`).join("") || "Nenhuma edição cadastrada."}
+18548:             </div></div>
+18549:           </div>
+18550:           <div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Criar coleção</button></div>
+18551:         </form>
+18552:       </div>`;
+18553:     $("#modal-root").appendChild(overlay);
+18554:     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+18593:         <div class="section-head"><div><h2>Administração</h2><div class="section-subtitle">Catálogo de obras, edições e coleções</div></div><button class="small-btn" data-close>Fechar</button></div>
+18594:         <div class="notice"><b>Oneshots e séries</b><br>Deixe o campo Série vazio para abrir uma edição diretamente. Use o mesmo nome de série em várias edições para criar a seleção de volumes.</div>
+18595:         <div class="admin-actions" style="margin-bottom:15px">
+18596:           <button class="btn btn-danger" data-new>+ Nova edição</button><button class="small-btn" data-new-collection>+ Criar coleção</button><button class="small-btn" data-achievements>Títulos</button><button class="small-btn" data-account-plan>Tipo de conta</button>
+18597:           <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
+18598:         </div>
+18599:         <table class="admin-table"><thead><tr><th>Série / edição</th><th>Editora</th><th>Selo</th><th>Personagem</th><th>Ano</th><th>Ações</th></tr></thead><tbody>
+18600:           ${state.db.library.map(x => `<tr><td><b>${escapeHTML(x.seriesTitle || x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue || (x.seriesId ? "Edição" : "Oneshot"))}</span></td><td>${escapeHTML(x.publisher || "—")}</td><td>${escapeHTML(x.imprint || "—")}</td><td>${escapeHTML(x.character || "—")}</td><td>${escapeHTML(String(x.year || "—"))}</td><td><div class="admin-actions"><button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button><button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button></div></td></tr>`).join("")}
+### Criar uma coleção — 0 matches
+### Nova coleção — 7 matches
+5666:     const cbrPromoIndex = value.search(/\n(?:\[\s*\]\([^)]*repackz\.cbr\.com|##\s*\[Adriano Di Benedetto)/i);
+5667:     if (cbrPromoIndex >= 0) value = value.slice(0, cbrPromoIndex);
+5668:     // O CBR representa cards e players de vídeo como links Markdown.
+5669:     value = value.replace(/\n[^\n]*(?:Visit|WATCH|NEXT)[^\n]*\n(?:\[(?:Video|Vídeo) \d+\][^\n]*\n)?[\s\S]*?(?=\n(?:Following|The series|A nova coleção|Scott Snyder's All Star))/gi, "\n");
+5670:     value = value.replace(/\n\[(?:Video|Vídeo) \d+\][^\n]*\n?/gi, "\n");
+5671:     const infoBoxIndex = value.search(/\n\\?#{1,6}\s*(?:Batman|\[Batman\]\([^)]*tag\/batman[^)]*\))\s*\n/i);
+5672:     if (infoBoxIndex >= 0) value = value.slice(0, infoBoxIndex);
+5673:     value = value.replace(/\n\*\*Google is updating how content is shown\.[\s\S]*$/i, "");
+11987:     const savedItems = shelfItemsByIds([...ensureShelfSnapshot().saved]);
+11988:     const overlay = document.createElement("div");
+11989:     overlay.className = "modal-backdrop";
+11990:     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>${existing ? "Editar coleção" : "Nova coleção"}</h2><div class="section-subtitle">Organize seus itens salvos e escolha se a coleção será compartilhável</div></div><button class="small-btn" data-close>Fechar</button></div><form id="shelf-category-form"><div class="form-grid"><div class="field full"><label>Nome da coleção</label><input name="name" required maxlength="60" value="${escapeHTML(existing?.name || "")}" placeholder="Ex.: Favoritos, Para reler"></div><div class="field full"><label>Imagem da coleção (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(existing?.coverUrl || "")}" placeholder="https://.../imagem.jpg"><small class="format-hint">Apenas para coleções públicas.</small></div><div class="field full"><label><input name="isPublic" type="checkbox" ${existing?.isPublic !== false ? "checked" : ""}> Coleção pública — aparecerá no perfil e poderá ser compartilhada</label></div><div class="field full"><label>Quadrinhos nesta coleção</label><div class="collection-picker">${savedItems.map(item => `<label><input type="checkbox" name="itemIds" value="${escapeHTML(item.id)}" ${existing?.itemIds?.includes(item.id) ? "checked" : ""}> ${escapeHTML(item.seriesTitle || item.title)}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</label>`).join("") || "Salve algum quadrinho primeiro."}</div></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar coleção</button></div></form></div>`;
+11991:     $("#modal-root").appendChild(overlay);
+11992:     const comicPicker = $(".collection-picker", overlay);
+11993:     if (comicPicker) {
+11994:       comicPicker.outerHTML = shelfComicPickerMarkup(savedItems, existing?.itemIds || []);
+12046:     const collections = (publicState ? publicState.blogCollections || [] : state.blogShelfCategories).filter(collection => !publicState || collection.isPublic !== false);
+12047:     const posts = [...new Map([...authored, ...saved].map(post => [String(post.id), post])).values()];
+12048:     const canEdit = !publicState;
+12049:     return `<div class="blog-shelf-panel"><div class="section-head"><div><h2 class="section-title">Blogs</h2><div class="section-subtitle">Blogs escritos e salvos por esta pessoa.</div></div>${canEdit ? '<button class="small-btn" data-blog-shelf-new>+ Nova coleção</button>' : ""}</div><section class="section shelf-collection"><div class="section-head"><div><h2 class="section-title">Escritos</h2><div class="section-subtitle">${authored.length} blog(s)</div></div></div><div class="blog-shelf-grid">${authored.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog escrito ainda.</div>'}</div></section><section class="section shelf-collection"><div class="section-head"><div><h2 class="section-title">Salvos</h2><div class="section-subtitle">${saved.length} blog(s)</div></div></div><div class="blog-shelf-grid">${saved.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog salvo ainda.</div>'}</div></section>${collections.map(collection => blogShelfCollectionMarkup(collection, posts, canEdit)).join("")}</div>`;
+12050:   }
+12051: 
+12052:   function openBlogShelfCollectionForm(collectionId = null) {
+12053:     const existing = state.blogShelfCategories.find(collection => collection.id === collectionId);
+12054:     const posts = [...new Map([...state.authoredBlogPosts, ...state.savedBlogPosts].map(post => [String(post.id), post])).values()];
+12055:     const overlay = document.createElement("div");
+12056:     overlay.className = "modal-backdrop";
+12057:     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>${existing ? "Editar coleção de blogs" : "Nova coleção de blogs"}</h2><div class="section-subtitle">Organize blogs escritos ou salvos.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="blog-shelf-collection-form"><div class="field"><label>Nome da coleção</label><input name="name" maxlength="60" required value="${escapeHTML(existing?.name || "")}" placeholder="Ex.: Notícias favoritas"></div><div class="field"><label>Imagem da coleção (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(existing?.coverUrl || "")}" placeholder="https://..."></div><div class="field"><label><input name="isPublic" type="checkbox" ${existing?.isPublic !== false ? "checked" : ""}> Coleção pública</label></div><div class="field"><label>Blogs</label><div class="collection-picker">${posts.map(post => `<label><input type="checkbox" name="blogIds" value="${escapeHTML(post.id)}" ${existing?.blogIds?.includes(String(post.id)) ? "checked" : ""}> ${escapeHTML(post.title)}</label>`).join("") || "Salve ou escreva algum blog primeiro."}</div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger" type="submit">${existing ? "Salvar alterações" : "Criar coleção"}</button></div></form></div>`;
+12058:     $("#modal-root").appendChild(overlay);
+12059:     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
+12060:     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+12061:     $("#blog-shelf-collection-form", overlay).onsubmit = async event => {
+12156:       extra += personalCollectionControls(category.id, categories, isOwnShelfProfile());
+12157:       return shelfCollectionMarkup(category.name, items, `${publicPrefix}category:${category.id}`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, extra, null, category.isSeries === true);
+12158:     }).join("");
+12159:     if (own || categories.length) categoryMarkup = `<section class="section shelf-categories"><div class="section-head shelf-categories-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div>${canEditPersonalCollections ? '<button class="small-btn" data-shelf-new-category>+ Nova coleção</button>' : ""}</div>${categoryMarkup || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>`;
+12160:     const ownTop10Profile = own || String(profile?.id || "") === String(state.session?.user?.id || "");
+12161:     const profileTop10Lists = (own ? state.top10Lists : (profileState?.top10Lists || [])).filter(list => ownTop10Profile || list.is_public !== false);
+12162:     return `<div class="content shelf-page${own ? "" : " public-profile-page"}"><div class="profile-header">${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile?.username || "")}</div>${profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : own ? "" : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(own ? state.achievements : profileState?.achievements)} </div><div class="profile-actions">${actions}</div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div>${own ? '<button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button>' : ""}</div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${savedItems.visible !== false ? shelfCollectionMarkup("Salvos", savedItems.items || savedItems, `${publicPrefix}saved`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${savedSeries.visible !== false ? shelfCollectionMarkup("Séries salvas", savedSeries.items || savedSeries, `${publicPrefix}series-saved`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, "", null, true) : ""}${readItems.visible !== false ? shelfCollectionMarkup("Lidos", readItems.items || readItems, `${publicPrefix}read`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${completedItems.visible !== false ? shelfCollectionMarkup("Concluídos", completedItems.items || completedItems, `${publicPrefix}completed`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, "", null, true) : ""}${likedItems.visible !== false ? shelfCollectionMarkup("Curtidos", likedItems.items || likedItems, `${publicPrefix}liked`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${categoryMarkup}<div class="shelf-tab-panel shelf-top10-panel" data-shelf-tab-panel="top10">${top10Markup(profileTop10Lists, ownTop10Profile)}</div></div>`;
+12163:   }
+12172:     const canCustomize = Boolean(state.profile);
+12173:     const categories = state.shelfCategories.map(category => ({ ...category, itemIds: (category.itemIds || []).filter(id => snapshot.saved.has(id)) }));
+12174:     return renderShelfLikePage({ profile: state.profile, own: true, savedItems, savedSeries, readItems, completedItems, likedItems: { items: [], visible: false }, categories: canCustomize ? categories.map(category => ({ ...category, isSeries: false })) : [] });
+12175:     return `<div class="content"><div class="profile-header">${avatarMarkup(state.profile)}<div><div class="eyebrow">@${escapeHTML(state.profile?.username || "")}</div>${state.profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(state.profile.title_color)}">${escapeHTML(state.profile.title)}</div>` : ""}${trophyRoom(state.achievements)}</div><div class="profile-actions"><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button></div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div><button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button></div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${shelfCollectionMarkup("Salvos", savedItems, "saved")}${state.profile?.shelf_series_public !== false ? shelfCollectionMarkup("Séries salvas", savedSeries, "series-saved", state.readingProgress, state.favoriteIds, "", null, true) : ""}${shelfCollectionMarkup("Lidos", readItems, "read")}${state.profile?.shelf_completed_public !== false ? shelfCollectionMarkup("Concluídos", completedItems, "completed", state.readingProgress, state.favoriteIds, "", null, true) : ""}${canCustomize ? `<section class="section shelf-categories"><div class="section-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div><button class="small-btn" data-shelf-new-category>+ Nova coleção</button></div>${categories.map(category => shelfCollectionMarkup(category.name, shelfItemsByIds(category.itemIds), `category:${category.id}`, state.readingProgress, state.favoriteIds, `<span class="shelf-visibility ${category.isPublic !== false ? "is-public" : "is-private"}">${category.isPublic !== false ? "Pública" : "Privada"}</span>${category.isPublic !== false ? `<button class="small-btn" data-copy-collection="${escapeHTML(category.id)}">Compartilhar</button>` : ""}<button class="small-btn" data-shelf-edit-category="${escapeHTML(category.id)}">Editar</button><button class="small-btn danger" data-shelf-delete-category="${escapeHTML(category.id)}">Excluir</button>`)).join("") || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>` : ""}</div>`;
+12176:   }
+12177: 
+12178:   function renderPublicCollectionPage(publicState, category) {
+12179:     const profile = publicState.profile;
+18537:     overlay.className = "modal-backdrop";
+18538:     overlay.innerHTML = `
+18539:       <div class="modal">
+18540:         <div class="section-head"><div><h2>Nova coleção</h2><div class="section-subtitle">Agrupe edições por tema, personagem ou universo</div></div><button class="small-btn" data-close>Fechar</button></div>
+18541:         <form id="collection-form">
+18542:           <div class="form-grid">
+18543:             <div class="field"><label>Nome da coleção</label><input name="title" required></div>
+18544:             <div class="field"><label>Capa da coleção (URL)</label><input name="cover" placeholder="https://.../imagem.jpg"></div>
+### createCollection — 0 matches
+### canCreateCollection — 0 matches
+### collectionLimit — 0 matches
+### isStaffProfile — 3 matches
+732:     return ["banca", "admin"].includes(normalizedPlan(profile));
+733:   }
+734:   function canViewHiddenHomepageSections(profile = state.profile) {
+735:     return isStaffProfile(profile);
+736:   }
+737:   function isStaffProfile(profile = state.profile) {
+738:     return ["moderator", "banca", "admin"].includes(normalizedPlan(profile));
+739:   }
+734:   function canViewHiddenHomepageSections(profile = state.profile) {
+735:     return isStaffProfile(profile);
+736:   }
+737:   function isStaffProfile(profile = state.profile) {
+738:     return ["moderator", "banca", "admin"].includes(normalizedPlan(profile));
+739:   }
+740:   function isHiddenCatalogItem(item) {
+741:     return Boolean(item?.id && state.hiddenCatalogItemIds?.has(String(item.id)));
+9648:       <div class="card-wrap"><article class="card ${hidden ? "is-hidden-catalog-item" : ""}" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
+9649:           <div class="cover" data-cover-id="${escapeHTML(item.id)}" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(coverFor(item, "card", activeCollectionContext?.coverChoices || coverChoices))}')">
+9650:           <span class="cover-number">${escapeHTML(issueLabel)}</span>
+9651:           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
+9652:           <button class="card-favorite ${favoriteIds.has(item.id) ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="Salvar na estante">★</button>
+9653:           ${isAdminProfile() ? `<button type="button" class="card-metadata-toggle" data-edit-item="${escapeHTML(item.id)}" title="Ver e editar metadados" aria-label="Ver e editar metadados">✎</button>` : ""}
+9654:         </div>
+9655:         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
+### hasLegendaryAccess — 13 matches
+17:   }
+18:   function generatedAvatarForProfile(profile = {}) {
+19:     const profileId = profile?.id || profile?.user_id;
+20:     return hasLegendaryAccess(profile) ? (profile?.avatar_url || randomAvatarUrl(profileId)) : randomAvatarUrl(profileId, "#ffffff", factionColorForProfile(profile));
+21:   }
+22:   function officialAiBadge(profile = {}) {
+23:     return "";
+24:   }
+623:   function canAccessStickerAlbum(profile = state.profile) {
+624:     return Boolean(profile) && normalizedPlan(profile) !== "banca";
+625:   }
+626:   function hasLegendaryAccess(profile = state.profile) {
+627:     return ["premium", "moderator", "banca", "admin"].includes(normalizedPlan(profile));
+628:   }
+629:   const PROFILE_BACKGROUND_THEMES = {
+630:     black: { label: "Preto", bg: "#000000", text: "#f5f5f5", muted: "#b5b5bd", surface: "#0d0d10", surface2: "#17171c", surface3: "#25252b", line: "#303038" },
+689:     ["trace", "Traçado", "assets/prateleiras/Lenda/tra%C3%A7ado.jpg", true],
+690:   ];
+691:   function shelfStyleOptionsFor(profile = state.profile) {
+692:     const legendary = hasLegendaryAccess(profile);
+693:     return SHELF_STYLE_OPTIONS.filter(([, , , isLegendary]) => !isLegendary || legendary);
+694:   }
+695:   function shelfStyleOption(value) {
+696:     return SHELF_STYLE_OPTIONS.find(([optionValue]) => optionValue === value) || SHELF_STYLE_OPTIONS[0];
+3762:     const existingOverlay = $("#modal-root .cover-choice-modal")?.closest(".modal-backdrop");
+3763:     if (existingOverlay) return;
+3764:     if (!state.session) return openAuthPage();
+3765:     if (!hasLegendaryAccess()) return toast("A escolha de capas variantes é exclusiva para usuários Lenda, moderadores e administradores.");
+3766:     const item = state.db.library.find(entry => entry.id === itemId);
+3767:     if (!item) return;
+3768:     const isAdmin = state.profile?.plan === "admin";
+3769:     const savedForCover = isAdmin || state.favoriteIds.has(itemId) || (item.seriesId && state.favoriteIds.has(item.seriesId));
+3883:     const options = [];
+3884:     editions.forEach(edition => {
+3885:       if (edition.coverUrl) options.push({ key: `standard:${edition.id}`, itemId: edition.id, coverUrl: edition.coverUrl, label: `${itemDisplayTitle(edition)} · Capa padrão`, isVariant: false });
+3886:       if (hasLegendaryAccess()) usableCoverVariants(edition).forEach(variant => options.push({ key: `variant:${edition.id}:${variant.variant_key}`, itemId: edition.id, coverUrl: variant.cover_url, label: `${itemDisplayTitle(edition)} · ${variant.label}`, variantKey: variant.variant_key, isVariant: true }));
+3887:     });
+3888:     const seriesStyle = coverStyleFor({ id: seriesId });
+3889:     const seriesModalEffects = `<div class="series-cover-modal-effects"><span>Estilo da capa:</span>${coverStyleControl(seriesId, seriesStyle)}</div>`;
+3890:     const overlay = document.createElement("div");
+3940: 
+3941:   async function setCoverStyle(itemId, style) {
+3942:     if (!state.session) return openAuthPage();
+3943:     if (style === "gold" && !hasLegendaryAccess()) return toast("A capa dourada é exclusiva para usuários Lenda, moderadores e administradores.");
+3944:     const item = state.db.library.find(entry => entry.id === itemId) || state.db.library.find(entry => entry.seriesId === itemId);
+3945:     if (!item) return;
+3946:     const nextStyle = ["normal", "grayscale", "gold"].includes(style) ? style : "normal";
+3947:     const result = nextStyle === "normal"
+3971:     });
+3972:     $$('[data-cover-style-item]').filter(element => element.dataset.coverStyleItem === itemId).forEach(element => { element.dataset.coverStyle = style; });
+3973:     $$('[data-cover-effect-item]').filter(element => element.dataset.coverEffectItem === itemId).forEach(element => {
+3974:       const premium = hasLegendaryAccess();
+3975:       const nextLabel = style === "normal" ? "Aplicar preto e branco" : style === "grayscale" && premium ? "Aplicar capa dourada" : "Voltar à capa normal";
+3976:       element.classList.remove("cover-effect-normal", "cover-effect-grayscale", "cover-effect-gold");
+3977:       element.classList.add(`cover-effect-${style}`);
+3978:       element.classList.toggle("is-active", style !== "normal");
+6322:       legacyAvatarField.accept = "";
+6323:       legacyAvatarField.value = state.profile?.avatar_url || "";
+6324:       const currentAvatar = String(state.profile?.avatar_url || "");
+6325:       if (hasLegendaryAccess(state.profile)) {
+6326:         const avatarColors = (() => { try { const params = new URL(currentAvatar).searchParams; const shape = params.get("shapeColor") || "e85b68"; const background = params.get("backgroundColor") || "f3f4f6"; return { shape: `#${shape.replace(/^#/, "").slice(0, 6)}`, background: `#${background.replace(/^#/, "").slice(0, 6)}` }; } catch { return { shape: "#e85b68", background: "#f3f4f6" }; } })();
+6327:         legacyAvatarField.insertAdjacentHTML("afterend", `<span class="avatar-color-controls"><label class="avatar-color-control">Cor do personagem <input name="avatarColor" type="color" value="${avatarColors.shape}"></label><label class="avatar-color-control">Cor do fundo <input name="avatarBackgroundColor" type="color" value="${avatarColors.background}"></label><small class="format-hint avatar-color-hint">Disponível apenas para contas do tipo Lenda.</small></span>`);
+6328:       }
+6329:       legacyAvatarField.previousElementSibling.textContent = "Foto de perfil (link)";
+6376:          render();
+6377:        }, 0);
+6378:      });
+6379:      profileForm?.addEventListener("submit", () => { const value = String(legacyAvatarField?.value || "").trim(); const isGeneratedAvatar = value.startsWith(RANDOM_AVATAR_BASE_URL); const customized = hasLegendaryAccess(state.profile); const avatar_url = !value || isGeneratedAvatar ? randomAvatarUrl(state.session?.user?.id, customized ? $("[name=avatarColor]", profileForm)?.value : "#ffffff", customized ? $("[name=avatarBackgroundColor]", profileForm)?.value : factionColorForProfile(state.profile)) : value; if (!value || /^https?:\/\//i.test(value)) state.profile = { ...state.profile, avatar_url }; });
+6380:     const bannerField = document.createElement("div");
+6381:     bannerField.className = "field full profile-banner-field";
+6382:     bannerField.innerHTML = `<label>Imagem de fundo da estante</label><input name="profileBannerUrl" type="url" value="${escapeHTML(state.profile?.profile_banner_url || "")}" placeholder="https://.../banner.jpg"><small class="format-hint">Opcional. Sem link, será usada a imagem padrão da estante.</small>`;
+6383:     $(".form-grid", profileForm).appendChild(bannerField);
+6381:     bannerField.className = "field full profile-banner-field";
+6382:     bannerField.innerHTML = `<label>Imagem de fundo da estante</label><input name="profileBannerUrl" type="url" value="${escapeHTML(state.profile?.profile_banner_url || "")}" placeholder="https://.../banner.jpg"><small class="format-hint">Opcional. Sem link, será usada a imagem padrão da estante.</small>`;
+6383:     $(".form-grid", profileForm).appendChild(bannerField);
+6384:     if (hasLegendaryAccess()) {
+6385:       const themeField = document.createElement("div");
+6386:       themeField.className = "field full profile-theme-settings";
+6387:       themeField.innerHTML = `<label>Aparência do perfil</label><small class="format-hint">Disponível para Lendas, moderadores e administradores. As cores ficam restritas ao perfil público.</small><div class="profile-theme-grid"><label>Fundo<select name="profileBackgroundTheme">${profileThemeOptions(PROFILE_BACKGROUND_THEMES, state.profile?.profile_background_theme, "Padrão")}</select></label><label>Cor de destaque<select name="profileAccentTheme"><option value="" ${!state.profile?.profile_accent_theme ? "selected" : ""}>Padrão (vermelho)</option>${Object.entries(PROFILE_ACCENT_THEMES).map(([key, theme]) => `<option value="${key}" ${state.profile?.profile_accent_theme === key ? "selected" : ""}>${theme.label}</option>`).join("")}</select></label></div><button type="button" class="small-btn profile-theme-reset" data-profile-theme-reset>Voltar ao padrão</button>`;
+6388:       $(".form-grid", profileForm).appendChild(themeField);
+6446:       state.profile = { ...state.profile, ...privacy };
+6447:       await originalProfileSubmit(event);
+6448:     });
+6449:     $("#profile-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); if (!/^[a-z0-9_]{3,24}$/.test(username)) return toast("@ inválido."); let avatar_url = state.profile?.avatar_url || null; const file = fd.get("avatar"); if (file?.size) { const path = `${state.session.user.id}/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, "_")}`; const upload = await sb.storage.from("avatars").upload(path, file, { upsert: true }); if (upload.error) return toast(upload.error.message); avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl; } const preferences = { shelf_saved_public: fd.get("shelfSavedPublic") === "on", shelf_series_public: fd.get("shelfSeriesPublic") === "on", shelf_read_public: fd.get("shelfReadPublic") === "on", shelf_completed_public: fd.get("shelfCompletedPublic") === "on", shelf_liked_public: fd.get("shelfLikedPublic") === "on", shelf_blogs_public: state.profile?.shelf_blogs_public !== false, profile_background_theme: hasLegendaryAccess() ? (PROFILE_BACKGROUND_THEMES[fd.get("profileBackgroundTheme")] ? fd.get("profileBackgroundTheme") : null) : (state.profile?.profile_background_theme || null), profile_accent_theme: hasLegendaryAccess() ? (PROFILE_ACCENT_THEMES[fd.get("profileAccentTheme")] ? fd.get("profileAccentTheme") : null) : (state.profile?.profile_accent_theme || null) }; const update = await sb.from("profiles").update({ username, avatar_url, ...preferences }).eq("id", state.session.user.id); if (update.error) return toast(update.error.message.includes("duplicate") ? "Esse @ já está em uso." : update.error.message); state.profile = { ...state.profile, username, avatar_url, ...preferences }; if (state.publicProfile?.profile?.id === state.session.user.id) state.publicProfile.profile = { ...state.publicProfile.profile, username, avatar_url, ...preferences }; overlay.remove(); render(); toast("Perfil atualizado."); };
+6450:     $("#profile-form", overlay).addEventListener("submit", async event => {
+6451:       const email = String(new FormData(event.currentTarget).get("email") || "").trim().toLowerCase();
+6452:       if (!email) return;
+6453:       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast("Informe um email válido.");
+9635:     const savedForCover = favoriteIds.has(item.id) || (seriesContext && item.seriesId && favoriteIds.has(item.seriesId));
+9636:     const collectionOwner = activeCollectionContext?.ownerId === state.session?.user?.id;
+9637:     const adminCanChooseCover = state.profile?.plan === "admin" && !activeCollectionContext?.id;
+9638:     const canChooseCover = state.session && hasLegendaryAccess() && (collectionOwner || adminCanChooseCover || (favoriteIds === state.favoriteIds && savedForCover)) && hasCoverVariants;
+9639:     const coverStyle = coverStyleFor(item, activeCollectionContext?.coverStyles || null);
+9640:     const hidden = isHiddenCatalogItem(item);
+9641:     const canSetCoverStyle = collectionOwner || (Boolean(state.session) && favoriteIds === state.favoriteIds);
+9642:     const coverEffects = coverStyleControl(item.id, coverStyle, canSetCoverStyle, activeCollectionContext?.id || "");
+10844:   function canOpenChatRoom(room) {
+10845:     if (room.factionId) return ["moderator", "banca", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
+10846:     return room.access === "public"
+10847:       || (room.access === "premium" && hasLegendaryAccess())
+10848:       || (room.access === "staff" && ["moderator", "banca", "admin"].includes(state.profile?.plan));
+10849:   }
+10850: 
+10851:   function chatRoomLabel(room) {
+### data-hide-item — 2 matches
+9654:         </div>
+9655:         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
+9656:         ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${isAdminProfile() ? "card-download-admin-offset" : ""} ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
+9657:         ${isAdminProfile() ? `<button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
+9658:         <div class="card-body">
+9659:           <div class="card-title">${escapeHTML(displayTitle)}</div>
+9660:           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${characterButtons}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
+9661:           ${authors.length ? `<div class="card-authors">${authors.map(author => entityButton("author", author)).join(" ")}</div>` : ""}
+16700:     }));
+16701:     $$('[data-delete-download-series]').forEach(button => button.addEventListener('click', () => deleteSeriesDownloads(button.dataset.deleteDownloadSeries)));
+16702:     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
+16703:     $$('[data-hide-item]').forEach(el => el.addEventListener("click", event => {
+16704:       event.stopPropagation();
+16705:       toggleCatalogItemVisibility(el.dataset.hideItem);
+16706:     }));
+16707:     $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
+### toggleCatalogItemVisibility — 2 matches
+762:     if (series.error) console.warn("Não foi possível carregar a visibilidade das séries:", series.error.message);
+763:     else state.hiddenCatalogSeriesIds = new Set((series.data || []).filter(row => row.is_hidden).map(row => String(row.series_id)));
+764:   }
+765:   async function toggleCatalogItemVisibility(itemId) {
+766:     if (!isAdminProfile()) return toast("Apenas administradores podem ocultar edições.");
+767:     const id = String(itemId || "");
+768:     if (!id || !sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
+769:     const hidden = !state.hiddenCatalogItemIds.has(id);
+16702:     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
+16703:     $$('[data-hide-item]').forEach(el => el.addEventListener("click", event => {
+16704:       event.stopPropagation();
+16705:       toggleCatalogItemVisibility(el.dataset.hideItem);
+16706:     }));
+16707:     $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
+16708:       event.preventDefault();
+16709:       event.stopPropagation();
+### catalog_item_visibility — 3 matches
+754:   async function loadCatalogVisibility() {
+755:     if (!sb || navigator.onLine === false) return;
+756:     const [editions, series] = await Promise.all([
+757:       sb.from("catalog_item_visibility").select("item_id, is_hidden"),
+758:       sb.from("catalog_series_visibility").select("series_id, is_hidden")
+759:     ]);
+760:     if (editions.error) console.warn("Não foi possível carregar a visibilidade das edições:", editions.error.message);
+761:     else state.hiddenCatalogItemIds = new Set((editions.data || []).filter(row => row.is_hidden).map(row => String(row.item_id)));
+768:     if (!id || !sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
+769:     const hidden = !state.hiddenCatalogItemIds.has(id);
+770:     const result = hidden
+771:       ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" })
+772:       : await sb.from("catalog_item_visibility").delete().eq("item_id", id);
+773:     if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade.");
+774:     if (hidden) state.hiddenCatalogItemIds.add(id); else state.hiddenCatalogItemIds.delete(id);
+775:     render();
+769:     const hidden = !state.hiddenCatalogItemIds.has(id);
+770:     const result = hidden
+771:       ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" })
+772:       : await sb.from("catalog_item_visibility").delete().eq("item_id", id);
+773:     if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade.");
+774:     if (hidden) state.hiddenCatalogItemIds.add(id); else state.hiddenCatalogItemIds.delete(id);
+775:     render();
+776:     toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
+### collection_type — 25 matches
+1643:       if (!parts) return;
+1644:       const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+1645:       if (owner.error || !owner.data) return;
+1646:       const collection = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, cover_styles, cover_choices").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
+1647:       if (collection.error || !collection.data) return;
+1648:       const key = catalogRow.id ? `catalog:${catalogRow.id}` : "catalog";
+1649:       state.factionAbafacCatalogs.set(key, { ...collection.data, username: owner.data.username, faction_id: catalogRow.faction_id, catalog_id: catalogRow.id, catalog_url: catalogRow.catalog_url });
+1650:     }));
+1661:     const pinnedPublicCollections = await sb.from("faction_pinned_public_collections").select("faction_id, collection_id");
+1662:     state.factionPinnedPublicCollections = new Map((pinnedPublicCollections.data || []).map(row => [`${row.faction_id}:${row.collection_id}`, row]));
+1663:     const pinnedPublicIds = [...new Set((pinnedPublicCollections.data || []).map(row => String(row.collection_id)))];
+1664:     const publicPinnedDetails = pinnedPublicIds.length ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_public").in("id", pinnedPublicIds).eq("is_public", true).eq("collection_type", "comic") : { data: [] };
+1665:     const publicPinnedOwnerIds = [...new Set((publicPinnedDetails.data || []).map(collection => collection.owner_id).filter(Boolean))];
+1666:     const publicPinnedOwners = publicPinnedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", publicPinnedOwnerIds) : { data: [] };
+1667:     const publicPinnedOwnerNames = new Map((publicPinnedOwners.data || []).map(profile => [profile.id, profile.username]));
+1668:     state.factionPublicPinnedCollectionDetails = new Map((publicPinnedDetails.data || []).map(collection => [String(collection.id), { ...collection, username: publicPinnedOwnerNames.get(collection.owner_id) || "" }]));
+3054:     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
+3055:     characterSettingsReady = true;
+3056:     wikiCharacterImageCache.clear();
+3057:     const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
+3058:     const publicCollections = publicCollectionsResult.data || [];
+3059:     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
+3060:     const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", collectionOwnerIds) : { data: [] };
+3061:     const collectionOwners = new Map((collectionOwnersResult.data || []).map(profile => [profile.id, profile.username]));
+3067:     }, new Map());
+3068:     state.popularPublicCollections = publicCollections
+3069:       .map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "", likes: collectionLikeCounts.get(`${collection.owner_id}:${collection.id}`) || 0 }))
+3070:       .filter(collection => collection.collection_type !== "blog" && collection.username)
+3071:       .sort((a, b) => b.likes - a.likes || String(a.name).localeCompare(String(b.name), "pt-BR"))
+3072:       .slice(0, 8);
+3073:     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+3074:     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
+3071:       .sort((a, b) => b.likes - a.likes || String(a.name).localeCompare(String(b.name), "pt-BR"))
+3072:       .slice(0, 8);
+3073:     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+3074:     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
+3075:     state.featuredBlogCollections = publicCollectionView.filter(collection => collection.collection_type === "blog" && collection.is_featured).slice(0, 8);
+3076:     const factionCatalogRows = (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").order("created_at", { ascending: false })).data || [];
+3077:     const factionIds = [...new Set(factionCatalogRows.map(catalog => catalog.faction_id).filter(Boolean))];
+3078:     const factionInfoRows = factionIds.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", factionIds)).data || [] : [];
+3072:       .slice(0, 8);
+3073:     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
+3074:     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
+3075:     state.featuredBlogCollections = publicCollectionView.filter(collection => collection.collection_type === "blog" && collection.is_featured).slice(0, 8);
+3076:     const factionCatalogRows = (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").order("created_at", { ascending: false })).data || [];
+3077:     const factionIds = [...new Set(factionCatalogRows.map(catalog => catalog.faction_id).filter(Boolean))];
+3078:     const factionInfoRows = factionIds.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", factionIds)).data || [] : [];
+3079:     const factionInfo = new Map(factionInfoRows.map(faction => [faction.id, faction]));
+3082:     const publicFactionCollections = factionCatalogRows.map(catalog => {
+3083:       const faction = factionInfo.get(catalog.faction_id);
+3084:       if (!faction) return null;
+3085:       return { ...catalog, id: `faction-catalog-${catalog.id}`, catalog_id: catalog.id, faction_id: faction.id, faction_page_key: faction.page_key, faction_name: faction.name, faction_emblem: faction.emblem, username: "", collection_type: "comic", is_public: true, is_faction_catalog: true, likes: factionLikeCounts.get(String(catalog.id)) || 0 };
+3086:     }).filter(Boolean);
+3087:     state.popularPublicCollections = [...state.popularPublicCollections, ...publicFactionCollections]
+3088:       .sort((a, b) => b.likes - a.likes || String(a.name).localeCompare(String(b.name), "pt-BR"))
+3089:       .slice(0, 8);
+3129:         render();
+3130:         return toast("Sua conta está banida.");
+3131:       }
+3132:       const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, sort_order").eq("owner_id", session.user.id).order("created_at", { ascending: true });
+3133:       state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, sortOrder: collection.sort_order || "added_desc", itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
+3134:       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
+3135:       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3136:       const savedCollectionsResult = savedCollectionIds.length
+3130:         return toast("Sua conta está banida.");
+3131:       }
+3132:       const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, sort_order").eq("owner_id", session.user.id).order("created_at", { ascending: true });
+3133:       state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, sortOrder: collection.sort_order || "added_desc", itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
+3134:       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
+3135:       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3136:       const savedCollectionsResult = savedCollectionIds.length
+3137:         ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+3134:       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
+3135:       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3136:       const savedCollectionsResult = savedCollectionIds.length
+3137:         ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+3138:         : { data: [] };
+3139:       const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
+3140:       const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+3141:       const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
+3143:       const savedFactionCollections = publicFactionCollections.filter(collection => state.factionCatalogSaveIds.has(String(collection.catalog_id)));
+3144:       state.savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
+3145:       state.wallComments = await loadProfileWallComments(session.user.id);
+3146:       state.blogShelfCategories = (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] }));
+3147:       const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", session.user.id).eq("status", "published").order("published_at", { ascending: false });
+3148:       state.authoredBlogPosts = authoredBlogs.data || [];
+3149:       const blogSaves = await sb.from("blog_saves").select("blog_id").eq("user_id", session.user.id);
+3150:       state.blogSaveIds = new Set((blogSaves.data || []).map(row => String(row.blog_id)));
+3498:     ]);
+3499:     // A atividade já traz a mesma lista de curtidas necessária para a estante.
+3500:     const comicLikes = { data: activityResults[0]?.data || [] };
+3501:     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3502:     if (collections.error) {
+3503:       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3504:     }
+3505:     const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", profile.data.id).eq("status", "published").order("published_at", { ascending: false });
+3500:     const comicLikes = { data: activityResults[0]?.data || [] };
+3501:     let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3502:     if (collections.error) {
+3503:       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3504:     }
+3505:     const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", profile.data.id).eq("status", "published").order("published_at", { ascending: false });
+3506:     const publicCollectionBlogIds = [...new Set((collections.data || []).filter(collection => collection.collection_type === "blog" && collection.is_public !== false).flatMap(collection => Array.isArray(collection.blog_ids) ? collection.blog_ids : []))];
+3507:     const collectionBlogs = publicCollectionBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", publicCollectionBlogIds).eq("status", "published") : { data: [] };
+3503:       collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+3504:     }
+3505:     const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", profile.data.id).eq("status", "published").order("published_at", { ascending: false });
+3506:     const publicCollectionBlogIds = [...new Set((collections.data || []).filter(collection => collection.collection_type === "blog" && collection.is_public !== false).flatMap(collection => Array.isArray(collection.blog_ids) ? collection.blog_ids : []))];
+3507:     const collectionBlogs = publicCollectionBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", publicCollectionBlogIds).eq("status", "published") : { data: [] };
+3508:     const publicBlogSaves = profile.data.shelf_blogs_public !== false ? await sb.from("blog_saves").select("blog_id").eq("user_id", profile.data.id) : { data: [] };
+3509:     const publicSavedBlogIds = (publicBlogSaves.data || []).map(row => row.blog_id);
+3510:     const savedBlogs = publicSavedBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", publicSavedBlogIds).eq("status", "published") : { data: [] };
+3540:     const publicSeriesCoverChoices = new Map((publicSeriesCoverChoicesResult.data || []).map(choice => [choice.series_id, choice]));
+3541:     const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
+3542:     const savedCollectionsResult = savedCollectionIds.length
+3543:       ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
+3544:       : { data: [] };
+3545:     const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
+3546:     const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+3547:     const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
+3554:     const savedFactionInfo = new Map(savedFactionInfoRows.map(faction => [faction.id, faction]));
+3555:     const savedFactionCollections = savedFactionRows.map(catalog => {
+3556:       const faction = savedFactionInfo.get(catalog.faction_id);
+3557:       return faction ? { ...catalog, id: `faction-catalog-${catalog.id}`, catalog_id: catalog.id, faction_id: faction.id, faction_page_key: faction.page_key, faction_name: faction.name, faction_emblem: faction.emblem, username: "", collection_type: "comic", is_public: true, is_faction_catalog: true } : null;
+3558:     }).filter(Boolean);
+3559:     const savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
+3560:     const wallCommentsResult = await loadProfileWallComments(profile.data.id);
+3561:     const activity = await buildPublicProfileActivity(profile.data, activityResults.map(result => result.data || []), [...(collections.data || []), ...(savedCollectionsResult.data || [])]);
+3567:       stickerAwards: stickerAwards.data || [],
+3568:       profileDisplayStickers: profileDisplayStickersResult.data || [],
+3569:       stickerSlotPreferences: new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }])),
+3570:       collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], sortOrder: collection.sort_order || "added_desc", coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
+3571:       blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
+3572:       authoredBlogPosts: authoredBlogs.data || [],
+3573:       savedBlogPosts: savedBlogs.data || [],
+3574:       collectionBlogPosts: collectionBlogs.data || [],
+3568:       profileDisplayStickers: profileDisplayStickersResult.data || [],
+3569:       stickerSlotPreferences: new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }])),
+3570:       collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], sortOrder: collection.sort_order || "added_desc", coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
+3571:       blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
+3572:       authoredBlogPosts: authoredBlogs.data || [],
+3573:       savedBlogPosts: savedBlogs.data || [],
+3574:       collectionBlogPosts: collectionBlogs.data || [],
+3575:       favoriteIds: new Set((favorites.data || []).map(row => row.item_id)),
+11891: 
+11892:   async function saveShelfCategories(categories) {
+11893:     if (sb && state.session) {
+11894:       const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], sort_order: category.sortOrder || state.collectionSortOrders?.[`category:${category.id}`] || "added_desc", collection_type: "comic", blog_ids: [], is_featured: category.is_featured === true }));
+11895:       let result = rows.length ? await sb.from("shelf_collections").upsert(rows, { onConflict: "id" }) : { error: null };
+11896:       if (result.error && /sort_order|schema cache|column/i.test(result.error.message || "")) {
+11897:         result = rows.length ? await sb.from("shelf_collections").upsert(rows.map(({ sort_order, ...row }) => row), { onConflict: "id" }) : { error: null };
+11898:       }
+11898:       }
+11899:       if (result.error) return toast("Não foi possível salvar a organização da estante.");
+11900:       const ids = rows.map(row => row.id);
+11901:       const existing = await sb.from("shelf_collections").select("id").eq("owner_id", state.session.user.id).eq("collection_type", "comic");
+11902:       const removedIds = (existing.data || []).map(row => row.id).filter(id => !ids.includes(id));
+11903:       if (removedIds.length) await sb.from("shelf_collections").delete().eq("owner_id", state.session.user.id).in("id", removedIds);
+11904:     }
+11905:     render();
+12064:       const name = String(form.get("name") || "").trim();
+12065:       const blogIds = form.getAll("blogIds");
+12066:       if (!name) return;
+12067:       const payload = { owner_id: state.session.user.id, name, cover_url: String(form.get("coverUrl") || "").trim() || null, is_public: form.get("isPublic") === "on", collection_type: "blog", blog_ids: blogIds, item_ids: [] };
+12068:       const result = existing ? await sb.from("shelf_collections").update(payload).eq("id", existing.id).eq("owner_id", state.session.user.id) : await sb.from("shelf_collections").insert({ id: `blog-shelf-${Date.now()}`, ...payload });
+12069:       if (result.error) return toast("Não foi possível criar a coleção de blogs.");
+12070:       overlay.remove();
+12071:       await loadAccount();
+12079:   }
+12080: 
+12081:   function publicCollectionCard(collection, canManage = false) {
+12082:     const blog = collection.collection_type === "blog";
+12083:     const factionCatalog = collection.is_faction_catalog === true;
+12084:     const count = blog ? (Array.isArray(collection.blog_ids) ? collection.blog_ids.length : 0) : (Array.isArray(collection.item_ids) ? collection.item_ids.length : 0);
+12085:     const cover = collection.cover_url || collection.coverUrl || instantCover({ title: collection.name });
+12086:     const href = factionCatalog ? `?pagina=faccoes&faccao=${encodeURIComponent(collection.faction_page_key)}&catalogo=${encodeURIComponent(collection.catalog_id)}` : publicProfileHref(collection.username, collection.id);
+13909:     if (!parts) return false;
+13910:     const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+13911:     if (owner.error || !owner.data) return false;
+13912:     const collection = await sb.from("shelf_collections").select("id, is_public, collection_type").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
+13913:     if (collection.error || !collection.data) return false;
+13914:     return publicProfileHref(owner.data.username, collection.data.id);
+13915:   }
+13916: 
+17192:       if ($('[data-save-public-collection]', cardElement) || !state.session || cardElement.dataset.publicOwner === state.profile?.username) return;
+17193:       const collectionId = cardElement.dataset.publicCollection;
+17194:       const collection = [...(state.featuredComicCollections || []), ...(state.popularPublicCollections || []), ...(state.savedPublicCollections || [])].find(item => item.id === collectionId);
+17195:       if (!collection || collection.collection_type === "blog") return;
+17196:       const actions = $(".shelf-section-actions", cardElement);
+17197:       if (!actions) return;
+17198:       const saved = state.savedPublicCollections?.some(item => item.id === collectionId);
+17199:       const button = document.createElement("button");
+17239:       }
+17240:       const managedFactionIds = new Set(state.factionRoles.filter(role => role.user_id === state.session?.user?.id && ["leader", "curator"].includes(role.role)).map(role => String(role.faction_id)));
+17241:       const linkedFactionId = [...managedFactionIds][0] || null;
+17242:       if (category && category.collection_type !== "blog" && actions && linkedFactionId && !$("[data-faction-public-catalog-pin]", actions)) {
+17243:         const button = document.createElement("button");
+17244:         const pinned = state.factionPinnedPublicCollections.has(`${linkedFactionId}:${category.id}`);
+17245:         button.className = `small-btn ${pinned ? "is-liked" : ""}`;
+17246:         button.dataset.factionPublicCatalogPin = category.id;
+### banca — 213 matches
+### moderator — 77 matches
