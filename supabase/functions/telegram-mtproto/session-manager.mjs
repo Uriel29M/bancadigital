@@ -9,7 +9,7 @@ export function floodSeconds(error) {
   const m = /(?:^|\b)FLOOD_WAIT_(\d+)(?:$|\b)/.exec(text);
   return m ? Math.min(86400, Number(m[1])) : 0;
 }
-export function createSessionManager({ state, createClient, botToken, encrypt, decrypt, now = () => Date.now(), setIntervalFn = setInterval, clearIntervalFn = clearInterval, owner = () => crypto.randomUUID(), leaseMs = 600000, renewMs = 60000, idleMs = 30000 }) {
+export function createSessionManager({ state, createClient, botToken, encrypt, decrypt, now = () => Date.now(), setIntervalFn = setInterval, clearIntervalFn = clearInterval, owner = () => crypto.randomUUID(), leaseMs = 600000, renewMs = 60000, idleMs = 0 }) {
   let active = null, pending = null, users = 0, timer = null, idleTimer = null, expiresAt = 0, leaseOwner = null, closing = null;
   const clearIdle = () => { if (idleTimer) clearTimeout(idleTimer); idleTimer = null; };
   const stop = () => { if (timer) clearIntervalFn(timer); timer = null; clearIdle(); };
@@ -77,7 +77,8 @@ export function createSessionManager({ state, createClient, botToken, encrypt, d
         released = true; users = Math.max(0, users - 1);
         if (!users && active) {
           clearIdle();
-          idleTimer = setTimeout(() => { if (!users) void close(); }, idleMs);
+          if (idleMs === 0) await close();
+          else idleTimer = setTimeout(() => { if (!users) void close(); }, idleMs);
         }
       },
     };

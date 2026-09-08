@@ -5,7 +5,6 @@ import { createMediaHandler, MediaError } from './media-core.mjs';
 import { resolveDocument, readAligned, safeError, migrationDc, isExpiredReference, SourceError } from './mtproto-source.mjs';
 import { createSessionManager, SessionError } from './session-manager.mjs';
 import { createSessionCrypto } from './session-crypto.mjs';
-
 class NativeTcpTransport {
   async connect(dc: { ipAddress: string; port: number }, signal: AbortSignal) {
     const conn = await connectTcp({ address: dc.ipAddress, port: dc.port }, signal);
@@ -39,8 +38,7 @@ async function state(action: string, owner: string, value: string | null = null)
   return await response.json();
 }
 const manager = createSessionManager({
-  state,
-  ...cryptoBox,
+  state, ...cryptoBox,
   botToken: () => required('TELEGRAM_BOT_TOKEN'),
   createClient: async () => {
     const apiId = Number(required('TELEGRAM_API_ID'));
@@ -81,7 +79,9 @@ const handle = createMediaHandler({
   lookup,
   health: async () => ({ ok: configured(), mode: 'mtproto', configured: configured(), ...await manager.status(), chunkBytes: 262144 }),
   open: async item => {
-    const lease = await manager.open();
+    let lease;
+    try { lease = await manager.open(); }
+    catch (error) { throw normalizeError(error); }
     try {
       const client = lease.client;
       const resolve = async () => {
