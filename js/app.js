@@ -7537,7 +7537,7 @@
 
   async function renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
-    if (item.local || isMega || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
+    if (item.local || isMega || isTelegramMediaUrl(url) || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
     let reader;
     try {
       const zipjs = await window.zipJsReady;
