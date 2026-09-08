@@ -6693,6 +6693,7 @@
       if (readerSingleClickTimer) window.clearTimeout(readerSingleClickTimer);
       readerSingleClickTimer = null;
       overlay._cbzDownloadController?.abort();
+      overlay._cbrDownloadController?.abort();
       overlay.remove();
       resumeCoverLoading();
       if (options.localObjectUrl) URL.revokeObjectURL(options.localObjectUrl);
@@ -7533,47 +7534,6 @@
     }
   }
 
-  async function showCBZProgressivePreview(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
-    // A resposta sem fim do mega-proxy pode ser interrompida pelo HTTP/3
-    // depois de retornar 200. O leitor por Range do zip.js não consegue
-    // recuperar esse erro; o download por faixas abaixo consegue.
-    const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
-    if (item.local || isMega || state.readingMode !== "single-page" || !/^https?:\/\//i.test(url) || !window.zipJsReady) return false;
-    try {
-      const zipjs = await window.zipJsReady;
-      if (!zipjs?.ZipReader || !zipjs?.HttpReader || !zipjs?.BlobWriter) return false;
-      const reader = new zipjs.ZipReader(new zipjs.HttpReader(proxiedFileUrl(url)));
-      const entries = (await reader.getEntries())
-        .filter(entry => !entry.directory && /\.(jpg|jpeg|png|webp|gif)$/i.test(entry.filename))
-        .sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true }));
-      if (!entries.length) { await reader.close(); return false; }
-      const pages = getReaderPages(entries.length, skipCover).map(page => page - 1);
-      let page = pages.includes((resumePage || 1) - 1) ? (resumePage - 1) : pages[0];
-      const img = document.createElement("img");
-      img.className = "reader-image";
-      img.alt = `Página ${page + 1}`;
-      body.replaceChildren(img);
-      let imageUrl = null;
-      const draw = async () => {
-        const blob = await entries[page].getData(new zipjs.BlobWriter());
-        if (imageUrl) URL.revokeObjectURL(imageUrl);
-        imageUrl = URL.createObjectURL(blob);
-        img.src = imageUrl;
-        img.alt = `Página ${page + 1}`;
-        controls.innerHTML = `<button data-prev ${page <= pages[0] ? "disabled" : ""}>‹</button><span class="reader-page">${page + 1} / ${entries.length}</span><button data-next ${page >= pages[pages.length - 1] ? "disabled" : ""}>›</button>`;
-        $(`[data-prev]`, controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position > 0) { page = pages[position - 1]; await draw(); } });
-        $(`[data-next]`, controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position < pages.length - 1) { page = pages[position + 1]; await draw(); } });
-        onPageChange?.(item, page + 1, entries.length);
-      };
-      await draw();
-      $("[data-close-reader]", overlay)?.addEventListener("click", async () => { if (imageUrl) URL.revokeObjectURL(imageUrl); await reader.close(); }, { once: true });
-      return true;
-    } catch (error) {
-      if (!isInvalidZipError(error)) console.warn("Prévia progressiva do CBZ indisponível:", error);
-      return false;
-    }
-  }
-
   async function renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
     if (item.local || isMega || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
@@ -7637,13 +7597,11 @@
     let progressBar;
     let progressDetail;
     let progressSpinner;
-    let progressivePreview = false;
     const showCbzProgress = (message, value = null, detail = "") => {
       if (/de 0(?:\.0+)? MB/.test(detail)) {
         value = null;
         detail = "";
       }
-      if (progressivePreview && progressRoot && !progressRoot.isConnected) return;
       if (!progressRoot || !progressRoot.isConnected) {
         progressRoot = document.createElement("div");
         progressRoot.className = "reader-loading";
@@ -7676,20 +7634,22 @@
     };
     showCbzProgress("Abrindo arquivo CBZ…");
     try {
+      // Telegram metadata already identifies the format. Try opening only the
+      // requested page before probing the signature or waiting for JSZip.
+      const telegramRange = isTelegramMediaUrl(url) && state.readingMode === "single-page";
+      if (telegramRange && await renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange)) return;
       const archiveSignature = await probeArchiveSignature(url);
       if (isRarSignature(archiveSignature)) {
         console.info("[CBZ] Contêiner RAR detectado; encaminhando para o leitor CBR.");
         return renderCBRReader(item, url, body, controls, overlay, skipCover, resumePage, onPageChange, null);
       }
+      if (!telegramRange && await renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange)) return;
       let JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
       if (!JSZipLib) JSZipLib = { loadAsync: async archiveBuffer => {
         const archive = await zipJsArchiveFromBuffer(archiveBuffer);
         if (!archive) throw new Error("Nenhum leitor ZIP está disponível.");
         return archive;
       } };
-      progressivePreview = await showCBZProgressivePreview(item, url, body, controls, overlay, skipCover, resumePage, onPageChange);
-      if (progressivePreview) return;
-      if (await renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange)) return;
       if (!JSZipLib) throw new Error("JSZip não carregou.");
       let buffer = await waitForPrefetchedBuffer(prefetchedBuffer);
       if (buffer) showCbzProgress("Arquivo CBZ carregado. Preparando p\u00e1ginas...", 100, "Abertura conclu\u00edda");
@@ -8040,6 +8000,8 @@
   }
 
   async function renderCBRReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
+    const downloadController = new AbortController();
+    overlay._cbrDownloadController = downloadController;
     let objectUrl = null;
     let archive = null;
     let objectUrls = null; // For continuous scroll
@@ -8151,10 +8113,11 @@
         buffer = await fetchFileArrayBuffer(url, (received, total) => {
           const value = total ? (received / total) * 100 : 0;
         showCbrProgress("Abrindo arquivo CBR…", value, total ? `${value.toFixed(0)}% · ${formatCbrBytes(received)} de ${formatCbrBytes(total)}` : `${formatCbrBytes(received)} processados`);
-        });
+        }, undefined, downloadController.signal);
         console.log(`[CBR] ${isMegaSource ? "Mega" : "Arquivo"} baixado:`, buffer.byteLength, "bytes");
       }
 
+      if (downloadController.signal.aborted) return;
       console.log(
         "[CBR] Tamanho:",
         buffer.byteLength,
@@ -8741,6 +8704,7 @@
         for (const url of objectUrls) URL.revokeObjectURL(url);
       }
 
+      if (downloadController.signal.aborted) return;
       console.error(
         "[CBR] ERRO NO LEITOR:",
         err
@@ -9166,56 +9130,89 @@
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) controller.abort();
-    const chunks = [];
-    let received = 0;
-    let total = 0;
     const chunkSize = 1024 * 1024;
-    try {
-      while (!total || received < total) {
-        if (controller.signal.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
-        const end = total ? Math.min(total - 1, received + chunkSize - 1) : received + chunkSize - 1;
-        let response, lastError;
-        for (let attempt = 0; attempt < 5; attempt++) {
-          try {
-            response = await fetch(url, { headers: { Range: `bytes=${received}-${end}` }, mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal });
-            if (!response.ok) {
-              const retryAfter = Number(response.headers.get('retry-after'));
-              let detail = '';
-              try { detail = (await response.json()).error || ''; } catch {}
-              const error = new Error(detail || `Telegram: HTTP ${response.status}`);
-              error.retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(10000, retryAfter * 1000) : 0;
-              throw error;
-            }
-            if (response.status !== 206) throw new Error('O servidor não respeitou o intervalo solicitado.');
-            const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') || '');
-            if (!match || Number(match[1]) !== received || Number(match[2]) > end || !Number.isSafeInteger(Number(match[3]))) throw new Error('Intervalo de arquivo inválido.');
-            const size = Number(match[3]);
-            if (total && total !== size) throw new Error('O tamanho do arquivo mudou durante a leitura.');
-            total = size;
-            const part = new Uint8Array(await response.arrayBuffer());
-            if (part.length !== Number(match[2]) - received + 1) throw new Error('Trecho incompleto do Telegram.');
-            chunks.push(part);
-            received += part.length;
-            onProgress(received, total);
-            lastError = null;
-            break;
-          } catch (error) {
-            lastError = error;
-            if (controller.signal.aborted) throw error;
-            if (attempt < 4) await new Promise(resolve => setTimeout(resolve, Math.max(500 * (attempt + 1), error.retryAfterMs || 0)));
+    const concurrency = 3;
+    let total = 0;
+    let received = 0;
+    const checkAbort = () => {
+      if (controller.signal.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
+    };
+    const waitForRetry = ms => new Promise((resolve, reject) => {
+      checkAbort();
+      const canceled = () => {
+        clearTimeout(timer);
+        reject(new DOMException('Leitura cancelada.', 'AbortError'));
+      };
+      const timer = setTimeout(() => {
+        controller.signal.removeEventListener('abort', canceled);
+        resolve();
+      }, ms);
+      controller.signal.addEventListener('abort', canceled, { once: true });
+    });
+    async function fetchChunk(start, end) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        checkAbort();
+        let response;
+        try {
+          response = await fetch(url, { headers: { Range: `bytes=${start}-${end}` }, mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal });
+          if (!response.ok) {
+            const retryAfter = Number(response.headers.get('retry-after'));
+            let detail = '';
+            try { detail = (await response.json()).error || ''; } catch {}
+            const error = new Error(detail || `Telegram: HTTP ${response.status}`);
+            error.retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(10000, retryAfter * 1000) : 0;
+            error.permanent = response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status);
+            throw error;
           }
+          if (response.status !== 206) throw new Error('O servidor não respeitou o intervalo solicitado.');
+          const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') || '');
+          const size = Number(match?.[3]);
+          if (!match || !Number.isSafeInteger(size) || size < 1 || start >= size || Number(match[1]) !== start || Number(match[2]) !== Math.min(end, size - 1)) throw new Error('Intervalo de arquivo inválido.');
+          if (total && total !== size) throw new Error('O tamanho do arquivo mudou durante a leitura.');
+          const part = new Uint8Array(await response.arrayBuffer());
+          checkAbort();
+          if (part.length !== Number(match[2]) - start + 1) throw new Error('Trecho incompleto do Telegram.');
+          return { part, size };
+        } catch (error) {
+          if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
+          checkAbort();
+          if (error.permanent || attempt === 4) throw error;
+          await waitForRetry(Math.max(500 * (attempt + 1), error.retryAfterMs || 0));
         }
-        if (lastError) throw lastError;
       }
+    }
+    try {
+      // Discover the size with useful data, then fill a single buffer by offset.
+      // Only three 1 MB blocks are in flight, even for very large archives.
+      const first = await fetchChunk(0, chunkSize - 1);
+      total = first.size;
       const bytes = new Uint8Array(total);
-      let offset = 0;
-      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-      chunks.length = 0;
+      bytes.set(first.part, 0);
+      received = first.part.length;
+      onProgress(received, total);
+      let nextOffset = received;
+      async function worker() {
+        while (nextOffset < total) {
+          checkAbort();
+          const start = nextOffset;
+          nextOffset += chunkSize;
+          const { part } = await fetchChunk(start, Math.min(total - 1, start + chunkSize - 1));
+          checkAbort();
+          bytes.set(part, start);
+          received += part.length;
+          onProgress(received, total);
+        }
+      }
+      await Promise.all(Array.from({ length: concurrency }, () => worker().catch(error => {
+        controller.abort();
+        throw error;
+      })));
+      checkAbort();
       onComplete();
       return bytes.buffer;
     } finally {
+      controller.abort();
       signal?.removeEventListener('abort', abort);
-      chunks.length = 0;
     }
   }
 
