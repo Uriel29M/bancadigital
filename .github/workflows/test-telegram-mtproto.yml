@@ -19,32 +19,31 @@ jobs:
         run: |
           node --check supabase/functions/telegram-mtproto/media-core.mjs
           node --test scripts/test-telegram-mtproto.mjs
-      - name: Check deployed function without exposing secrets
+      - name: Verify actual Telegram download without exposing secrets
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           const base = 'https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto';
           const health = await fetch(`${base}?health=1`, {signal:AbortSignal.timeout(20000)});
           const data = await health.json();
-          assert.equal(data.mode, 'mtproto');
+          assert.equal(health.status,200);
+          assert.equal(data.mode,'mtproto');
           console.log('HTTP health:', health.status, 'configured:', data.configured === true);
-          if (!data.configured) {
-            console.log('LIVE TEST BLOCKED: TELEGRAM_API_ID or TELEGRAM_API_HASH is not configured. No production reader changed.');
-            process.exit(0);
-          }
+          assert.equal(data.configured,true,'MTProto credentials are not configured in Supabase');
           const url = `${base}?item_id=series-all-star-western-2011-novos-52-032`;
-          const response = await fetch(url, {headers:{Range:'bytes=0-4095'},signal:AbortSignal.timeout(90000)});
-          if (!response.ok) {
-            const text = await response.text();
-            let error; try {error=JSON.parse(text).code || JSON.parse(text).error;} catch {error='Non-JSON response';}
-            console.log('LIVE TEST FAILED:', response.status, String(error).slice(0,300));
-            process.exitCode=1;
-          } else {
+          const size = 35595664;
+          for (const [start,end] of [[0,4095],[size-4096,size-1]]) {
+            const response = await fetch(url,{headers:{Range:`bytes=${start}-${end}`},signal:AbortSignal.timeout(90000)});
+            if (!response.ok) {
+              let error = 'Non-JSON response';
+              try {const body=await response.json();error=body.code || body.error || error;} catch {}
+              throw new Error(`Live download failed: HTTP ${response.status}: ${String(error).slice(0,300)}`);
+            }
             const bytes = new Uint8Array(await response.arrayBuffer());
             assert.equal(response.status,206);
-            assert.equal(bytes.length,4096);
-            assert.match(response.headers.get('content-range')||'',/^bytes 0-4095\/35595664$/);
-            assert.notEqual(bytes[0],undefined);
-            console.log('LIVE TEST PASS: 4096 bytes from a 35,595,664-byte Telegram CBR.');
+            assert.equal(bytes.length,end-start+1);
+            assert.equal(response.headers.get('content-range'),`bytes ${start}-${end}/${size}`);
+            if(start===0) assert.equal(Buffer.from(bytes.subarray(0,7)).toString('hex'),'526172211a0700');
+            console.log(`LIVE TEST PASS: bytes ${start}-${end} of ${size}`);
           }
           JS
