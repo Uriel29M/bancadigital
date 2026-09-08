@@ -1,0 +1,142 @@
+name: Fix empty personal collections
+on:
+  push:
+    branches: [fix/empty-personal-collections]
+    paths: [.github/workflows/fix-empty-personal-collections.yml]
+permissions:
+  contents: write
+concurrency:
+  group: empty-personal-collections-production
+  cancel-in-progress: false
+jobs:
+  fix-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Fix ownership condition and bump application cache versions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          app = Path('js/app.js')
+          source = app.read_text(encoding='utf-8')
+          start = source.index('  function renderShelfLikePage(')
+          end = source.index('\n  function renderPublicCollectionPage(', start)
+          original = source[start:end]
+          old = 'if (own || categories.length) categoryMarkup ='
+          new = 'if (canEditPersonalCollections || categories.length) categoryMarkup ='
+          if original.count(old) != 1:
+              raise SystemExit('Expected exactly one original condition in renderShelfLikePage')
+          repaired = original.replace(old, new, 1)
+          assert repaired.count(new) == 1
+          assert 'data-shelf-new-category' in repaired
+          assert 'Crie uma coleção para começar a organizar seus salvos.' in repaired
+          app.write_text(source[:start] + repaired + source[end:], encoding='utf-8')
+          index = Path('index.html')
+          html = index.read_text(encoding='utf-8')
+          def bump(pattern, text):
+              def change(match):
+                  parts = match.group(2).split('.')
+                  parts[-1] = str(int(parts[-1]) + 1)
+                  return match.group(1) + '.'.join(parts) + match.group(3)
+              updated, count = re.subn(pattern, change, text, count=1)
+              if count != 1:
+                  raise SystemExit('Missing or ambiguous version: ' + pattern)
+              return updated
+          html = bump(r'(src="js/app\.js\?v=)([0-9]+(?:\.[0-9]+)*)(")', html)
+          html = bump(r'(register\("\./sw\.js\?v=)([0-9]+)(")', html)
+          index.write_text(html, encoding='utf-8')
+          sw = Path('sw.js')
+          sw.write_text(bump(r'(const CACHE_VERSION = "banca-digital-shell-v)([0-9]+)(";)', sw.read_text(encoding='utf-8')), encoding='utf-8')
+          print('Updated only the collection section condition and cache versions.')
+          PY
+      - name: Check JavaScript syntax
+        run: |
+          node --check js/app.js
+          node --check sw.js
+      - name: Test empty collection owner and visitor rendering
+        run: |
+          node <<'JS'
+          const assert = require('node:assert/strict');
+          const vm = require('node:vm');
+          const fs = require('node:fs');
+          const source = fs.readFileSync('js/app.js', 'utf8');
+          const start = source.indexOf('  function renderShelfLikePage(');
+          const end = source.indexOf('\n  function renderPublicCollectionPage(', start);
+          assert.ok(start >= 0 && end > start);
+          const fn = source.slice(start, end);
+          const original = 'if (own || categories.length) categoryMarkup =';
+          const corrected = 'if (canEditPersonalCollections || categories.length) categoryMarkup =';
+          assert.equal(fn.includes(original), false);
+          assert.equal(fn.split(corrected).length - 1, 1);
+          assert.ok(fn.includes('data-shelf-new-category'));
+          const currentUser = 'owner-test';
+          const state = {
+            session: {user: {id: currentUser}},
+            favoriteIds: new Set(),
+            readingProgress: new Map(),
+            top10Lists: [],
+            db: {library: []}
+          };
+          const context = {
+            state,
+            isOwnShelfProfile: () => false,
+            shelfCollectionOrderForProfile: () => [],
+            normalizePersonalCollectionOrder: (_order, categories) => categories.map(x => String(x.id)),
+            escapeHTML: value => String(value ?? ''),
+            avatarMarkup: () => '', factionDot: () => '', trophyRoom: () => '',
+            shelfCollectionMarkup: name => '<article>' + name + '</article>',
+            top10Markup: () => '',
+            shelfItemsByIds: () => [], publicCollectionItems: () => [],
+            personalCollectionControls: () => '',
+            publicProfileHref: () => '#'
+          };
+          vm.createContext(context);
+          vm.runInContext(fn + '\nthis.renderShelfLikePage = renderShelfLikePage;', context);
+          const empty = {items: [], visible: false};
+          function render({own, profileId, categories = [], editable = false}) {
+            context.isOwnShelfProfile = () => editable;
+            return context.renderShelfLikePage({
+              profile: {id: profileId, username: 'teste'}, own,
+              savedItems: empty, savedSeries: empty, readItems: empty,
+              completedItems: empty, likedItems: empty, categories,
+              profileState: {favoriteIds: new Set(), readingProgress: new Map(), top10Lists: [], collectionLikes: new Set(), collectionLikeCounts: new Map()}
+            });
+          }
+          function verifyOwner(html) {
+            assert.match(html, /data-shelf-new-category/);
+            assert.match(html, /Coleções pessoais/);
+            assert.match(html, /Crie uma coleção para começar a organizar seus salvos\./);
+          }
+          verifyOwner(render({own: true, profileId: currentUser}));
+          verifyOwner(render({own: false, profileId: currentUser, editable: true}));
+          verifyOwner(render({own: false, profileId: currentUser, editable: false}));
+          const stranger = render({own: false, profileId: 'other-user'});
+          assert.doesNotMatch(stranger, /data-shelf-new-category/);
+          assert.doesNotMatch(stranger, /shelf-categories/);
+          const populated = render({own: false, profileId: 'other-user', categories: [{id:'one',name:'Existente',isPublic:true} ]});
+          assert.match(populated, /Coleções pessoais/);
+          assert.doesNotMatch(populated, /data-shelf-new-category/);
+          console.log('PASS: own empty shelf, public own profile, zero-collection fallback, foreign empty shelf and foreign populated shelf.');
+          JS
+      - name: Run existing regression suite
+        run: node --test scripts/test-telegram-auto.mjs scripts/test-telegram-covers.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs scripts/test-series-default-cover.mjs
+      - name: Review and publish production changes
+        run: |
+          git diff --check
+          git diff --stat
+          git diff -- js/app.js index.html sw.js
+          python3 - <<'PY'
+          import subprocess
+          changed = set(subprocess.check_output(['git','diff','--name-only'], text=True).splitlines())
+          assert changed == {'js/app.js', 'index.html', 'sw.js'}, changed
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app.js index.html sw.js
+          git commit -m "fix: show new collection action on empty own profiles"
+          git push origin HEAD:main
