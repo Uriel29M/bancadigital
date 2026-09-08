@@ -18834,9 +18834,17 @@
           submit.textContent = "Identificando capas…";
           Object.assign(item, await telegramCoverEditor.forSave(item, { coverUrl: item.coverUrl, featuredCoverUrl: item.featuredCoverUrl }));
         }
-        if (isTelegram) {
+        if (isTelegram && (!telegramFileId || !window.BancaTelegram.samePost(x.telegramUrl, sourceUrl))) {
           submit.textContent = "Identificando arquivo…";
-          Object.assign(item, await telegramEditor.forSave(item, sourceUrl));
+          try {
+            Object.assign(item, await telegramEditor.forSave(item, sourceUrl));
+          } catch (error) {
+            if (!window.BancaTelegram.samePost(x.telegramUrl, sourceUrl)) throw error;
+            item.telegramUrl = sourceUrl;
+            item.telegramFileId = telegramFileId || x.telegramFileId || "";
+            item.telegramFileName = x.telegramFileName || "";
+            item.telegramFileSize = Number(x.telegramFileSize || 0);
+          }
         }
         submit.textContent = "Publicando edição...";
         const published = await saveCatalog("Edição salva.", item);
