@@ -2211,6 +2211,8 @@ main { min-height: calc(100vh - 150px); }
 .admin-table th { color: #aaa; }
 .admin-actions { display: flex; gap: 5px; flex-wrap: wrap; }
 .format-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
+.telegram-cover-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.telegram-cover-tools [role="status"] { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .checkbox-inline { display: block; margin-top: 9px; color: var(--muted); font-size: 12px; }
 input:disabled { opacity: .45; cursor: not-allowed; }
 .collection-picker { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: #ccc; font-size: 12px; }
