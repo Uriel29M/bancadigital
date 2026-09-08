@@ -7,6 +7,9 @@ verify_jwt = false
 [functions.telegram-proxy]
 verify_jwt = false
 
+[functions.telegram-mtproto]
+verify_jwt = false
+
 [functions.image-proxy]
 verify_jwt = false
 

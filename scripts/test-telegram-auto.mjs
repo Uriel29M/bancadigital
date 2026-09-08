@@ -69,8 +69,7 @@ test('reader uses the canonical shared identifier rather than stale local metada
   assert.equal(url.searchParams.get('item_id'), 'edition-5');
   assert.equal(url.searchParams.has('file_id'), false);
 });
-test('existing direct file IDs remain compatible without a shared record', () => {
+test('large-file gateway requires a shared catalog item', () => {
   const api = load();
-  const url = new URL(api.proxyUrl({ id: 'legacy', ...metadata }));
-  assert.equal(url.searchParams.get('file_id'), metadata.telegramFileId);
+  assert.equal(api.proxyUrl({ ...metadata }), '');
 });

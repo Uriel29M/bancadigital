@@ -58,16 +58,17 @@ supabase functions deploy drive-proxy --no-verify-jwt
 
 ## Gateway Telegram
 
-Postagens públicas do Telegram não fornecem uma URL de download ao navegador. Para ler um arquivo do canal, cadastre na edição a URL da postagem em `telegramUrl` e o `telegramFileId` recebido pelo bot ao publicar o documento. O leitor prioriza essa fonte e chama a Edge Function `telegram-proxy`, que usa a Bot API e devolve o arquivo com CORS.
+Postagens públicas do Telegram não fornecem uma URL de download ao navegador. Para ler um arquivo do canal, cadastre na edição a URL da postagem em `telegramUrl` e o `telegramFileId` recebido pelo bot ao publicar o documento. O leitor prioriza essa fonte e chama a Edge Function `telegram-mtproto`, que usa MTProto para devolver o arquivo em faixas com CORS, sem o limite de 20 MB da Bot API hospedada.
 
 Crie um bot, adicione-o como administrador do canal e configure o token exclusivamente nos secrets do Supabase:
 
 ```bash
 supabase secrets set TELEGRAM_BOT_TOKEN=SEU_TOKEN
-supabase functions deploy telegram-proxy --no-verify-jwt
+supabase secrets set TELEGRAM_API_ID=SEU_API_ID TELEGRAM_API_HASH=SEU_API_HASH
+supabase functions deploy telegram-mtproto --no-verify-jwt
 ```
 
-O `file_id` não pode ser deduzido de `https://t.me/canal/mensagem`: ele deve vir de uma atualização recebida pelo bot (campo `message.document.file_id` ou `channel_post.document.file_id`). A Bot API hospedada pelo Telegram limita downloads a 20 MB; para arquivos maiores, use um servidor local da Bot API ou mantenha uma fonte reserva.
+O `file_id` não pode ser deduzido de `https://t.me/canal/mensagem`: ele deve vir de uma atualização recebida pelo bot (campo `message.document.file_id` ou `channel_post.document.file_id`). Configure também `SUPABASE_URL` e `SUPABASE_ANON_KEY` nos secrets da função. As credenciais da API do Telegram devem ser obtidas em `my.telegram.org/apps` e nunca colocadas no navegador ou no repositório.
 
 ## Rodar
 

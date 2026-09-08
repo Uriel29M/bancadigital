@@ -222,6 +222,8 @@
     });
   }
 
+  let storageQuotaWarningShown = false;
+
   function isLegacyRemovedCatalogItem(item) {
     const text = [item?.id, item?.seriesId, item?.title, item?.name, item?.seriesTitle, item?.originalTitle].join(" ");
     return /tomoki-kun|onnanoko/i.test(text);
@@ -361,7 +363,10 @@
         try {
           localStorage.setItem(DB_KEY, payload);
         } catch (retryError) {
-          console.warn("Catálogo local maior que a cota do navegador; alterações locais não foram persistidas.", retryError);
+          if (!storageQuotaWarningShown) {
+            storageQuotaWarningShown = true;
+            console.warn("Catálogo local maior que a cota do navegador; o catálogo continuará disponível apenas nesta sessão.", retryError);
+          }
         }
       }
     }
@@ -1227,6 +1232,9 @@
     if (!item || item.local) return null;
     if (navigator.onLine === false || state.session?.offline) return null;
     const url = downloadSource(item);
+    // O Telegram já atende o leitor por faixas; baixar o arquivo inteiro em
+    // segundo plano duplica requisições e satura o gateway para arquivos grandes.
+    if (isTelegramMediaUrl(url) || isTelegramPostUrl(item.telegramUrl)) return null;
     const format = String(item.format || extension(url)).toLowerCase();
     if (!/^https?:\/\//i.test(url) || !["pdf", "cbz", "cbr"].includes(format)) return null;
     if (readerFilePrefetches.has(url)) return readerFilePrefetches.get(url);
@@ -6532,18 +6540,24 @@
     // real por faixas e trata o erro no ponto correto.
     if (/^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url))) return true;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await fetch(proxiedFileUrl(url), {
-        method: "GET",
-        headers: { Range: "bytes=0-0" },
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store",
-        signal: controller.signal
-      });
-      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-      return response.ok && (response.status === 200 || response.status === 206) && !contentType.includes("text/html");
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const response = await fetch(proxiedFileUrl(url), {
+          method: "GET",
+          headers: { Range: "bytes=0-0" },
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        if (response.ok && (response.status === 200 || response.status === 206) && !contentType.includes("text/html")) return true;
+        if (response.status !== 429 && response.status !== 502 && response.status !== 503 && response.status !== 504) return false;
+        const retryAfter = Number(response.headers.get("retry-after"));
+        if (attempt < 4) await new Promise(resolve => setTimeout(resolve, Math.max(500 * (attempt + 1), Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(10000, retryAfter * 1000) : 0)));
+      }
+      return false;
     } catch {
       return false;
     } finally {
@@ -9161,13 +9175,16 @@
         if (controller.signal.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
         const end = total ? Math.min(total - 1, received + chunkSize - 1) : received + chunkSize - 1;
         let response, lastError;
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 5; attempt++) {
           try {
             response = await fetch(url, { headers: { Range: `bytes=${received}-${end}` }, mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal });
             if (!response.ok) {
+              const retryAfter = Number(response.headers.get('retry-after'));
               let detail = '';
               try { detail = (await response.json()).error || ''; } catch {}
-              throw new Error(detail || `Telegram: HTTP ${response.status}`);
+              const error = new Error(detail || `Telegram: HTTP ${response.status}`);
+              error.retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(10000, retryAfter * 1000) : 0;
+              throw error;
             }
             if (response.status !== 206) throw new Error('O servidor não respeitou o intervalo solicitado.');
             const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') || '');
@@ -9185,7 +9202,7 @@
           } catch (error) {
             lastError = error;
             if (controller.signal.aborted) throw error;
-            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+            if (attempt < 4) await new Promise(resolve => setTimeout(resolve, Math.max(500 * (attempt + 1), error.retryAfterMs || 0)));
           }
         }
         if (lastError) throw lastError;
