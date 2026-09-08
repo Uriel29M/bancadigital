@@ -8,6 +8,7 @@ window.BancaTelegramCovers = (() => {
     if (!source || !window.BANCA_SUPABASE_URL) return String(value || '');
     const url = new URL(endpoint());
     url.searchParams.set('url', source);
+    url.searchParams.set('v', '2');
     return url.toString();
   };
   async function resolve(value, client) {
