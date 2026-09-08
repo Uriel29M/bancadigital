@@ -1,4 +1,4 @@
-# Diagnostic run for deployed MTProto v3. No production reader changes.
+# Live verification of native TCP MTProto v4. No production reader changes.
 name: Test Telegram MTProto
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
           const url = `${base}?item_id=series-all-star-western-2011-novos-52-029`;
           const size = 34688050;
           for (const [start,end] of [[0,4095],[size-4096,size-1]]) {
-            const response = await fetch(url,{headers:{Range:`bytes=${start}-${end}`},signal:AbortSignal.timeout(90000)});
+            const response = await fetch(url,{headers:{Range:`bytes=${start}-${end}`},signal:AbortSignal.timeout(60000)});
             if (!response.ok) {
               let error = 'Non-JSON response';
               try {const body=await response.json();error=body.code || body.error || error;} catch {}
