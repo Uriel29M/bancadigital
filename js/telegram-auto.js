@@ -49,20 +49,9 @@ window.BancaTelegram = (() => {
   function proxyUrl(item) {
     const post = normalized(item?.telegramUrl);
     if (!post || !window.BANCA_SUPABASE_URL) return '';
-    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-proxy`);
-    const canonical = window.BancaCatalogSync?.rows?.get(String(item.id));
-    if (canonical?.edition && samePost(post, canonical.edition.telegramUrl) && canonical.edition.telegramFileId) {
-      proxy.searchParams.set('item_id', String(item.id));
-    } else if (item.telegramFileId) {
-      proxy.searchParams.set('file_id', String(item.telegramFileId));
-    } else return '';
-    // A dedicated download bot resolves the original post, not another bot's file_id.
-    // Keep the stable proxy URL so every PDF/ZIP range can receive a fresh signed redirect.
-    proxy.searchParams.set('source_url', post);
-    const format = String(item.format || '').trim().toLowerCase();
-    const extension = String(item.telegramFileName || '').match(/\.(pdf|cbz|cbr)$/i)?.[1]?.toLowerCase();
-    const resolvedFormat = supported.has(format) ? format : extension;
-    if (resolvedFormat && supported.has(resolvedFormat)) proxy.searchParams.set('format', resolvedFormat);
+    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-mtproto`);
+    if (!item.id || !item.telegramFileId) return '';
+    proxy.searchParams.set('item_id', String(item.id));
     return proxy.toString();
   }
   function bindEditor(form, client, initial = {}) {
