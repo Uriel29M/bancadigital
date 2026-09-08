@@ -11,16 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Compare actual Telegram connectivity
+      - name: Diagnose native MTProto authentication
         run: |
           node --input-type=module <<'JS'
-          import assert from 'node:assert/strict';
-          const root='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/';
-          for(const [name,path] of [['existing-smoke','telegram-mtproto-smoke?check=banca-mtproto-34mb'],['verified','telegram-mtproto-verified?item_id=series-all-star-western-2011-novos-52-029']]){
-            const response=await fetch(root+path,{headers:name==='verified'?{Range:'bytes=0-4095'}:{},signal:AbortSignal.timeout(90000)});
-            const type=response.headers.get('content-type')||'';
-            const body=type.includes('json')?await response.json():new Uint8Array(await response.arrayBuffer());
-            console.log(name, response.status, type.includes('json')?JSON.stringify(body):`bytes=${body.length} signature=${Buffer.from(body.subarray(0,8)).toString('hex')}`);
-            if(name==='verified')assert.equal(response.status,206);
-          }
+          const url='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto-auth-diagnostic?check=banca-auth-diagnostic-20260908';
+          const response=await fetch(url,{signal:AbortSignal.timeout(90000)});
+          console.log('DIAGNOSTIC',response.status,JSON.stringify(await response.json()));
+          if(!response.ok)process.exitCode=1;
           JS
