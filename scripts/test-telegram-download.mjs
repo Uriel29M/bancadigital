@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source = readFileSync('js/app.js', 'utf8');
 const start = source.indexOf('  async function fetchTelegramTemporaryBuffer(');
 const end = source.indexOf('  async function fetchFileArrayBuffer(', start);
-const MB = 1024 * 1024;
+const MB = 8 * 1024 * 1024; // Download block size.
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 function load(fetch) {
   const context = vm.createContext({ fetch, AbortController, DOMException, Uint8Array,
@@ -20,7 +20,7 @@ function reply(start, end, size, data = null) {
     status: 206, headers: { 'content-range': `bytes ${start}-${end}/${size}` },
   });
 }
-test('three concurrent blocks reconstruct exact bytes despite out-of-order completion', async () => {
+test('larger blocks reconstruct exact bytes without overlapping gateway sessions', async () => {
   const size = 5 * MB + 123, progress = [], finished = [];
   let active = 0, peak = 0, completed = 0;
   const download = load(async (_, options) => {
@@ -31,8 +31,8 @@ test('three concurrent blocks reconstruct exact bytes despite out-of-order compl
     return reply(start, end, size);
   });
   const bytes = new Uint8Array(await download('https://example.com', n => progress.push(n), () => completed++));
-  assert.equal(peak, 3);
-  assert.ok(finished.indexOf(2 * MB) < finished.indexOf(MB));
+  assert.equal(peak, 1);
+  assert.deepEqual(finished, [0, MB, 2 * MB, 3 * MB, 4 * MB, 5 * MB]);
   assert.equal(bytes.length, size);
   for (let i = 0; i < size; i++) assert.equal(bytes[i], Math.floor(i / MB));
   assert.ok(progress.every((n, i) => !i || n > progress[i - 1]));
@@ -74,11 +74,11 @@ test('aborting cancels all in-flight blocks without completing', async () => {
     started++;
     return new Promise((resolve, reject) => {
       options.signal.addEventListener('abort', () => { canceled++; reject(new DOMException('Canceled', 'AbortError')); }, { once: true });
-      if (started === 3) queueMicrotask(() => controller.abort());
+      if (started === 1) queueMicrotask(() => controller.abort());
     });
   });
   await assert.rejects(download('https://example.com', undefined, () => completed = true, controller.signal), { name: 'AbortError' });
-  assert.equal(canceled, 3);
+  assert.equal(canceled, 1);
   assert.equal(completed, false);
 });
 test('permanent HTTP failures are not retried', async () => {
@@ -94,5 +94,5 @@ test('rate limiting retries the same range', async () => {
     return ranges.length === 1 ? new Response('{}', { status: 429, headers: { 'retry-after': '1' } }) : reply(...range(options), 100);
   });
   await download('https://example.com');
-  assert.deepEqual(ranges, ['bytes=0-1048575', 'bytes=0-1048575']);
+  assert.deepEqual(ranges, ['bytes=0-8388607', 'bytes=0-8388607']);
 });

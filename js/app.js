@@ -9130,8 +9130,8 @@
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) controller.abort();
-    const chunkSize = 1024 * 1024;
-    const concurrency = 3;
+    const chunkSize = 8 * 1024 * 1024;
+    const concurrency = 1;
     let total = 0;
     let received = 0;
     const checkAbort = () => {
@@ -9183,7 +9183,8 @@
     }
     try {
       // Discover the size with useful data, then fill a single buffer by offset.
-      // Only three 1 MB blocks are in flight, even for very large archives.
+      // The deployed gateway leases one Telegram session across isolates.
+      // Serialize requests; larger ranges amortize session setup and catalog checks.
       const first = await fetchChunk(0, chunkSize - 1);
       total = first.size;
       const bytes = new Uint8Array(total);
