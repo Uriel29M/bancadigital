@@ -1,3 +1,4 @@
+# Diagnostic run for deployed MTProto v3. No production reader changes.
 name: Test Telegram MTProto
 on:
   push:
