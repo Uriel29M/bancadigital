@@ -1,0 +1,50 @@
+name: Test Telegram MTProto
+on:
+  push:
+    branches: [fix/telegram-mtproto-direct]
+    paths:
+      - 'supabase/functions/telegram-mtproto/**'
+      - 'scripts/test-telegram-mtproto.mjs'
+      - '.github/workflows/test-telegram-mtproto.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: |
+          node --check supabase/functions/telegram-mtproto/media-core.mjs
+          node --test scripts/test-telegram-mtproto.mjs
+      - name: Check deployed function without exposing secrets
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const base = 'https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto';
+          const health = await fetch(`${base}?health=1`, {signal:AbortSignal.timeout(20000)});
+          const data = await health.json();
+          assert.equal(data.mode, 'mtproto');
+          console.log('HTTP health:', health.status, 'configured:', data.configured === true);
+          if (!data.configured) {
+            console.log('LIVE TEST BLOCKED: TELEGRAM_API_ID or TELEGRAM_API_HASH is not configured. No production reader changed.');
+            process.exit(0);
+          }
+          const url = `${base}?item_id=series-all-star-western-2011-novos-52-032`;
+          const response = await fetch(url, {headers:{Range:'bytes=0-4095'},signal:AbortSignal.timeout(90000)});
+          if (!response.ok) {
+            const text = await response.text();
+            let error; try {error=JSON.parse(text).code || JSON.parse(text).error;} catch {error='Non-JSON response';}
+            console.log('LIVE TEST FAILED:', response.status, String(error).slice(0,300));
+            process.exitCode=1;
+          } else {
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            assert.equal(response.status,206);
+            assert.equal(bytes.length,4096);
+            assert.match(response.headers.get('content-range')||'',/^bytes 0-4095\/35595664$/);
+            assert.notEqual(bytes[0],undefined);
+            console.log('LIVE TEST PASS: 4096 bytes from a 35,595,664-byte Telegram CBR.');
+          }
+          JS
