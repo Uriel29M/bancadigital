@@ -1,5 +1,5 @@
-import { TelegramClient } from 'jsr:@mtcute/deno@0.31.0';
-import { MemoryStorage } from 'jsr:@mtcute/core@0.31.0';
+import { TelegramClient } from 'npm:@mtcute/web@0.31.0';
+import { MemoryStorage } from 'npm:@mtcute/core@0.31.0';
 import { createMediaHandler, MediaError } from './media-core.mjs';
 
 const required = (name: string) => {
@@ -27,7 +27,8 @@ function databaseUrl(path: string) {
   return `${required('SUPABASE_URL')}/rest/v1/${path}`;
 }
 async function query(path: string) {
-  const response = await fetch(databaseUrl(path), { headers: { apikey: required('SUPABASE_ANON_KEY'), Authorization: `Bearer ${required('SUPABASE_ANON_KEY')}` }, signal: AbortSignal.timeout(10000) });
+  const key = required('SUPABASE_ANON_KEY');
+  const response = await fetch(databaseUrl(path), { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
   if (!response.ok) throw new MediaError('Não foi possível validar o catálogo.', 502);
   return await response.json();
 }
