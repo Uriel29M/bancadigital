@@ -56,6 +56,13 @@ window.BancaTelegram = (() => {
     } else if (item.telegramFileId) {
       proxy.searchParams.set('file_id', String(item.telegramFileId));
     } else return '';
+    // A dedicated download bot resolves the original post, not another bot's file_id.
+    // Keep the stable proxy URL so every PDF/ZIP range can receive a fresh signed redirect.
+    proxy.searchParams.set('source_url', post);
+    const format = String(item.format || '').trim().toLowerCase();
+    const extension = String(item.telegramFileName || '').match(/\.(pdf|cbz|cbr)$/i)?.[1]?.toLowerCase();
+    const resolvedFormat = supported.has(format) ? format : extension;
+    if (resolvedFormat && supported.has(resolvedFormat)) proxy.searchParams.set('format', resolvedFormat);
     return proxy.toString();
   }
   function bindEditor(form, client, initial = {}) {
