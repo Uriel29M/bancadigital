@@ -1,0 +1,53 @@
+name: Inspect collection permissions
+on:
+  push:
+    branches: [fix/series-visibility]
+    paths: [.github/workflows/inspect-collection-permissions.yml]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Extract current permission and collection code
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('js/app.js').read_text(encoding='utf-8')
+          out=Path('collection-permissions-audit');out.mkdir(exist_ok=True)
+          starts=list(re.finditer(r'(?m)^  (?:async\s+)?function\s+([A-Za-z0-9_]+)\s*\(',s))
+          names=[]
+          for i,m in enumerate(starts):
+              name=m.group(1)
+              end=starts[i+1].start() if i+1<len(starts) else len(s)
+              body=s[m.start():end]
+              if re.search(r'collection|coleção|colecoes|Coleções|shelfCategor|isStaffProfile|canCreate|canManage|hasLegendaryAccess|toggleCatalogItemVisibility|isAdminProfile|normalizedPlan',name+' '+body[:250],re.I) or name in ('toggleCatalogItemVisibility','isAdminProfile','isStaffProfile','normalizedPlan','hasLegendaryAccess'):
+                  if len(body)<60000:
+                      out.joinpath(name+'.js').write_text(body,encoding='utf-8')
+                      names.append(name)
+          terms=['shelf_collections','Criar coleção','Criar uma coleção','Nova coleção','createCollection','canCreateCollection','collectionLimit','isStaffProfile','hasLegendaryAccess','data-hide-item','toggleCatalogItemVisibility','catalog_item_visibility','collection_type','banca','moderator']
+          lines=s.splitlines()
+          report=[]
+          for term in terms:
+              matches=[i for i,line in enumerate(lines) if term.lower() in line.lower()]
+              report.append('### '+term+' — '+str(len(matches))+' matches')
+              for i in matches:
+                  if term.lower() in ('banca','moderator') and len(matches)>60: continue
+                  report.extend(f'{j+1}: {lines[j]}' for j in range(max(0,i-3),min(len(lines),i+5)))
+          out.joinpath('references.txt').write_text('\n'.join(report),encoding='utf-8')
+          out.joinpath('functions.txt').write_text('\n'.join(names),encoding='utf-8')
+          print('\n'.join(report[:400]))
+          PY
+      - name: Publish inspection to isolated branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin fix/series-visibility
+          git checkout fix/series-visibility
+          git add collection-permissions-audit
+          git commit -m "chore: capture collection permission source" || true
+          git push origin HEAD:fix/series-visibility
