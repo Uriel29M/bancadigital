@@ -1,3 +1,4 @@
+// The raw MTProto document identity is obtained from the original message.
 export class SourceError extends Error {
   constructor(message, status = 502, code = 'source_error') {
     super(message); this.status = status; this.code = code;
@@ -16,8 +17,9 @@ export function parsePost(value) {
   return { chat, messageId: Number(id) };
 }
 export function rpcCode(error) {
-  const text = String(error?.text || error?.errorMessage || '');
-  return /^[A-Z][A-Z0-9_]{2,100}$/.test(text) ? text : '';
+  const text = String(error?.text || error?.errorMessage || error?.message || '');
+  const match = /(?:^|\b)(FLOOD_WAIT_\d+|FILE_MIGRATE_\d+|FILE_REFERENCE_(?:EXPIRED|INVALID|EMPTY)|[A-Z][A-Z0-9_]{2,100})(?:$|\b)/.exec(text);
+  return match ? match[1] : '';
 }
 export function migrationDc(error) {
   const match = /^FILE_MIGRATE_(\d+)$/.exec(rpcCode(error));
@@ -29,7 +31,9 @@ export function isExpiredReference(error) {
 export function safeError(error, stage) {
   if (error instanceof SourceError) return error;
   const name = String(error?.name || 'Error').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
-  return new SourceError('Não foi possível acessar o arquivo pelo MTProto.', 502, `mtproto_${stage}_${rpcCode(error) || name}`);
+  const code = rpcCode(error);
+  if (/^FLOOD_WAIT_\d+$/.test(code)) return new SourceError('O Telegram limitou novas autenticações. A conexão precisa aguardar a liberação indicada pelo serviço.', 429, code);
+  return new SourceError('Não foi possível acessar o arquivo pelo MTProto.', 502, `mtproto_${stage}_${code || name}`);
 }
 export async function resolveDocument(client, item, allowed, Long) {
   const post = parsePost(item.telegramUrl);
@@ -60,8 +64,16 @@ export async function readAligned(read, offset, length, size, signal) {
   const start = Math.floor(offset / 4096) * 4096;
   const skip = offset - start;
   const limit = Math.ceil((skip + length) / 4096) * 4096;
-  if (signal?.aborted) throw new DOMException('Cancelado', 'AbortError');
-  const bytes = await read(start, limit, signal);
-  if (!(bytes instanceof Uint8Array) || bytes.length < skip + length) throw new SourceError('O Telegram retornou um trecho incompleto.', 502, 'incomplete_chunk');
+  const parts = []; let received = 0;
+  while (received < limit) {
+    if (signal?.aborted) throw new DOMException('Cancelado', 'AbortError');
+    const part = await read(start + received, Math.min(262144, limit - received), signal);
+    if (!(part instanceof Uint8Array) || !part.length || part.length > Math.min(262144, limit - received)) throw new SourceError('O Telegram retornou um trecho incompleto.', 502, 'incomplete_chunk');
+    parts.push(part); received += part.length;
+    if (part.length % 4096 !== 0) break;
+  }
+  if (received < skip + length) throw new SourceError('O Telegram retornou um trecho incompleto.', 502, 'incomplete_chunk');
+  const bytes = new Uint8Array(received); let position = 0;
+  for (const part of parts) { bytes.set(part, position); position += part.length; }
   return bytes.slice(skip, skip + length);
 }
