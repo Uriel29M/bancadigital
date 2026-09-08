@@ -430,7 +430,7 @@
     "title": "All-Star Seção Oito",
     "year": 2015,
     "telegramUrl": "https://t.me/c/4424843914/57",
-    "coverUrl": "https://t.me/c/4424843914/58",
+    "coverUrl": "https://t.me/c/4424843914/70",
     "catalogEditedAt": "2026-09-08T23:06:11.455Z"
   },
   {
