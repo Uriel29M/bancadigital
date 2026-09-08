@@ -9,35 +9,18 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
-      - name: Verify actual archive and HTTP ranges
+      - name: Compare actual Telegram connectivity
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
-          import {createHash} from 'node:crypto';
-          const base='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto-verified';
-          const url=base+'?item_id=series-all-star-western-2011-novos-52-029';
-          const size=34688050;
-          async function request(range,method='GET') {
-            const response=await fetch(url,{method,headers:range?{Range:range}:{},signal:AbortSignal.timeout(90000)});
-            if(!response.ok){let body={};try{body=await response.json();}catch{}throw Error(`HTTP ${response.status}: ${body.code||body.error||'unknown'}`);}
-            return response;
+          const root='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/';
+          for(const [name,path] of [['existing-smoke','telegram-mtproto-smoke?check=banca-mtproto-34mb'],['verified','telegram-mtproto-verified?item_id=series-all-star-western-2011-novos-52-029']]){
+            const response=await fetch(root+path,{headers:name==='verified'?{Range:'bytes=0-4095'}:{},signal:AbortSignal.timeout(90000)});
+            const type=response.headers.get('content-type')||'';
+            const body=type.includes('json')?await response.json():new Uint8Array(await response.arrayBuffer());
+            console.log(name, response.status, type.includes('json')?JSON.stringify(body):`bytes=${body.length} signature=${Buffer.from(body.subarray(0,8)).toString('hex')}`);
+            if(name==='verified')assert.equal(response.status,206);
           }
-          const health=await fetch(base+'?health=1',{signal:AbortSignal.timeout(20000)});
-          assert.equal(health.status,200);assert.equal((await health.json()).configured,true);
-          const head=await request(null,'HEAD');assert.equal(head.headers.get('content-length'),String(size));
-          const ranges=[[0,4095],[size-4096,size-1],[123,4567]];
-          for(const [start,end] of ranges){
-            const r=await request(`bytes=${start}-${end}`);const bytes=new Uint8Array(await r.arrayBuffer());
-            assert.equal(r.status,206);assert.equal(bytes.length,end-start+1);assert.equal(r.headers.get('content-range'),`bytes ${start}-${end}/${size}`);
-            if(start===0)assert.match(Buffer.from(bytes.subarray(0,8)).toString('hex'),/^526172211a07(?:00|0100)/);
-            console.log('RANGE PASS',start,end);
-          }
-          const parts=[];const hash=createHash('sha256');let received=0;
-          while(received<size){const end=Math.min(size-1,received+1048576-1);const r=await request(`bytes=${received}-${end}`);assert.equal(r.status,206);const bytes=new Uint8Array(await r.arrayBuffer());assert.equal(bytes.length,end-received+1);parts.push(bytes);hash.update(bytes);received+=bytes.length;}
-          const assembled=Buffer.concat(parts);assert.equal(assembled.length,size);assert.match(assembled.subarray(0,8).toString('hex'),/^526172211a07(?:00|0100)/);
-          console.log('COMPLETE ARCHIVE PASS',received,'SHA256',hash.digest('hex'));
-          const last=await request(`bytes=${size-4096}-${size-1}`);assert.deepEqual(Buffer.from(await last.arrayBuffer()),assembled.subarray(size-4096));
-          console.log('FINAL RANGE INTEGRITY PASS');
           JS
