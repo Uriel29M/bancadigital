@@ -871,7 +871,7 @@
   }
   // A postagem identifica a edição; o file_id, capturado pelo bot, é o que
   // permite ao gateway pedir o binário à API oficial do Telegram.
-  function downloadSource(item) { return telegramProxyUrl(item) || item?.fileUrl || (!isTelegramPostUrl(item?.telegramUrl) ? item?.telegramUrl : "") || ""; }
+  function downloadSource(item) { if (item?.local) return item.fileUrl || ""; return telegramProxyUrl(item) || item?.fileUrl || (!isTelegramPostUrl(item?.telegramUrl) ? item?.telegramUrl : "") || ""; }
   function isExternalArchiveLink(url) {
     return /^(?:https?:\/\/)(?:(?:www\.)?mediafire\.com\/\?|mega\.co\.nz\/#!)/i.test(String(url || ""));
   }
@@ -913,7 +913,8 @@
     const entry = downloaded(item.id);
     if (!entry || entry.status !== "completed") return;
     try {
-      const buffer = await fetchFileArrayBuffer(entry.url);
+      const buffer = await readReaderFileCache(downloadCacheKey(entry.url), () => {});
+      if (!buffer) throw new Error("Arquivo offline ausente.");
       const objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
       openReader({ ...item, fileUrl: objectUrl, local: true }, { localObjectUrl: objectUrl });
     } catch { toast("Este download não está disponível offline. Baixe novamente quando estiver conectado."); }
@@ -9226,7 +9227,16 @@
       onComplete();
       return buffer;
     }
-    if (isTelegramMediaUrl(source)) return fetchTelegramTemporaryBuffer(source, onProgress, onComplete, signal);
+    if (isTelegramMediaUrl(source)) {
+      const cacheKey = downloadCacheKey(source);
+      const cached = forceFresh ? null : await readReaderFileCache(cacheKey, onProgress);
+      if (cached) { onComplete(); return cached; }
+      const buffer = await fetchTelegramTemporaryBuffer(source, onProgress, () => {}, signal);
+      if (signal?.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
+      if (!await writeReaderFileCache(cacheKey, buffer)) throw new Error("Não foi possível salvar o arquivo offline.");
+      onComplete();
+      return buffer;
+    }
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(source);
     const proxyUrl = proxiedFileUrl(source);
     const requestUrl = forceFresh ? (() => {
