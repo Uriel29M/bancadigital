@@ -1,0 +1,71 @@
+name: Verify persistent Telegram reader
+on:
+  push:
+    branches: [fix/telegram-large-files-20260908]
+    paths: ['.github/workflows/test-telegram-persistent.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: |
+          node --test supabase/functions/telegram-mtproto/test-session.mjs
+          node --test scripts/test-telegram-mtproto.mjs
+          node --test scripts/test-telegram-reader-integration.mjs
+      - name: Verify real original archive and HTTP ranges
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          import {writeFileSync} from 'node:fs';
+          const base='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto-verified';
+          const url=base+'?item_id=series-all-star-western-2011-novos-52-029';
+          const size=34688050;
+          async function request(range,method='GET') {
+            for(let attempt=0;attempt<8;attempt++){
+              const response=await fetch(url,{method,headers:range?{Range:range}:{},signal:AbortSignal.timeout(90000)});
+              if(response.ok)return response;
+              let body={};try{body=await response.json();}catch{}
+              const code=body.code||'unknown';
+              if(response.status===503&&['telegram_busy','session_storage_unavailable','lease_expired'].includes(code)&&attempt<7){await new Promise(r=>setTimeout(r,2000));continue;}
+              throw Error(`HTTP ${response.status}: ${code}`);
+            }
+          }
+          const health=await fetch(base+'?health=1',{signal:AbortSignal.timeout(20000)});
+          assert.equal(health.status,200);const state=await health.json();
+          assert.equal(state.configured,true);assert.equal(state.storage,'encrypted-postgres');
+          console.log('HEALTH PASS',JSON.stringify({configured:state.configured,hasSession:state.hasSession,busy:state.busy}));
+          const head=await request(null,'HEAD');assert.equal(head.headers.get('content-length'),String(size));
+          console.log('HEAD PASS',size);
+          const parts=[];const hash=createHash('sha256');let received=0;
+          while(received<size){
+            const end=Math.min(size-1,received+1048576-1);
+            const r=await request(`bytes=${received}-${end}`);
+            assert.equal(r.status,206);assert.equal(r.headers.get('content-range'),`bytes ${received}-${end}/${size}`);
+            const bytes=new Uint8Array(await r.arrayBuffer());assert.equal(bytes.length,end-received+1);
+            if(received===0)assert.match(Buffer.from(bytes.subarray(0,8)).toString('hex'),/^526172211a07(?:00|0100)/);
+            parts.push(bytes);hash.update(bytes);received+=bytes.length;
+            console.log('RANGE PASS',received,'/',size);
+          }
+          const assembled=Buffer.concat(parts);assert.equal(assembled.length,size);
+          const digest=hash.digest('hex');
+          const tail=await request(`bytes=${size-4096}-${size-1}`);
+          assert.deepEqual(Buffer.from(await tail.arrayBuffer()),assembled.subarray(size-4096));
+          const unaligned=await request('bytes=123-4567');
+          assert.deepEqual(Buffer.from(await unaligned.arrayBuffer()),assembled.subarray(123,4568));
+          writeFileSync('/tmp/banca-original.cbr',assembled);
+          console.log('COMPLETE ARCHIVE PASS',size,'SHA256',digest);
+          console.log('FINAL AND UNALIGNED RANGE INTEGRITY PASS');
+          JS
+      - name: Verify RAR archive can be opened
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libarchive-tools
+          bsdtar -tf /tmp/banca-original.cbr > /tmp/banca-archive-entries.txt
+          test -s /tmp/banca-archive-entries.txt
+          echo "ARCHIVE OPEN PASS: $(wc -l < /tmp/banca-archive-entries.txt) entries"
