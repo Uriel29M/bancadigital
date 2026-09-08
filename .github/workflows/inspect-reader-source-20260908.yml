@@ -1,0 +1,22 @@
+name: Inspect reader source
+on:
+  push:
+    branches: [fix/telegram-reader-live]
+    paths: [.github/workflows/inspect-reader-source-20260908.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          node <<'JS'
+          const fs=require('fs');
+          for(const file of ['js/app.js','js/telegram-auto.js','index.html','sw.js']){
+            const s=fs.readFileSync(file,'utf8');const lines=s.split('\n');console.log('\nFILE',file,'LINES',lines.length);
+            const re=/BancaTelegram|telegram-proxy|renderCBRReader|renderCBZReader|renderPDFReader|async function openReader|function openReader|telegram-auto\.js|js\/app\.js|CACHE_NAME|CACHE_VERSION/i;
+            const selected=new Set();for(let i=0;i<lines.length;i++)if(re.test(lines[i]))for(let j=Math.max(0,i-5);j<Math.min(lines.length,i+15);j++)selected.add(j);
+            for(const i of [...selected].sort((a,b)=>a-b))console.log(`${i+1}: ${lines[i]}`);
+          }
+          JS
