@@ -1,0 +1,26 @@
+name: Verify Telegram original document
+on:
+  push:
+    branches: [fix/telegram-mtproto-direct]
+    paths: ['.github/workflows/test-telegram-mtproto-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read original document via MTProto
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const url='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto-smoke?check=banca-mtproto-34mb';
+          const response=await fetch(url,{signal:AbortSignal.timeout(90000)});
+          const result=await response.json();
+          console.log(JSON.stringify(result));
+          assert.equal(response.status,200);
+          assert.equal(result.ok,true);
+          assert.equal(result.bytes,4096);
+          assert.equal(result.archiveBytes,34688050);
+          JS
