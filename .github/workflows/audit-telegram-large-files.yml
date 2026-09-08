@@ -1,0 +1,30 @@
+name: Audit Telegram large files
+on:
+  push:
+    branches: [fix/telegram-large-files-20260908]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture tracked source without credentials or binary assets
+        run: |
+          python3 - <<'PY'
+          import subprocess, zipfile, pathlib
+          files = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          with zipfile.ZipFile('/tmp/bancadigital-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in files:
+                  if not name or name.startswith(('supabase/.temp/','.env','.git/')): continue
+                  if pathlib.Path(name).suffix.lower() in {'.png','.jpg','.jpeg','.gif','.webp','.wasm','.pdf','.cbr','.cbz','.rar','.zip','.woff','.woff2','.ttf','.otf'}: continue
+                  archive.write(name)
+          print('Source files captured:',len(zipfile.ZipFile('/tmp/bancadigital-source.zip').namelist()))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bancadigital-source-audit
+          path: /tmp/bancadigital-source.zip
+          retention-days: 1

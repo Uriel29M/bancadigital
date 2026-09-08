@@ -1,0 +1,21 @@
+name: Verify large Telegram archive
+on:
+  push:
+    branches: [fix/telegram-large-files-20260908]
+    paths: ['.github/workflows/test-telegram-verified.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Diagnose native MTProto authentication
+        run: |
+          node --input-type=module <<'JS'
+          const url='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto-auth-diagnostic?check=banca-auth-diagnostic-20260908';
+          const response=await fetch(url,{signal:AbortSignal.timeout(90000)});
+          console.log('DIAGNOSTIC',response.status,JSON.stringify(await response.json()));
+          if(!response.ok)process.exitCode=1;
+          JS
