@@ -858,6 +858,9 @@
     } catch {}
   }
   function isTelegramPostUrl(url) { return /^https?:\/\/(?:www\.)?t(?:elegram)?\.me\//i.test(String(url || "")); }
+  function isTelegramMediaUrl(url) {
+    try { const u = new URL(url); return u.hostname === new URL(window.BANCA_SUPABASE_URL).hostname && /\/functions\/v1\/telegram-(?:proxy|mtproto)$/.test(u.pathname); } catch { return false; }
+  }
   function telegramProxyUrl(item) {
     return window.BancaTelegram?.proxyUrl(item) || "";
   }
@@ -6614,7 +6617,7 @@
     readerIsOpen = true;
     prioritizeReaderLoading();
 
-    const prefetchedBuffer = readerFilePrefetches.get(resolvedUrl) || null;
+    const prefetchedBuffer = isTelegramMediaUrl(resolvedUrl) ? null : readerFilePrefetches.get(resolvedUrl) || null;
     readerFilePrefetches.delete(resolvedUrl);
     const itemFormat = String(item.format || "").toLowerCase();
     const fileFormat = extension(item.file?.name || item.name || "");
@@ -9144,6 +9147,61 @@
     return bytes.buffer;
   }
 
+  async function fetchTelegramTemporaryBuffer(url, onProgress = () => {}, onComplete = () => {}, signal = null) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) controller.abort();
+    const chunks = [];
+    let received = 0;
+    let total = 0;
+    const chunkSize = 1024 * 1024;
+    try {
+      while (!total || received < total) {
+        if (controller.signal.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
+        const end = total ? Math.min(total - 1, received + chunkSize - 1) : received + chunkSize - 1;
+        let response, lastError;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            response = await fetch(url, { headers: { Range: `bytes=${received}-${end}` }, mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal });
+            if (!response.ok) {
+              let detail = '';
+              try { detail = (await response.json()).error || ''; } catch {}
+              throw new Error(detail || `Telegram: HTTP ${response.status}`);
+            }
+            if (response.status !== 206) throw new Error('O servidor não respeitou o intervalo solicitado.');
+            const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') || '');
+            if (!match || Number(match[1]) !== received || Number(match[2]) > end || !Number.isSafeInteger(Number(match[3]))) throw new Error('Intervalo de arquivo inválido.');
+            const size = Number(match[3]);
+            if (total && total !== size) throw new Error('O tamanho do arquivo mudou durante a leitura.');
+            total = size;
+            const part = new Uint8Array(await response.arrayBuffer());
+            if (part.length !== Number(match[2]) - received + 1) throw new Error('Trecho incompleto do Telegram.');
+            chunks.push(part);
+            received += part.length;
+            onProgress(received, total);
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+            if (controller.signal.aborted) throw error;
+            if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+        if (lastError) throw lastError;
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+      chunks.length = 0;
+      onComplete();
+      return bytes.buffer;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+      chunks.length = 0;
+    }
+  }
+
   async function fetchFileArrayBuffer(url, onProgress = () => {}, onComplete = () => {}, signal = null, forceFresh = false) {
     const source = String(url || "");
     if (/^blob:/i.test(source)) {
@@ -9153,6 +9211,7 @@
       onComplete();
       return buffer;
     }
+    if (isTelegramMediaUrl(source)) return fetchTelegramTemporaryBuffer(source, onProgress, onComplete, signal);
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(source);
     const proxyUrl = proxiedFileUrl(source);
     const requestUrl = forceFresh ? (() => {
