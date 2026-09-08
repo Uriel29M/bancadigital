@@ -1,0 +1,120 @@
+name: Deploy and validate Telegram reader
+on:
+  push:
+    branches: [fix/telegram-reader-live]
+    paths: ['.github/workflows/telegram-reader-deploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Apply exact reader integration without replacing unrelated code
+        env:
+          SOURCE_SHA: 805257057f1d167273938e28029e8e42f2222027
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p=Path('js/app.js')
+          actual=subprocess.check_output(['git','hash-object',str(p)],text=True).strip()
+          assert actual==__import__('os').environ['SOURCE_SHA'], 'Reader changed; refusing unsafe patch'
+          s=p.read_text()
+          marker='  function downloadCacheKey(url) {'
+          assert s.count(marker)==1
+          helper='''  function isTelegramMediaUrl(url) {
+            try { const u = new URL(url); return u.origin === window.BANCA_SUPABASE_URL && /\\/functions\\/v1\\/telegram-(?:proxy|mtproto)$/.test(u.pathname); } catch { return false; }
+          }
+          async function fetchTelegramBuffer(url, onProgress, signal) {
+            const source = proxiedFileUrl(url);
+            const controller = new AbortController();
+            const abort = () => controller.abort();
+            signal?.addEventListener("abort", abort, { once: true });
+            try {
+              if (signal?.aborted) throw new DOMException("Cancelado", "AbortError");
+              const head = await fetch(source, { method: "HEAD", cache: "no-store", signal: controller.signal });
+              if (!head.ok) throw new Error(`Telegram: HTTP ${head.status}`);
+              const total = Number(head.headers.get("content-length"));
+              if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Tamanho do arquivo indisponível.");
+              const bytes = new Uint8Array(total);
+              const chunkSize = 1024 * 1024;
+              for (let offset = 0; offset < total; offset += chunkSize) {
+                const end = Math.min(total - 1, offset + chunkSize - 1);
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  if (controller.signal.aborted) throw new DOMException("Cancelado", "AbortError");
+                  try {
+                    const response = await fetch(source, { headers: { Range: `bytes=${offset}-${end}` }, cache: "no-store", signal: controller.signal });
+                    if (response.status !== 206 || response.headers.get("content-range") !== `bytes ${offset}-${end}/${total}`) throw new Error(`Intervalo inválido (HTTP ${response.status}).`);
+                    const part = new Uint8Array(await response.arrayBuffer());
+                    if (part.length !== end - offset + 1) throw new Error("Trecho incompleto.");
+                    bytes.set(part, offset);
+                    break;
+                  } catch (error) {
+                    if (attempt === 2 || controller.signal.aborted) throw error;
+                    await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+                  }
+                }
+                onProgress(end + 1, total);
+              }
+              return bytes.buffer;
+            } finally { signal?.removeEventListener("abort", abort); }
+          }
+          '''
+          s=s.replace(marker,helper+marker,1)
+          needle='    const source = String(url || "");\n    if (/^blob:/i.test(source)) {'
+          start=s.index('  async function fetchFileArrayBuffer(')
+          assert needle in s[start:]
+          s=s[:start]+s[start:].replace(needle,'''    const source = String(url || "");
+            if (isTelegramMediaUrl(source)) {
+              const buffer = await fetchTelegramBuffer(source, onProgress, signal);
+              onComplete();
+              return buffer;
+            }
+            if (/^blob:/i.test(source)) {''',1)
+          s=s.replace('    const promise = fetchFileArrayBuffer(url);\n    readerFilePrefetches.set(url, promise);','    if (isTelegramMediaUrl(url)) return null;\n    const promise = fetchFileArrayBuffer(url);\n    readerFilePrefetches.set(url, promise);',1)
+          s=s.replace('    const prefetchedBuffer = readerFilePrefetches.get(resolvedUrl) || null;','    const prefetchedBuffer = isTelegramMediaUrl(resolvedUrl) ? null : readerFilePrefetches.get(resolvedUrl) || null;',1)
+          s=s.replace('    const closeReaderButton = $("[data-close-reader]", overlay);','    const telegramDownloadController = new AbortController();\n    overlay._telegramDownloadController = telegramDownloadController;\n    const closeReaderButton = $("[data-close-reader]", overlay);',1)
+          s=s.replace('      overlay._cbzDownloadController?.abort();\n      overlay.remove();','      overlay._cbzDownloadController?.abort();\n      telegramDownloadController.abort();\n      overlay.remove();',1)
+          s=s.replace('`${formatCbrBytes(received)} processados`);\n        });','`${formatCbrBytes(received)} processados`);\n        }, () => {}, overlay._telegramDownloadController?.signal);',1)
+          p.write_text(s)
+          t=Path('js/telegram-auto.js');s=t.read_text();old='const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-proxy`);';assert s.count(old)==1;s=s.replace(old,old.replace('telegram-proxy','telegram-mtproto'));t.write_text(s)
+          i=Path('index.html');s=i.read_text().replace('js/telegram-auto.js?v=2','js/telegram-auto.js?v=3').replace('js/app.js?v=2.2.10.454','js/app.js?v=2.2.10.455');i.write_text(s)
+          w=Path('sw.js');s=w.read_text().replace('banca-digital-shell-v590','banca-digital-shell-v591').replace('js/telegram-auto.js?v=2','js/telegram-auto.js?v=3').replace('js/app.js?v=2.2.10.449','js/app.js?v=2.2.10.455');w.write_text(s)
+          PY
+          node --check js/app.js
+          node --check js/telegram-auto.js
+          git diff --check
+      - name: Verify live MTProto archive before publishing
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const base='https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-mtproto';
+          const url=base+'?item_id=series-all-star-western-2011-novos-52-029';
+          const size=34688050;
+          const head=await fetch(url,{method:'HEAD',signal:AbortSignal.timeout(90000)});
+          assert.equal(head.status,200);
+          assert.equal(Number(head.headers.get('content-length')),size);
+          const bytes=new Uint8Array(size);
+          for(let offset=0;offset<size;offset+=1048576){
+            const end=Math.min(size-1,offset+1048575);
+            const response=await fetch(url,{headers:{Range:`bytes=${offset}-${end}`},signal:AbortSignal.timeout(90000)});
+            assert.equal(response.status,206);
+            assert.equal(response.headers.get('content-range'),`bytes ${offset}-${end}/${size}`);
+            const part=new Uint8Array(await response.arrayBuffer());
+            assert.equal(part.length,end-offset+1);
+            bytes.set(part,offset);
+          }
+          assert.match(Buffer.from(bytes.subarray(0,8)).toString('hex'),/^526172211a07(?:00|0100)/);
+          console.log('LIVE COMPLETE ARCHIVE PASS:',bytes.length,'bytes');
+          JS
+      - name: Publish only verified reader files
+        run: |
+          git add js/app.js js/telegram-auto.js index.html sw.js
+          git commit -m 'fix: open large Telegram archives through MTProto'
+          git push origin HEAD:main
