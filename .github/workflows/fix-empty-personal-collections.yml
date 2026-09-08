@@ -27,12 +27,15 @@ jobs:
           start = source.index('  function renderShelfLikePage(')
           end = source.index('\n  function renderPublicCollectionPage(', start)
           original = source[start:end]
-          old = 'if (own || categories.length) categoryMarkup ='
-          new = 'if (canEditPersonalCollections || categories.length) categoryMarkup ='
-          if original.count(old) != 1:
-              raise SystemExit('Expected exactly one original condition in renderShelfLikePage')
-          repaired = original.replace(old, new, 1)
-          assert repaired.count(new) == 1
+          old_permission = 'const canEditPersonalCollections = own || isOwnShelfProfile();'
+          new_permission = 'const canEditPersonalCollections = own || isOwnShelfProfile() || Boolean(state.session?.user?.id && String(profile?.id || "") === String(state.session.user.id));'
+          old_section = 'if (own || categories.length) categoryMarkup ='
+          new_section = 'if (canEditPersonalCollections || categories.length) categoryMarkup ='
+          if original.count(old_permission) != 1 or original.count(old_section) != 1:
+              raise SystemExit('Expected exactly one original ownership and collection-section condition')
+          repaired = original.replace(old_permission, new_permission, 1).replace(old_section, new_section, 1)
+          assert repaired.count(new_permission) == 1
+          assert repaired.count(new_section) == 1
           assert 'data-shelf-new-category' in repaired
           assert 'Crie uma coleção para começar a organizar seus salvos.' in repaired
           app.write_text(source[:start] + repaired + source[end:], encoding='utf-8')
@@ -52,7 +55,7 @@ jobs:
           index.write_text(html, encoding='utf-8')
           sw = Path('sw.js')
           sw.write_text(bump(r'(const CACHE_VERSION = "banca-digital-shell-v)([0-9]+)(";)', sw.read_text(encoding='utf-8')), encoding='utf-8')
-          print('Updated only the collection section condition and cache versions.')
+          print('Updated collection ownership and section conditions, plus application cache versions.')
           PY
       - name: Check JavaScript syntax
         run: |
@@ -69,9 +72,8 @@ jobs:
           const end = source.indexOf('\n  function renderPublicCollectionPage(', start);
           assert.ok(start >= 0 && end > start);
           const fn = source.slice(start, end);
-          const original = 'if (own || categories.length) categoryMarkup =';
           const corrected = 'if (canEditPersonalCollections || categories.length) categoryMarkup =';
-          assert.equal(fn.includes(original), false);
+          assert.equal(fn.includes('if (own || categories.length) categoryMarkup ='), false);
           assert.equal(fn.split(corrected).length - 1, 1);
           assert.ok(fn.includes('data-shelf-new-category'));
           const currentUser = 'owner-test';
@@ -121,7 +123,11 @@ jobs:
           const populated = render({own: false, profileId: 'other-user', categories: [{id:'one',name:'Existente',isPublic:true} ]});
           assert.match(populated, /Coleções pessoais/);
           assert.doesNotMatch(populated, /data-shelf-new-category/);
-          console.log('PASS: own empty shelf, public own profile, zero-collection fallback, foreign empty shelf and foreign populated shelf.');
+          assert.match(populated, /Existente/);
+          state.session = null;
+          const anonymous = render({own: false, profileId: currentUser});
+          assert.doesNotMatch(anonymous, /data-shelf-new-category/);
+          console.log('PASS: six owner, visitor and anonymous collection rendering scenarios.');
           JS
       - name: Run existing regression suite
         run: node --test scripts/test-telegram-auto.mjs scripts/test-telegram-covers.mjs scripts/test-catalog-sync.mjs scripts/test-shared-catalog.mjs scripts/test-series-default-cover.mjs
