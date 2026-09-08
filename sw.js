@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v589";
+const CACHE_VERSION = "banca-digital-shell-v590";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
@@ -7,7 +7,7 @@ const APP_SHELL = [
   "./css/style.css?v=2.2.10.226",
   "./js/app.js?v=2.2.10.449",
   "./js/catalog-sync.js?v=1",
-  "./js/telegram-auto.js?v=1",
+  "./js/telegram-auto.js?v=2",
   "./js/telegram-covers.js?v=1",
   "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.43",
