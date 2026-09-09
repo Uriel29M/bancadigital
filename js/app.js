@@ -212,6 +212,15 @@
     keys.forEach(key => localStorage.removeItem(key));
   }
 
+  function clearStaleCatalogKeys() {
+    const keys = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith("bancaDigitalDB_v1:") && key !== DB_KEY) keys.push(key);
+    }
+    keys.forEach(key => localStorage.removeItem(key));
+  }
+
   function storageSafeLibrary(items = []) {
     return compactSeriesItems(items).map(item => {
       const safe = { ...item };
@@ -362,6 +371,7 @@
     save(db) {
       const payload = JSON.stringify({ ...db, library: storageSafeLibrary(db.library) });
       try {
+        clearStaleCatalogKeys();
         localStorage.setItem(DB_KEY, payload);
       } catch (error) {
         if (error?.name !== "QuotaExceededError") throw error;
@@ -8930,12 +8940,15 @@
     const cachedCover = state.offlineCoverData?.get?.(String(item.id));
     if (cachedCover && (state.session?.offline || navigator.onLine === false)) return cachedCover;
     if (state.session?.offline) return instantCover(item);
+    const milestoneSeriesCover = /^assets\/covers\/milestone\//i.test(String(item.coverUrl || ""))
+      ? (window.DEFAULT_SERIES || []).find(series => series.id === item.seriesId)?.coverUrl
+      : "";
     // O hero já é conhecido no primeiro render: libere sua capa imediatamente.
     if (variant === "hero" || variant === "hero-background") {
       const earlyBlockedGcdCover = value => /^https:\/\/files1\.comics\.org\//i.test(String(value || ""));
       const earlyDefaultItemCover = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === item.id)?.coverUrl;
       const earlyDefaultCover = /^assets\/covers\/milestone\//i.test(String(item.coverUrl || "")) || earlyBlockedGcdCover(item.coverUrl)
-        ? earlyDefaultItemCover
+        ? (milestoneSeriesCover || earlyDefaultItemCover)
         : item.coverUrl;
       const earlyHeroCover = variant === "hero" ? item.featuredCoverUrl || earlyDefaultCover || item.cover : earlyDefaultCover || item.cover;
       if (earlyHeroCover && !/^data:/i.test(String(earlyHeroCover)) && !earlyBlockedGcdCover(earlyHeroCover)) return proxiedImageUrl(earlyHeroCover);
@@ -8953,7 +8966,7 @@
     if (variant === "hero" && item.featuredCoverUrl) return proxiedImageUrl(item.featuredCoverUrl);
     const defaultItemCover = (window.DEFAULT_LIBRARY || []).find(entry => entry.id === item.id)?.coverUrl;
     const defaultCover = /^assets\/covers\/milestone\//i.test(String(item.coverUrl || "")) || isBlockedGcdCover(item.coverUrl)
-      ? defaultItemCover
+      ? (milestoneSeriesCover || defaultItemCover)
       : item.coverUrl;
     if (defaultCover) return proxiedImageUrl(defaultCover);
     if (item.cover) return proxiedImageUrl(item.cover); // backward compatibility
