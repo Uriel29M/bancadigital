@@ -9844,7 +9844,10 @@
   }
 
   function itemDisplayTitle(item) {
-    const candidates = [item?.seriesTitle, item?.title, item?.name, item?.comicTitle, item?.displayTitle];
+    const watchmenVolume = item?.seriesId === "series-antes-de-watchmen-2012-novos-52"
+      ? String(item.volumeTitle || item.volume || "").replace(/\s*\(\d{4}\)\s*$/, "").trim()
+      : "";
+    const candidates = [watchmenVolume ? `Antes de Watchmen: ${watchmenVolume}` : "", item?.seriesTitle, item?.title, item?.name, item?.comicTitle, item?.displayTitle];
     let base = candidates.find(value => {
       const text = String(value || "").trim();
       return text && !/^(quadrinho|hq)$/i.test(text);
@@ -10057,7 +10060,7 @@
     const defaultIndex = Math.min(available.length - 1, Math.floor(recommendationHash(`homepage-banner:${dayKey}`) * available.length));
     const banner = available.find(entry => String(entry.id) === String(state.homepageBannerOverrideId)) || available[defaultIndex];
     const item = lib.find(entry => String(entry.id) === String(banner.item_id));
-    const seriesName = itemDisplayTitle(item);
+    const seriesName = seriesDefinitionFor(item).seriesTitle;
     return `<section class="section homepage-banner-section"><div class="section-head"><div><div class="eyebrow">Destaque editorial</div><h2 class="section-title">Em destaque</h2><div class="section-subtitle">Uma recomendação especial da banca, renovada a cada 24 horas.</div></div></div><button type="button" class="homepage-banner" data-home-banner-series="${escapeHTML(item.seriesId)}" aria-label="Abrir a série ${escapeHTML(seriesName)}"><span class="homepage-banner-image" style="background-image:url('${escapeHTML(proxiedImageUrl(banner.image_url))}')"></span><span class="homepage-banner-shade"></span><span class="homepage-banner-copy"><span class="eyebrow">Capa selecionada</span><strong>${escapeHTML(seriesName)}</strong><small>Ver série <b>→</b></small></span></button></section>`;
   }
 
@@ -19076,7 +19079,7 @@
 
   function seriesDefinitionFor(item) {
     const definition = (window.DEFAULT_SERIES || []).find(series => series.id === item?.seriesId);
-    return { ...(definition || {}), ...item, title: definition?.name || item?.seriesTitle || item?.title || "Série", seriesTitle: definition?.name || item?.seriesTitle || item?.title || "Série", coverUrl: definition?.coverUrl || item?.coverUrl || item?.cover || "" };
+    return { ...(definition || {}), ...item, name: definition?.name || item?.seriesTitle || "Série", title: definition?.name || item?.seriesTitle || item?.title || "Série", seriesTitle: definition?.name || item?.seriesTitle || item?.title || "Série", coverUrl: definition?.coverUrl || item?.coverUrl || item?.cover || "" };
   }
 
   function seriesCard(item, favoriteIds = state.favoriteIds) {
