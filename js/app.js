@@ -6590,6 +6590,11 @@
       if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
       void window.BancaTelegram.published(item, sb).then(canonical => {
         if (!canonical.telegramFileId && !canonical.fileUrl) {
+          const published = (window.DEFAULT_LIBRARY || []).find(entry => String(entry.id) === String(item.id));
+          if (published && (published.telegramFileId || published.fileUrl)) {
+            openReader(mergeCatalogEdition(item, published), { ...options, telegramResolved: true });
+            return;
+          }
           toast("Esta postagem ainda não foi identificada pelo bot. Um administrador precisa salvar a edição novamente.");
           return;
         }

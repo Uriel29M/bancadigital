@@ -409,7 +409,7 @@
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "issue": "1",
     "sortOrder": 1,
-    "format": "comic",
+    "format": "pdf",
     "fileUrl": "",
     "sourceUrl": "http://hqs-soquadrinhos.blogspot.com/2015/06/secao-oito-2015.html",
     "clicks": 0,
@@ -420,8 +420,11 @@
     "title": "All-Star Seção Oito",
     "year": 2015,
     "telegramUrl": "https://t.me/c/4424843914/56",
-    "coverUrl": "https://t.me/c/4424843914/55",
-    "catalogEditedAt": "2026-09-08T23:06:11.455Z"
+    "coverUrl": "https://vqfmbpqurapcsuixgvql.supabase.co/functions/v1/telegram-cover?url=https%3A%2F%2Ft.me%2Fc%2F4424843914%2F69",
+    "telegramFileId": "BQACAgEAAyEFAAMBB73CigADOGqf-88wjl5dpcykK7Ssa6uF0h2iAAK3CAAC830BReGZcIwhjjO8PQQ",
+    "telegramFileName": "1 Eu Sempre Me Pergunto O Que O Vinicultor Compra.pdf",
+    "telegramFileSize": 25651234,
+    "catalogEditedAt": "2026-09-09T00:17:32.685467+00:00"
   },
   {
     "id": "series-all-star-secao-oito-2015-novos-52-002",
