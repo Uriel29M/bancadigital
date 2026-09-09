@@ -1,9 +1,9 @@
-name: Inspect 4shared public source
+name: Inspect 4shared public download flow
 on:
   push:
     branches: [feature/4shared-reader]
     paths:
-      - scripts/inspect-fourshared.mjs
+      - scripts/inspect-fourshared-flow.mjs
       - .github/workflows/apply-fourshared-reader.yml
   workflow_dispatch:
 permissions:
@@ -11,17 +11,18 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Inspect public HTML and download metadata
-        run: node scripts/inspect-fourshared.mjs
+      - name: Inspect public download flow
+        run: node scripts/inspect-fourshared-flow.mjs
       - name: Preserve diagnostic files
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fourshared-diagnostic
-          path: fourshared-diagnostic/
+          name: fourshared-flow
+          path: fourshared-flow/
           retention-days: 1
