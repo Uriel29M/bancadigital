@@ -12,7 +12,7 @@
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=251", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=252", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -37,7 +37,7 @@
         <button class="reader-btn ranking-header-btn" data-section="ranking" title="Ranking" aria-label="Ranking">🏆</button>
         <button class="reader-btn random-header-btn" data-action="random" title="Surpreenda-me" aria-label="Surpreenda-me">🎲</button>
         <button class="reader-btn messages-header-btn" data-action="messages" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></button>
-        <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
+        <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações">🔔<span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜</button>
         <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
         <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
@@ -100,7 +100,7 @@
           settled = true;
           load(index + 1);
         };
-        script.onload = () => window.JSZip ? (settled = true, resolve(window.JSZip)) : next();
+        script.onload = () => window.JSZip ? (settled = true, resolve(null)) : next();
         script.onerror = next;
         window.setTimeout(next, 8000);
         document.head.appendChild(script);
@@ -116,7 +116,7 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
-  <script src="js/catalog-sync.js?v=1"></script>
+  <script src="js/catalog-sync.js?v=2"></script>
   <script src="js/telegram-auto.js?v=4"></script>
   <script src="js/series-default-covers.js?v=1"></script>
   <script src="js/telegram-covers.js?v=2"></script>
@@ -132,6 +132,7 @@
   <script src="js/data/dc-comics/black-label.js?v=1.0.14"></script>
   <script src="js/data/dc-comics/milestone.js?v=1.1.1"></script>
   <script src="js/data/dc-comics/novos-52.js?v=1.0.20"></script>
+  <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
     <script src="js/app.js?v=2.2.10.468"></script>
 </body>
