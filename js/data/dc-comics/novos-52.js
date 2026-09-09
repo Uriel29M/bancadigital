@@ -33,6 +33,20 @@
     "https://mega.co.nz/#!c8dAnCqR!NkIq6PrvlnGIbcfi5k9lYtVBKQv-Dc0th1Fw3RUeO2E",
     "https://www.mediafire.com/?uo1ni2bykup7dms"
   ];
+  fileUrlsBySeries["series-as-aventuras-do-superman-2013-novos-52"] = [
+    "https://www.mediafire.com/file/2uwq43goylnfalb/Aventuras_do_Superman_%252301_%25282013%2529_%2528DarkseidClub%2529.cbr/file",
+    "https://www.mediafire.com/file/rkv1y0kpsyxhgcz/Aventuras_do_Superman_%252302_%25282013%2529_%2528DarkseidClub%2529.cbr/file",
+    "https://www.mediafire.com/file/pfor5o9ya2kngkz/Aventuras_do_Superman_%252303_%25282013%2529_%2528DarkseidClub%2529.cbr/file",
+    "https://www.mediafire.com/file/2yoeege7gef4hh4/Aventuras_do_Superman_%252304_%25282015%2529_%2528DarkseidClub%2529.cbr/file",
+    "https://www.mediafire.com/file/i477hx8nrq634dv/As_Aventuras_do_Superman_%252305_%25282013%2529_%2528SoQuadrinhos%2529.cbr/file"
+  ];
+  coverUrlsBySeries["series-as-aventuras-do-superman-2013-novos-52"] = [
+    "https://comicvine.gamespot.com/a/uploads/scale_large/6/66303/3071429-adventures.jpg",
+    "https://comicvine.gamespot.com/a/uploads/scale_large/6/67663/3132491-02.jpg",
+    "https://comicvine.gamespot.com/a/uploads/scale_large/6/67663/3209777-03.jpg",
+    "https://comicvine.gamespot.com/a/uploads/scale_large/6/66303/3268866-adventures%20of%20superman.jpg",
+    "https://t.me/c/4424843914/60"
+  ];
   coverUrlsBySeries["series-action-comics-2011-novos-52"] = [
     "https://lh3.googleusercontent.com/blogger_img_proxy/AEn0k_sCc47cjNbkwPgfY-TCyUdCpXAYbyXGsLonOIpGaQfqdzp__CN6SQtMt5RatYtM2Zv_z_JaftnWsu7OZIrbF9hpcAzT3yyzmg0gjDT_fD8s_klkfJovZFGjbz7w8txn_1Q8Rvf-qGJQGpZh6g=s0-d",
     "https://lh3.googleusercontent.com/blogger_img_proxy/AEn0k_sPPUg-i_eWQVl6LnJsO280tk98K0ZfGSRl-VP70hiF7MJTgN-m9BjGI-ifBRMope2qfeqCfWoTABgvgrS60gcuRSUQgzq3oziyRUuftqQ4BOJszUUJCNH9fwbqsvdVHj8zULI=s0-d",
@@ -228,7 +242,7 @@
     ["series-arlequina-2013-novos-52", "Arlequina", "Harley Quinn", "Amanda Conner / Jimmy Palmiotti", "Arlequina", "Harley Quinn assume o protagonismo em uma série irreverente, caótica e cheia de humor.", "harley-quinn-2013/harley-quinn-0", "http://hqs-soquadrinhos.blogspot.com.br/2013/12/arlequina-2013.html", 19, "https://static.dc.com/dc/files/default_images/hquinn_v2_0_5b170b71f26ee8.48700576.jpg"],
     ["series-arqueiro-verde-2011-novos-52", "Arqueiro Verde", "Green Arrow", "J. T. Krul / Andrea Sorrentino / Jeff Lemire", "Arqueiro Verde", "Oliver Queen percorre o mundo em busca de justiça enquanto enfrenta inimigos e segredos ligados à própria família.", "green-arrow-2011/green-arrow-1", "http://hqs-soquadrinhos.blogspot.com/2011/08/arqueiro-verde-2011.html", 25, "https://static.dc.com/dc/files/default_images/garrow_v5_1_5b172067b04b84.18177226.jpg"],
     ["series-asa-noturna-2011-novos-52", "Asa Noturna", "Nightwing", "Kyle Higgins / Eddy Barrows", "Asa Noturna", "Dick Grayson retorna a Gotham e encara mistérios ligados ao circo onde passou a infância.", "nightwing-2011/nightwing-1", "http://hqs-soquadrinhos.blogspot.com/2011/09/asa-noturna-v3-012011.html", 31, "https://i.postimg.cc/FHBKHM4d/RG7htl-Y.jpg"],
-    ["series-as-aventuras-do-superman-2013-novos-52", "As Aventuras do Superman", "Adventures of Superman", "Jeff Parker / Jeff Lemire / Justin Jordan", "Superman", "Histórias independentes que mostram novas aventuras do Homem de Aço e seus encontros com ameaças clássicas.", "adventures-of-superman-2013/adventures-of-superman-1", "https://hqs-soquadrinhos.blogspot.com/2019/02/as-aventuras-do-superman-2013.html", 5, "https://comicvine.gamespot.com/a/uploads/6/66303/3071429-adventures.jpg"],
+    ["series-as-aventuras-do-superman-2013-novos-52", "As Aventuras do Superman", "Adventures of Superman", "Jeff Parker / Jeff Lemire / Justin Jordan", "Superman", "Histórias independentes que mostram novas aventuras do Homem de Aço e seus encontros com ameaças clássicas.", "adventures-of-superman-2013/adventures-of-superman-1", "https://hqs-soquadrinhos.blogspot.com/2019/02/as-aventuras-do-superman-2013.html", 5, "https://comicvine.gamespot.com/a/uploads/scale_large/6/66303/3071429-adventures.jpg"],
     ["series-aves-de-rapina-2011-novos-52", "Aves de Rapina", "Birds of Prey", "Duane Swierczynski / Jesús Saíz", "Canário Negro / Starling", "Canário Negro e Starling formam uma equipe de operações secretas enquanto tentam limpar seus nomes.", "birds-of-prey-2011/birds-of-prey-1-2011", "http://hqs-soquadrinhos.blogspot.com/2011/08/aves-de-rapina-2011.html", 28, "http://img33.imageshack.us/img33/3966/20095400x600.jpg"],
     ["series-furia-do-nuclear-2011-novos-52", "A Fúria do Nuclear: Os Homens Nucleares", "The Fury of Firestorm: The Nuclear Men", "Ethan Van Sciver / Gail Simone / Yildiray Cinar", "Firestorm", "Jason Rusch e Ronnie Raymond precisam lidar com as consequências do poder do Nuclear e com novos Firestorms.", "the-fury-of-firestorm-the-nuclear-men-2011/the-fury-of-firestorm-the-nuclear-men-0", "http://hqs-soquadrinhos.blogspot.com/2011/11/furia-do-nuclear-os-homens-nucleares.html", 21, "https://static.dc.com/dc/files/default_images/fury_firestorm_0_5b2450ff59f451.42227336.jpg"]
   ];
