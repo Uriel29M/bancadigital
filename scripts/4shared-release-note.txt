@@ -1,0 +1,1 @@
+Temporary staging note for the isolated 4shared reader integration. No catalog or existing provider files are modified by this note.
