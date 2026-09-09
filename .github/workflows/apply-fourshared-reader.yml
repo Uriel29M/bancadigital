@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Diagnose exact 4shared source
+        run: python scripts/diagnose-4shared-live.py
       - name: Apply guarded patch
         run: node scripts/apply-fourshared-reader.mjs
       - name: Check JavaScript syntax
