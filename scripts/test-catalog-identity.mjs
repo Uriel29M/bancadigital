@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const context = { window: {}, Map, Set, console };
+vm.runInNewContext(fs.readFileSync(new URL('../js/catalog-sync.js', import.meta.url), 'utf8'), context);
+const sync = context.window.BancaCatalogSync;
+const canonical = 'series-aves-de-rapina-2011-novos-52';
+const wrong = 'series-birds-of-prey-2023';
+const make = n => ({ id: `${canonical}-${String(n).padStart(3, '0')}`, seriesId: wrong, year: 2011, issue: String(n), coverUrl: `cover-${n}.jpg`, fileUrl: `file-${n}.cbr` });
+const client = { from: () => ({ upsert(payload) { return { select() { return { async single() { return { data: { ...payload, updated_at: '2026-09-09T07:00:00Z' } }; } }; } }; } }) };
+for (let n = 1; n <= 28; n++) {
+  const item = make(n);
+  const saved = await sync.publish(client, item, 'admin');
+  assert.equal(saved.edition.seriesId, canonical);
+  assert.equal(saved.edition.coverUrl, item.coverUrl);
+  assert.equal(saved.edition.fileUrl, item.fileUrl);
+  assert.equal(sync.applyEdition(item, { ...item, seriesId: wrong }).seriesId, canonical);
+  assert.equal(sync.merge([item])[0].seriesId, canonical);
+}
+const shazam = { id: 'series-shazam-2011-001', seriesId: 'series-shazam-2011', title: 'Shazam!' };
+const birds2023 = { id: 'birds-of-prey-2023-001', seriesId: wrong, title: 'Aves de Rapina' };
+assert.equal(sync.normalizeEdition(shazam).seriesId, shazam.seriesId);
+assert.equal(sync.normalizeEdition(birds2023).seriesId, wrong);
+assert.equal(sync.normalizeEdition(make(29)).seriesId, wrong);
+const stale = make(4);
+sync.accept([{ item_id: stale.id, edition: stale, updated_at: '2026-09-09T08:00:00Z' }]);
+assert.equal(sync.rows.get(stale.id).edition.seriesId, canonical);
+assert.equal(sync.merge([]).find(item => item.id === stale.id).seriesId, canonical);
+console.log('PASS: 28 edições preservam identidade e capas ao publicar, mesclar e ler overrides.');
+console.log('PASS: Shazam, Aves de Rapina 2023 e IDs fora do intervalo permanecem inalterados.');
