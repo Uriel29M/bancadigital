@@ -6712,6 +6712,7 @@
       readerIsOpen = false;
       if (readerSingleClickTimer) window.clearTimeout(readerSingleClickTimer);
       readerSingleClickTimer = null;
+      overlay._pdfDownloadController?.abort();
       overlay._cbzDownloadController?.abort();
       overlay._cbrDownloadController?.abort();
       overlay.remove();
@@ -7242,6 +7243,38 @@
     return `<aside class="reader-loading-tip"><span class="reader-loading-tip-text">${escapeHTML(tip.text || "")}</span></aside>`;
   }
 
+  async function fetchPdfBuffer(url, signal, onProgress = () => {}) {
+    const response = await fetch(proxiedFileUrl(url), {
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      priority: "high",
+      signal
+    });
+    if (!response.ok) {
+      const error = new Error(`Arquivo não encontrado (HTTP ${response.status})`);
+      error.name = 'MissingPDFException';
+      throw error;
+    }
+    const total = Number(response.headers.get("content-length")) || 0;
+    if (!response.body?.getReader) return await response.arrayBuffer();
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      chunks.push(part.value);
+      received += part.value.byteLength;
+      onProgress(received, total);
+    }
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    chunks.forEach(chunk => { bytes.set(chunk, offset); offset += chunk.byteLength; });
+    return bytes.buffer;
+  }
+
   async function renderPDFReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
     body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Carregando PDF…</div><progress class="reader-progress"></progress>${readerLoadingTipMarkup()}<div class="reader-spinner"></div></div>`;
     try {
@@ -7251,8 +7284,9 @@
         throw Object.assign(new Error("PDF.js não está disponível nesta página."), { name: "PDFJS_MISSING" });
       }
 
-      // Fetch the PDF data manually to have better control over errors.
-      // This helps distinguish between "file not found" and "invalid file".
+      // Fetch Telegram PDFs ourselves and hand bytes to PDF.js. Some browsers
+      // fail when the worker performs its own ranged requests against the Edge
+      // Function, even though the endpoint returns a valid PDF.
       body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Abrindo arquivo PDF…</div><progress class="reader-progress"></progress>${readerLoadingTipMarkup()}<div class="reader-spinner"></div></div>`;
       let pdfData;
       let pdfUrl = null;
@@ -7260,23 +7294,31 @@
         pdfData = await prefetchedBuffer;
       } else if (item.local && item.file) {
         pdfData = await item.file.arrayBuffer();
+      } else if (isTelegramMediaUrl(url)) {
+        const downloadController = new AbortController();
+        overlay._pdfDownloadController = downloadController;
+        const progressBar = body.querySelector(".reader-progress");
+        const label = body.querySelector(".reader-loading-label");
+        const detail = document.createElement("div");
+        detail.className = "reader-loading-detail";
+        body.querySelector(".reader-loading")?.appendChild(detail);
+        pdfData = await fetchPdfBuffer(url, downloadController.signal, (received, total) => {
+          if (label) label.textContent = "Baixando PDF…";
+          if (!progressBar) return;
+          if (total > 0) {
+            progressBar.max = 100;
+            progressBar.value = Math.min(100, Math.round((received / total) * 100));
+            detail.textContent = `${(received / 1048576).toFixed(1)} MB de ${(total / 1048576).toFixed(1)} MB`;
+          } else {
+            progressBar.removeAttribute("value");
+            detail.textContent = `${(received / 1048576).toFixed(1)} MB processados`;
+          }
+        });
       } else if (!prefetchedBuffer && !item.local) {
-        // PDF.js busca somente os intervalos necessários do PDF.
+        // PDF.js busca somente os intervalos necessários para fontes comuns.
         pdfUrl = proxiedFileUrl(url);
       } else {
-        const response = await fetch(proxiedFileUrl(url), {
-          method: "GET",
-          mode: "cors",
-          credentials: "omit",
-          cache: "default",
-          priority: "high"
-        });
-        if (!response.ok) {
-          const error = new Error(`Arquivo não encontrado (HTTP ${response.status})`);
-          error.name = 'MissingPDFException';
-          throw error;
-        }
-        pdfData = await response.arrayBuffer();
+        pdfData = await fetchPdfBuffer(url, null);
       }
       if (pdfData && !pdfData.byteLength) throw new Error("PDF vazio.");
 
