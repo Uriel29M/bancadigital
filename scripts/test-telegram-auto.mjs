@@ -69,6 +69,14 @@ test('reader uses the canonical shared identifier rather than stale local metada
   assert.equal(url.searchParams.get('item_id'), 'edition-5');
   assert.equal(url.searchParams.has('file_id'), false);
 });
+test('reader accepts a shared override when the Telegram post was corrected later', async () => {
+  const row = { item_id: 'edition-5', edition: { id: 'edition-5', ...metadata, telegramUrl: 'https://t.me/bancahq/8' }, updated_at: '2026-09-09T00:27:46Z' };
+  const api = load();
+  const db = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: row, error: null }) }) }) }) };
+  const item = await api.published({ id: 'edition-5', telegramUrl: 'https://t.me/bancahq/7', telegramFileId: '', fileUrl: '' }, db);
+  assert.equal(item.telegramUrl, 'https://t.me/bancahq/8');
+  assert.equal(item.telegramFileId, metadata.telegramFileId);
+});
 test('large-file gateway requires a shared catalog item', () => {
   const api = load();
   assert.equal(api.proxyUrl({ ...metadata }), '');

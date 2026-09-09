@@ -35,7 +35,7 @@ window.BancaTelegram = (() => {
     if (!item?.id || !client || !normalized(item.telegramUrl)) return item;
     const { data, error } = await client.from('catalog_edition_overrides').select('item_id,edition,updated_at').eq('item_id', String(item.id)).maybeSingle();
     if (error) throw error;
-    if (!data?.edition || !samePost(item.telegramUrl, data.edition.telegramUrl)) return item;
+    if (!data?.edition) return item;
     if (String(data.edition.id) !== String(item.id)) throw new Error('O cadastro compartilhado está inconsistente.');
     const merged = { ...item, ...data.edition, catalogEditedAt: data.updated_at };
     const fields = ['fileUrl', 'telegramUrl', 'telegramFileId', 'telegramFileName', 'telegramFileSize', 'format'];

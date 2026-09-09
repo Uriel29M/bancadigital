@@ -433,7 +433,6 @@
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "issue": "2",
     "sortOrder": 2,
-    "format": "comic",
     "fileUrl": "",
     "sourceUrl": "http://hqs-soquadrinhos.blogspot.com/2015/06/secao-oito-2015.html",
     "clicks": 0,
@@ -443,8 +442,12 @@
     "downloadCount": 0,
     "title": "All-Star Seção Oito",
     "year": 2015,
-    "telegramUrl": "https://t.me/c/4424843914/57",
+    "telegramUrl": "https://t.me/c/4424843914/58",
     "coverUrl": "https://t.me/c/4424843914/70",
+    "telegramFileId": "BQACAgEAAyEFAAMBB73CigADOmqf-9y21vG_MDCyQeXJpbSVpSOLAAK5CAAC830BRXXzrKA9IMbvPQQ",
+    "telegramFileName": "2 Não É Fácil Ser Verde.pdf",
+    "telegramFileSize": 27331721,
+    "format": "pdf",
     "catalogEditedAt": "2026-09-08T23:06:11.455Z"
   },
   {
