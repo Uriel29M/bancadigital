@@ -284,6 +284,12 @@
             return { ...item, fileUrl: defaultItem.fileUrl };
           });
           let normalizedSeriesIds = false;
+          let updatedSectionEightIssue2Cover = false;
+          saved.library = saved.library.map(item => {
+            if (item.id !== "series-all-star-secao-oito-2015-novos-52-002" || item.coverUrl !== "https://t.me/c/4424843914/58") return item;
+            updatedSectionEightIssue2Cover = true;
+            return { ...item, coverUrl: "https://t.me/c/4424843914/70" };
+          });
           saved.library = saved.library.map(item => {
             const canonicalSeriesId = canonicalSeriesIdFor(item.seriesTitle, item.seriesId);
             if (!canonicalSeriesId || item.seriesId === canonicalSeriesId) return item;
@@ -324,7 +330,7 @@
             const previous = previousLibrary.find(entry => entry.id === item.id);
             return previous && (previous.volume !== item.volume || previous.volumeTitle !== item.volumeTitle);
           });
-          if (normalizedSeriesIds || updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
+          if (normalizedSeriesIds || updatedSectionEightIssue2Cover || updatedIcon13Url || knightVolumesChanged || hadStargirlAdvertisement || batgirlsCharacterChanged || hadUnavailableMilestoneIssues || hadObsoleteHardwareIssues || hadLegacyIconCatalog) this.save(saved);
           if (saved.library.some(item => item.id === "series-justice-godzilla-kong-2023-08" && String(item.fileUrl || "").includes("bpk2XxWKhFNO9s"))) this.save(saved);
           const knownIds = new Set(saved.library.map(item => item.id));
           const newDefaults = materializeSeriesItems(structuredClone(window.DEFAULT_LIBRARY)).filter(item => !knownIds.has(item.id) && !removedItemIds.has(item.id) && !isLegacyRemovedCatalogItem(item));
