@@ -18275,6 +18275,33 @@
     downloadSeriesButton.dataset.seriesDownloadModal = series.seriesId;
     $(".modal-actions", overlay)?.prepend(downloadSeriesButton);
     downloadSeriesButton.addEventListener("click", () => startSeriesDownload(editions));
+    if (isAdminProfile()) {
+      const addEditionButton = document.createElement("button");
+      addEditionButton.className = "small-btn";
+      addEditionButton.type = "button";
+      addEditionButton.textContent = "+ Adicionar edição";
+      $(".modal-actions", overlay)?.insertBefore(addEditionButton, downloadSeriesButton.nextSibling);
+      addEditionButton.addEventListener("click", () => {
+        overlay.remove();
+        openEditForm(null, {
+          title: series.title || series.seriesTitle || "",
+          seriesTitle: series.seriesTitle || series.title || "",
+          seriesId: series.seriesId || series.id || "",
+          type: series.type || "comic",
+          author: series.author || "",
+          publisher: series.publisher || "",
+          imprint: series.imprint || "",
+          character: series.character || "",
+          year: series.year || new Date().getFullYear(),
+          description: series.description || "",
+          tags: Array.isArray(series.tags) ? series.tags : [],
+          publication: series.publication || "",
+          status: series.status || "",
+          editions: series.editions || "",
+          featured: true,
+        });
+      });
+    }
     refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
     overlay.addEventListener("click", event => {
@@ -18756,9 +18783,9 @@
     $$('[data-delete-collection]', overlay).forEach(button => button.onclick = () => { state.db.collections = state.db.collections.filter(c => c.id !== button.dataset.deleteCollection); saveCatalog("Coleção excluída."); overlay.remove(); openAdmin(); });
   }
 
-  function openEditForm(id = null) {
+  function openEditForm(id = null, initial = null) {
     const old = id ? state.db.library.find(x => x.id === id) : null;
-    const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", telegramFileId: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [] };
+    const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", telegramFileId: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [], ...(initial || {}) };
     const secondaryCharacters = Array.isArray(x.secondaryCharacters)
       ? x.secondaryCharacters
       : Array.isArray(x.characters)
