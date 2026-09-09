@@ -105,12 +105,12 @@ self.addEventListener("fetch", event => {
       const response = await fetch(request);
       if (response.ok) {
         const copy = response.clone();
-        caches.open(SHELL_CACHE).then(cache.put(request, response.clone())).catch(() => {});
+        caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
       }
       return response;
     } catch {
       return new Response("Offline", {
-        status: 503, statusText: "Offline",
+        status: 503, statusText: "Offline" ,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
