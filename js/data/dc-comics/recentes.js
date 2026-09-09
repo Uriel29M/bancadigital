@@ -2352,7 +2352,7 @@ window.DEFAULT_SERIES = [
     "editions": "28",
     "year": 2011,
     "description": "Canário Negro e Starling formam uma equipe de operações secretas enquanto tentam limpar seus nomes.",
-    "coverUrl": "http://img33.imageshack.us/img33/3966/20095400x600.jpg",
+    "coverUrl": "https://img33.imageshack.us/img33/3966/20095400x600.jpg",
     "blogUrl": "http://hqs-soquadrinhos.blogspot.com/2011/08/aves-de-rapina-2011.html",
     "telegramUrl": "",
     "author": "Duane Swierczynski / Jesús Saíz",
