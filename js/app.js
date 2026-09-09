@@ -367,6 +367,9 @@
         if (error?.name !== "QuotaExceededError") throw error;
         clearGeneratedCoverCache();
         try {
+          // Remover a cópia anterior evita que o navegador precise reservar
+          // espaço para a nova versão antes de liberar a antiga.
+          localStorage.removeItem(DB_KEY);
           localStorage.setItem(DB_KEY, payload);
         } catch (retryError) {
           if (!storageQuotaWarningShown) {
@@ -7244,18 +7247,35 @@
   }
 
   async function fetchPdfBuffer(url, signal, onProgress = () => {}) {
-    const response = await fetch(proxiedFileUrl(url), {
-      method: "GET",
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store",
-      priority: "high",
-      signal
-    });
-    if (!response.ok) {
-      const error = new Error(`Arquivo não encontrado (HTTP ${response.status})`);
-      error.name = 'MissingPDFException';
-      throw error;
+    const source = proxiedFileUrl(url);
+    let response;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        response = await fetch(source, {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store",
+          priority: "high",
+          signal
+        });
+      } catch (error) {
+        if (signal?.aborted || attempt === 3) throw error;
+        await new Promise(resolve => setTimeout(resolve, 800 * (attempt + 1)));
+        continue;
+      }
+      if (response.ok) break;
+      const retryable = [429, 502, 503, 504].includes(response.status);
+      if (!retryable || attempt === 3) {
+        const error = new Error(`Arquivo não encontrado (HTTP ${response.status})`);
+        error.name = 'MissingPDFException';
+        throw error;
+      }
+      const retryAfter = Number(response.headers.get("retry-after"));
+      const delay = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(10000, retryAfter * 1000)
+        : 800 * (attempt + 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
     const total = Number(response.headers.get("content-length")) || 0;
     if (!response.body?.getReader) return await response.arrayBuffer();
