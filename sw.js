@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v606";
+const CACHE_VERSION = "banca-digital-shell-v607";
 const SHELL_CACHE = CACHE_VERSION;
 
 const APP_SHELL = [
@@ -6,7 +6,8 @@ const APP_SHELL = [
   "./index.html",
   "./css/style.css?v=2.2.10.226",
   "./js/app.js?v=2.2.10.468",
-  "./js/catalog-sync.js?v=1",
+  "./js/catalog-sync.js?v=2",
+  "./js/catalog-identity.js?v=1",
   "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2",
   "./js/data.js?v=2.2.7.39",
@@ -76,6 +77,7 @@ self.addEventListener("fetch", event => {
   if (
     url.pathname.endsWith("/js/app.js") ||
     url.pathname.endsWith("/js/catalog-sync.js") ||
+    url.pathname.endsWith("/js/catalog-identity.js") ||
     url.pathname.endsWith("/js/telegram-auto.js") ||
     url.pathname.endsWith("/js/telegram-covers.js") ||
     url.pathname.endsWith("/css/style.css") ||
@@ -103,13 +105,12 @@ self.addEventListener("fetch", event => {
       const response = await fetch(request);
       if (response.ok) {
         const copy = response.clone();
-        caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
+        caches.open(SHELL_CACHE).then(cache.put(request, response.clone())).catch(() => {});
       }
       return response;
     } catch {
       return new Response("Offline", {
-        status: 503,
-        statusText: "Offline",
+        status: 503, statusText: "Offline",
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
