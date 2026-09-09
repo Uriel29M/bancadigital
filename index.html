@@ -37,7 +37,7 @@
         <button class="reader-btn ranking-header-btn" data-section="ranking" title="Ranking" aria-label="Ranking">🏆</button>
         <button class="reader-btn random-header-btn" data-action="random" title="Surpreenda-me" aria-label="Surpreenda-me">🎲</button>
         <button class="reader-btn messages-header-btn" data-action="messages" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></button>
-        <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações">🔔<span class="notification-badge" hidden></span></button>
+        <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜</button>
         <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
         <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
@@ -100,7 +100,7 @@
           settled = true;
           load(index + 1);
         };
-        script.onload = () => window.JSZip ? (settled = true, resolve(null)) : next();
+        script.onload = () => window.JSZip ? (settled = true, resolve(window.JSZip)) : next();
         script.onerror = next;
         window.setTimeout(next, 8000);
         document.head.appendChild(script);
