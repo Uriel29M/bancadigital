@@ -19274,7 +19274,8 @@
   const modalRoot = document.getElementById("modal-root");
   let modalScrollLock = null;
   ["pointerdown", "pointermove", "pointerup", "pointercancel"].forEach(type => {
-    modalRoot?.addEventListener(type, event => event.stopPropagation(), true);
+    // Let modal controls receive pointer events before isolating the background.
+    modalRoot?.addEventListener(type, event => event.stopPropagation());
   });
   const preventBackgroundScroll = event => {
     if (!modalRoot?.children.length) return;
