@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v614-series-id";
+const CACHE_VERSION = "banca-digital-shell-v615-series-order";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.226",
-  "./js/app.js?v=2.2.10.472-series-id", "./js/catalog-sync.js?v=2",
+  "./", "./index.html", "./css/style.css?v=2.2.10.232-series-order",
+  "./js/app.js?v=2.2.10.473-series-order", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.47",

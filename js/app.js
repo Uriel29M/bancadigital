@@ -4916,6 +4916,7 @@
   }
 
   function issueSortValue(item) {
+    if (Number.isFinite(item?.seriesSortOrder)) return -1000000000 + item.seriesSortOrder;
     const explicitOrder = Number(item?.sortOrder);
     if (Number.isFinite(explicitOrder)) return explicitOrder;
     const issueNumber = Number(String(item?.issue || "").match(/\d+(?:\.\d+)?/)?.[0]);
@@ -18325,6 +18326,116 @@
     });
   }
 
+  function bindSeriesEditionOrder(overlay, editions) {
+    const grids = $$('.series-volume-panel .results-grid', overlay);
+    const originals = grids.map(grid => [...grid.children]);
+    const controls = document.createElement('div');
+    controls.className = 'series-order-controls';
+    controls.innerHTML = '<button type="button" class="small-btn" data-order-start>Reordenar edições</button><button type="button" class="small-btn" data-order-save hidden>Salvar ordem</button><button type="button" class="small-btn" data-order-cancel hidden>Cancelar</button><span role="status" aria-live="polite" data-order-status></span>';
+    $('.section-head', overlay).after(controls);
+    const start = $('[data-order-start]', controls), submit = $('[data-order-save]', controls), cancel = $('[data-order-cancel]', controls), status = $('[data-order-status]', controls);
+    let editing = false, saving = false, drag = null;
+    const handles = [];
+    const mode = active => {
+      editing = active;
+      overlay.classList.toggle('series-order-editing', active);
+      start.hidden = active;
+      submit.hidden = cancel.hidden = !active;
+      handles.forEach(handle => { handle.hidden = !active; });
+      status.textContent = active ? 'Arraste pela alça ou use as setas do teclado. Depois, salve a ordem.' : '';
+    };
+    const finishDrag = () => {
+      if (!drag) return;
+      drag.wrap.classList.remove('is-order-dragging');
+      drag = null;
+    };
+    // Capture prevents opening the reader or metadata while arranging covers.
+    overlay.addEventListener('click', event => {
+      if (editing && event.target.closest('.card-wrap')) { event.preventDefault(); event.stopPropagation(); }
+      if (saving && !controls.contains(event.target)) { event.preventDefault(); event.stopPropagation(); }
+    }, true);
+    grids.forEach(grid => [...grid.children].forEach(wrap => {
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'small-btn series-order-handle';
+      handle.textContent = '⠿ Arrastar edição';
+      handle.setAttribute('aria-label', `Mover ${$('[data-open]', wrap)?.getAttribute('data-open') || 'edição'}; use as setas para reordenar`);
+      handle.hidden = true;
+      handles.push(handle);
+      wrap.prepend(handle);
+      handle.addEventListener('pointerdown', event => {
+        if (!editing || saving || event.button !== 0) return;
+        event.preventDefault();
+        drag = { wrap, grid, pointerId: event.pointerId };
+        wrap.classList.add('is-order-dragging');
+        handle.setPointerCapture(event.pointerId);
+      });
+      handle.addEventListener('pointermove', event => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.card-wrap');
+        if (target && target !== wrap && target.parentElement === grid) {
+          const children = [...grid.children];
+          grid.insertBefore(wrap, children.indexOf(wrap) < children.indexOf(target) ? target.nextSibling : target);
+          handle.setPointerCapture(event.pointerId);
+        }
+        const modal = $('.series-modal', overlay);
+        const rect = modal.getBoundingClientRect();
+        if (event.clientY < rect.top + 70) modal.scrollTop -= 24;
+        else if (event.clientY > rect.bottom - 70) modal.scrollTop += 24;
+      });
+      handle.addEventListener('pointerup', finishDrag);
+      handle.addEventListener('pointercancel', finishDrag);
+      handle.addEventListener('lostpointercapture', finishDrag);
+      handle.addEventListener('keydown', event => {
+        if (!editing || saving || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault(); event.stopPropagation();
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+          if (wrap.previousElementSibling) grid.insertBefore(wrap, wrap.previousElementSibling);
+        } else if (wrap.nextElementSibling) grid.insertBefore(wrap, wrap.nextElementSibling.nextSibling);
+        handle.focus();
+      });
+    }));
+    start.onclick = () => mode(true);
+    cancel.onclick = () => {
+      finishDrag();
+      grids.forEach((grid, index) => originals[index].forEach(wrap => grid.appendChild(wrap)));
+      mode(false);
+    };
+    submit.onclick = async () => {
+      if (saving || !isAdminProfile()) return;
+      finishDrag();
+      saving = true;
+      submit.disabled = cancel.disabled = true;
+      handles.forEach(handle => { handle.disabled = true; });
+      status.textContent = 'Salvando ordem…';
+      try {
+        const ids = grids.flatMap(grid => [...grid.children].map(wrap => $('[data-open]', wrap).dataset.open));
+        const expected = new Set(editions.map(item => String(item.id)));
+        if (ids.length !== expected.size || new Set(ids).size !== expected.size || ids.some(id => !expected.has(id))) throw new Error('A lista de edições mudou. Reabra a série e tente novamente.');
+        const items = ids.map((id, index) => {
+          const item = state.db.library.find(entry => String(entry.id) === id);
+          const original = editions.find(entry => String(entry.id) === id);
+          if (!item || item.seriesId !== original.seriesId) throw new Error('Uma edição mudou de série. Reabra o seletor.');
+          return { ...item, seriesSortOrder: index, catalogEditedAt: new Date().toISOString() };
+        });
+        const records = await BancaCatalogSync.publishMany(sb, items, state.session?.user?.id);
+        const confirmed = new Map(records.map(row => [String(row.item_id), { ...row.edition, catalogEditedAt: row.updated_at }]));
+        state.db.library = state.db.library.map(item => confirmed.get(String(item.id)) || item);
+        save();
+        grids.forEach((grid, index) => { originals[index] = [...grid.children]; });
+        mode(false);
+        status.textContent = 'Ordem salva para todos os usuários.';
+      } catch (error) {
+        status.textContent = `Não foi possível salvar: ${error.message || 'tente novamente.'}`;
+      } finally {
+        saving = false;
+        submit.disabled = cancel.disabled = false;
+        handles.forEach(handle => { handle.disabled = false; });
+      }
+    };
+  }
+
   function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null) {
     if (isHiddenCatalogSeries(series?.seriesId || series?.id) && !isAdminProfile()) {
       toast("Esta série está temporariamente oculta.");
@@ -18386,6 +18497,7 @@
         });
       });
     }
+    if (isAdminProfile()) bindSeriesEditionOrder(overlay, editions);
     refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
     overlay.addEventListener("click", event => {

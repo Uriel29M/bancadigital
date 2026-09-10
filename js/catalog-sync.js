@@ -73,6 +73,22 @@ window.BancaCatalogSync = (() => {
       pending.delete(id);
     }
   }
+  async function publishMany(client, editions, userId) {
+    if (!client || !userId || !editions.length || editions.some(item => !item?.id)) throw new Error("Sessão de administrador e edições válidas necessárias.");
+    const ids = editions.map(item => String(item.id));
+    if (new Set(ids).size !== ids.length || ids.some(id => pending.has(id))) throw new Error("Há edições duplicadas ou sendo salvas. Tente novamente.");
+    ids.forEach(id => pending.add(id));
+    try {
+      const result = await client.from(table).upsert(editions.map(edition => ({ item_id: String(edition.id), edition: normalizeEdition({ ...edition }), updated_by: userId })), { onConflict: "item_id" }).select("item_id,edition,updated_at");
+      if (result.error) throw result.error;
+      const confirmed = new Set((result.data || []).filter(valid).map(row => String(row.item_id)));
+      if (confirmed.size !== ids.length || ids.some(id => !confirmed.has(id))) throw new Error("O banco não confirmou a ordem completa. Tente novamente.");
+      result.data.forEach(row => rows.set(String(row.item_id), row));
+      return result.data;
+    } finally {
+      ids.forEach(id => pending.delete(id));
+    }
+  }
   function start(client, refresh) {
     if (!client || channel) return;
     channel = client.channel("banca-catalog-editions").on("postgres_changes", { event: "*", schema: "public", table }, () => { refresh().catch(error => console.warn("Atualização do catálogo indisponível:", error)); }).subscribe();
@@ -83,5 +99,5 @@ window.BancaCatalogSync = (() => {
       timer = window.setInterval(() => { if (!document.hidden && navigator.onLine !== false) refresh().catch(() => {}); }, 60000);
     }
   }
-  return { fields, rows, pending, merge, accept, read, publish, start, applyEdition, normalizeEdition };
+  return { fields, rows, pending, merge, accept, read, publish, publishMany, start, applyEdition, normalizeEdition };
 })();

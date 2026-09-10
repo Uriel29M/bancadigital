@@ -7,12 +7,12 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.230">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.232-series-order">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=258-series-id", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=259-series-order", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -116,7 +116,7 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
-  <script src="js/catalog-sync.js?v=2"></script>
+  <script src="js/catalog-sync.js?v=3-series-order"></script>
   <script src="js/telegram-auto.js?v=4"></script>
   <script src="js/series-default-covers.js?v=1"></script>
   <script src="js/telegram-covers.js?v=2"></script>
@@ -134,6 +134,6 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.20"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.472-series-id"></script>
+    <script src="js/app.js?v=2.2.10.473-series-order"></script>
 </body>
 </html>
