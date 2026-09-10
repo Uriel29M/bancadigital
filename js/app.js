@@ -94,7 +94,7 @@
   function materializeSeriesItems(items = []) {
     const series = new Map((window.DEFAULT_SERIES || []).map(entry => [entry.id, entry]));
     return items.map(item => {
-      const inferredSeriesId = String(item.id || "").startsWith("harley-quinn-2021-")
+      const inferredSeriesId = !item.catalogEditedAt && String(item.id || "").startsWith("harley-quinn-2021-")
         ? "series-harley-quinn-2021"
         : item.seriesId;
       const definition = series.get(inferredSeriesId);
@@ -282,7 +282,7 @@
           const previousLibrary = saved.library;
           let updatedIcon13Url = false;
           saved.library = saved.library.map(item => {
-            if (!/^series-shazam-2023-\d{2}$/.test(String(item.id || ""))) return item;
+            if (item.catalogEditedAt || !/^series-shazam-2023-\d{2}$/.test(String(item.id || ""))) return item;
             return { ...item, seriesId: "series-shazam-2023", seriesTitle: item.seriesTitle || "Shazam!", title: item.title || "Shazam!" };
           });
           saved.library = saved.library.map(item => {
@@ -300,6 +300,7 @@
             return { ...item, coverUrl: "https://t.me/c/4424843914/70" };
           });
           saved.library = saved.library.map(item => {
+            if (item.catalogEditedAt) return item;
             const canonicalSeriesId = canonicalSeriesIdFor(item.seriesTitle, item.seriesId);
             if (!canonicalSeriesId || item.seriesId === canonicalSeriesId) return item;
             normalizedSeriesIds = true;
@@ -4755,7 +4756,7 @@
       .replace(/&gt;/gi, ">")
       .replace(/Â·/g, "·")
       .replace(/â€™/g, "’")
-      .replace(/â€œ|â€/g, '"')
+      .replace(/â€œ|â€^]/g, '"')
       .replace(/â€“|â€”/g, "–")
       .replace(/â€¢|âœ•/g, "•")
       .replace(/Ã—/g, "×")
@@ -18879,6 +18880,7 @@
       <div class="modal"><div class="section-head"><div><h2>${id ? "Editar edição" : "Nova edição"}</h2><div class="section-subtitle">A capa será extraída da primeira página</div></div><button class="small-btn" data-close>Fechar</button></div>
         <form id="edit-form"><div class="form-grid">
           <div class="field"><label>Título da edição</label><input name="title" required value="${escapeHTML(x.title)}"></div>
+          <div class="field"><label for="edition-series-id">ID da série</label><input id="edition-series-id" name="seriesId" value="${escapeHTML(x.seriesId || "")}" placeholder="Ex.: series-minha-serie"><small class="format-hint">Use um ID existente para mover a edição ou um novo para criar uma série. Vazio: gerar pelo nome da série.</small></div>
           <div class="field full"><label>Série (deixe vazio para oneshot)</label><input name="seriesTitle" value="${escapeHTML(x.seriesTitle || "")}" placeholder="Ex.: Homem-Aranha, Universo Casulo"></div>
           <div class="field"><label>Número da edição / volume</label><input name="volume" type="text" value="${escapeHTML(String(x.issue || ""))}" placeholder="Ex.: 0, 1, Anuário"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
@@ -18897,6 +18899,18 @@
     const source = $("[name=sourceUrl]", overlay), preview = $("[data-format-preview]", overlay), volume = $("[name=volume]", overlay), oneShot = $("[name=oneShot]", overlay);
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
+    const seriesIdInput = $("[name=seriesId]", overlay);
+    const seriesTitleInput = $("[name=seriesTitle]", overlay);
+    const findSeries = seriesId => state.db.library.find(item => item.seriesId === seriesId && item.id !== x.id)
+      || (window.DEFAULT_SERIES || []).find(series => series.id === seriesId);
+    seriesIdInput.addEventListener("input", () => {
+      const seriesId = seriesIdInput.value.trim();
+      if (!seriesId) return;
+      oneShot.checked = false;
+      syncOneShot();
+      const series = findSeries(seriesId);
+      if (series) seriesTitleInput.value = series.seriesTitle || series.name || series.title || "";
+    });
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
     const telegramEditor = window.BancaTelegram.bindEditor($("#edit-form", overlay), sb, x);
     const telegramCoverEditor = window.BancaTelegramCovers.bindEditor($("#edit-form", overlay), sb);
@@ -18909,7 +18923,9 @@
       const isTelegram = isTelegramPostUrl(sourceUrl);
       const telegramFileId = String(fd.get("telegramFileId") || "").trim();
       const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-      const seriesTitle = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesTitle") || "").trim();
+      const explicitSeriesId = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesId") || "").trim();
+      const targetSeries = explicitSeriesId ? findSeries(explicitSeriesId) : null;
+      const seriesTitle = fd.get("oneShot") === "on" ? "" : String(targetSeries?.seriesTitle || targetSeries?.name || targetSeries?.title || fd.get("seriesTitle") || (explicitSeriesId ? fd.get("title") : "") || "").trim();
       const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").trim();
       const character = String(fd.get("character") || "").trim();
       const secondaryCharacters = [...new Set(String(fd.get("secondaryCharacters") || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
@@ -18917,7 +18933,7 @@
         ...x,
         title: String(fd.get("title") || "").trim(),
         seriesTitle,
-        seriesId: seriesTitle ? seriesKey(seriesTitle) : "",
+        seriesId: explicitSeriesId || (seriesTitle ? seriesKey(seriesTitle) : ""),
         issue: volumeNumber,
         type: fd.get("type"),
         year: Number(fd.get("year")) || new Date().getFullYear(),
