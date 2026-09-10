@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v616-drag-fix";
+const CACHE_VERSION = "banca-digital-shell-v617-imprint-characters";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.232-series-order",
-  "./js/app.js?v=2.2.10.474-drag-fix", "./js/catalog-sync.js?v=3-series-order",
+  "./js/app.js?v=2.2.10.475-imprint-characters", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.47",

@@ -9921,8 +9921,11 @@
   }
 
   function characterNames(item) {
-    const explicit = Array.isArray(item?.characters) ? item.characters : null;
-    const values = explicit || [item?.character, ...(Array.isArray(item?.secondaryCharacters) ? item.secondaryCharacters : [])];
+    const values = [
+      item?.character,
+      ...(Array.isArray(item?.secondaryCharacters) ? item.secondaryCharacters : []),
+      ...(Array.isArray(item?.characters) ? item.characters : [])
+    ];
     const names = values.flatMap(value => {
       const name = value && typeof value === "object" ? (value.name || value.character || "") : value;
       return String(name || "").split(/\s*(?:\/|\be\b)\s*/i);
@@ -10370,7 +10373,7 @@
           return `<button class="publisher-card imprint-card" type="button" data-imprint="${escapeHTML(imprint)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(imprint)}</strong><span>${imprintItems.length} edição(ões)</span></div></button>`;
         }).join("");
       const relatedImprintsMarkup = relatedImprintCards ? `<section class="section imprint-carousel-section related-imprints-section"><div class="section-head"><div><h2 class="section-title">Outros selos<span class="related-imprints-publisher-suffix"> da editora</span></h2><div class="section-subtitle">Conheça outros selos presentes no catálogo da mesma editora.</div></div><div class="carousel-controls" aria-label="Navegação de outros selos"><button class="carousel-control" type="button" data-imprint-carousel-prev aria-label="Selo anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-imprint-carousel-next aria-label="Próximo selo" title="Próximo">›</button></div></div><div class="imprint-carousel" data-imprint-carousel aria-label="Outros selos da editora"><div class="imprint-carousel-track">${relatedImprintCards}</div></div></section>` : "";
-      const imprintCharacterRail = imprintCharacterMarkup(items);
+      const imprintCharacterRail = imprintCharacterMarkup(allItems);
       const entityCards = ((sortCatalogCards(uniqueCatalogItems(items)).map(item => item.seriesId ? seriesCard(item) : card(item)).join("") || '<div class="empty">Nenhuma edição encontrada.</div>') + (relatedImprintsMarkup ? `</div></section>${relatedImprintsMarkup}<section class="section"><div class="results-grid">` : ""));
       const factionPinButton = canFeatureInFaction ? `<button class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-imprint-pin="${escapeHTML(filter.value)}" data-faction-imprint-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "★ Fixado na facção" : "☆ Fixar na facção"}</button>` : "";
       return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${imprintCharacterRail}</div>`;
