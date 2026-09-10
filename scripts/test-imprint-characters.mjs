@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = readFileSync('js/app.js', 'utf8');
 
-test('selo inclui personagens de todas as edições, sem duplicar histórias da mesma série', () => {
+test('selo inclui personagens de todas as edições, contando cada edição da mesma série', () => {
   const library = [
     { id: '1', seriesId: 'serie', imprint: 'Selo', character: 'Batman', secondaryCharacters: ['Alfred'], characters: ['Batman'] },
     { id: '2', seriesId: 'serie', imprint: 'Selo', character: 'Batman', secondaryCharacters: ['Robin'] },
@@ -33,10 +33,10 @@ test('selo inclui personagens de todas as edições, sem duplicar histórias da 
     vm.runInContext(match[0], context);
   }
   const markup = context.renderEntityPage();
-  assert.match(markup, /<strong>Batman<\/strong><small>1 história<\/small>/);
-  assert.match(markup, /<strong>Alfred<\/strong><small>1 história<\/small>/);
-  assert.match(markup, /<strong>Robin<\/strong><small>2 histórias<\/small>/);
-  assert.match(markup, /<strong>Batgirl<\/strong><small>1 história<\/small>/);
+  assert.match(markup, /<strong>Batman<\/strong><small>2 edições<\/small>/);
+  assert.match(markup, /<strong>Alfred<\/strong><small>1 edição<\/small>/);
+  assert.match(markup, /<strong>Robin<\/strong><small>2 edições<\/small>/);
+  assert.match(markup, /<strong>Batgirl<\/strong><small>1 edição<\/small>/);
   assert.equal((markup.match(/data-wiki-character="Robin"/g) || []).length, 1);
   assert.doesNotMatch(markup, /Superman|Oculto/);
 });

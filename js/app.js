@@ -13379,23 +13379,23 @@
   function imprintCharacterMarkup(items) {
     const characters = new Map();
     items.forEach(item => {
-      const storyKey = String(item.seriesId || item.id || "");
+      const editionKey = String(item.id || "");
       characterNames(item).forEach(name => {
         const character = String(name || "").trim();
         const key = character.toLocaleLowerCase("pt-BR");
         if (!character || isTeamCharacter(character) || isRedirectedCharacter(character)) return;
-        if (!characters.has(key)) characters.set(key, { name: character, stories: new Set() });
-        if (storyKey) characters.get(key).stories.add(storyKey);
+        if (!characters.has(key)) characters.set(key, { name: character, editions: new Set() });
+        if (editionKey) characters.get(key).editions.add(editionKey);
       });
     });
-    const entries = [...characters.values()].sort((a, b) => b.stories.size - a.stories.size || a.name.localeCompare(b.name, "pt-BR"));
+    const entries = [...characters.values()].sort((a, b) => b.editions.size - a.editions.size || a.name.localeCompare(b.name, "pt-BR"));
     if (!entries.length) return "";
-    const cards = entries.map(({ name, stories }) => {
+    const cards = entries.map(({ name, editions }) => {
       const setting = state.characterSettings.get(publisherKey(name)) || {};
       const image = setting.cover_url || wikiCharacterImageCache.get(name) || "assets/batmanicon.jpg";
-      return `<button type="button" class="wiki-character-card publisher-character-card" data-wiki-character="${escapeHTML(name)}" aria-label="Ver personagem ${escapeHTML(name)}"><span class="wiki-character-image"><img src="${escapeHTML(imageProxyFetchUrl(image))}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"></span><strong>${escapeHTML(name)}</strong><small>${stories.size} ${stories.size === 1 ? "história" : "histórias"}</small></button>`;
+      return `<button type="button" class="wiki-character-card publisher-character-card" data-wiki-character="${escapeHTML(name)}" aria-label="Ver personagem ${escapeHTML(name)}"><span class="wiki-character-image"><img src="${escapeHTML(imageProxyFetchUrl(image))}" alt="Imagem de ${escapeHTML(name)}" loading="lazy"></span><strong>${escapeHTML(name)}</strong><small>${editions.size} ${editions.size === 1 ? "edição" : "edições"}</small></button>`;
     }).join("");
-    return `<section class="section imprint-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens do selo</h2><div class="section-subtitle">Personagens que aparecem nas histórias deste selo.</div></div></div><div class="publisher-character-carousel" aria-label="Personagens deste selo"><div class="publisher-character-track">${cards}</div></div></section>`;
+    return `<section class="section imprint-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens do selo</h2><div class="section-subtitle">Personagens que aparecem nas edições deste selo.</div></div></div><div class="publisher-character-carousel" aria-label="Personagens deste selo"><div class="publisher-character-track">${cards}</div></div></section>`;
   }
 
   function characterSettingForName(name) {
