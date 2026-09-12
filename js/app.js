@@ -1721,12 +1721,15 @@
 
   const HOME_SECTION_ORDER = [
     "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
-    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner"
+    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "bucho-hidden", "editorial-banner"
   ];
 
   function normalizeHomeSectionOrder(value) {
     const saved = Array.isArray(value) ? value.filter(key => HOME_SECTION_ORDER.includes(key)) : [];
     const unique = [...new Set(saved)];
+    if (!unique.includes("bucho-hidden") && unique.includes("most-read-covers")) {
+      unique.splice(unique.indexOf("most-read-covers") + 1, 0, "bucho-hidden");
+    }
     return [...unique, ...HOME_SECTION_ORDER.filter(key => !unique.includes(key))];
   }
 
@@ -10397,6 +10400,24 @@
     return match ? Number(match[1]) : 0;
   }
 
+  function buchoHiddenEditionsSection() {
+    const items = state.db.library.filter(item =>
+      isHiddenCatalogItem(item) || isHiddenCatalogSeries(item.seriesId));
+    return `<section class="section bucho-hidden-section" aria-labelledby="bucho-hidden-title">
+      <div class="bucho-stage">
+        <img class="bucho-art" src="assets/bucho/ocultas.png" alt="Bucho mordendo e segurando um retângulo com as edições ocultas" width="1536" height="1024" loading="lazy" decoding="async">
+        <div class="bucho-editions" id="bucho-editions" role="region" aria-label="Carrossel de edições comidas pelo Bucho" tabindex="0">
+          ${items.map(item => `<button type="button" class="bucho-edition" data-open="${escapeHTML(item.id)}" data-open-direct="true" title="${escapeHTML(itemDisplayTitle(item))}" aria-label="Abrir ${escapeHTML(itemDisplayTitle(item))}"><img src="${escapeHTML(coverFor(item, "card"))}" alt="${escapeHTML(itemDisplayTitle(item))}" loading="lazy" decoding="async"></button>`).join("") || '<p class="bucho-empty">O Bucho ainda não comeu nenhuma edição.</p>'}
+        </div>
+        <div class="bucho-caption">
+          <h2 id="bucho-hidden-title">Edições comidas pelo Bucho</h2>
+          ${items.length ? '<div class="bucho-carousel-controls"><button type="button" data-bucho-scroll="-1" aria-label="Edições anteriores" aria-controls="bucho-editions">‹</button><button type="button" data-bucho-scroll="1" aria-label="Próximas edições" aria-controls="bucho-editions">›</button></div>' : ""}
+        </div>
+      </div>
+      <div data-home-section-controls-slot></div>
+    </section>`;
+  }
+
   function renderHome() {
     const lib = visibleCatalogItems();
     let heroItem = lib.find(item => item.id === state.homeHeroId);
@@ -10530,6 +10551,7 @@
       "random-publisher": randomPublisherRail,
       downloads: mostDownloadedRail,
       "most-read-covers": mostReadCoverGrid,
+      "bucho-hidden": buchoHiddenEditionsSection(),
       "editorial-banner": homepageBannerSection(lib)
     };
     const visibleHomeKeys = normalizeHomeSectionOrder(state.homeSectionOrder)
@@ -16805,6 +16827,11 @@
   }
 
   function bind() {
+    $$('[data-bucho-scroll]').forEach(button => button.addEventListener("click", () => {
+      const carousel = $(".bucho-editions", button.closest(".bucho-hidden-section"));
+      if (!carousel) return;
+      carousel.scrollBy({ left: Number(button.dataset.buchoScroll) * carousel.clientWidth * .8, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    }));
     loadDeviantArtFanarts();
     if (!document.body.dataset.catalogSeriesToggleBound) {
       document.body.dataset.catalogSeriesToggleBound = "true";

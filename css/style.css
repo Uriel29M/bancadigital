@@ -3398,3 +3398,24 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
   .chat-modal > .section-head > div:first-child { width: auto; }
   .chat-modal > .section-head > .chat-modal-actions { width: auto; max-width: 50%; }
 }
+
+/* Safe area of ocultas.png: below the teeth, to the right of Bucho's hand. */
+.bucho-hidden-section { position: relative; }
+.bucho-stage { position: relative; width: 100%; aspect-ratio: 3 / 2; isolation: isolate; }
+.bucho-art { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.bucho-editions { position: absolute; left: 43%; top: 52%; width: 48%; height: 29%; display: flex; align-items: stretch; gap: clamp(5px, 1.2vw, 18px); overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; padding: 3px; box-sizing: border-box; }
+.bucho-editions::-webkit-scrollbar { display: none; }
+.bucho-edition { flex: 0 0 auto; height: 100%; aspect-ratio: 2 / 3; min-width: 36px; padding: 0; border: 0; border-radius: 3px; background: #17171b; overflow: hidden; cursor: pointer; scroll-snap-align: start; }
+.bucho-edition img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bucho-edition:hover { filter: brightness(1.12); }
+.bucho-edition:focus-visible, .bucho-editions:focus-visible { outline: 2px solid #ffd45c; outline-offset: -2px; }
+.bucho-caption { position: absolute; left: 47%; right: 6%; top: 86%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bucho-caption h2 { margin: 0; color: #ffe3b4; font-size: clamp(11px, 2.2vw, 30px); font-weight: 800; line-height: 1.12; text-wrap: balance; text-shadow: 0 2px 8px #000; }
+.bucho-carousel-controls { display: flex; flex-shrink: 0; gap: 5px; }
+.bucho-carousel-controls button { width: clamp(24px, 3.2vw, 42px); height: clamp(28px, 3.2vw, 42px); display: grid; place-items: center; padding: 0; border: 1px solid #b77c45; border-radius: 50%; background: #21130f; color: #ffe3b4; font-size: clamp(20px, 2.5vw, 32px); cursor: pointer; line-height: 1; }
+.bucho-carousel-controls button:hover, .bucho-carousel-controls button:focus-visible { background: #62301d; outline: 2px solid #ffd45c; outline-offset: 2px; }
+.bucho-empty { margin: auto; padding: 6px; color: #dbcbc0; text-align: center; font-size: clamp(10px, 1.4vw, 18px); }
+@media (max-width: 480px) {
+  .bucho-caption { gap: 4px; right: 5%; }
+  .bucho-carousel-controls { gap: 3px; }
+}

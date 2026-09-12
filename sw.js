@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v638-favorite-feedback";
+const CACHE_VERSION = "banca-digital-shell-v639-bucho-hidden";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.241-auth-logo-size",
-  "./js/app.js?v=2.2.10.491-favorite-feedback", "./js/catalog-sync.js?v=3-series-order",
+  "./", "./index.html", "./css/style.css?v=2.2.10.242-bucho-hidden",
+  "./js/app.js?v=2.2.10.492-bucho-hidden", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./js/data/dc-comics/milestone.js?v=1.1.1",
   "./js/data/dc-comics/novos-52.js?v=1.0.26",
   "./js/data/loading-tips.js?v=1.0.0", "./js/supabase.js",
+  "./assets/bucho/ocultas.png",
   "./assets/barracavermelhaicon.png?v=2",
   "./assets/barracabrancaicon.png?v=1", "./assets/semfoto.jpg?v=1",
   "./assets/papercomicsbackground.jpg", "./assets/papercomicsbackgroung.jpg",
