@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+const start = app.indexOf('  function catalogAddedTimestamp(');
+const end = app.indexOf('  function renderHome()', start);
+const context = vm.createContext({});
+vm.runInContext(app.slice(start, end), context);
+const timestamp = context.catalogAddedTimestamp;
+const old = { id: 'item-1700000000000' };
+const recent = { id: 'item-1800000000000' };
+assert.equal(timestamp(old), 1700000000000);
+assert.equal(timestamp({ id: 'static-edition' }), 0);
+assert.equal(timestamp({ ...old, addedAt: 'invalid', createdAt: '2026-09-12T10:00:00Z' }), Date.parse('2026-09-12T10:00:00Z'));
+assert.equal(timestamp({ ...old, addedAt: '2026-09-12T10:00:00Z' }), Date.parse('2026-09-12T10:00:00Z'));
+assert.equal(timestamp({ ...old, catalogEditedAt: '2030-01-01T00:00:00Z' }), timestamp(old));
+assert.deepEqual([old, recent].sort((a, b) => timestamp(b) - timestamp(a)), [recent, old]);
+assert.match(app.slice(app.indexOf('  function openEditForm(id')), /addedAt: old \?/);
+console.log('Recent additions: legacy IDs, explicit dates, invalid dates and edit stability passed.');

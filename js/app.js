@@ -10352,6 +10352,16 @@
     return `<section class="section homepage-banner-section"><div class="section-head"><div><div class="eyebrow">Destaque editorial</div><h2 class="section-title">Em destaque</h2><div class="section-subtitle">Uma recomendação especial da banca, renovada a cada 24 horas.</div></div></div><button type="button" class="homepage-banner" data-home-banner-series="${escapeHTML(item.seriesId)}" aria-label="Abrir a série ${escapeHTML(seriesName)}"><span class="homepage-banner-image" style="background-image:url('${escapeHTML(proxiedImageUrl(banner.image_url))}')"></span><span class="homepage-banner-shade"></span><span class="homepage-banner-copy"><span class="eyebrow">Capa selecionada</span><strong>${escapeHTML(seriesName)}</strong><small>Ver série <b>→</b></small></span></button></section>`;
   }
 
+  function catalogAddedTimestamp(item) {
+    for (const value of [item.addedAt, item.createdAt]) {
+      const timestamp = Date.parse(value || "");
+      if (Number.isFinite(timestamp)) return timestamp;
+    }
+    // O formulário antigo já registrava o instante de criação no ID.
+    const match = String(item.id || "").match(/^item-(\d{13})$/);
+    return match ? Number(match[1]) : 0;
+  }
+
   function renderHome() {
     const lib = visibleCatalogItems();
     let heroItem = lib.find(item => item.id === state.homeHeroId);
@@ -10366,12 +10376,12 @@
       return bCount - aCount || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR");
     }).slice(0, 10));
     const recentlyAdded = lib
-      .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
+      .map((item, index) => ({ item, index, addedAt: catalogAddedTimestamp(item) }))
       .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
       .slice(0, 20)
       .map(entry => entry.item);
     const recentlyAddedSeries = lib
-      .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
+      .map((item, index) => ({ item, index, addedAt: catalogAddedTimestamp(item) }))
       .filter(entry => entry.item.seriesId)
       .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
       .filter((entry, index, entries) => entries.findIndex(candidate => candidate.item.seriesId === entry.item.seriesId) === index)
@@ -15188,7 +15198,7 @@
     const publisher = String(faction.publisher_name || "").trim().toLocaleLowerCase("pt-BR");
     const items = state.db.library
       .filter(item => !publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)
-      .map((item, index) => ({ item, index, addedAt: Date.parse(item.addedAt || item.createdAt || "") || 0 }))
+      .map((item, index) => ({ item, index, addedAt: catalogAddedTimestamp(item) }))
       .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
       .slice(0, 6)
       .map(entry => entry.item);
@@ -15221,7 +15231,7 @@
     const series = new Map();
     state.db.library.filter(item => item.seriesId && (!publisher || String(item.publisher || "").trim().toLocaleLowerCase("pt-BR") === publisher)).forEach((item, index) => {
       const current = series.get(item.seriesId);
-      const addedAt = Date.parse(item.addedAt || item.createdAt || "") || 0;
+      const addedAt = catalogAddedTimestamp(item);
       if (!current || addedAt > current.addedAt) series.set(item.seriesId, { item, addedAt, index });
     });
     const items = [...series.values()].sort((a, b) => b.addedAt - a.addedAt || a.index - b.index).slice(0, 6).map(entry => entry.item);
@@ -19429,6 +19439,7 @@
       const secondaryCharacters = [...new Set(String(fd.get("secondaryCharacters") || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
       const item = {
         ...x,
+        addedAt: old ? (x.addedAt || (catalogAddedTimestamp(x) ? new Date(catalogAddedTimestamp(x)).toISOString() : undefined)) : new Date().toISOString(),
         title: String(fd.get("title") || "").trim(),
         seriesTitle,
         seriesId: explicitSeriesId || (seriesTitle ? seriesKey(seriesTitle) : ""),
