@@ -3452,3 +3452,10 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
 .bucho-edition img { filter: saturate(.78); }
 .bucho-edition::after { content: ""; position: absolute; inset: 0; background: rgba(190, 0, 12, .46); pointer-events: none; }
 .series-card.is-hidden .series-card-cover { box-shadow: inset 0 0 0 999px rgba(190, 0, 12, .46); filter: saturate(.78); }
+
+.bucho-edition-wrap { position: relative; flex: 0 0 auto; height: 100%; aspect-ratio: 2 / 3; min-width: 36px; scroll-snap-align: start; }
+.bucho-edition-wrap > .bucho-edition { width: 100%; }
+.bucho-edition-admin-actions { position: absolute; top: 3px; right: 3px; z-index: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
+.bucho-admin-button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.6); border-radius: 50%; background: rgba(0,0,0,.85); color: #fff; font-size: 17px; cursor: pointer; }
+.bucho-admin-button:hover { background: #b20d16; }
+.bucho-admin-button:disabled { opacity: .5; cursor: default; }
