@@ -399,6 +399,10 @@
     publicProfile: null,
     search: "",
     searchUsers: [],
+    searchCollections: [],
+    searchCollectionsLoading: false,
+    searchCollectionsError: false,
+    searchCollectionsRequest: 0,
     searchUsersQuery: "",
     searchUsersLoading: false,
     entityFilter: null,
@@ -3954,21 +3958,46 @@
     ensureShelfSnapshot()[kind].add(itemId);
   }
 
+  const pendingFavorites = new Set();
+
   async function toggleFavorite(itemId) {
     if (!state.session) return openAuthPage();
-    if (state.favoriteIds.has(itemId)) {
-      await sb.from("favorites").delete().eq("user_id", state.session.user.id).eq("item_id", itemId);
+    if (pendingFavorites.has(itemId)) return;
+    const userId = state.session.user.id;
+    const saved = state.favoriteIds.has(itemId);
+    const addedAt = state.favoriteAddedAt.get(itemId);
+    ensureShelfSnapshot();
+    pendingFavorites.add(itemId);
+    if (saved) {
       state.favoriteIds.delete(itemId);
       state.favoriteAddedAt.delete(itemId);
     } else {
-      await sb.from("favorites").insert({ user_id: state.session.user.id, item_id: itemId });
       state.favoriteIds.add(itemId);
       state.favoriteAddedAt.set(itemId, new Date().toISOString());
-      rememberShelfItem("saved", itemId);
-      awardAchievement("first_favorite");
     }
     updateFavoriteButtons(itemId);
-    render();
+    try {
+      const result = saved
+        ? await sb.from("favorites").delete().eq("user_id", userId).eq("item_id", itemId)
+        : await sb.from("favorites").insert({ user_id: userId, item_id: itemId });
+      if (result.error) throw result.error;
+      if (state.session?.user.id !== userId) return;
+      if (!saved) {
+        rememberShelfItem("saved", itemId);
+        awardAchievement("first_favorite");
+      }
+    } catch (error) {
+      if (state.session?.user.id !== userId) return;
+      if (saved) state.favoriteIds.add(itemId);
+      else state.favoriteIds.delete(itemId);
+      if (addedAt !== undefined) state.favoriteAddedAt.set(itemId, addedAt);
+      else state.favoriteAddedAt.delete(itemId);
+      toast("Não foi possível atualizar a estante. Tente novamente.");
+    } finally {
+      pendingFavorites.delete(itemId);
+      updateFavoriteButtons(itemId);
+    }
+    if (state.session?.user.id === userId) render();
   }
 
   async function toggleSeriesFavorite(seriesId) {
@@ -4247,6 +4276,10 @@
     $$('[data-favorite]').filter(button => button.dataset.favorite === itemId).forEach(button => {
       button.classList.toggle("is-favorite", favorite);
       button.textContent = favorite ? "★" : "☆";
+      button.title = favorite ? "Remover da estante" : "Salvar na estante";
+      button.setAttribute("aria-label", button.title);
+      button.setAttribute("aria-pressed", String(favorite));
+      button.disabled = pendingFavorites.has(itemId);
     });
   }
 
@@ -10090,6 +10123,8 @@
       ? state.publicProfile.collections?.find(collection => collection.id === state.publicProfile.collectionId)
       : null;
     const activeCollectionContext = collectionContext || (publicCollection ? { id: publicCollection.id, ownerId: state.publicProfile.profile.id, coverStyles: new Map(Object.entries(publicCollection.coverStyles || {})), coverChoices: new Map(Object.entries(publicCollection.coverChoices || {})) } : null);
+    const favorite = state.favoriteIds.has(item.id);
+    const favoriteLabel = favorite ? "Remover da estante" : "Salvar na estante";
     const completed = progressFor(item, progressMap)?.completed;
     const displayTitle = itemDisplayTitle(item);
     const issueLabel = itemIssueLabel(item);
@@ -10112,7 +10147,7 @@
           <div class="cover" data-cover-id="${escapeHTML(item.id)}" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(coverFor(item, "card", activeCollectionContext?.coverChoices || coverChoices))}')">
           <span class="cover-number">${escapeHTML(issueLabel)}</span>
           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
-          <button class="card-favorite ${favoriteIds.has(item.id) ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="Salvar na estante">★</button>
+          <button class="card-favorite ${favorite ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="${favoriteLabel}" aria-label="${favoriteLabel}" aria-pressed="${favorite}" ${pendingFavorites.has(item.id) ? "disabled" : ""}>${favorite ? "★" : "☆"}</button>
           ${isAdminProfile() ? `<button type="button" class="card-metadata-toggle" data-edit-item="${escapeHTML(item.id)}" title="Ver e editar metadados" aria-label="Ver e editar metadados">✎</button>` : ""}
         </div>
         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
@@ -13978,13 +14013,14 @@
     const characterResultsMarkup = q && characterCards
       ? `<section class="section search-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div></div><div class="publisher-carousel" aria-label="Personagens encontrados">${characterCards}</div></section>`
       : "";
-    const collectionCards = q ? state.db.collections
-      .filter(collection => String(collection.title || "").toLocaleLowerCase("pt-BR").includes(q))
+    const collectionCards = state.db.collections
+      .filter(collection => !q || String(collection.title || "").toLocaleLowerCase("pt-BR").includes(q))
       .sort((a, b) => String(a.title).localeCompare(String(b.title), "pt-BR"))
-      .map(collection => `<button class="publisher-card" type="button" data-collection="${escapeHTML(collection.id)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover || ""))}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(collection.title)}</strong><span>${(collection.issueIds || []).length} edição(ões)</span></div></button>`).join("") : "";
-    const collectionResultsMarkup = q
-      ? `<section class="section search-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div></div>${collectionCards ? `<div class="publisher-carousel" aria-label="Coleções encontradas">${collectionCards}</div>` : '<div class="empty">Nenhuma coleção encontrada.</div>'}</section>`
-      : "";
+      .map(collection => `<button class="publisher-card" type="button" data-collection="${escapeHTML(collection.id)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover || ""))}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(collection.title)}</strong><span>${(collection.issueIds || []).length} edição(ões)</span></div></button>`).join("");
+    const publicCollectionCards = (state.searchCollections || []).map(collection => publicCollectionCard(collection)).join("");
+    const collectionStatus = state.searchCollectionsLoading ? "Pesquisando coleções..." : state.searchCollectionsError ? "Não foi possível pesquisar as coleções públicas. Tente novamente." : "Nenhuma coleção encontrada.";
+    const collectionResultsBody = `${collectionCards ? `<div class="publisher-carousel" aria-label="Coleções encontradas">${collectionCards}</div>` : ""}${publicCollectionCards ? `<div class="public-collections-grid">${publicCollectionCards}</div>` : ""}${state.searchCollectionsLoading || state.searchCollectionsError || (!collectionCards && !publicCollectionCards) ? `<div class="empty">${collectionStatus}</div>` : ""}`;
+    const collectionResultsMarkup = `<section class="section search-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções</h2><div class="section-subtitle">${q ? `Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”` : "Explore as coleções públicas dos usuários."}</div></div></div>${collectionResultsBody}</section>`;
     return `
       <div class="content">
         <div class="section">
@@ -14004,7 +14040,45 @@
       </div>`;
   }
 
+  async function loadSearchCollections(query = "") {
+    const request = ++state.searchCollectionsRequest;
+    const term = String(query || "").trim();
+    state.searchCollections = [];
+    state.searchCollectionsError = false;
+    state.searchCollectionsLoading = Boolean(sb && navigator.onLine !== false);
+    state.searchCollectionsError = !state.searchCollectionsLoading;
+    if (!state.searchCollectionsLoading) return;
+    try {
+      const escapedTerm = term.replace(/[\\%_]/g, "\\$&");
+      let collectionQuery = sb.from("shelf_collections")
+        .select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured")
+        .eq("is_public", true);
+      if (term) collectionQuery = collectionQuery.ilike("name", `%${escapedTerm}%`);
+      const result = await collectionQuery.order("name").limit(50);
+      if (result.error) throw result.error;
+      const collections = result.data || [];
+      const ownerIds = [...new Set(collections.map(collection => collection.owner_id).filter(Boolean))];
+      const owners = ownerIds.length ? await sb.from("profiles").select("id, username")
+        .in("id", ownerIds).eq("profile_hidden", false).neq("is_banned", true) : { data: [] };
+      if (owners.error) throw owners.error;
+      if (request !== state.searchCollectionsRequest) return;
+      const usernames = new Map((owners.data || []).map(profile => [profile.id, profile.username]));
+      state.searchCollections = collections.map(collection => ({ ...collection, username: usernames.get(collection.owner_id) }))
+        .filter(collection => collection.username);
+    } catch (error) {
+      if (request !== state.searchCollectionsRequest) return;
+      state.searchCollectionsError = true;
+      console.warn("Não foi possível pesquisar coleções:", error.message);
+    } finally {
+      if (request === state.searchCollectionsRequest) {
+        state.searchCollectionsLoading = false;
+        if (state.section === "search") render();
+      }
+    }
+  }
+
   async function loadSearchUsers(query = "") {
+    void loadSearchCollections(query);
     const normalizedQuery = String(query || "").trim();
     state.searchUsersQuery = normalizedQuery;
     state.searchUsers = [];
