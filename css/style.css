@@ -3422,3 +3422,33 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
   .bucho-stage::before { border-width: 3px; border-radius: 0 14px 14px 0; box-shadow: inset 0 0 0 2px #303036; }
   .bucho-carousel-controls { gap: 3px; }
 }
+
+/* Series export remains available while navigating the site. */
+.series-export-overlay { z-index: 310; }
+.series-export-modal [data-export-restore] { display: none; }
+.series-export-modal [data-export-progress] { width: 100%; height: 8px; accent-color: var(--red, #e65362); }
+.series-export-modal [data-export-status] { overflow-wrap: anywhere; }
+.series-export-overlay.is-minimized {
+  inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto;
+  width: min(340px, calc(100vw - 24px)); padding: 0; background: transparent;
+}
+.series-export-overlay.is-minimized .series-export-modal {
+  width: 100%; max-height: min(320px, 60dvh); padding: 16px;
+  box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+}
+.series-export-overlay.is-minimized .section-head { gap: 10px; margin-bottom: 10px; }
+.series-export-overlay.is-minimized h2 { font-size: 16px; margin-bottom: 4px; }
+.series-export-overlay.is-minimized .section-subtitle { font-size: 12px; overflow-wrap: anywhere; }
+.series-export-overlay.is-minimized [data-export-status] { font-size: 12px; margin: 8px 0; }
+.series-export-overlay.is-minimized .series-export-settings,
+.series-export-overlay.is-minimized .series-export-description,
+.series-export-overlay.is-minimized [data-export-minimize],
+.series-export-overlay.is-minimized [type="submit"] { display: none; }
+.series-export-overlay.is-minimized [data-export-restore] { display: inline-flex; }
+.series-export-overlay.is-minimized .modal-actions { margin-top: 8px; }
+
+/* Keep unavailable covers red, including the Bucho carousel. */
+.bucho-edition { position: relative; }
+.bucho-edition img { filter: saturate(.78); }
+.bucho-edition::after { content: ""; position: absolute; inset: 0; background: rgba(190, 0, 12, .46); pointer-events: none; }
+.series-card.is-hidden .series-card-cover { box-shadow: inset 0 0 0 999px rgba(190, 0, 12, .46); filter: saturate(.78); }

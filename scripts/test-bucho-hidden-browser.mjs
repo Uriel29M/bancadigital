@@ -17,7 +17,7 @@ try {
     await page.setContent(readFileSync('index.html', 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ''));
     await page.addStyleTag({ content: readFileSync('css/style.css', 'utf8') });
     await page.addScriptTag({ content: 'window.DEFAULT_COLLECTIONS=[];' });
-    await page.addScriptTag({ content: source.slice(0, source.indexOf('  const pathParts = window.location.pathname')) + 'window.testApp={state,render,normalizeHomeSectionOrder};})();' });
+    await page.addScriptTag({ content: source.slice(0, source.indexOf('  const pathParts = window.location.pathname')) + 'window.testApp={state,render,normalizeHomeSectionOrder,openReader,prefetchReaderFile};})();' });
     await page.evaluate(() => {
       const { state, render } = window.testApp;
       const cover = index => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="hsl(${index * 45} 45% 25%)"/><path d="M0 240L100 40L200 240Z" fill="hsl(${index * 45} 60% 45%)"/><text x="100" y="280" text-anchor="middle" fill="white" font-size="22">Edição ${index + 1}</text></svg>`);
@@ -51,11 +51,32 @@ try {
     await page.locator('[data-bucho-scroll="-1"]').click();
     await page.screenshot({ path: `/tmp/bucho-home-${width}.png`, fullPage: false });
     await section.screenshot({ path: `/tmp/bucho-section-${width}.png` });
-    await page.evaluate(() => { testApp.state.hiddenCatalogItemIds.clear(); testApp.state.hiddenCatalogSeriesIds.clear(); testApp.render(); });
+    assert.equal(await page.locator('.bucho-edition[data-open]').count(), 0, 'Bucho never links directly to the reader');
+    const tint = await page.locator('.bucho-edition').first().evaluate(element => getComputedStyle(element, '::after').backgroundColor);
+    assert.equal(tint, 'rgba(190, 0, 12, 0.46)');
+    await page.locator('.bucho-editions').evaluate(element => { element.scrollLeft = 0; });
+    await page.locator('.bucho-edition').first().click();
+    assert.equal(await page.locator('.series-modal').count(), 1, 'Hidden series can be browsed from Bucho');
+    assert.equal(await page.locator('.series-modal .is-hidden-catalog-item').count(), 2, 'All editions of a hidden series stay red');
+    await page.locator('.series-modal .card .cover').first().click();
+    assert.equal(await page.locator('.reader-overlay').count(), 0);
+    assert.equal(await page.locator('.series-modal').count(), 1, 'Blocked reading keeps series open');
+    assert.ok((await page.locator('body').textContent()).includes('Esta edição está indisponível.'));
+    await page.locator('.series-modal [data-close]').click();
+    await page.evaluate(() => {
+      testApp.state.profile = { plan: 'admin' };
+      testApp.openReader(testApp.state.db.library[2]);
+      testApp.openReader(testApp.state.db.library[0]);
+    });
+    assert.equal(await page.locator('.reader-overlay').count(), 0, 'Admin cannot read hidden editions either');
+    assert.equal(await page.evaluate(() => testApp.prefetchReaderFile(testApp.state.db.library[2])), null);
+    await page.locator('[data-bucho-series="issue-2"]').click();
+    assert.equal(await page.locator('.reader-overlay, .series-modal').count(), 0, 'Hidden oneshot shows unavailable message');
+    await page.evaluate(() => { testApp.state.profile = null; testApp.state.hiddenCatalogItemIds.clear(); testApp.state.hiddenCatalogSeriesIds.clear(); testApp.render(); });
     assert.equal(await page.locator('.bucho-edition').count(), 0);
     assert.equal(await page.locator('.bucho-empty').textContent(), 'O Bucho ainda não comeu nenhuma edição.');
     assert.deepEqual(errors, []);
-    console.log(`PASS ${width}px: posição, área segura, edições ocultas, navegação e estado vazio`);
+    console.log(`PASS ${width}px: layout, filtro vermelho, abertura da série, bloqueio de leitura e estado vazio`);
     await page.close();
   }
 } finally { await browser.close(); }

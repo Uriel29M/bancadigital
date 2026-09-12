@@ -1182,25 +1182,54 @@
     return output.arrayBuffer();
   }
 
+  let activeSeriesExport = null;
   function openSeriesExport(series, editions) {
     if (!isAdminProfile()) return;
+    if (activeSeriesExport) { activeSeriesExport.restore(); return; }
     const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Obter série"><div class="section-head"><div><h2>Obter série</h2><div class="section-subtitle">${escapeHTML(series.seriesTitle || series.title)} · ${editions.length} edições</div></div></div><form><label class="field"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p>Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão.</p><p data-export-status role="status" aria-live="polite"></p><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
-    $("#modal-root").appendChild(overlay);
+    overlay.className = "modal-backdrop series-export-overlay";
+    overlay.innerHTML = `<div class="modal series-export-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Obter série"><div class="section-head"><div><h2>Obter série</h2><div class="section-subtitle">${escapeHTML(series.seriesTitle || series.title)} · ${editions.length} edições</div></div><div class="modal-actions"><button type="button" class="small-btn" data-export-minimize>Minimizar</button><button type="button" class="small-btn" data-export-restore>Abrir</button></div></div><form><label class="field series-export-settings"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p class="series-export-description">Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão.</p><p data-export-status role="status" aria-live="polite">Escolha o formato e clique em Obter.</p><progress data-export-progress max="100" value="0" aria-label="Progresso da série"></progress><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
+    document.body.appendChild(overlay);
     const controller = new AbortController();
     let busy = false;
-    const close = () => { controller.abort(); overlay.remove(); };
+    const dialog = $('.series-export-modal', overlay);
+    const minimize = () => {
+      overlay.classList.add("is-minimized");
+      dialog.setAttribute("aria-modal", "false");
+      dialog.setAttribute("role", "region");
+      $('[data-export-restore]', overlay).focus();
+    };
+    const restore = () => {
+      overlay.classList.remove("is-minimized");
+      dialog.setAttribute("aria-modal", "true");
+      dialog.setAttribute("role", "dialog");
+      dialog.focus();
+    };
+    activeSeriesExport = { restore };
+    const close = () => { controller.abort(); overlay.remove(); activeSeriesExport = null; };
+    $('[data-export-minimize]', overlay).onclick = minimize;
+    $('[data-export-restore]', overlay).onclick = restore;
+    overlay.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !overlay.classList.contains("is-minimized")) {
+        event.preventDefault(); event.stopPropagation(); minimize();
+      }
+    });
     $('[data-close]', overlay).onclick = close;
-    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
+    overlay.addEventListener("click", event => { if (event.target === overlay) minimize(); });
+    restore();
     $('form', overlay).onsubmit = async event => {
       event.preventDefault();
       if (busy || !isAdminProfile()) return;
       busy = true;
       const submit = $('[type="submit"]', overlay);
       const select = $('select', overlay);
+      const closeButton = $('[data-close]', overlay);
+      closeButton.textContent = "Cancelar download";
+      const progress = $('[data-export-progress]', overlay);
+      progress.value = 0;
       const status = $('[data-export-status]', overlay);
       submit.disabled = select.disabled = true;
+      status.textContent = "Preparando download…";
       const safeName = value => String(value || "serie").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").slice(0, 140) || "serie";
       let currentTitle = "";
       try {
@@ -1216,14 +1245,27 @@
           status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
           const source = downloadSource(item);
           if (!source || isExternalArchiveLink(source)) throw new Error("Edição sem arquivo direto disponível.");
-          const buffer = await fetchFileArrayBuffer(source, () => {}, () => {}, controller.signal);
+          const buffer = await fetchFileArrayBuffer(source, (received, total) => {
+            if (controller.signal.aborted) return;
+            const fraction = total > 0 ? Math.min(received / total, 1) : 0;
+            const detail = total > 0 ? `${Math.round(fraction * 100)}%` : `${(received / 1048576).toFixed(1)} MB`;
+            status.textContent = `Baixando ${index + 1}/${ordered.length}: ${currentTitle} · ${detail}`;
+            progress.value = (index + fraction * 0.8) / ordered.length * 90;
+          }, () => {}, controller.signal);
+          if (controller.signal.aborted) return;
+          status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
           const format = seriesExportFormat(buffer);
           const output = await seriesExportConvert(buffer, format, select.value, Zip, controller.signal);
           bundle.file(`${String(index + 1).padStart(4, "0")} - ${safeName(currentTitle)}.${select.value === "original" ? format : select.value}`, output);
+          progress.value = (index + 1) / ordered.length * 90;
         }
         currentTitle = "";
         status.textContent = "Reunindo edições no ZIP…";
-        const blob = await bundle.generateAsync({ type: "blob", compression: "STORE" });
+        const blob = await bundle.generateAsync({ type: "blob", compression: "STORE" }, metadata => {
+          if (controller.signal.aborted) throw new DOMException("Cancelado", "AbortError");
+          progress.value = 90 + metadata.percent * 0.1;
+          status.textContent = `Reunindo edições no ZIP… ${Math.round(metadata.percent)}%`;
+        });
         if (controller.signal.aborted || !isAdminProfile()) return;
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -1233,11 +1275,13 @@
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 60000);
+        progress.value = 100;
         status.textContent = `${editions.length} edições preparadas. Download do ZIP enviado ao navegador.`;
       } catch (error) {
         if (!controller.signal.aborted) status.textContent = `${currentTitle ? `${currentTitle}: ` : ""}${error.message || "Não foi possível obter a série."}`;
       } finally {
         busy = false;
+        closeButton.textContent = "Fechar";
         submit.disabled = select.disabled = false;
       }
     };
@@ -1476,7 +1520,7 @@
   }
 
   function prefetchReaderFile(item) {
-    if (!item || item.local) return null;
+    if (!item || item.local || !canViewCatalogItem(item)) return null;
     if (navigator.onLine === false || state.session?.offline) return null;
     const url = downloadSource(item);
     // O Telegram já atende o leitor por faixas; baixar o arquivo inteiro em
@@ -6859,8 +6903,8 @@
 
   function openReader(item, options = {}) {
     if (!item) return;
-    if (!canViewCatalogItem(item, isAdminProfile())) {
-      toast("Esta edição está temporariamente oculta.");
+    if (!canViewCatalogItem(item)) {
+      toast("Esta edição está indisponível.");
       return;
     }
     if (!options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
@@ -6881,8 +6925,8 @@
     }
     if (!item) return;
     if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
-    if (!canViewCatalogItem(item, isAdminProfile())) {
-      toast("Esta edição está temporariamente oculta.");
+    if (!canViewCatalogItem(item)) {
+      toast("Esta edição está indisponível.");
       return;
     }
     if (!downloadSource(item) && item?.officialUrl) {
@@ -10150,7 +10194,7 @@
     const characterButtons = entityButton("character", characterNames(item)[0]);
     const cardActions = `<div class="card-actions"><button class="card-like ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}" title="Curtir quadrinho">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="card-share" data-share-item="${escapeHTML(item.id)}" title="Compartilhar quadrinho">Compartilhar</button><button class="card-comment" data-comment-item="${escapeHTML(item.id)}" title="Ver comentarios">Comentários</button>${item.seriesId ? `<button class="card-series" data-view-series="${escapeHTML(item.seriesId)}" title="Ver serie">Série</button>` : ""}</div>`;
     return `
-      <div class="card-wrap"><article class="card ${hidden ? "is-hidden-catalog-item" : ""}" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
+      <div class="card-wrap"><article class="card ${(hidden || isHiddenCatalogSeries(item.seriesId)) ? "is-hidden-catalog-item" : ""}" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
           <div class="cover" data-cover-id="${escapeHTML(item.id)}" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(coverFor(item, "card", activeCollectionContext?.coverChoices || coverChoices))}')">
           <span class="cover-number">${escapeHTML(issueLabel)}</span>
           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
@@ -10411,7 +10455,7 @@
       <div class="bucho-stage">
         <img class="bucho-art" src="assets/bucho/ocultas.png" alt="Bucho mordendo e segurando um retângulo com as edições ocultas" width="1536" height="1024" loading="lazy" decoding="async">
         <div class="bucho-editions" id="bucho-editions" role="region" aria-label="Carrossel de edições comidas pelo Bucho" tabindex="0">
-          ${items.map(item => `<button type="button" class="bucho-edition" data-open="${escapeHTML(item.id)}" data-open-direct="true" title="${escapeHTML(itemDisplayTitle(item))}" aria-label="Abrir ${escapeHTML(itemDisplayTitle(item))}"><img src="${escapeHTML(coverFor(item, "card"))}" alt="${escapeHTML(itemDisplayTitle(item))}" loading="lazy" decoding="async"></button>`).join("") || '<p class="bucho-empty">O Bucho ainda não comeu nenhuma edição.</p>'}
+          ${items.map(item => `<button type="button" class="bucho-edition" data-bucho-series="${escapeHTML(item.id)}" title="${escapeHTML(itemDisplayTitle(item))} · Edição indisponível" aria-label="${item.seriesId ? `Abrir série ${escapeHTML(item.seriesTitle || item.title)}` : `Edição indisponível: ${escapeHTML(itemDisplayTitle(item))}`}"><img src="${escapeHTML(coverFor(item, "card"))}" alt="${escapeHTML(itemDisplayTitle(item))}" loading="lazy" decoding="async"></button>`).join("") || '<p class="bucho-empty">O Bucho ainda não comeu nenhuma edição.</p>'}
         </div>
         <div class="bucho-caption">
           <h2 id="bucho-hidden-title">Edições comidas pelo Bucho</h2>
@@ -16830,7 +16874,16 @@
     document.addEventListener("keydown", onKey);
   }
 
+  function openBuchoSeries(item) {
+    if (!item?.seriesId) return toast("Esta edição está indisponível.");
+    const editions = state.db.library.filter(entry => entry.seriesId === item.seriesId);
+    openSeriesSelection(item, editions, false, false, null, true);
+  }
+
   function bind() {
+    $$('[data-bucho-series]').forEach(button => button.addEventListener("click", () => {
+      openBuchoSeries(state.db.library.find(item => item.id === button.dataset.buchoSeries));
+    }));
     $$('[data-bucho-scroll]').forEach(button => button.addEventListener("click", () => {
       const carousel = $(".bucho-editions", button.closest(".bucho-hidden-section"));
       if (!carousel) return;
@@ -18929,8 +18982,8 @@
     };
   }
 
-  function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null) {
-    if (isHiddenCatalogSeries(series?.seriesId || series?.id) && !isAdminProfile()) {
+  function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null, allowHiddenPreview = false) {
+    if (!allowHiddenPreview && isHiddenCatalogSeries(series?.seriesId || series?.id) && !isAdminProfile()) {
       toast("Esta série está temporariamente oculta.");
       return;
     }
@@ -18951,7 +19004,7 @@
     overlay.innerHTML = `
       <div class="modal series-modal">
         <div class="section-head">
-          <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições disponíveis · clique em uma edição para ler</div></div>
+          <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições · capas em vermelho estão indisponíveis</div></div>
           <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-file-reports ${returnToFileReports ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-reader ${returnToReader ? "" : "hidden"}>Voltar à história</button><button class="small-btn" data-close>Fechar</button></div>
         </div>
         ${volumeTabs}${volumePanels}
@@ -18976,7 +19029,7 @@
       obtainButton.dataset.seriesExport = series.seriesId || series.id;
       obtainButton.title = "Salvar todas as edições no computador";
       downloadSeriesButton.after(obtainButton);
-      obtainButton.addEventListener("click", () => openSeriesExport(series, editions));
+      obtainButton.addEventListener("click", () => { overlay.remove(); openSeriesExport(series, editions); });
       addEditionButton.addEventListener("click", () => {
         const latest = seriesEditions({ seriesId: series.seriesId || series.id }).at(-1) || series;
         overlay.remove();
@@ -19061,8 +19114,10 @@
     }));
     $$('[data-open]', overlay).forEach(el => el.addEventListener("click", event => {
       if (event.target.closest("button, a")) return;
+      const item = state.db.library.find(x => x.id === el.dataset.open);
+      if (item && !canViewCatalogItem(item)) return toast("Esta edição está indisponível.");
       overlay.remove();
-      openReader(state.db.library.find(x => x.id === el.dataset.open));
+      openReader(item);
     }));
     $$('[data-cover-choice]', overlay).forEach(el => {
       if (el.dataset.coverChoiceBound) return;

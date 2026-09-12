@@ -13,7 +13,7 @@ const source = readFileSync('js/app.js', 'utf8');
 const helpers = source.slice(source.indexOf('  function seriesExportFormat('), source.indexOf('  function refreshSeriesDownloadButton('));
 function setup(admin = true, broken = false) {
   const nodes = new Map();
-  const node = key => { if (!nodes.has(key)) nodes.set(key, { value: 'original', appendChild() {}, remove() {}, click() {}, addEventListener() {} }); return nodes.get(key); };
+  const node = key => { if (!nodes.has(key)) nodes.set(key, { value: 'original', appendChild() {}, remove() {}, click() {}, focus() {}, setAttribute() {}, classList: { add() {}, remove() {}, contains() { return false; } }, addEventListener() {} }); return nodes.get(key); };
   const files = [];
   let downloads = 0;
   class Zip { file(name, bytes) { files.push({ name, bytes }); } async generateAsync() { return new Blob(['zip']); } }
