@@ -13978,6 +13978,13 @@
     const characterResultsMarkup = q && characterCards
       ? `<section class="section search-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div></div><div class="publisher-carousel" aria-label="Personagens encontrados">${characterCards}</div></section>`
       : "";
+    const collectionCards = q ? state.db.collections
+      .filter(collection => String(collection.title || "").toLocaleLowerCase("pt-BR").includes(q))
+      .sort((a, b) => String(a.title).localeCompare(String(b.title), "pt-BR"))
+      .map(collection => `<button class="publisher-card" type="button" data-collection="${escapeHTML(collection.id)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover || ""))}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(collection.title)}</strong><span>${(collection.issueIds || []).length} edição(ões)</span></div></button>`).join("") : "";
+    const collectionResultsMarkup = q
+      ? `<section class="section search-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div></div>${collectionCards ? `<div class="publisher-carousel" aria-label="Coleções encontradas">${collectionCards}</div>` : '<div class="empty">Nenhuma coleção encontrada.</div>'}</section>`
+      : "";
     return `
       <div class="content">
         <div class="section">
@@ -13993,6 +14000,7 @@
         ${imprintResultsMarkup}
         ${publisherResultsMarkup}
         ${characterResultsMarkup}
+        ${collectionResultsMarkup}
       </div>`;
   }
 
