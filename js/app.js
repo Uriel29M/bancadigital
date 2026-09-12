@@ -1017,6 +1017,228 @@
     pending.forEach(item => startDownload(item));
     refreshSeriesDownloadButton(pending[0]?.seriesId || editions[0]?.seriesId);
   }
+  function seriesExportFormat(buffer) {
+    const bytes = new Uint8Array(buffer);
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) return "pdf";
+    if (isZipSignature(bytes)) return "cbz";
+    if (bytes[0] === 0x52 && bytes[1] === 0x61 && bytes[2] === 0x72 && bytes[3] === 0x21) return "cbr";
+    throw new Error("O arquivo recebido não é PDF, CBZ ou CBR.");
+  }
+
+  async function seriesExportCbz(buffer, format, Zip, signal) {
+    if (format === "cbz") return buffer;
+    const zip = new Zip();
+    const check = () => { if (signal.aborted) throw new DOMException("Cancelado", "AbortError"); };
+    if (format === "pdf") {
+      const pdfjs = await window.pdfjsReady;
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+      try {
+        for (let index = 1; index <= pdf.numPages; index++) {
+          check();
+          const page = await pdf.getPage(index);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.95));
+          canvas.width = canvas.height = 0;
+          page.cleanup();
+          if (!blob) throw new Error("Não foi possível converter uma página do PDF.");
+          zip.file(`${String(index).padStart(5, "0")}.jpg`, await blob.arrayBuffer());
+        }
+      } finally { await pdf.destroy(); }
+    } else {
+      const { Archive } = await loadLibarchiveModule();
+      Archive.init({ workerUrl: appAssetUrl("libarchive/worker-bundle.js") });
+      const archive = await Archive.open(new File([buffer], "edition.cbr"));
+      try {
+        const images = [];
+        const collect = (entries, prefix = "") => {
+          for (const [key, value] of Object.entries(entries || {})) {
+            const path = `${prefix}${key}`;
+            if (typeof value?.extract === "function") {
+              if (/\.(jpe?g|png|webp|gif)$/i.test(value.name || key)) images.push({ path, value });
+            } else if (value && typeof value === "object") collect(value, `${path}/`);
+          }
+        };
+        collect(await archive.getFilesObject());
+        images.sort((a, b) => a.path.localeCompare(b.path, "pt-BR", { numeric: true }));
+        if (!images.length) throw new Error("CBR sem páginas de imagens.");
+        for (const [index, entry] of images.entries()) {
+          check();
+          const blob = await entry.value.extract();
+          const extension = (entry.value.name || entry.path).match(/\.[^.]+$/)[0];
+          zip.file(`${String(index + 1).padStart(5, "0")}${extension}`, await blob.arrayBuffer());
+        }
+      } finally { await archive.close?.(); }
+    }
+    check();
+    return zip.generateAsync({ type: "uint8array", compression: "STORE" });
+  }
+
+  // RAR 5 STORE blocks: https://www.rarlab.com/technote.htm
+  // Images are already compressed; store their bytes without recompression.
+  function seriesExportRar(files) {
+    const vint = value => {
+      const bytes = [];
+      do { const low = value % 128; value = Math.floor(value / 128); bytes.push(low | (value ? 128 : 0)); } while (value);
+      return bytes;
+    };
+    const crc32 = bytes => {
+      let crc = 0xffffffff;
+      for (const byte of bytes) {
+        crc ^= byte;
+        for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+      }
+      return (crc ^ 0xffffffff) >>> 0;
+    };
+    const uint32 = value => [value & 255, (value >>> 8) & 255, (value >>> 16) & 255, value >>> 24];
+    const header = body => {
+      const data = new Uint8Array([...vint(body.length), ...body]);
+      return new Uint8Array([...uint32(crc32(data)), ...data]);
+    };
+    const parts = [new Uint8Array([82, 97, 114, 33, 26, 7, 1, 0]), header([1, 0, 0])];
+    for (const file of files) {
+      const name = new TextEncoder().encode(file.name);
+      const bytes = new Uint8Array(file.bytes);
+      parts.push(header([2, 2, ...vint(bytes.length), 4, ...vint(bytes.length), 0,
+        ...uint32(crc32(bytes)), 0, 0, ...vint(name.length), ...name]), bytes);
+    }
+    parts.push(header([5, 0, 0]));
+    return new Blob(parts, { type: "application/vnd.rar" });
+  }
+
+  // Image-only PDF with explicit byte offsets and one JPEG per page.
+  function seriesExportPdfDocument(pages) {
+    const parts = [];
+    const offsets = [0];
+    let length = 0;
+    const append = value => {
+      const bytes = typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
+      parts.push(bytes); length += bytes.length;
+    };
+    const object = (id, body, stream = null) => {
+      offsets[id] = length;
+      append(`${id} 0 obj\n${body}`);
+      if (stream !== null) { append("\nstream\n"); append(stream); append("\nendstream"); }
+      append("\nendobj\n");
+    };
+    append("%PDF-1.4\n");
+    object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    object(2, `<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${3 + i * 3} 0 R`).join(" ")}] >>`);
+    pages.forEach((page, index) => {
+      const id = 3 + index * 3;
+      const commands = new TextEncoder().encode(`q\n${page.width} 0 0 ${page.height} 0 0 cm\n/Im0 Do\nQ\n`);
+      object(id, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /XObject << /Im0 ${id + 1} 0 R >> >> /Contents ${id + 2} 0 R >>`);
+      object(id + 1, `<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.bytes.byteLength} >>`, page.bytes);
+      object(id + 2, `<< /Length ${commands.length} >>`, commands);
+    });
+    const start = length;
+    append(`xref\n0 ${offsets.length}\n0000000000 65535 f \n`);
+    for (const offset of offsets.slice(1)) append(`${String(offset).padStart(10, "0")} 00000 n \n`);
+    append(`trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF\n`);
+    return new Blob(parts, { type: "application/pdf" });
+  }
+
+  async function seriesExportConvert(buffer, format, target, Zip, signal) {
+    if (target === "original" || target === format) return buffer;
+    if (target === "cbz") return seriesExportCbz(buffer, format, Zip, signal);
+    if (!["cbr", "pdf"].includes(target)) throw new Error("Formato de exportação inválido.");
+    const check = () => { if (signal.aborted) throw new DOMException("Cancelado", "AbortError"); };
+    check();
+    const cbz = await seriesExportCbz(buffer, format, Zip, signal);
+    const archive = await Zip.loadAsync(cbz);
+    const entries = Object.values(archive.files).filter(entry => !entry.dir && /\.(jpe?g|png|webp|gif)$/i.test(entry.name) && !/(^|\/)__MACOSX\//.test(entry.name));
+    entries.sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true }));
+    if (!entries.length) throw new Error("Arquivo sem páginas de imagens.");
+    const files = [];
+    const pages = [];
+    for (const [index, entry] of entries.entries()) {
+      check();
+      const bytes = await entry.async("uint8array");
+      if (target === "cbr") {
+        files.push({ name: `${String(index + 1).padStart(5, "0")}${entry.name.match(/\.[^.]+$/)[0]}`, bytes });
+      } else {
+        const bitmap = await createImageBitmap(new Blob([bytes]));
+        const canvas = document.createElement("canvas");
+        try {
+          canvas.width = bitmap.width; canvas.height = bitmap.height;
+          const context = canvas.getContext("2d");
+          context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(bitmap, 0, 0);
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.95));
+          if (!blob) throw new Error("Não foi possível converter uma página para PDF.");
+          pages.push({ width: canvas.width, height: canvas.height, bytes: await blob.arrayBuffer() });
+        } finally { bitmap.close(); canvas.width = canvas.height = 0; }
+      }
+    }
+    check();
+    const output = target === "cbr" ? seriesExportRar(files) : seriesExportPdfDocument(pages);
+    return output.arrayBuffer();
+  }
+
+  function openSeriesExport(series, editions) {
+    if (!isAdminProfile()) return;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop";
+    overlay.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="Obter série"><div class="section-head"><div><h2>Obter série</h2><div class="section-subtitle">${escapeHTML(series.seriesTitle || series.title)} · ${editions.length} edições</div></div></div><form><label class="field"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p>Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão.</p><p data-export-status role="status" aria-live="polite"></p><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
+    $("#modal-root").appendChild(overlay);
+    const controller = new AbortController();
+    let busy = false;
+    const close = () => { controller.abort(); overlay.remove(); };
+    $('[data-close]', overlay).onclick = close;
+    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
+    $('form', overlay).onsubmit = async event => {
+      event.preventDefault();
+      if (busy || !isAdminProfile()) return;
+      busy = true;
+      const submit = $('[type="submit"]', overlay);
+      const select = $('select', overlay);
+      const status = $('[data-export-status]', overlay);
+      submit.disabled = select.disabled = true;
+      const safeName = value => String(value || "serie").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").slice(0, 140) || "serie";
+      let currentTitle = "";
+      try {
+        const Zip = await window.jszipReady;
+        if (!Zip) throw new Error("Não foi possível carregar o gerador de ZIP. Tente novamente.");
+        if (!editions.length) throw new Error("Esta série não possui edições.");
+        const bundle = new Zip();
+        const ordered = editions.slice().sort((a, b) => issueSortValue(a) - issueSortValue(b));
+        for (const [index, item] of ordered.entries()) {
+          if (controller.signal.aborted) return;
+          if (!isAdminProfile()) throw new Error("Acesso exclusivo para administradores.");
+          currentTitle = itemDisplayTitle(item);
+          status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
+          const source = downloadSource(item);
+          if (!source || isExternalArchiveLink(source)) throw new Error("Edição sem arquivo direto disponível.");
+          const buffer = await fetchFileArrayBuffer(source, () => {}, () => {}, controller.signal);
+          const format = seriesExportFormat(buffer);
+          const output = await seriesExportConvert(buffer, format, select.value, Zip, controller.signal);
+          bundle.file(`${String(index + 1).padStart(4, "0")} - ${safeName(currentTitle)}.${select.value === "original" ? format : select.value}`, output);
+        }
+        currentTitle = "";
+        status.textContent = "Reunindo edições no ZIP…";
+        const blob = await bundle.generateAsync({ type: "blob", compression: "STORE" });
+        if (controller.signal.aborted || !isAdminProfile()) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${safeName(series.seriesTitle || series.title)}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        status.textContent = `${editions.length} edições preparadas. Download do ZIP enviado ao navegador.`;
+      } catch (error) {
+        if (!controller.signal.aborted) status.textContent = `${currentTitle ? `${currentTitle}: ` : ""}${error.message || "Não foi possível obter a série."}`;
+      } finally {
+        busy = false;
+        submit.disabled = select.disabled = false;
+      }
+    };
+  }
+
   function refreshSeriesDownloadButton(seriesId) {
     const first = state.db.library.find(item => String(item.seriesId) === String(seriesId));
     const editions = first ? seriesEditions(first) : [];
@@ -18620,6 +18842,14 @@
       addEditionButton.type = "button";
       addEditionButton.textContent = "+ Adicionar edição";
       $(".modal-actions", overlay)?.insertBefore(addEditionButton, downloadSeriesButton.nextSibling);
+      const obtainButton = document.createElement("button");
+      obtainButton.className = "small-btn";
+      obtainButton.type = "button";
+      obtainButton.textContent = "Obter";
+      obtainButton.dataset.seriesExport = series.seriesId || series.id;
+      obtainButton.title = "Salvar todas as edições no computador";
+      downloadSeriesButton.after(obtainButton);
+      obtainButton.addEventListener("click", () => openSeriesExport(series, editions));
       addEditionButton.addEventListener("click", () => {
         overlay.remove();
         openEditForm(null, {
