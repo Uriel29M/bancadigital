@@ -1377,7 +1377,7 @@ as $$
   select auth.uid() is not null
     and (
       p_style = 'grayscale'
-      or exists (select 1 from public.profiles where id = auth.uid() and (plan in ('premium', 'moderator', 'admin') or (plan = 'free' and public.is_legendary_event_active())))
+      or exists (select 1 from public.profiles where id = auth.uid() and (plan in ('premium', 'moderator', 'banca', 'admin') or (plan = 'free' and public.is_legendary_event_active())))
     )
 $$;
 
