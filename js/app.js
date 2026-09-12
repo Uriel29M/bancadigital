@@ -10285,9 +10285,16 @@
     }
     base ||= "Quadrinho";
     const issue = itemIssueDisplay(item);
-    if (!issue) return base;
     const number = issue.match(/^\d+(?:\.\d+)?$/)?.[0];
-    return number ? `${base} #${Number(number)}` : `${base} — ${issue}`;
+    const numberedTitle = !issue ? base : number ? `${base} #${Number(number)}` : `${base} — ${issue}`;
+    const editionTitle = String(item?.title || "").trim();
+    const seriesTitle = String(item?.seriesTitle || "").trim();
+    const normalizeTitle = value => String(value).normalize("NFC").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+    const hasEditionTitle = seriesTitle && editionTitle && !/^(quadrinho|hq)$/i.test(editionTitle)
+      && normalizeTitle(editionTitle) !== normalizeTitle(seriesTitle)
+      && normalizeTitle(editionTitle) !== normalizeTitle(base)
+      && normalizeTitle(editionTitle) !== normalizeTitle(numberedTitle);
+    return hasEditionTitle ? `${numberedTitle} - ${editionTitle}` : numberedTitle;
   }
 
   function itemIssueDisplay(item) {
