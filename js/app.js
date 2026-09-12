@@ -7170,6 +7170,7 @@
 
 
     const startReader = async () => {
+      body.innerHTML = readerLoadingMarkup("Abrindo edição…");
       const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(format);
       let selectedIndex = 0;
       if (!item.local && sourceCandidates.length && !isImage) {
@@ -7202,11 +7203,21 @@
     if (format === "pdf" || format === "cbz" || format === "cbr") {
       void startReader().then(markReaderReady).catch(() => {});
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
-      body.innerHTML = `<img class="reader-image" src="${escapeHTML(resolvedUrl)}" alt="" fetchpriority="high">`;
+      body.innerHTML = readerLoadingMarkup("Abrindo imagem…");
+      const image = document.createElement("img");
+      image.className = "reader-image";
+      image.alt = "";
+      image.style.display = "none";
+      body.appendChild(image);
       const readerImage = $(".reader-image", body);
       if (readerImage) {
         readerImage.loading = "eager";
         readerImage.fetchPriority = "high";
+        readerImage.addEventListener("load", () => {
+          body.querySelector(".reader-loading")?.remove();
+          readerImage.style.removeProperty("display");
+          markReaderReady();
+        }, { once: true });
         readerImage.addEventListener("error", async () => {
           if (sourceCandidates.length && readerImage.dataset.backupTried !== "true") {
             readerImage.dataset.backupTried = "true";
@@ -7218,9 +7229,9 @@
           controls.innerHTML = `<span class="reader-page">Imagem</span>`;
           $("[data-report-file]", body).onclick = () => reportFileFailure(item, "A imagem não abriu no leitor.");
         }, { once: true });
+        readerImage.src = resolvedUrl;
       }
       controls.innerHTML = `<span class="reader-page">Imagem</span>`;
-      markReaderReady();
       saveReadingProgress(item, 1, 1);
     } else if (item.seriesUrl && !item.fileUrl && !item.telegramUrl) {
       body.innerHTML = `
@@ -7256,6 +7267,27 @@
     if (!tips.length) return "";
     const tip = tips[Math.floor(Math.random() * tips.length)];
     return `<aside class="reader-loading-tip"><span class="reader-loading-tip-text">${escapeHTML(tip.text || "")}</span></aside>`;
+  }
+
+  function readerLoadingMarkup(message) {
+    return `<div class="reader-loading" role="status"><div class="reader-loading-label">${escapeHTML(message)}</div><progress class="reader-progress" aria-label="Carregamento da edição"></progress>${readerLoadingTipMarkup()}</div>`;
+  }
+
+  function showReaderPageLoading(wrapper) {
+    if (!wrapper.querySelector(".reader-loading")) {
+      wrapper.insertAdjacentHTML("beforeend", readerLoadingMarkup("Carregando página…"));
+    }
+    wrapper.classList.add("reader-page-loading");
+  }
+
+  function finishReaderPageLoading(wrapper, error = null) {
+    const loading = wrapper.querySelector(".reader-loading");
+    if (error && loading) {
+      loading.textContent = "Não foi possível carregar esta página.";
+    } else {
+      loading?.remove();
+    }
+    wrapper.classList.remove("reader-page-loading");
   }
 
   async function fetchPdfBuffer(url, signal, onProgress = () => {}) {
@@ -7308,7 +7340,7 @@
   }
 
   async function renderPDFReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
-    body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Carregando PDF…</div><progress class="reader-progress"></progress>${readerLoadingTipMarkup()}<div class="reader-spinner"></div></div>`;
+    body.innerHTML = readerLoadingMarkup("Carregando PDF…");
     try {
       const pdfjs = await (window.pdfjsReady || Promise.resolve(window.pdfjsLib));
       // PDF.js 4.x via module pode não expor global em alguns navegadores.
@@ -7319,7 +7351,7 @@
       // Fetch Telegram PDFs ourselves and hand bytes to PDF.js. Some browsers
       // fail when the worker performs its own ranged requests against the Edge
       // Function, even though the endpoint returns a valid PDF.
-      body.innerHTML = `<div class="reader-loading"><div class="reader-loading-label">Abrindo arquivo PDF…</div><progress class="reader-progress"></progress>${readerLoadingTipMarkup()}<div class="reader-spinner"></div></div>`;
+      body.innerHTML = readerLoadingMarkup("Abrindo arquivo PDF…");
       let pdfData;
       let pdfUrl = null;
       if (prefetchedBuffer) {
@@ -7355,8 +7387,19 @@
       if (pdfData && !pdfData.byteLength) throw new Error("PDF vazio.");
 
       // Pass the data as a typed array.
-      body.innerHTML = `<div class="empty" style="margin:auto">Abrindo PDF…</div>`;
-      const pdf = await pdfjs.getDocument(pdfUrl ? { url: pdfUrl } : { data: new Uint8Array(pdfData) }).promise;
+      body.innerHTML = readerLoadingMarkup("Abrindo PDF…");
+      const loadingTask = pdfjs.getDocument(pdfUrl ? { url: pdfUrl } : { data: new Uint8Array(pdfData) });
+      loadingTask.onProgress = ({ loaded, total }) => {
+        const bar = body.querySelector(".reader-progress");
+        if (!bar) return;
+        if (total > 0 && loaded < total) {
+          bar.max = total;
+          bar.value = loaded;
+        } else {
+          bar.removeAttribute("value");
+        }
+      };
+      const pdf = await loadingTask.promise;
 
       const currentReadingMode = state.readingMode;
 
@@ -7366,7 +7409,6 @@
         let page = Math.max(firstPage, Math.min(resumePage, totalPages));
         const canvas = document.createElement("canvas");
         canvas.className = "reader-canvas";
-        body.replaceChildren(canvas);
 
         async function drawSinglePage() {
           if (page === totalPages) {
@@ -7376,7 +7418,6 @@
             onPageChange(item, page, totalPages);
             return;
           }
-          if (!canvas.isConnected) body.replaceChildren(canvas);
           const p = await pdf.getPage(page);
           const baseViewport = p.getViewport({ scale: 1 });
           const availableWidth = Math.max(240, body.clientWidth - 40);
@@ -7395,6 +7436,7 @@
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
           await p.render({ canvasContext: ctx, viewport }).promise;
+          if (!canvas.isConnected) body.replaceChildren(canvas);
           controls.innerHTML = `
             <button data-prev ${page <= firstPage ? "disabled" : ""}>‹</button>
             <span class="reader-page">${page} / ${totalPages}</span>
@@ -7414,7 +7456,6 @@
         let spread = Math.max(0, Math.floor((resumePage - 1) / 2));
         const spreadContainer = document.createElement("div");
         spreadContainer.className = "reader-double-page";
-        body.replaceChildren(spreadContainer);
 
         async function drawSpread() {
           const totalPages = pdf.numPages + 1;
@@ -7462,6 +7503,7 @@
           }
 
           const displayedPages = [...pages].sort((a, b) => a - b);
+          if (!spreadContainer.isConnected) body.replaceChildren(spreadContainer);
 
           controls.innerHTML = `
             <button data-prev ${spread === 0 ? "disabled" : ""}>‹</button>
@@ -7508,6 +7550,7 @@
               if (!renderedPages.has(pageNum)) {
                 renderedPages.add(pageNum);
                 const canvas = entry.target.querySelector('canvas');
+                try {
                 const p = await pdf.getPage(pageNum);
                 // Smaller scale for continuous scroll to fit more pages
                 const baseViewport = p.getViewport({ scale: 1 });
@@ -7523,6 +7566,11 @@
                 ctx.fillStyle = "white";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 await p.render({ canvasContext: ctx, viewport }).promise;
+                finishReaderPageLoading(entry.target);
+                } catch (error) {
+                  finishReaderPageLoading(entry.target, error);
+                  console.error("[PDF] Falha ao renderizar página", pageNum, error);
+                }
               }
             }
           }
@@ -7535,6 +7583,7 @@
           const canvas = document.createElement("canvas");
           canvas.className = "reader-canvas";
           pageWrapper.appendChild(canvas);
+          showReaderPageLoading(pageWrapper);
           pageContainer.appendChild(pageWrapper);
           pageElements.push(pageWrapper);
           observer.observe(pageWrapper);
@@ -7643,7 +7692,6 @@
       let page = pages.includes(requestedPage - 1) ? requestedPage - 1 : pages[0];
       const img = document.createElement("img");
       img.className = "reader-image";
-      body.replaceChildren(img);
       const urls = new Set();
       const draw = async () => {
         const blob = await entries[page].getData(new zipjs.BlobWriter());
@@ -7652,6 +7700,8 @@
         if (img.dataset.url) { URL.revokeObjectURL(img.dataset.url); urls.delete(img.dataset.url); }
         img.dataset.url = objectUrl;
         img.src = objectUrl;
+        await img.decode();
+        if (!img.isConnected) body.replaceChildren(img);
         controls.innerHTML = `<button data-prev ${page <= pages[0] ? "disabled" : ""}>‹</button><span class="reader-page">${page + 1} / ${entries.length}</span><button data-next ${page >= pages[pages.length - 1] ? "disabled" : ""}>›</button>`;
         $("[data-prev]", controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position > 0) { page = pages[position - 1]; await draw(); } });
         $("[data-next]", controls)?.addEventListener("click", async () => { const position = pages.indexOf(page); if (position < pages.length - 1) { page = pages[position + 1]; await draw(); } });
@@ -7690,7 +7740,6 @@
     let progressLabel;
     let progressBar;
     let progressDetail;
-    let progressSpinner;
     const showCbzProgress = (message, value = null, detail = "") => {
       if (/de 0(?:\.0+)? MB/.test(detail)) {
         value = null;
@@ -7707,9 +7756,7 @@
         progressBar.max = 100;
         progressDetail = document.createElement("div");
         progressDetail.className = "reader-loading-detail";
-        progressSpinner = document.createElement("div");
-        progressSpinner.className = "reader-spinner";
-        progressRoot.append(progressLabel, progressBar, progressDetail, progressSpinner);
+        progressRoot.append(progressLabel, progressBar, progressDetail);
         progressRoot.insertAdjacentHTML("beforeend", readerLoadingTipMarkup());
         body.replaceChildren(progressRoot);
       }
@@ -7724,7 +7771,6 @@
         progressDetail.hidden = false;
         progressDetail.textContent = detail;
       }
-      progressSpinner.hidden = true;
     };
     showCbzProgress("Abrindo arquivo CBZ…");
     try {
@@ -7792,7 +7838,6 @@
         const pageCache = createArchivePageCache(names, name => zip.files[name].async("blob"));
         const img = document.createElement("img");
         img.className = "reader-image";
-        body.replaceChildren(img);
 
         async function draw() {
           if (page === names.length) {
@@ -7800,6 +7845,7 @@
             delete img.dataset.url;
             img.src = READER_END_PAGE_URL;
             img.alt = "Página final";
+            if (!img.isConnected) body.replaceChildren(img);
             controls.innerHTML = `<button data-prev>‹</button><span class="reader-page">${page + 1} / ${totalPages}</span><button data-next disabled>›</button>`;
             $("[data-prev]", controls)?.addEventListener("click", async () => { page--; await draw(); });
             onPageChange(item, page + 1, totalPages);
@@ -7815,6 +7861,8 @@
           const objectUrl = URL.createObjectURL(blob);
           img.dataset.url = objectUrl;
           img.src = objectUrl;
+          await img.decode();
+          if (!img.isConnected) body.replaceChildren(img);
           controls.innerHTML = `
             <button data-prev ${page <= firstIndex ? "disabled" : ""}>‹</button>
             <span class="reader-page">${page + 1} / ${names.length}</span>
@@ -7838,7 +7886,6 @@
         let spread = Math.max(0, Math.floor((resumePage - 1) / 2));
         const spreadContainer = document.createElement("div");
         spreadContainer.className = "reader-double-page";
-        body.replaceChildren(spreadContainer);
         const spreadUrls = [];
 
         async function drawSpread() {
@@ -7872,12 +7919,14 @@
             img.className = "reader-image";
             img.src = objectUrl;
             img.alt = `Página ${index + 1}`;
+            await img.decode();
 
             wrapper.appendChild(img);
             spreadContainer.appendChild(wrapper);
           }
 
           const displayedPages = indexesToRender.map(p => p + 1).sort((a, b) => a - b);
+          if (!spreadContainer.isConnected) body.replaceChildren(spreadContainer);
 
           controls.innerHTML = `
             <button data-prev ${spread === 0 ? "disabled" : ""}>‹</button>
@@ -7942,7 +7991,12 @@
             state.url = URL.createObjectURL(blob);
             state.img.src = state.url;
             objectUrls.push(state.url);
-          })().catch(error => console.error("[CBZ] Falha ao extrair página", index + 1, error)).finally(() => { state.loading = null; });
+            await state.img.decode();
+            finishReaderPageLoading(pageWrapper);
+          })().catch(error => {
+            finishReaderPageLoading(pageWrapper, error);
+            console.error("[CBZ] Falha ao extrair página", index + 1, error);
+          }).finally(() => { state.loading = null; });
           return state.loading;
         };
         const releasePage = pageWrapper => {
@@ -7953,6 +8007,7 @@
           objectUrls.splice(objectUrls.indexOf(state.url), 1);
           state.url = null;
           state.img.removeAttribute("src");
+          showReaderPageLoading(pageWrapper);
         };
 
         getReaderPages(names.length, skipCover).forEach(pageNum => {
@@ -7964,6 +8019,7 @@
           img.className = "reader-image";
           img.alt = `Página ${pageNum}`;
           pageWrapper.appendChild(img);
+          showReaderPageLoading(pageWrapper);
           pageContainer.appendChild(pageWrapper);
           pageElements.push(pageWrapper);
           pageStates.set(index, { img, url: null, loading: null });
@@ -8094,6 +8150,7 @@
   }
 
   async function renderCBRReader(item, url, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}, prefetchedBuffer = null) {
+    body.innerHTML = readerLoadingMarkup("Abrindo arquivo CBR…");
     const downloadController = new AbortController();
     overlay._cbrDownloadController = downloadController;
     let objectUrl = null;
@@ -8104,7 +8161,7 @@
     let cbrProgressBar;
     let cbrProgressDetail;
 
-    function showCbrProgress(message, value = 0, detail = "Aguardando abertura…") {
+    function showCbrProgress(message, value = null, detail = "Aguardando abertura…") {
       const safeValue = Number.isFinite(Number(value)) ? Math.max(0, Math.min(100, Number(value))) : 0;
       if (!cbrProgressRoot || !cbrProgressRoot.isConnected) {
         cbrProgressRoot = document.createElement("div");
@@ -8121,19 +8178,14 @@
         body.replaceChildren(cbrProgressRoot);
       }
       cbrProgressLabel.textContent = message;
-      cbrProgressBar.value = safeValue;
+      if (value === null) cbrProgressBar.removeAttribute("value");
+      else cbrProgressBar.value = safeValue;
       cbrProgressDetail.textContent = detail || `${safeValue.toFixed(0)}%`;
       cbrProgressDetail.hidden = !detail;
     }
 
     function status(message) {
-      showCbrProgress(message, 0, "Preparando arquivo…");
-      return;
-      body.innerHTML = `
-      <div class="empty" style="margin:auto;max-width:650px">
-        ${escapeHTML(message)}
-      </div>
-    `;
+      showCbrProgress(message, null, "Preparando arquivo…");
     }
 
     function fail(title, message) {
@@ -8205,7 +8257,7 @@
         showCbrProgress("Arquivo CBR carregado. Preparando páginas…", 100, "Abertura concluída");
       } else {
         buffer = await fetchFileArrayBuffer(url, (received, total) => {
-          const value = total ? (received / total) * 100 : 0;
+          const value = total ? (received / total) * 100 : null;
         showCbrProgress("Abrindo arquivo CBR…", value, total ? `${value.toFixed(0)}% · ${formatCbrBytes(received)} de ${formatCbrBytes(total)}` : `${formatCbrBytes(received)} processados`);
         }, undefined, downloadController.signal);
         console.log(`[CBR] ${isMegaSource ? "Mega" : "Arquivo"} baixado:`, buffer.byteLength, "bytes");
@@ -8521,7 +8573,6 @@
         img.className = "reader-image";
         img.alt = "Página do quadrinho";
         img.decoding = "async";
-        body.replaceChildren(img);
 
         async function draw() {
           controls.innerHTML = `<span class="reader-page">Extraindo página ${page + 1}…</span>`;
@@ -8539,6 +8590,8 @@
           objectUrl = URL.createObjectURL(blob);
           img.src = objectUrl;
           }
+          await img.decode();
+          if (!img.isConnected) body.replaceChildren(img);
           controls.innerHTML = `
             <button data-prev ${page <= firstIndex ? "disabled" : ""}>‹</button>
             <span class="reader-page">${page + 1} / ${totalPages}</span>
@@ -8562,7 +8615,6 @@
         let spread = Math.max(0, Math.floor((resumePage - 1) / 2));
         const spreadContainer = document.createElement("div");
         spreadContainer.className = "reader-double-page";
-        body.replaceChildren(spreadContainer);
         const spreadUrls = [];
 
         async function drawSpread() {
@@ -8606,12 +8658,14 @@
             img.className = "reader-image";
             img.alt = `Página ${index + 1}`;
             img.src = objectUrl;
+            await img.decode();
 
             wrapper.appendChild(img);
             spreadContainer.appendChild(wrapper);
           }
 
           const displayedPages = indexesToRender.map(p => p + 1).sort((a, b) => a - b);
+          if (!spreadContainer.isConnected) body.replaceChildren(spreadContainer);
 
           controls.innerHTML = `
             <button data-prev ${spread === 0 ? "disabled" : ""}>‹</button>
@@ -8667,6 +8721,7 @@
           img.className = "reader-image";
           img.alt = `Página ${pageNum}`;
           pageWrapper.appendChild(img);
+          showReaderPageLoading(pageWrapper);
           pageContainer.appendChild(pageWrapper);
           pageElements.push({ file, pageNum, wrapper: pageWrapper, img });
           pageStates.set(index, { url: null, loading: null });
@@ -8699,7 +8754,12 @@
             pageState.url = URL.createObjectURL(blob);
             page.img.src = pageState.url;
             objectUrls.push(pageState.url);
-          })().catch(error => console.error("[CBR] Falha ao extrair página", page.pageNum, error)).finally(() => {
+            await page.img.decode();
+            finishReaderPageLoading(page.wrapper);
+          })().catch(error => {
+            finishReaderPageLoading(page.wrapper, error);
+            console.error("[CBR] Falha ao extrair página", page.pageNum, error);
+          }).finally(() => {
             pageState.loading = null;
           });
           await pageState.loading;
@@ -8712,6 +8772,7 @@
           objectUrls = objectUrls.filter(url => url !== pageState.url);
           pageState.url = null;
           page.img.removeAttribute("src");
+          showReaderPageLoading(page.wrapper);
         };
 
         const observer = new IntersectionObserver(entries => {

@@ -7,12 +7,12 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.233-series-volumes">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.234-reader-loading">
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=263-series-volumes", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=264-reader-loading", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -134,6 +134,6 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.20"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.477-series-volumes"></script>
+    <script src="js/app.js?v=2.2.10.479-reader-loading"></script>
 </body>
 </html>
