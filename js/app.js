@@ -12181,7 +12181,8 @@
       const button = $("button[type=submit]", composeForm);
       if (!body || button.disabled) return;
       button.disabled = true;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }).select("id").single();
+      // Use the database expiry default so device clock skew cannot violate RLS.
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) } }).select("id").single();
       if (result.error) { console.error("[chat room] erro ao enviar mensagem", result.error); toast(result.error.message || "Não foi possível enviar a mensagem."); }
       else {
         if (/@guria\b/i.test(body) && result.data?.id) sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] menção pública indisponível", error?.message || error));
@@ -12336,10 +12337,13 @@
       messagesRoot.insertAdjacentHTML("beforeend", `<div class="chat-message is-mine chat-message-pending" data-chat-pending="${optimisticId}"><div>${escapeHTML(body)}</div><small>Enviando…</small></div>`);
       event.currentTarget.reset();
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
-      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) }, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }).select("id").single();
+      // Use the database expiry default so device clock skew cannot violate RLS.
+      const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, recipient_id: contact.id, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) } }).select("id").single();
       if (result.error) {
         $(`[data-chat-pending="${optimisticId}"]`, messagesRoot)?.remove();
         submitButton.disabled = false;
+        const input = composeForm.querySelector("textarea");
+        if (input && !input.value) input.value = String(form.get("body") || "");
         console.error("[private chat] erro ao enviar mensagem", result.error);
         return toast(result.error.message || "Não foi possível enviar a mensagem.");
       }
