@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v627-auth-logo";
+const CACHE_VERSION = "banca-digital-shell-v628-popup-actions";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.238-auth-logo",
+  "./", "./index.html", "./css/style.css?v=2.2.10.239-popup-actions",
   "./js/app.js?v=2.2.10.482-auth-logo", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
