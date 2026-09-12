@@ -815,6 +815,22 @@
     render();
     toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
   }
+  function updateCatalogItemVisibilityAppearance(item, hidden) {
+    $$('[data-hide-item]').filter(button => button.dataset.hideItem === String(item.id)).forEach(button => {
+      button.classList.toggle("is-hidden", hidden);
+      button.textContent = hidden ? "◉" : "⊘";
+      button.title = hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns";
+      button.setAttribute("aria-label", button.title);
+      const card = button.closest(".card");
+      card?.classList.toggle("is-hidden-catalog-item", hidden || isHiddenCatalogSeries(item.seriesId));
+      const cover = card?.querySelector(".cover");
+      const badge = cover?.querySelector(".card-hidden-badge");
+      if (hidden && !badge) cover?.insertAdjacentHTML("beforeend", '<span class="card-hidden-badge">OCULTA</span>');
+      if (!hidden) badge?.remove();
+    });
+  }
+
+  const pendingCatalogItemVisibility = new Set();
   function bindCatalogItemVisibility(root = document) {
     $$('[data-hide-item]', root).forEach(button => {
       if (button.dataset.visibilityBound) return;
@@ -822,26 +838,19 @@
       button.addEventListener("click", async event => {
         event.preventDefault();
         event.stopPropagation();
-        if (button.disabled) return;
+        const id = button.dataset.hideItem;
+        const item = state.db.library.find(entry => String(entry.id) === id);
+        if (!item || pendingCatalogItemVisibility.has(id)) return;
+        pendingCatalogItemVisibility.add(id);
         button.disabled = true;
+        updateCatalogItemVisibilityAppearance(item, !isHiddenCatalogItem(item));
         try {
-          await toggleCatalogItemVisibility(button.dataset.hideItem);
-          const item = state.db.library.find(entry => String(entry.id) === button.dataset.hideItem);
-          if (!item || !button.isConnected) return;
-          const hidden = isHiddenCatalogItem(item);
-          button.classList.toggle("is-hidden", hidden);
-          button.textContent = hidden ? "◉" : "⊘";
-          button.title = hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns";
-          button.setAttribute("aria-label", button.title);
-          const card = button.closest(".card");
-          card?.classList.toggle("is-hidden-catalog-item", hidden || isHiddenCatalogSeries(item.seriesId));
-          const cover = card?.querySelector(".cover");
-          const badge = cover?.querySelector(".card-hidden-badge");
-          if (hidden && !badge) cover?.insertAdjacentHTML("beforeend", '<span class="card-hidden-badge">OCULTA</span>');
-          if (!hidden) badge?.remove();
+          await toggleCatalogItemVisibility(id);
         } catch (error) {
           toast(error?.message || "Não foi possível alterar a visibilidade.");
         } finally {
+          updateCatalogItemVisibilityAppearance(item, isHiddenCatalogItem(item));
+          pendingCatalogItemVisibility.delete(id);
           button.disabled = false;
         }
       });
@@ -19053,6 +19062,7 @@
         ${volumeTabs}${volumePanels}
       </div>`;
     $("#modal-root").appendChild(overlay);
+    bindCatalogItemVisibility(overlay);
     const downloadSeriesButton = document.createElement("button");
     downloadSeriesButton.className = "small-btn";
     downloadSeriesButton.type = "button";
@@ -19104,7 +19114,6 @@
         openSeriesSelection(series, state.db.library.filter(item => ids.has(String(item.id))), returnToCoverVariants, returnToFileReports, returnToReader);
       });
     }
-    bindCatalogItemVisibility(overlay);
     refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
     overlay.addEventListener("click", event => {
