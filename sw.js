@@ -1,15 +1,16 @@
-const CACHE_VERSION = "banca-digital-shell-v626-series-actions";
+const CACHE_VERSION = "banca-digital-shell-v627-auth-logo";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.237-series-actions",
-  "./js/app.js?v=2.2.10.481-series-formats", "./js/catalog-sync.js?v=3-series-order",
+  "./", "./index.html", "./css/style.css?v=2.2.10.238-auth-logo",
+  "./js/app.js?v=2.2.10.482-auth-logo", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
-  "./js/data/dc-comics/recentes.js?v=2.2.7.47",
+  "./js/data/dc-comics/recentes.js?v=2.2.7.54",
   "./js/data/dc-comics/black-label.js?v=1.0.14",
   "./js/data/dc-comics/milestone.js?v=1.1.1",
-  "./js/data/dc-comics/novos-52.js?v=1.0.20",
+  "./js/data/dc-comics/novos-52.js?v=1.0.26",
   "./js/data/loading-tips.js?v=1.0.0", "./js/supabase.js",
+  "./assets/barracavermelhaicon.png?v=2",
   "./assets/barracabrancaicon.png?v=1", "./assets/semfoto.jpg?v=1",
   "./assets/papercomicsbackground.jpg", "./assets/papercomicsbackgroung.jpg",
   "./js/pdfjs/pdf.min.mjs", "./js/pdfjs/pdf.worker.min.mjs",

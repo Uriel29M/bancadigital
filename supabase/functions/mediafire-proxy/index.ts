@@ -25,7 +25,11 @@ function isAllowedHost(hostname: string) {
 function parseAllowedUrl(value: string) {
   let url: URL;
   try {
-    url = new URL(value);
+    // Links copied from escaped text can contain www\.mediafire.com.
+    // Repair escaped dots only in the authority; still enforce the host allowlist.
+    const normalized = value.replace(/^(https:\/\/)([^/?#]+)/i, (_match, scheme, authority) =>
+      scheme + authority.replace(/\\\./g, "."));
+    url = new URL(normalized);
   } catch {
     throw new Error("URL inválida.");
   }
@@ -65,6 +69,11 @@ function extractDownloadUrl(html: string, pageUrl: URL) {
 
 async function resolveDownload(url: URL) {
   if (/^download\d+\.mediafire\.com$/i.test(url.hostname)) return url;
+  // Legacy query/download URLs can be blocked by MediaFire in some regions.
+  // Resolve the same file through its canonical public path.
+  const legacyId = /^\?([a-z0-9]{15})$/i.exec(url.search)?.[1]
+    || /^\/download\/([a-z0-9]{15})\/?$/i.exec(url.pathname)?.[1];
+  if (legacyId) url = new URL(`https://www.mediafire.com/file/${legacyId}/file`);
   const page = await fetchAllowed(url, { headers: { Accept: "text/html,application/xhtml+xml" } });
   // Alguns links permanentes /file/{id} redirecionam diretamente para o
   // host de download. Nesse caso fetchAllowed já resolveu o destino e a

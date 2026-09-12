@@ -80,3 +80,39 @@ test('server publisher reconciles shared records before writing GitHub', () => {
   assert.match(server, /catalogEditedAt: record\.updated_at/);
   assert.match(server, /profile\?\.plan !== "admin"/);
 });
+
+test('batch ordering saves all editions in one write and keeps metadata', async () => {
+  const sync = setup();
+  const editions = [{ ...edition, seriesSortOrder: 0 }, { ...edition, id: 'test-2', seriesSortOrder: 1 }];
+  let calls = 0;
+  const client = { from() { return { upsert(payload) {
+    calls++;
+    assert.equal(payload.length, 2);
+    assert.equal(payload[0].edition.fileUrl, edition.fileUrl);
+    assert.equal(sync.pending.size, 2);
+    return { select: async () => ({ data: payload.map(row => ({ ...row, updated_at: record.updated_at })) }) };
+  } }; } };
+  await sync.publishMany(client, editions, 'admin-id');
+  assert.equal(calls, 1);
+  assert.equal(sync.pending.size, 0);
+  assert.equal(sync.merge([old])[0].seriesSortOrder, 0);
+  assert.equal(sync.rows.get('test-2').edition.seriesSortOrder, 1);
+});
+
+test('failed batch does not change cached order and permits retry', async () => {
+  const sync = setup();
+  sync.accept([record]);
+  const client = { from() { return { upsert() { return { select: async () => ({ error: new Error('Forbidden') }) }; } }; } };
+  await assert.rejects(sync.publishMany(client, [{ ...edition, seriesSortOrder: 3 }], 'admin-id'), /Forbidden/);
+  assert.equal(sync.rows.get('test-1').edition.seriesSortOrder, undefined);
+  assert.equal(sync.pending.size, 0);
+});
+
+test('manual order takes precedence over issue numbers and legacy annual order', () => {
+  const app = readFileSync('js/app.js', 'utf8');
+  const code = app.slice(app.indexOf('  function issueSortValue('), app.indexOf('  function catalogTitleCompare('));
+  const context = vm.createContext({});
+  vm.runInContext(code, context);
+  const items = [{ id: 'annual', issue: 'Anuário', sortOrder: 4.5, seriesSortOrder: 0 }, { id: 'first', issue: '1', seriesSortOrder: 1 }, { id: 'new', issue: '2' }];
+  assert.deepEqual(items.sort((a, b) => context.issueSortValue(a) - context.issueSortValue(b)).map(item => item.id), ['annual', 'first', 'new']);
+});

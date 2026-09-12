@@ -2239,6 +2239,8 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .auth-page { min-height: 55vh; display: grid; place-items: center; }
 .auth-card { width: min(100%, 430px); padding: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
 .auth-card h1 { margin: 16px 0 14px; }
+.auth-title { display: flex; align-items: center; gap: 12px; }
+.auth-logo { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
 .auth-card .section-subtitle { margin-bottom: 32px; line-height: 1.6; }
 .auth-card .field { margin-bottom: 24px; }
 .auth-card .field label { display: block; margin-bottom: 7px; }

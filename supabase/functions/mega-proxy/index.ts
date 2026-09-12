@@ -86,7 +86,10 @@ async function downloadMegaBlock(file: any, start: number, end: number): Promise
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= 4; attempt++) {
     try {
-      const block = await readMegaBlock(file.download({ start, end, maxConnections: 1 }));
+      // megajs treats end: 0 as an absent end and downloads the entire file.
+      const downloadEnd = end === 0 ? Math.min(15, Number(file.size) - 1) : end;
+      const downloaded = await readMegaBlock(file.download({ start, end: downloadEnd, maxConnections: 1 }));
+      const block = end === 0 ? downloaded.subarray(0, expected) : downloaded;
       if (block.byteLength === expected) return block;
       lastError = new Error(`O Mega encerrou o bloco em ${block.byteLength} de ${expected} bytes.`);
     } catch (error) {
