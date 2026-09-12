@@ -815,6 +815,39 @@
     render();
     toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
   }
+  function bindCatalogItemVisibility(root = document) {
+    $$('[data-hide-item]', root).forEach(button => {
+      if (button.dataset.visibilityBound) return;
+      button.dataset.visibilityBound = "true";
+      button.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (button.disabled) return;
+        button.disabled = true;
+        try {
+          await toggleCatalogItemVisibility(button.dataset.hideItem);
+          const item = state.db.library.find(entry => String(entry.id) === button.dataset.hideItem);
+          if (!item || !button.isConnected) return;
+          const hidden = isHiddenCatalogItem(item);
+          button.classList.toggle("is-hidden", hidden);
+          button.textContent = hidden ? "◉" : "⊘";
+          button.title = hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns";
+          button.setAttribute("aria-label", button.title);
+          const card = button.closest(".card");
+          card?.classList.toggle("is-hidden-catalog-item", hidden || isHiddenCatalogSeries(item.seriesId));
+          const cover = card?.querySelector(".cover");
+          const badge = cover?.querySelector(".card-hidden-badge");
+          if (hidden && !badge) cover?.insertAdjacentHTML("beforeend", '<span class="card-hidden-badge">OCULTA</span>');
+          if (!hidden) badge?.remove();
+        } catch (error) {
+          toast(error?.message || "Não foi possível alterar a visibilidade.");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+  }
+
   async function toggleCatalogSeriesVisibility(seriesId) {
     if (!isAdminProfile() || state.session?.offline) return toast("Apenas administradores podem ocultar séries.");
     const id = String(seriesId || "");
@@ -17362,10 +17395,7 @@
     }));
     $$('[data-delete-download-series]').forEach(button => button.addEventListener('click', () => deleteSeriesDownloads(button.dataset.deleteDownloadSeries)));
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
-    $$('[data-hide-item]').forEach(el => el.addEventListener("click", event => {
-      event.stopPropagation();
-      toggleCatalogItemVisibility(el.dataset.hideItem);
-    }));
+    bindCatalogItemVisibility();
     $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -19074,6 +19104,7 @@
         openSeriesSelection(series, state.db.library.filter(item => ids.has(String(item.id))), returnToCoverVariants, returnToFileReports, returnToReader);
       });
     }
+    bindCatalogItemVisibility(overlay);
     refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
     overlay.addEventListener("click", event => {
