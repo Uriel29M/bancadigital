@@ -19302,6 +19302,45 @@
     };
   }
 
+  function bindAdminAccountRetention(overlay) {
+    if (!isAdminProfile()) return;
+    const section = document.createElement("section");
+    section.className = "notice admin-account-retention";
+    section.setAttribute("aria-label", "Exclusão automática de contas inativas");
+    section.innerHTML = `<h3>Contas comuns inativas</h3><p>Exclusão automática após 30 dias de inatividade, diariamente às 03h de Brasília. Administradores, moderadores, banca e Lendas são preservados.</p><p data-retention-status role="status" aria-live="polite">Carregando configuração…</p><button type="button" class="small-btn" data-retention-toggle disabled>Carregando…</button>`;
+    $(".admin-actions", overlay)?.after(section);
+    const status = $("[data-retention-status]", section);
+    const button = $("[data-retention-toggle]", section);
+    let enabled = null;
+    let busy = false;
+    const refresh = async (next = null) => {
+      if (busy || !isAdminProfile()) return;
+      busy = true;
+      button.disabled = true;
+      status.textContent = next === null ? "Carregando configuração…" : "Salvando configuração…";
+      try {
+        if (!sb || state.session?.offline || navigator.onLine === false) throw new Error("Conecte-se à internet para gerenciar esta opção.");
+        const result = next === null
+          ? await sb.rpc("get_inactive_account_cleanup_enabled")
+          : await sb.rpc("set_inactive_account_cleanup_enabled", { p_enabled: next });
+        if (result.error) throw result.error;
+        if (typeof result.data !== "boolean") throw new Error("Não foi possível confirmar a configuração.");
+        enabled = result.data;
+        status.textContent = enabled ? "Ativada: a limpeza será executada diariamente." : "Desativada: novas execuções automáticas estão pausadas.";
+        button.textContent = enabled ? "Desativar exclusão automática" : "Ativar exclusão automática";
+      } catch (error) {
+        enabled = null;
+        status.textContent = error.message || "Não foi possível confirmar a configuração. Tente novamente.";
+        button.textContent = "Tentar novamente";
+      } finally {
+        busy = false;
+        button.disabled = false;
+      }
+    };
+    button.onclick = () => refresh(typeof enabled === "boolean" ? !enabled : null);
+    refresh();
+  }
+
   function openAdmin(editId = null) {
     cancelCoverLoads();
     const overlay = document.createElement("div");
@@ -19321,6 +19360,7 @@
         <div class="admin-collection-list">${state.db.collections.map(c => `<div><b>${escapeHTML(c.title)}</b><span>${c.issueIds.length} edições</span><button class="small-btn danger" data-delete-collection="${escapeHTML(c.id)}">Excluir</button></div>`).join("") || "Nenhuma coleção criada."}</div>
       </div>`;
     $("#modal-root").appendChild(overlay);
+    bindAdminAccountRetention(overlay);
     const filterBar = document.createElement("div");
     filterBar.className = "admin-catalog-filters";
     filterBar.style.cssText = "display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 15px";

@@ -19,6 +19,17 @@ As funções e os registros estão no schema privado, sem acesso para anon,
 authenticated ou service_role. O histórico fica em
 `private.inactive_account_purge_runs`. Nenhuma chave de serviço está no agendamento.
 
+## Controle na Administração
+
+Em **Administração → Contas comuns inativas**, administradores podem usar
+**Desativar exclusão automática** e **Ativar exclusão automática**. O controle
+altera o agendamento no servidor e persiste entre sessões. Reativar retoma o
+horário diário; não dispara uma exclusão imediata. Desativar pausa futuras
+execuções, sem interromper uma execução que já tenha começado.
+
+As RPCs de leitura e alteração exigem uma sessão cujo perfil tenha plano
+`admin`. Outros planos não podem consultar nem alterar o controle.
+
 ## Verificação administrativa (SQL Editor, postgres)
 
 Prévia sem excluir contas:
