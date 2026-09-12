@@ -18865,22 +18865,23 @@
       downloadSeriesButton.after(obtainButton);
       obtainButton.addEventListener("click", () => openSeriesExport(series, editions));
       addEditionButton.addEventListener("click", () => {
+        const latest = seriesEditions({ seriesId: series.seriesId || series.id }).at(-1) || series;
         overlay.remove();
         openEditForm(null, {
-          title: series.title || series.seriesTitle || "",
-          seriesTitle: series.seriesTitle || series.title || "",
+          title: latest.title || latest.seriesTitle || "",
+          seriesTitle: latest.seriesTitle || latest.title || "",
           seriesId: series.seriesId || series.id || "",
-          type: series.type || "comic",
-          author: series.author || "",
-          publisher: series.publisher || "",
-          imprint: series.imprint || "",
-          character: series.character || "",
-          year: series.year || new Date().getFullYear(),
-          description: series.description || "",
-          tags: Array.isArray(series.tags) ? series.tags : [],
-          publication: series.publication || "",
-          status: series.status || "",
-          editions: series.editions || "",
+          type: latest.type || "comic",
+          author: latest.author || "",
+          publisher: latest.publisher || "",
+          imprint: latest.imprint || "",
+          character: latest.character || "",
+          year: latest.year || new Date().getFullYear(),
+          description: latest.description || "",
+          tags: Array.isArray(latest.tags) ? latest.tags : [],
+          publication: latest.publication || "",
+          status: latest.status || "",
+          editions: latest.editions || "",
           featured: true,
         });
       });

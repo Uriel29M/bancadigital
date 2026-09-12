@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v633-recently-added";
+const CACHE_VERSION = "banca-digital-shell-v634-latest-edition";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.241-auth-logo-size",
-  "./js/app.js?v=2.2.10.486-recently-added", "./js/catalog-sync.js?v=3-series-order",
+  "./js/app.js?v=2.2.10.487-latest-edition", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
