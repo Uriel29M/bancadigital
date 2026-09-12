@@ -2541,7 +2541,11 @@
         const canonical = { ...record.edition, catalogEditedAt: record.updated_at };
         BancaCatalogSync.rows.set(String(canonical.id), { ...record, edition: canonical });
         const index = state.db.library.findIndex(item => String(item.id) === String(canonical.id));
-        if (index >= 0) state.db.library[index] = canonical;
+        if (canonical.catalogDeleted === true) {
+          state.db.library = state.db.library.filter(item => String(item.id) !== String(canonical.id));
+          state.db.removedItemIds = [...new Set([...(state.db.removedItemIds || []), canonical.id])];
+          state.db.collections.forEach(collection => { collection.issueIds = (collection.issueIds || []).filter(id => String(id) !== String(canonical.id)); });
+        } else if (index >= 0) state.db.library[index] = canonical;
         else state.db.library.push(canonical);
         sharedPublished = true;
         clearGeneratedCoverCache();
@@ -19193,14 +19197,7 @@
     $("[data-export]", overlay).onclick = exportDB;
     $("[data-import]", overlay).onclick = importDB;
     $$("[data-edit]", overlay).forEach(b => b.onclick = () => { overlay.remove(); openEditForm(b.dataset.edit); });
-    $$("[data-delete]", overlay).forEach(b => b.onclick = () => {
-      const itemId = b.dataset.delete;
-      state.db.removedItemIds = Array.isArray(state.db.removedItemIds) ? state.db.removedItemIds : [];
-      if (!state.db.removedItemIds.includes(itemId)) state.db.removedItemIds.push(itemId);
-      state.db.library = state.db.library.filter(x => x.id !== itemId);
-      state.db.collections.forEach(c => c.issueIds = c.issueIds.filter(i => i !== itemId));
-      save(); overlay.remove(); render(); openAdmin(); toast("Edição excluída.");
-    });
+    $$("[data-delete]", overlay).forEach(button => button.onclick = () => deleteCatalogEdition(button, overlay));
   }
 
   function openEditFormLegacy(id = null) {
@@ -19521,8 +19518,26 @@
     $("[data-account-plan]", overlay).onclick = () => { overlay.remove(); openAccountPlanAdmin(); };
     $("[data-export]", overlay).onclick = exportDB; $("[data-import]", overlay).onclick = importDB;
     $$('[data-edit]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openEditForm(button.dataset.edit); });
-    $$('[data-delete]', overlay).forEach(button => button.onclick = () => { state.db.library = state.db.library.filter(x => x.id !== button.dataset.delete); state.db.collections.forEach(c => c.issueIds = c.issueIds.filter(id => id !== button.dataset.delete)); saveCatalog("Edição excluída."); overlay.remove(); render(); openAdmin(); });
+    $$('[data-delete]', overlay).forEach(button => button.onclick = () => deleteCatalogEdition(button, overlay));
     $$('[data-delete-collection]', overlay).forEach(button => button.onclick = () => { state.db.collections = state.db.collections.filter(c => c.id !== button.dataset.deleteCollection); saveCatalog("Coleção excluída."); overlay.remove(); openAdmin(); });
+  }
+
+  async function deleteCatalogEdition(button, overlay) {
+    if (button.disabled) return;
+    const item = state.db.library.find(item => String(item.id) === button.dataset.delete);
+    if (!item) return;
+    button.disabled = true;
+    button.textContent = "Excluindo…";
+    // Keep a shared deletion record so stale caches cannot restore this edition.
+    const saved = await saveCatalog("Edição excluída.", { ...item, catalogDeleted: true });
+    if (!saved) {
+      button.disabled = false;
+      button.textContent = "Excluir";
+      return;
+    }
+    overlay.remove();
+    render();
+    openAdmin();
   }
 
   function openEditForm(id = null, initial = null) {

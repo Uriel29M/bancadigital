@@ -116,3 +116,51 @@ test('manual order takes precedence over issue numbers and legacy annual order',
   const items = [{ id: 'annual', issue: 'Anuário', sortOrder: 4.5, seriesSortOrder: 0 }, { id: 'first', issue: '1', seriesSortOrder: 1 }, { id: 'new', issue: '2' }];
   assert.deepEqual(items.sort((a, b) => context.issueSortValue(a) - context.issueSortValue(b)).map(item => item.id), ['annual', 'first', 'new']);
 });
+
+test('confirmed deletion survives stale caches and older network responses', async () => {
+  const sync = setup();
+  sync.accept([record]);
+  const deleted = { ...edition, catalogDeleted: true };
+  const client = { from() { return { upsert(payload) {
+    assert.equal(payload.edition.catalogDeleted, true);
+    return { select() { return { single: async () => ({ data: { ...record, edition: payload.edition, updated_at: '2026-09-12T00:00:00Z' }, error: null }) }; } };
+  } }; } };
+  await sync.publish(client, deleted, 'admin-id');
+  sync.accept([record]);
+  assert.equal(sync.merge([old]).length, 0);
+  assert.equal(sync.merge([]).length, 0);
+  const otherBrowser = setup();
+  otherBrowser.accept([...sync.rows.values()]);
+  assert.equal(otherBrowser.merge([old]).length, 0);
+});
+
+test('failed deletion retains the existing shared edition', async () => {
+  const sync = setup();
+  sync.accept([record]);
+  const client = { from() { return { upsert() { return { select() { return { single: async () => ({ error: new Error('denied') }) }; } }; } }; } };
+  await assert.rejects(sync.publish(client, { ...edition, catalogDeleted: true }, 'admin-id'), /denied/);
+  assert.equal(sync.merge([old])[0].id, old.id);
+  assert.equal(sync.pending.size, 0);
+});
+
+test('admin waits for deletion confirmation and preserves the dialog on failure', async () => {
+  const app = readFileSync('js/app.js', 'utf8');
+  const handler = app.slice(app.indexOf('  async function deleteCatalogEdition('), app.indexOf('  function openEditForm(id = null, initial = null)'));
+  for (const success of [false, true]) {
+    let finish;
+    let closed = false;
+    const context = vm.createContext({ state: { db: { library: [old] } }, saveCatalog: async (_message, item) => {
+      assert.equal(item.catalogDeleted, true);
+      return new Promise(resolve => { finish = resolve; });
+    }, render() {}, openAdmin() {} });
+    vm.runInContext(handler, context);
+    const button = { dataset: { delete: old.id }, disabled: false };
+    const task = context.deleteCatalogEdition(button, { remove() { closed = true; } });
+    assert.equal(button.disabled, true);
+    assert.equal(closed, false);
+    finish(success);
+    await task;
+    assert.equal(closed, success);
+    if (!success) assert.equal(button.disabled, false);
+  }
+});

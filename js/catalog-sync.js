@@ -37,7 +37,7 @@ window.BancaCatalogSync = (() => {
     for (const [id, record] of incoming) {
       if (!known.has(id) && !pending.has(id) && valid(record)) result.push(normalizeEdition({ ...record.edition }));
     }
-    return result;
+    return result.filter(item => item.catalogDeleted !== true);
   }
   function accept(incoming) {
     for (const row of incoming || []) {
