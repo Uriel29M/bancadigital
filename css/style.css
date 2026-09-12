@@ -2893,6 +2893,7 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   display: flex; justify-content: space-between; gap: 20px; color: #aaa;
   font-size: 12px;
 }
+.footer > div:first-child { width: 320px; max-width: 100%; min-width: 0; }
 .footer strong { color: white; display: block; margin-bottom: 5px; }
 .footer-donation { display: flex; flex-direction: column; gap: 4px; }
 .donation-pix-key { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
