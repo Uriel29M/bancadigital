@@ -460,6 +460,7 @@
     comicMonthlyReadCounts: new Map(),
     comicMonthlyReadCountsLoaded: false,
     hiddenCatalogItemIds: new Set(),
+    hiddenCatalogItemUpdatedAt: new Map(),
     hiddenCatalogSeriesIds: new Set(),
      homeSectionOrder: null,
      homeHiddenSectionKeys: new Set(),
@@ -783,11 +784,15 @@
   async function loadCatalogVisibility() {
     if (!sb || navigator.onLine === false) return;
     const [editions, series] = await Promise.all([
-      sb.from("catalog_item_visibility").select("item_id, is_hidden"),
+      sb.from("catalog_item_visibility").select("item_id, is_hidden, updated_at"),
       sb.from("catalog_series_visibility").select("series_id, is_hidden")
     ]);
     if (editions.error) console.warn("Não foi possível carregar a visibilidade das edições:", editions.error.message);
-    else state.hiddenCatalogItemIds = new Set((editions.data || []).filter(row => row.is_hidden).map(row => String(row.item_id)));
+    else {
+      const hiddenEditions = (editions.data || []).filter(row => row.is_hidden);
+      state.hiddenCatalogItemIds = new Set(hiddenEditions.map(row => String(row.item_id)));
+      state.hiddenCatalogItemUpdatedAt = new Map(hiddenEditions.map(row => [String(row.item_id), Date.parse(row.updated_at) || 0]));
+    }
     if (series.error) console.warn("Não foi possível carregar a visibilidade das séries:", series.error.message);
     else state.hiddenCatalogSeriesIds = new Set((series.data || []).filter(row => row.is_hidden).map(row => String(row.series_id)));
   }
@@ -797,10 +802,16 @@
     if (!id || !sb || !state.session?.user?.id) return toast("A visibilidade precisa ser alterada com o banco online.");
     const hidden = !state.hiddenCatalogItemIds.has(id);
     const result = hidden
-      ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" })
+      ? await sb.from("catalog_item_visibility").upsert({ item_id: id, is_hidden: true, updated_by: state.session.user.id }, { onConflict: "item_id" }).select("item_id, updated_at").single()
       : await sb.from("catalog_item_visibility").delete().eq("item_id", id);
     if (result.error) return toast(result.error.message || "Não foi possível alterar a visibilidade.");
-    if (hidden) state.hiddenCatalogItemIds.add(id); else state.hiddenCatalogItemIds.delete(id);
+    if (hidden) {
+      state.hiddenCatalogItemIds.add(id);
+      state.hiddenCatalogItemUpdatedAt.set(id, Date.parse(result.data.updated_at) || 0);
+    } else {
+      state.hiddenCatalogItemIds.delete(id);
+      state.hiddenCatalogItemUpdatedAt.delete(id);
+    }
     render();
     toast(hidden ? "Edição ocultada para usuários comuns." : "Edição visível novamente para todos.");
   }
@@ -10450,7 +10461,9 @@
 
   function buchoHiddenEditionsSection() {
     const items = state.db.library.filter(item =>
-      isHiddenCatalogItem(item) || isHiddenCatalogSeries(item.seriesId));
+      isHiddenCatalogItem(item) || isHiddenCatalogSeries(item.seriesId))
+      .sort((a, b) => (state.hiddenCatalogItemUpdatedAt.get(String(b.id)) || 0)
+        - (state.hiddenCatalogItemUpdatedAt.get(String(a.id)) || 0));
     return `<section class="section bucho-hidden-section" aria-labelledby="bucho-hidden-title">
       <div class="bucho-stage">
         <img class="bucho-art" src="assets/bucho/ocultas.png" alt="Bucho mordendo e segurando um retângulo com as edições ocultas" width="1536" height="1024" loading="lazy" decoding="async">
