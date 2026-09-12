@@ -16514,10 +16514,10 @@
       brandLogo.alt = isBlogTheme ? "Bobojaco" : "Banca Digital";
     }
     if (brandName) brandName.innerHTML = isBlogTheme ? 'Bobo<span class="brand-accent">jaco</span>' : 'Banca<span class="brand-accent">Digital</span>';
-    if (footerTitle) footerTitle.textContent = isBlogTheme ? "Bobojaco" : "Banca Digital";
+    if (footerTitle) footerTitle.textContent = isBlogTheme ? "Bobojaco" : "Sobre a Banca";
     if (footerDescription) footerDescription.textContent = isBlogTheme
       ? "Um espaço para publicar, descobrir e conversar sobre histórias."
-      : "Uma biblioteca de quadrinhos feita para a era digital.";
+      : "Diferente de outros sites, não visamos distribuir links de nenhum quadrinho e somos ativamente contra pirataria. temos por objetivo facilitar a leitura online de quadrinhos e apresentar historias que amamos a quem estiver disposto a conhecer novos universos desbravando nossa biblioteca";
     document.title = isBlogTheme ? "Bobojaco — Blogs" : "Banca Digital — Quadrinhos & Mangás";
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) metaDescription.content = isBlogTheme
