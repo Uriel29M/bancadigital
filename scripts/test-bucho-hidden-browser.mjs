@@ -35,12 +35,16 @@ try {
     assert.equal(await section.evaluate(element => element.previousElementSibling.classList.contains('most-read-cover-section')), true);
     const dimensions = await page.evaluate(() => {
       const stage = document.querySelector('.bucho-stage').getBoundingClientRect();
+      const art = document.querySelector('.bucho-art').getBoundingClientRect();
       const rail = document.querySelector('.bucho-editions').getBoundingClientRect();
       const caption = document.querySelector('.bucho-caption').getBoundingClientRect();
-      return { left: (rail.left-stage.left)/stage.width, top: (rail.top-stage.top)/stage.height, right: (rail.right-stage.left)/stage.width, bottom: (rail.bottom-stage.top)/stage.height, caption: (caption.top-stage.top)/stage.height, overflow: document.documentElement.scrollWidth > innerWidth };
+      return { artWidth: art.width, stageWidth: stage.width, artLeft: art.left - stage.left, railWidth: rail.width, left: (rail.left-stage.left)/art.width, top: (rail.top-stage.top)/stage.height, right: (rail.right-stage.left)/stage.width, bottom: (rail.bottom-stage.top)/stage.height, caption: (caption.top-stage.top)/stage.height, overflow: document.documentElement.scrollWidth > innerWidth };
     });
-    assert.ok(dimensions.left >= .425 && dimensions.top >= .515 && dimensions.right <= .92 && dimensions.bottom <= .82, JSON.stringify(dimensions));
+    assert.ok(dimensions.left >= .425 && dimensions.top >= .515 && dimensions.right <= 1 && dimensions.bottom <= .82, JSON.stringify(dimensions));
     assert.ok(dimensions.caption >= .85);
+    assert.ok(Math.abs(dimensions.artWidth - Math.min(dimensions.stageWidth, 820)) < 1);
+    assert.equal(dimensions.artLeft, 0);
+    if (width === 1280) assert.ok(dimensions.railWidth > dimensions.artWidth * .8, 'Rectangle grows without enlarging Bucho');
     assert.equal(dimensions.overflow, false);
     await page.locator('[data-bucho-scroll="1"]').click();
     await page.waitForFunction(() => document.querySelector('.bucho-editions').scrollLeft > 0);

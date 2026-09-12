@@ -3400,22 +3400,25 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
 }
 
 /* Safe area of ocultas.png: below the teeth, to the right of Bucho's hand. */
-.bucho-hidden-section { position: relative; }
-.bucho-stage { position: relative; width: min(100%, 820px); margin-inline: auto; aspect-ratio: 3 / 2; isolation: isolate; container-type: inline-size; }
-.bucho-art { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-.bucho-editions { position: absolute; left: 43%; top: 52%; width: 48%; height: 29%; display: flex; align-items: stretch; gap: clamp(5px, 1.2cqw, 12px); overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; padding: 3px; box-sizing: border-box; }
+.bucho-hidden-section { position: relative; container-type: inline-size; }
+.bucho-stage { --bucho-art-width: min(100cqw, 820px); position: relative; width: 100%; height: calc(var(--bucho-art-width) * 2 / 3); isolation: isolate; }
+.bucho-stage::before { content: ""; position: absolute; left: calc(var(--bucho-art-width) * .80); right: 0; top: 44.6%; bottom: 15.5%; border: 5px solid #111114; border-radius: 0 30px 30px 0; background: linear-gradient(110deg, #19191d, #202024 70%, #19191d); box-shadow: inset 0 0 0 4px #303036; }
+.bucho-art { position: relative; display: block; width: var(--bucho-art-width); height: 100%; object-fit: contain; clip-path: inset(0 16% 0 0); mask-image: linear-gradient(to right, #000 83%, transparent 84%); pointer-events: none; }
+.bucho-editions { position: absolute; left: calc(var(--bucho-art-width) * .43); right: 20px; top: 52%; height: 29%; display: flex; align-items: stretch; gap: clamp(5px, 1.2cqw, 12px); overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; padding: 3px; box-sizing: border-box; }
 .bucho-editions::-webkit-scrollbar { display: none; }
 .bucho-edition { flex: 0 0 auto; height: 100%; aspect-ratio: 2 / 3; min-width: 36px; padding: 0; border: 0; border-radius: 3px; background: #17171b; overflow: hidden; cursor: pointer; scroll-snap-align: start; }
 .bucho-edition img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bucho-edition:hover { filter: brightness(1.12); }
 .bucho-edition:focus-visible, .bucho-editions:focus-visible { outline: 2px solid #ffd45c; outline-offset: -2px; }
-.bucho-caption { position: absolute; left: 47%; right: 6%; top: 86%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bucho-caption { position: absolute; left: calc(var(--bucho-art-width) * .47); right: 16px; top: 86%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bucho-caption h2 { margin: 0; color: #ffe3b4; font-size: clamp(11px, 2.4cqw, 20px); font-weight: 800; line-height: 1.12; text-wrap: balance; text-shadow: 0 2px 8px #000; }
 .bucho-carousel-controls { display: flex; flex-shrink: 0; gap: 5px; }
 .bucho-carousel-controls button { width: clamp(24px, 3.9cqw, 32px); height: clamp(28px, 3.9cqw, 32px); display: grid; place-items: center; padding: 0; border: 1px solid #b77c45; border-radius: 50%; background: #21130f; color: #ffe3b4; font-size: clamp(20px, 3cqw, 26px); cursor: pointer; line-height: 1; }
 .bucho-carousel-controls button:hover, .bucho-carousel-controls button:focus-visible { background: #62301d; outline: 2px solid #ffd45c; outline-offset: 2px; }
 .bucho-empty { margin: auto; padding: 6px; color: #dbcbc0; text-align: center; font-size: clamp(10px, 1.4vw, 18px); }
 @media (max-width: 480px) {
-  .bucho-caption { gap: 4px; right: 5%; }
+  .bucho-caption { gap: 4px; right: 8px; }
+  .bucho-editions { right: 12px; }
+  .bucho-stage::before { border-width: 3px; border-radius: 0 14px 14px 0; box-shadow: inset 0 0 0 2px #303036; }
   .bucho-carousel-controls { gap: 3px; }
 }

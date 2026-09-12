@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v641-catalog-delete";
+const CACHE_VERSION = "banca-digital-shell-v642-bucho-wide";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.243-bucho-compact",
+  "./", "./index.html", "./css/style.css?v=2.2.10.244-bucho-wide",
   "./js/app.js?v=2.2.10.493-catalog-delete", "./js/catalog-sync.js?v=4-catalog-delete",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
