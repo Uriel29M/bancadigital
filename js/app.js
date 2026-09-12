@@ -7367,7 +7367,7 @@
         detail.className = "reader-loading-detail";
         body.querySelector(".reader-loading")?.appendChild(detail);
         pdfData = await fetchPdfBuffer(url, downloadController.signal, (received, total) => {
-          if (label) label.textContent = "Baixando PDF…";
+          if (label) label.textContent = "Carregando PDF…";
           if (!progressBar) return;
           if (total > 0) {
             progressBar.max = 100;
@@ -7818,7 +7818,7 @@
           const detail = total
             ? `${(received / 1048576).toFixed(1)} MB de ${(total / 1048576).toFixed(1)} MB`
             : `${(received / 1048576).toFixed(1)} MB processados`;
-          showCbzProgress("Baixando arquivo CBZ…", value, detail);
+          showCbzProgress("Carregando arquivo CBZ…", value, detail);
         }, undefined, downloadController.signal, true);
         if (!hasZipEndRecord(buffer)) throw error;
         zip = await JSZipLib.loadAsync(buffer);
