@@ -3364,3 +3364,12 @@ body.blogs-theme .footer button:hover { color: var(--blog-accent-2); }
 .series-order-editing .card-wrap{min-width:0}
 .series-order-editing .card{cursor:default}
 .series-order-editing .is-order-dragging{opacity:.55;outline:2px dashed #c83c3c;outline-offset:4px}
+
+.series-volume-add{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}
+.series-volume-add label{flex:1;min-width:180px;display:grid;gap:6px}
+.series-volume-list{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.series-volume-assignments{display:grid;gap:10px}
+.series-volume-assignment{display:grid;grid-template-columns:minmax(0,1fr) minmax(140px,1fr);align-items:center;gap:12px}
+.series-volume-assignment span{overflow-wrap:anywhere}
+.series-volume-assignment select{width:100%;min-width:0}
+@media(max-width:540px){.series-volume-assignment{grid-template-columns:1fr}}

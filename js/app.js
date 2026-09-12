@@ -18329,12 +18329,90 @@
     });
   }
 
+  function openSeriesVolumeManager(editions, onSaved) {
+    if (!isAdminProfile()) return;
+    const labelOf = item => String(item.volumeTitle || item.volume || "Edições");
+    const assignments = editions.map(labelOf);
+    let labels = [...new Set(assignments)].filter(label => label !== "Edições");
+    let saving = false;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-backdrop';
+    overlay.innerHTML = `<form class="modal series-modal series-volume-manager" role="dialog" aria-modal="true" aria-label="Gerenciar volumes">
+      <div class="section-head"><h2>Gerenciar volumes</h2><button type="button" class="small-btn" data-volume-cancel>Cancelar</button></div>
+      <p>Crie um volume e escolha suas edições. Ao remover um volume, suas revistas voltam para “Edições”. Nenhuma revista será excluída.</p>
+      <div class="series-volume-add"><label>Nome do volume<input data-volume-name maxlength="120" placeholder="Ex.: Volume 2"></label><button type="button" class="small-btn" data-volume-add>Adicionar volume</button></div>
+      <div class="series-volume-list" data-volume-list></div>
+      <div class="series-volume-assignments" data-volume-assignments></div>
+      <div class="series-order-controls"><button type="submit" class="small-btn">Salvar volumes</button><span role="status" aria-live="polite" data-volume-status></span></div>
+    </form>`;
+    const status = $('[data-volume-status]', overlay);
+    const draw = () => {
+      $('[data-volume-list]', overlay).innerHTML = labels.map((label, index) => `<button type="button" class="small-btn" data-volume-remove="${index}" aria-label="Remover volume ${escapeHTML(label)}">${escapeHTML(label)} · Remover</button>`).join('');
+      $('[data-volume-assignments]', overlay).innerHTML = editions.map((item, index) => `<label class="series-volume-assignment"><span>${escapeHTML(item.title || item.id)}</span><select data-volume-edition="${index}">${['Edições', ...labels].map(label => `<option value="${escapeHTML(label)}" ${assignments[index] === label ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`).join('');
+      $$('[data-volume-edition]', overlay).forEach(select => select.onchange = () => { assignments[Number(select.dataset.volumeEdition)] = select.value; });
+      $$('[data-volume-remove]', overlay).forEach(button => button.onclick = () => {
+        const label = labels[Number(button.dataset.volumeRemove)];
+        labels = labels.filter(entry => entry !== label);
+        assignments.forEach((entry, index) => { if (entry === label) assignments[index] = 'Edições'; });
+        draw();
+        status.textContent = 'Volume removido. Salve para confirmar.';
+      });
+    };
+    $('[data-volume-add]', overlay).onclick = () => {
+      const input = $('[data-volume-name]', overlay);
+      const label = input.value.trim();
+      if (!label) { status.textContent = 'Informe o nome do volume.'; input.focus(); return; }
+      if (['Edições', ...labels].some(entry => entry.toLocaleLowerCase('pt-BR') === label.toLocaleLowerCase('pt-BR'))) { status.textContent = 'Já existe um volume com esse nome.'; return; }
+      labels.push(label);
+      input.value = '';
+      draw();
+      status.textContent = 'Volume criado. Atribua pelo menos uma edição a ele antes de salvar.';
+    };
+    const close = () => { if (!saving) overlay.remove(); };
+    $('[data-volume-cancel]', overlay).onclick = close;
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    $('form', overlay).onsubmit = async event => {
+      event.preventDefault();
+      if (saving || !isAdminProfile()) return;
+      if (labels.some(label => !assignments.includes(label))) { status.textContent = 'Cada volume precisa de pelo menos uma edição. Atribua as edições ou remova os volumes vazios.'; return; }
+      saving = true;
+      $$('button, input, select', overlay).forEach(control => { control.disabled = true; });
+      status.textContent = 'Salvando volumes…';
+      try {
+        const items = editions.flatMap((original, index) => {
+          const item = state.db.library.find(entry => String(entry.id) === String(original.id));
+          if (!item || item.seriesId !== original.seriesId || labelOf(item) !== labelOf(original)) throw new Error('A série mudou. Reabra o gerenciador e tente novamente.');
+          if (assignments[index] === labelOf(item)) return [];
+          const volume = assignments[index] === 'Edições' ? '' : assignments[index];
+          return [{ ...item, volumeTitle: volume, volume, catalogEditedAt: new Date().toISOString() }];
+        });
+        if (items.length) {
+          const records = await BancaCatalogSync.publishMany(sb, items, state.session?.user?.id);
+          const confirmed = new Map(records.map(row => [String(row.item_id), { ...row.edition, catalogEditedAt: row.updated_at }]));
+          state.db.library = state.db.library.map(item => confirmed.get(String(item.id)) || item);
+          save();
+        }
+        overlay.remove();
+        onSaved();
+        toast('Volumes salvos.');
+      } catch (error) {
+        status.textContent = `Não foi possível salvar: ${error.message || 'tente novamente.'}`;
+      } finally {
+        saving = false;
+        $$('button, input, select', overlay).forEach(control => { control.disabled = false; });
+      }
+    };
+    draw();
+    $('#modal-root').appendChild(overlay);
+    $('[data-volume-name]', overlay).focus();
+  }
+
   function bindSeriesEditionOrder(overlay, editions) {
     const grids = $$('.series-volume-panel .results-grid', overlay);
     const originals = grids.map(grid => [...grid.children]);
     const controls = document.createElement('div');
     controls.className = 'series-order-controls';
-    controls.innerHTML = '<button type="button" class="small-btn" data-order-start>Reordenar edições</button><button type="button" class="small-btn" data-order-save hidden>Salvar ordem</button><button type="button" class="small-btn" data-order-cancel hidden>Cancelar</button><span role="status" aria-live="polite" data-order-status></span>';
+    controls.innerHTML = '<button type="button" class="small-btn" data-order-start>Reordenar edições</button><button type="button" class="small-btn" data-manage-volumes>Gerenciar volumes</button><button type="button" class="small-btn" data-order-save hidden>Salvar ordem</button><button type="button" class="small-btn" data-order-cancel hidden>Cancelar</button><span role="status" aria-live="polite" data-order-status></span>';
     $('.section-head', overlay).after(controls);
     const start = $('[data-order-start]', controls), submit = $('[data-order-save]', controls), cancel = $('[data-order-cancel]', controls), status = $('[data-order-status]', controls);
     let editing = false, saving = false, drag = null;
@@ -18343,6 +18421,8 @@
       editing = active;
       overlay.classList.toggle('series-order-editing', active);
       start.hidden = active;
+      const volumeButton = $('[data-manage-volumes]', controls);
+      if (volumeButton) volumeButton.hidden = active;
       submit.hidden = cancel.hidden = !active;
       handles.forEach(handle => { handle.hidden = !active; });
       status.textContent = active ? 'Arraste pela alça ou use as setas do teclado. Depois, salve a ordem.' : '';
@@ -18500,7 +18580,15 @@
         });
       });
     }
-    if (isAdminProfile()) bindSeriesEditionOrder(overlay, editions);
+    if (isAdminProfile()) {
+      bindSeriesEditionOrder(overlay, editions);
+      const volumeButton = $('[data-manage-volumes]', overlay);
+      volumeButton.onclick = () => openSeriesVolumeManager(editions, () => {
+        overlay.remove();
+        const ids = new Set(editions.map(item => String(item.id)));
+        openSeriesSelection(series, state.db.library.filter(item => ids.has(String(item.id))), returnToCoverVariants, returnToFileReports, returnToReader);
+      });
+    }
     refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
     overlay.addEventListener("click", event => {
