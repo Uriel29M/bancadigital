@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v629-auth-heading";
+const CACHE_VERSION = "banca-digital-shell-v630-auth-logo-size";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.240-auth-heading",
+  "./", "./index.html", "./css/style.css?v=2.2.10.241-auth-logo-size",
   "./js/app.js?v=2.2.10.483-auth-heading", "./js/catalog-sync.js?v=3-series-order",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
