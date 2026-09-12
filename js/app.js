@@ -19993,5 +19993,15 @@
     })
     .finally(() => {
       if (appRoot) appRoot.style.visibility = "";
+      // Retoma os atalhos do cabeçalho da página 404 após carregar a conta.
+      const params = new URLSearchParams(window.location.search);
+      const headerAction = params.get("acao");
+      const allowedHeaderActions = ["downloads", "random", "messages", "notifications-popup", "staff-activity", "focus-search", "open-profile-page"];
+      if (allowedHeaderActions.includes(headerAction)) {
+        params.delete("acao");
+        const query = params.toString();
+        window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+        document.querySelector(`.topbar [data-action="${headerAction}"]`)?.click();
+      }
     });
 })();

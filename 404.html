@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <base href="/bancadigital/">
+  <title>Página não encontrada — Banca Digital</title>
+  <link rel="icon" type="image/png" href="assets/barracavermelhaicon.png?v=2">
+  <link rel="stylesheet" href="css/style.css?v=2.2.10.241-auth-logo-size">
+  <style>
+    body { background: #000; }
+    .top-actions > a { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; flex-shrink: 0; }
+    a:focus-visible { outline: 2px solid #ff5962; outline-offset: 4px; }
+    .error-page { min-height: calc(100svh - 68px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px 56px; text-align: center; }
+    .error-page img { display: block; width: min(100%, 768px); height: auto; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; pointer-events: none; }
+    .error-page h1 { margin: 24px 0 0; color: #fff; font-size: clamp(1.25rem, 3vw, 2rem); line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <a class="brand" href="./">
+        <span class="brand-mark"><img class="brand-logo" src="assets/barracabrancaicon.png?v=1" alt="Banca Digital"></span>
+        <span>Banca<span class="brand-accent">Digital</span></span>
+      </a>
+      <nav class="main-nav" aria-label="Principal">
+        <a href="./" class="nav-link">Início</a>
+        <a href="?pagina=quadrinhos" class="nav-link">Quadrinhos</a>
+        <a href="?pagina=faccoes" class="nav-link">Facção</a>
+        <a href="?perfil=bancadigital&amp;album=1" class="nav-link album-nav">Álbum</a>
+      </nav>
+      <div class="top-actions">
+        <a href="?acao=downloads" class="reader-btn downloads-header-btn" title="Downloads" aria-label="Downloads">↓<span class="download-badge" hidden></span></a>
+        <a href="?pagina=ranking" class="reader-btn ranking-header-btn" title="Ranking" aria-label="Ranking">🏆</a>
+        <a href="?acao=random" class="reader-btn random-header-btn" title="Surpreenda-me" aria-label="Surpreenda-me">🎲</a>
+        <a href="?acao=messages" class="reader-btn messages-header-btn" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></a>
+        <a href="?acao=notifications-popup" class="icon-btn notification-bell" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></a>
+        <a href="?acao=staff-activity" class="icon-btn staff-activity-button" title="Monitoramento" aria-label="Monitoramento">📜</a>
+        <a href="?acao=focus-search" class="icon-btn" title="Pesquisar">⌕</a>
+        <a href="?acao=open-profile-page" class="avatar" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></a>
+      </div>
+    </header>
+    <main class="error-page">
+      <img src="assets/bucho/error404.png" alt="Bucho — erro 404" draggable="false" width="1536" height="1024">
+      <h1>Desculpe, o Bucho comeu essa página.</h1>
+    </main>
+  </div>
+</body>
+</html>
