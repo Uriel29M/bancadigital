@@ -1,0 +1,45 @@
+name: Fix Telegram reader live
+on:
+  push:
+    branches: [fix/telegram-reader-live]
+    paths: ['.github/workflows/fix-telegram-reader-live.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Apply targeted integration
+        run: |
+          git fetch origin fix/telegram-reader-live
+          git show origin/fix/telegram-reader-live:js/telegram-auto.js > js/telegram-auto.js
+          git show origin/fix/telegram-reader-live:scripts/fix-telegram-reader-live.py > /tmp/fix-telegram-reader-live.py
+          python /tmp/fix-telegram-reader-live.py
+          node --check js/app.js
+          node --check js/telegram-auto.js
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('js/app.js').read_text()
+          assert 'if (isTelegramMediaUrl(source)) return fetchTelegramTemporaryBuffer' in s
+          assert 'if (!await writeReaderFileCache(cacheKey, buffer))' in s
+          assert s.index('if (isTelegramMediaUrl(source)) return fetchTelegramTemporaryBuffer') < s.index('const cached = forceFresh ? null : await readReaderFileCache',s.index('async function fetchFileArrayBuffer('))
+          assert 'renderCBRReader(item, resolvedUrl' in s
+          assert 'Archive.open(file)' in s
+          assert 'renderCBZReader(item, resolvedUrl' in s
+          assert 'renderPDFReader(item, resolvedUrl' in s
+          assert 'telegram-mtproto' in Path('js/telegram-auto.js').read_text()
+          print('Reader integration checks passed')
+          PY
+      - name: Publish only after tests
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add js/app.js js/telegram-auto.js index.html sw.js
+          git commit -m 'fix: connect Telegram MTProto to existing reader' || exit 0
+          git push origin HEAD:main
