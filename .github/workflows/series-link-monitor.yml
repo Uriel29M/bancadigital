@@ -1,12 +1,11 @@
 name: Descobrir novas edições nas fontes
 
 on:
-  schedule:
-    - cron: "37 3 * * *"
   workflow_dispatch:
 
 jobs:
   scan-series-sources:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Executar series-link-monitor

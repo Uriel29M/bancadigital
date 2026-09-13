@@ -128,13 +128,18 @@ Para a versão online, substitua o DataStore por uma API com banco de dados. Uma
 
 ## Verificação diária de links
 
-A Edge Function `link-checker-bot` lê os arquivos do catálogo publicado, testa `fileUrl`, `backupUrls` e `telegramUrl` e cria relatos automáticos em `file_reports`. Eles ficam identificados no painel como `Relato automático de link-checker-bot`.
+A Edge Function `link-checker-bot` combina o catálogo publicado com as edições atualizadas em `catalog_edition_overrides`. Quando todas as fontes estão comprovadamente indisponíveis, oculta a edição em `catalog_item_visibility`, usando a mesma aparência vermelha e restrição aos administradores da ocultação manual. O carrossel do Bucho continua visível para todos, como antes. Essa ação não cria relato.
 
-Para publicar e configurar o bot:
+Se o principal falhar e houver um alternativo funcional, o bot troca os links, mantém o antigo nos alternativos e cria um relato em `file_reports`. A troca e o relato são gravados na mesma transação. Timeouts, limites de acesso e respostas inconclusivas não causam ocultação.
+
+Administradores podem ativar ou desativar o verificador em **Administração > Verificador de links**. Desativar bloqueia novas alterações, inclusive de lotes em andamento; não desoculta edições anteriores.
+
+A migração `link_checker_admin_visibility` configura o agendamento no Supabase. O ciclo diário começa às 03:17 UTC (00:17 de Brasília), em lotes de até 20 edições. O cursor e a trava de execução ficam no esquema privado, e o segredo de autenticação é gerado no banco. O workflow antigo do GitHub está desativado e não é mais necessário configurar secrets nele.
+
+Para publicar o código da função:
 
 ```bash
-supabase secrets set LINK_CHECKER_SECRET=UM_SEGREDO_LONGO GITHUB_REPOSITORY=Uriel29M/banca-digital-quadrinhos-v3 GITHUB_BRANCH=main
 supabase functions deploy link-checker-bot --no-verify-jwt
 ```
 
-Defina também `CATALOG_FILES` se houver outros catálogos, separados por vírgula. O arquivo `.github/workflows/link-checker.yml` já agenda a execução diária; crie no GitHub os secrets `SUPABASE_URL` e `LINK_CHECKER_SECRET`. Como alternativa, no Supabase Dashboard, crie um job diário em Database > Cron que faça `POST` para `/functions/v1/link-checker-bot` com o cabeçalho `x-link-checker-secret` igual ao segredo configurado e corpo `{}`.
+Defina `CATALOG_FILES` se houver outros catálogos, separados por vírgula. O bot `series-link-monitor`, que procurava novas edições nas fontes, está desativado; as descobertas anteriores continuam disponíveis para consulta.

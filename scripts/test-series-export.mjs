@@ -11,7 +11,7 @@ const run = promisify(execFile);
 import { createCanvas } from '@napi-rs/canvas';
 const source = readFileSync('js/app.js', 'utf8');
 const helpers = source.slice(source.indexOf('  function seriesExportFormat('), source.indexOf('  function refreshSeriesDownloadButton('));
-function setup(admin = true, broken = false) {
+function setup(admin = true, broken = false, hiddenIssues = []) {
   const nodes = new Map();
   const node = key => { if (!nodes.has(key)) nodes.set(key, { value: 'original', appendChild() {}, remove() {}, click() {}, focus() {}, setAttribute() {}, classList: { add() {}, remove() {}, contains() { return false; } }, addEventListener() {} }); return nodes.get(key); };
   const files = [];
@@ -21,7 +21,7 @@ function setup(admin = true, broken = false) {
     window: { jszipReady: Promise.resolve(Zip) },
     document: { createElement: tag => tag === 'a' ? { click() { downloads++; }, remove() {} } : node('overlay'), body: node('body') },
     URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
-    $: node, isAdminProfile: () => admin, escapeHTML: s => s, issueSortValue: i => i.issue,
+    $: node, isAdminProfile: () => admin, isHiddenCatalogItem: item => hiddenIssues.includes(item.issue), escapeHTML: s => s, issueSortValue: i => i.issue,
     itemDisplayTitle: i => i.title, downloadSource: i => i.url, isExternalArchiveLink: () => false,
     fetchFileArrayBuffer: async () => new Uint8Array(broken ? [60, 104, 116, 109, 108] : [37, 80, 68, 70]).buffer,
     isZipSignature: b => b[0] === 80 && b[1] === 75,
@@ -36,6 +36,20 @@ test('admin exports all editions in order in a single PC download', async () => 
   assert.deepEqual(t.files.map(f => f.name), ['0001 - Primeira.pdf', '0002 - Segunda.pdf']);
   assert.equal(t.downloads(), 1);
 });
+test('hidden editions are excluded from the count and ZIP', async () => {
+  const t = setup(true, false, [1]);
+  assert.match(t.node('overlay').innerHTML, /1 edições/);
+  await t.node('form').onsubmit({ preventDefault() {} });
+  assert.deepEqual(t.files.map(f => f.name), ['0001 - Segunda.pdf']);
+  assert.equal(t.downloads(), 1);
+});
+test('a series with only hidden editions produces no download', async () => {
+  const t = setup(true, false, [1, 2]);
+  await t.node('form').onsubmit({ preventDefault() {} });
+  assert.equal(t.files.length, 0);
+  assert.equal(t.downloads(), 0);
+  assert.match(t.node('[data-export-status]').textContent, /não possui edições visíveis/);
+});
 test('non-admin cannot open export', () => { assert.equal(setup(false).nodes.has('overlay'), false); });
 test('invalid remote content fails without downloading an incomplete series', async () => {
   const t = setup(true, true);
@@ -47,6 +61,43 @@ test('closing cancels export before fetching editions', async () => {
   const t = setup(); t.node('[data-close]').onclick();
   await t.node('form').onsubmit({ preventDefault() {} });
   assert.equal(t.files.length, 0); assert.equal(t.downloads(), 0);
+});
+test('missing file pauses and skipping continues with remaining editions', async () => {
+  const t = setup();
+  t.context.downloadSource = item => item.issue === 2 ? '' : item.url;
+  const pending = t.node('form').onsubmit({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(t.files.length, 1);
+  assert.equal(t.downloads(), 0);
+  assert.equal(t.node('[data-export-skip]').hidden, false);
+  t.node('[data-export-skip]').onclick();
+  await pending;
+  assert.equal(t.downloads(), 1);
+  assert.equal(t.files.length, 1);
+  assert.equal(t.node('[data-export-skip]').hidden, true);
+  assert.match(t.node('[data-export-status]').textContent, /1 edições preparadas.*1 edições puladas/);
+});
+test('skipping all missing files does not download an empty ZIP', async () => {
+  const t = setup();
+  t.context.downloadSource = () => '';
+  const pending = t.node('form').onsubmit({ preventDefault() {} });
+  for (let i = 0; i < 2; i++) {
+    await new Promise(resolve => setImmediate(resolve));
+    t.node('[data-export-skip]').onclick();
+  }
+  await pending;
+  assert.equal(t.downloads(), 0);
+  assert.match(t.node('[data-export-status]').textContent, /Nenhuma edição com arquivo/);
+});
+test('canceling while waiting to skip finishes the export', async () => {
+  const t = setup();
+  t.context.downloadSource = () => '';
+  const pending = t.node('form').onsubmit({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  t.node('[data-close]').onclick();
+  await pending;
+  assert.equal(t.downloads(), 0);
+  assert.equal(t.node('[data-export-skip]').hidden, true);
 });
 test('CBZ export preserves existing ZIP bytes', async () => {
   const t = setup(); const bytes = new Uint8Array([80, 75, 3, 4]).buffer;

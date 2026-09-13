@@ -1239,9 +1239,10 @@
   function openSeriesExport(series, editions) {
     if (!isAdminProfile()) return;
     if (activeSeriesExport) { activeSeriesExport.restore(); return; }
+    editions = editions.filter(item => !isHiddenCatalogItem(item));
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop series-export-overlay";
-    overlay.innerHTML = `<div class="modal series-export-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Obter série"><div class="section-head"><div><h2>Obter série</h2><div class="section-subtitle">${escapeHTML(series.seriesTitle || series.title)} · ${editions.length} edições</div></div><div class="modal-actions"><button type="button" class="small-btn" data-export-minimize>Minimizar</button><button type="button" class="small-btn" data-export-restore>Abrir</button></div></div><form><label class="field series-export-settings"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p class="series-export-description">Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão.</p><p data-export-status role="status" aria-live="polite">Escolha o formato e clique em Obter.</p><progress data-export-progress max="100" value="0" aria-label="Progresso da série"></progress><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal series-export-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Obter série"><div class="section-head"><div><h2>Obter série</h2><div class="section-subtitle">${escapeHTML(series.seriesTitle || series.title)} · ${editions.length} edições</div></div><div class="modal-actions"><button type="button" class="small-btn" data-export-minimize>Minimizar</button><button type="button" class="small-btn" data-export-restore>Abrir</button></div></div><form><label class="field series-export-settings"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p class="series-export-description">Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão.</p><p data-export-status role="status" aria-live="polite">Escolha o formato e clique em Obter.</p><progress data-export-progress max="100" value="0" aria-label="Progresso da série"></progress><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button type="button" class="small-btn" data-export-skip hidden>Pular edição</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
     document.body.appendChild(overlay);
     const controller = new AbortController();
     let busy = false;
@@ -1285,10 +1286,13 @@
       status.textContent = "Preparando download…";
       const safeName = value => String(value || "serie").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/g, "").slice(0, 140) || "serie";
       let currentTitle = "";
+      let skipped = 0;
+      let exported = 0;
+      const skipButton = $('[data-export-skip]', overlay);
       try {
         const Zip = await window.jszipReady;
         if (!Zip) throw new Error("Não foi possível carregar o gerador de ZIP. Tente novamente.");
-        if (!editions.length) throw new Error("Esta série não possui edições.");
+        if (!editions.length) throw new Error("Esta série não possui edições visíveis.");
         const bundle = new Zip();
         const ordered = editions.slice().sort((a, b) => issueSortValue(a) - issueSortValue(b));
         for (const [index, item] of ordered.entries()) {
@@ -1297,7 +1301,25 @@
           currentTitle = itemDisplayTitle(item);
           status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
           const source = downloadSource(item);
-          if (!source || isExternalArchiveLink(source)) throw new Error("Edição sem arquivo direto disponível.");
+          if (!source || isExternalArchiveLink(source)) {
+            status.textContent = `${currentTitle}: Edição sem arquivo direto disponível. Clique em Pular edição para continuar.`;
+            await new Promise(resolve => {
+              const finish = () => {
+                skipButton.hidden = true;
+                skipButton.onclick = null;
+                controller.signal.removeEventListener("abort", finish);
+                resolve();
+              };
+              skipButton.onclick = finish;
+              controller.signal.addEventListener("abort", finish, { once: true });
+              skipButton.hidden = false;
+              if (controller.signal.aborted) finish();
+            });
+            if (controller.signal.aborted) return;
+            skipped++;
+            progress.value = (index + 1) / ordered.length * 90;
+            continue;
+          }
           const buffer = await fetchFileArrayBuffer(source, (received, total) => {
             if (controller.signal.aborted) return;
             const fraction = total > 0 ? Math.min(received / total, 1) : 0;
@@ -1310,9 +1332,11 @@
           const format = seriesExportFormat(buffer);
           const output = await seriesExportConvert(buffer, format, select.value, Zip, controller.signal);
           bundle.file(`${String(index + 1).padStart(4, "0")} - ${safeName(currentTitle)}.${select.value === "original" ? format : select.value}`, output);
+          exported++;
           progress.value = (index + 1) / ordered.length * 90;
         }
         currentTitle = "";
+        if (!exported) throw new Error("Nenhuma edição com arquivo disponível para obter.");
         status.textContent = "Reunindo edições no ZIP…";
         const blob = await bundle.generateAsync({ type: "blob", compression: "STORE" }, metadata => {
           if (controller.signal.aborted) throw new DOMException("Cancelado", "AbortError");
@@ -1329,7 +1353,7 @@
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 60000);
         progress.value = 100;
-        status.textContent = `${editions.length} edições preparadas. Download do ZIP enviado ao navegador.`;
+        status.textContent = `${exported} edições preparadas.${skipped ? ` ${skipped} edições puladas.` : ""} Download do ZIP enviado ao navegador.`;
       } catch (error) {
         if (!controller.signal.aborted) status.textContent = `${currentTitle ? `${currentTitle}: ` : ""}${error.message || "Não foi possível obter a série."}`;
       } finally {
@@ -5047,9 +5071,11 @@
   let deferredCoverObserver = null;
   let homeHeroReady = true;
   let coverLoadGeneration = 0;
+  let coverHydrationGeneration = 0;
 
   function cancelCoverLoads() {
     coverLoadGeneration += 1;
+    coverHydrationGeneration += 1;
     homeHeroReady = true;
     deferredCoverObserver?.disconnect();
     deferredCoverObserver = null;
@@ -10137,6 +10163,7 @@
 
   function hydrateHomeCovers() {
     if (readerIsOpen || state.session?.offline) return;
+    const hydrationGeneration = ++coverHydrationGeneration;
     const elements = $$('[data-cover-id]');
     if (!elements.length) return;
     const load = element => {
@@ -10190,7 +10217,7 @@
     const priority = state.section === "home" ? heroPriority : visible;
     const deferred = elements.filter(element => !element.classList.contains("hero-bg"));
     const observeDeferred = () => {
-      if (readerIsOpen) return;
+      if (readerIsOpen || hydrationGeneration !== coverHydrationGeneration) return;
       deferredCoverObserver?.disconnect();
       deferredCoverObserver = "IntersectionObserver" in window ? new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { load(entry.target); deferredCoverObserver?.unobserve(entry.target); } }), { rootMargin: "500px" }) : null;
       deferred.forEach(element => deferredCoverObserver ? deferredCoverObserver.observe(element) : load(element));
@@ -10212,6 +10239,7 @@
     homeHeroReady = !priorityJobs.length;
     if (priorityJobs.length) {
       Promise.allSettled(priorityJobs).then(() => {
+        if (hydrationGeneration !== coverHydrationGeneration) return;
         homeHeroReady = true;
         observeDeferred();
         releaseLazyBackgrounds();
@@ -15775,7 +15803,7 @@
       const status = source.last_error ? `Erro: ${source.last_error}` : source.last_checked_at ? `Última verificação: ${formatCommentDate(source.last_checked_at)}` : "Ainda não verificada";
       return `<article class="staff-activity-item series-link-source-item" data-source-publisher="${escapeHTML(metadata.publisher || "")}" data-source-imprint="${escapeHTML(metadata.imprint || "")}" data-source-year="${escapeHTML(metadata.year || "")}"><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(source.source_url)}</small><small>${escapeHTML(status)}</small></div><div class="staff-activity-actions"><label class="checkbox-inline"><input type="checkbox" data-series-source-enabled="${source.id}" ${checked}> Ativa</label><button class="small-btn" data-series-source-edit="${source.id}">Editar</button><button class="small-btn danger" data-series-source-delete="${source.id}">Excluir</button></div></article>`;
     }).join("") || '<div class="empty">Nenhuma fonte cadastrada.</div>';
-    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>Fontes das novas edições</h2><div class="section-subtitle">O bot verifica diariamente estas páginas e recomenda links novos para aprovação.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="series-link-source-form"><div class="form-grid"><div class="field"><label>Série</label><select name="seriesId" required>${series.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name || item.id)}${item.year ? ` (${escapeHTML(item.year)})` : ""}</option>`).join("")}</select></div><div class="field"><label>Provedor</label><input name="provider" value="blogspot" maxlength="80"></div></div><div class="field full"><label>URL da página fonte</label><input name="sourceUrl" type="url" required placeholder="https://exemplo.blogspot.com/..." pattern="https://.+"><small class="format-hint">Use a página que contém os links dos arquivos e, se possível, a imagem da capa.</small></div><div class="modal-actions"><button type="submit" class="btn btn-danger">Adicionar fonte</button></div></form><div class="series-link-source-filters"><div class="field"><label>Editora</label><select data-source-filter="publisher"><option value="">Todas as editoras</option>${filterOptions("publisher")}</select></div><div class="field"><label>Selo</label><select data-source-filter="imprint"><option value="">Todos os selos</option>${filterOptions("imprint")}</select></div><div class="field"><label>Ano</label><select data-source-filter="year"><option value="">Todos os anos</option>${filterOptions("year")}</select></div></div><div class="series-link-source-list">${sourceRows()}</div></div>`;
+    overlay.innerHTML = `<div class="modal notifications-popup-modal"><div class="section-head"><div><h2>Fontes das novas edições</h2><div class="section-subtitle">Busca automática desativada. Fontes cadastradas anteriormente.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="series-link-source-form"><div class="form-grid"><div class="field"><label>Série</label><select name="seriesId" required>${series.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name || item.id)}${item.year ? ` (${escapeHTML(item.year)})` : ""}</option>`).join("")}</select></div><div class="field"><label>Provedor</label><input name="provider" value="blogspot" maxlength="80"></div></div><div class="field full"><label>URL da página fonte</label><input name="sourceUrl" type="url" required placeholder="https://exemplo.blogspot.com/..." pattern="https://.+"><small class="format-hint">Use a página que contém os links dos arquivos e, se possível, a imagem da capa.</small></div><div class="modal-actions"><button type="submit" class="btn btn-danger">Adicionar fonte</button></div></form><div class="series-link-source-filters"><div class="field"><label>Editora</label><select data-source-filter="publisher"><option value="">Todas as editoras</option>${filterOptions("publisher")}</select></div><div class="field"><label>Selo</label><select data-source-filter="imprint"><option value="">Todos os selos</option>${filterOptions("imprint")}</select></div><div class="field"><label>Ano</label><select data-source-filter="year"><option value="">Todos os anos</option>${filterOptions("year")}</select></div></div><div class="series-link-source-list">${sourceRows()}</div></div>`;
     $("#modal-root").appendChild(overlay);
     const applySourceFilters = () => {
       const filters = Object.fromEntries($$('[data-source-filter]', overlay).map(select => [select.dataset.sourceFilter, select.value]));
@@ -15935,24 +15963,9 @@
     $("[data-notification-tab]", overlay).onclick = () => { overlay.remove(); openNotificationsPopup("staff"); };
     $("[data-open-cover-variants]", overlay).onclick = () => openCoverVariantsReviewPopup();
     $("[data-series-link-sources]", overlay).onclick = () => openSeriesLinkSourcesPopup(overlay);
-    $("[data-series-link-scan]", overlay).onclick = async event => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      const result = await sb.functions.invoke("series-link-monitor", { body: { action: "scan" } });
-      if (result.error || result.data?.error) toast(result.error?.message || result.data?.error || "Não foi possível verificar as fontes.");
-      else {
-        const data = result.data || {};
-        const missing = Object.values(data.missingIssues || {}).flat();
-        const summary = `${Number(data.sourceLinks || 0)} arquivo(s) no Blogspot · ${Number(data.discovered || 0)} nova(s) descoberta(s)`;
-        const missingLabel = missing.length ? ` · Ausente(s) no catálogo: #${missing.join(", #")}` : "";
-        const unidentifiedLabel = Number(data.unidentifiedLinks || 0) ? ` · ${Number(data.unidentifiedLinks)} sem número` : "";
-        const errorLabel = Object.keys(data.errors || {}).length ? ` · ${Object.keys(data.errors).length} fonte(s) com erro` : "";
-        toast(`${summary}${missingLabel}${unidentifiedLabel}${errorLabel}.`);
-      }
-      await loadStaffActivities();
-      overlay.remove();
-      openSeriesLinkMonitorPopup();
-    };
+    const scanButton = $("[data-series-link-scan]", overlay);
+    scanButton.disabled = true;
+    scanButton.textContent = "Busca desativada";
     $$('[data-series-link-tab]', overlay).forEach(button => button.onclick = () => { state.seriesLinkMonitorTab = button.dataset.seriesLinkTab; overlay.remove(); openSeriesLinkMonitorPopup(); });
     $$('[data-series-link-review]', overlay).forEach(button => button.onclick = async () => {
       const row = state.seriesLinkDiscoveries.find(entry => String(entry.id) === String(button.dataset.seriesLinkReview));
@@ -19523,6 +19536,46 @@
     };
   }
 
+  function bindAdminLinkChecker(overlay) {
+    if (!isAdminProfile()) return;
+    const section = document.createElement("section");
+    section.className = "admin-link-checker";
+    section.setAttribute("aria-label", "Verificador de links");
+    section.innerHTML = `<h3>Verificador de links</h3><label><input type="checkbox" role="switch" data-link-checker-toggle disabled> Ativado</label><p data-link-checker-status role="status" aria-live="polite">Carregando configuração…</p><button type="button" class="small-btn" data-link-checker-retry hidden>Tentar novamente</button>`;
+    $(".admin-actions", overlay)?.after(section);
+    const toggle = $("[data-link-checker-toggle]", section);
+    const status = $("[data-link-checker-status]", section);
+    const retry = $("[data-link-checker-retry]", section);
+    let busy = false;
+    const refresh = async (next = null) => {
+      if (busy || !isAdminProfile()) return;
+      busy = true;
+      toggle.disabled = true;
+      retry.hidden = true;
+      status.textContent = next === null ? "Carregando configuração…" : "Salvando configuração…";
+      try {
+        if (!sb || state.session?.offline || navigator.onLine === false) throw new Error("Conecte-se à internet para gerenciar esta opção.");
+        const query = sb.from("link_checker_settings");
+        const result = next === null
+          ? await query.select("enabled").eq("id", true).single()
+          : await query.update({ enabled: next }).eq("id", true).select("enabled").single();
+        if (result.error) throw result.error;
+        if (typeof result.data?.enabled !== "boolean") throw new Error("Não foi possível confirmar a configuração.");
+        toggle.checked = result.data.enabled;
+        toggle.disabled = false;
+        status.textContent = toggle.checked ? "Ativado" : "Desativado";
+      } catch (error) {
+        status.textContent = error.message || "Não foi possível confirmar a configuração.";
+        retry.hidden = false;
+      } finally {
+        busy = false;
+      }
+    };
+    toggle.onchange = () => refresh(toggle.checked);
+    retry.onclick = () => refresh();
+    refresh();
+  }
+
   function bindAdminAccountRetention(overlay) {
     if (!isAdminProfile()) return;
     const section = document.createElement("section");
@@ -19582,6 +19635,7 @@
       </div>`;
     $("#modal-root").appendChild(overlay);
     bindAdminAccountRetention(overlay);
+    bindAdminLinkChecker(overlay);
     const filterBar = document.createElement("div");
     filterBar.className = "admin-catalog-filters";
     filterBar.style.cssText = "display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 15px";

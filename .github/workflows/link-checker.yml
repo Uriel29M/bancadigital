@@ -1,12 +1,12 @@
 name: Verificar links do catálogo
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
 
 jobs:
   check-links:
+    # The database now schedules batches and owns the administration toggle.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Executar link-checker-bot

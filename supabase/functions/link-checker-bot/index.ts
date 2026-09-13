@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { mergeCatalog, checkSource, inspectEdition } from "./checks.mjs";
 
 const BOT_NAME = "link-checker-bot";
 const MAX_ITEMS = 10000;
@@ -23,7 +24,7 @@ function catalogFiles() {
 function rawCatalogBase() {
   const explicit = Deno.env.get("CATALOG_BASE_URL")?.trim();
   if (explicit) return explicit.replace(/\/$/, "");
-  const repository = required("GITHUB_REPOSITORY");
+  const repository = Deno.env.get("GITHUB_REPOSITORY")?.trim() || "Uriel29M/bancadigital";
   const branch = Deno.env.get("GITHUB_BRANCH")?.trim() || "main";
   return `https://raw.githubusercontent.com/${repository}/${branch}`;
 }
@@ -49,72 +50,58 @@ async function loadCatalog() {
   return library.slice(0, MAX_ITEMS) as Record<string, unknown>[];
 }
 
-function urlsFor(item: Record<string, unknown>) {
-  return [...new Set([
-    item.fileUrl,
-    ...(Array.isArray(item.backupUrls) ? item.backupUrls : []),
-    item.telegramUrl,
-  ].map(value => String(value || "").trim()).filter(value => /^https?:\/\//i.test(value)))];
-}
-
-async function checkUrl(url: string) {
-  const attempt = async (method: string) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetch(url, { method, redirect: "follow", signal: controller.signal, headers: { "User-Agent": "BancaDigitalLinkChecker/1.0", Accept: "*/*" } });
-    } finally { clearTimeout(timer); }
-  };
-  try {
-    let response = await attempt("HEAD");
-    if (response.status === 405 || response.status === 403) response = await attempt("GET");
-    if (response.ok) return { ok: true, status: response.status, finalUrl: response.url };
-    return { ok: false, reason: `HTTP ${response.status}`, status: response.status, finalUrl: response.url };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : "falha de rede" };
-  }
-}
-
-function snapshot(item: Record<string, unknown>, url: string) {
-  return {
-    id: String(item.id || url), title: String(item.title || "Edição sem título"),
-    seriesTitle: item.seriesTitle || "", seriesId: item.seriesId || "", issue: item.issue || "",
-    format: item.format || "", fileUrl: String(item.fileUrl || ""),
-    backupUrls: Array.isArray(item.backupUrls) ? item.backupUrls : [], failedUrl: url,
-  };
-}
-
 Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Método não permitido." }, 405);
-  const expected = required("LINK_CHECKER_SECRET");
-  if (request.headers.get("x-link-checker-secret") !== expected) return json({ error: "Não autorizado." }, 401);
   try {
+    const secret = request.headers.get("x-link-checker-secret");
+    if (!secret) return json({ error: "Não autorizado." }, 401);
     const supabase = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVICE_ROLE_KEY"));
-    const library = await loadCatalog();
-    const checked: string[] = [];
-    const broken: Array<Record<string, unknown>> = [];
-    for (const item of library) {
-      for (const url of urlsFor(item)) {
-        const result = await checkUrl(url);
-        checked.push(url);
-        if (!result.ok) broken.push({ item, url, result });
+    const claim = await supabase.rpc("claim_link_checker_batch", { p_secret: secret });
+    if (claim.error?.code === "42501") return json({ error: "Não autorizado." }, 401);
+    if (claim.error) throw claim.error;
+    if (!claim.data.lease) return json({ bot: BOT_NAME, ...claim.data });
+    const offset = claim.data.offset;
+    const overrides = [];
+    for (let start = 0; ; start += 1000) {
+      const page = await supabase.from("catalog_edition_overrides").select("item_id, edition, updated_at").order("item_id").range(start, start + 999);
+      if (page.error) throw page.error;
+      overrides.push(...page.data);
+      if (page.data.length < 1000) break;
+    }
+    const library = mergeCatalog(await loadCatalog(), overrides).sort((a, b) => String(a.item.id).localeCompare(String(b.item.id)));
+    const batch = library.slice(offset, offset + 20);
+    const visibility = batch.length ? await supabase.from("catalog_item_visibility").select("item_id").eq("is_hidden", true).in("item_id", batch.map(entry => entry.item.id)) : { data: [], error: null };
+    if (visibility.error) throw visibility.error;
+    const hiddenIds = new Set(visibility.data.map(row => row.item_id));
+    const counts = { checked: 0, hidden: 0, swapped: 0, uncertain: 0 };
+    let cursor = 0;
+    let disabled = false;
+    const deadline = Date.now() + 75000;
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      while (cursor < batch.length && !disabled && Date.now() < deadline) {
+        const entry = batch[cursor++];
+        if (hiddenIds.has(entry.item.id)) continue;
+        const result = await inspectEdition(entry.item, (url, item) => Date.now() < deadline
+          ? checkSource(url, item, required("SUPABASE_URL"))
+          : Promise.resolve({ state: "unknown", reason: "Tempo do lote esgotado" }));
+        counts.checked++;
+        if (result.uncertain) counts.uncertain++;
+        if (result.action === "none") continue;
+        const applied = await supabase.rpc("apply_link_checker_result", {
+          p_item: entry.item, p_override_updated_at: entry.updatedAt,
+          p_action: result.action, p_fallback_url: result.fallbackUrl || null, p_reason: result.reason || "",
+          p_fallback_format: result.fallbackFormat || null,
+        });
+        if (applied.error) throw applied.error;
+        if (applied.data === "hidden") counts.hidden++;
+        if (applied.data === "swapped") counts.swapped++;
+        if (applied.data === "disabled") disabled = true;
       }
-    }
-    let created = 0;
-    for (const entry of broken) {
-      const item = entry.item as Record<string, unknown>;
-      const url = String(entry.url);
-      const itemId = String(item.id || url);
-      const result = entry.result as Record<string, unknown>;
-      const reason = `Bot: link indisponível (${String(result.reason || "erro desconhecido")}) — ${url}`.slice(0, 500);
-      const insert = await supabase.from("file_reports").insert({
-        item_id: itemId, reporter_id: null, source: "bot", bot_name: BOT_NAME,
-        item_snapshot: snapshot(item, url), reason, status: "pending",
-      });
-      if (!insert.error) created++;
-      else if (insert.error.code !== "23505") console.error("file_reports insert", insert.error);
-    }
-    return json({ bot: BOT_NAME, checked: checked.length, broken: broken.length, created });
+    }));
+    const nextOffset = offset + cursor < library.length ? offset + cursor : null;
+    const finished = await supabase.rpc("finish_link_checker_batch", { p_lease: claim.data.lease, p_next_offset: nextOffset });
+    if (finished.error) throw finished.error;
+    return json({ bot: BOT_NAME, ...counts, disabled, next_offset: nextOffset });
   } catch (error) {
     console.error(BOT_NAME, error);
     return json({ error: error instanceof Error ? error.message : "Falha no verificador." }, 500);
