@@ -268,8 +268,7 @@ Deno.serve(async request => {
     const secret = Deno.env.get("SERIES_MONITOR_SECRET")?.trim();
     const scheduled = Boolean(secret && request.headers.get("x-series-monitor-secret") === secret);
     if (!scheduled && !(await isAdmin(request))) return json({ error: "Authentication required" }, 401);
-    const service = createClient(required("SUPABASE_URL"), required("SUPABASE_SERVICE_ROLE_KEY"));
-    return json(await scan(service));
+    return json({ ok: true, disabled: true, discovered: 0 });
   } catch (error) {
     console.error("series-link-monitor", error);
     return json({ error: error instanceof Error ? error.message : "Series monitor failed" }, 500);
