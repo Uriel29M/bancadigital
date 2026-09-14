@@ -17449,11 +17449,7 @@
       el.disabled = true;
       Promise.resolve(toggleCatalogSeriesVisibility(el.dataset.hideSeries)).finally(() => { if (el.isConnected) el.disabled = false; });
     }));
-    $$('[data-edit-item]').forEach(el => el.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (isAdminProfile()) openEditForm(el.dataset.editItem);
-    }));
+    bindEditionEditButtons();
     $$('[data-download]').forEach(el => {
       const entry = downloaded(el.dataset.download);
       if (entry?.status === "waiting") { el.classList.add("is-downloading"); el.textContent = "…"; el.title = "Aguardando na fila"; }
@@ -19221,11 +19217,7 @@
       event.stopPropagation();
       toggleFavorite(el.dataset.favorite);
     }));
-    $$('[data-edit-item]', overlay).forEach(el => el.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (isAdminProfile()) openEditForm(el.dataset.editItem);
-    }));
+    bindEditionEditButtons(overlay);
     $$('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       toggleComicLike(el.dataset.likeItem);
@@ -19733,6 +19725,18 @@
     overlay.remove();
     render();
     openAdmin();
+  }
+
+  function bindEditionEditButtons(root = document) {
+    $$('[data-edit-item]', root).forEach(button => {
+      if (button.dataset.editionEditBound) return;
+      button.dataset.editionEditBound = "true";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (isAdminProfile()) openEditForm(button.dataset.editItem);
+      });
+    });
   }
 
   function openEditForm(id = null, initial = null) {
