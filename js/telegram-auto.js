@@ -50,7 +50,7 @@ window.BancaTelegram = (() => {
     const post = normalized(item?.telegramUrl);
     if (!post || !window.BANCA_SUPABASE_URL) return '';
     const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-mtproto`);
-    if (!item.id || !item.telegramFileId) return '';
+    if (!item?.id) return '';
     proxy.searchParams.set('item_id', String(item.id));
     return proxy.toString();
   }
