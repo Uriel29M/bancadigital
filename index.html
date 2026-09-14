@@ -8,6 +8,14 @@
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
     <link rel="stylesheet" href="css/style.css?v=2.2.10.247-bucho-admin-actions">
+  <style>
+    @media (hover: hover) and (pointer: fine) {
+      .card-wrap > .card:hover > .card-completed,
+      .card-wrap > .card:focus-within > .card-completed {
+        top: calc(30px + 2cm);
+      }
+    }
+  </style>
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
