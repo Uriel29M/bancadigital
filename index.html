@@ -20,6 +20,12 @@
         background: rgba(0,0,0,.72);
       }
     }
+
+    /* No seletor de edições, usar a ação "Sobre" da própria edição em vez de "Série". */
+    .series-modal .card-actions .card-series { display: none !important; }
+    .series-modal .card-actions .card-about { display: block !important; }
+    .series-modal .card-actions .card-about:hover,
+    .series-modal .card-actions .card-about:focus-visible { color: white; border-color: var(--accent); }
   </style>
   <script>
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
