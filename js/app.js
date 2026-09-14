@@ -19593,29 +19593,37 @@
     const section = document.createElement("section");
     section.className = "notice admin-account-retention";
     section.setAttribute("aria-label", "Exclusão automática de contas inativas");
-    section.innerHTML = `<h3>Contas comuns inativas</h3><p>Exclusão automática após 30 dias de inatividade, diariamente às 03h de Brasília. Administradores, moderadores, banca e Lendas são preservados.</p><p data-retention-status role="status" aria-live="polite">Carregando configuração…</p><button type="button" class="small-btn" data-retention-toggle disabled>Carregando…</button>`;
+    section.innerHTML = `<h3>Contas comuns inativas</h3><p>Exclusão automática após 30 dias de inatividade, diariamente às 03h de Brasília. Administradores, moderadores, banca e Lendas são preservados.</p><label class="field"><span>Contas a excluir</span><select data-retention-email-scope disabled><option value="all">Todas as contas comuns</option><option value="with_email">Somente com e-mail</option><option value="without_email">Somente sem e-mail</option></select></label><p data-retention-status role="status" aria-live="polite">Carregando configuração…</p><button type="button" class="small-btn" data-retention-toggle disabled>Carregando…</button>`;
     $(".admin-actions", overlay)?.after(section);
     const status = $("[data-retention-status]", section);
     const button = $("[data-retention-toggle]", section);
+    const scopeSelect = $("[data-retention-email-scope]", section);
     let enabled = null;
+    let emailScope = null;
     let busy = false;
-    const refresh = async (next = null) => {
+    const refresh = async (next = null, nextScope = null) => {
       if (busy || !isAdminProfile()) return;
       busy = true;
       button.disabled = true;
-      status.textContent = next === null ? "Carregando configuração…" : "Salvando configuração…";
+      scopeSelect.disabled = true;
+      const reading = next === null && nextScope === null;
+      status.textContent = reading ? "Carregando configuração…" : "Salvando configuração…";
       try {
         if (!sb || state.session?.offline || navigator.onLine === false) throw new Error("Conecte-se à internet para gerenciar esta opção.");
-        const result = next === null
-          ? await sb.rpc("get_inactive_account_cleanup_enabled")
-          : await sb.rpc("set_inactive_account_cleanup_enabled", { p_enabled: next });
+        const result = reading
+          ? await sb.rpc("get_inactive_account_cleanup_settings")
+          : await sb.rpc("set_inactive_account_cleanup_settings", { p_enabled: next ?? enabled, p_email_scope: nextScope ?? emailScope });
         if (result.error) throw result.error;
-        if (typeof result.data !== "boolean") throw new Error("Não foi possível confirmar a configuração.");
-        enabled = result.data;
+        if (typeof result.data?.enabled !== "boolean" || !["all", "with_email", "without_email"].includes(result.data.email_scope)) throw new Error("Não foi possível confirmar a configuração.");
+        enabled = result.data.enabled;
+        emailScope = result.data.email_scope;
+        scopeSelect.value = emailScope;
+        scopeSelect.disabled = false;
         status.textContent = enabled ? "Ativada: a limpeza será executada diariamente." : "Desativada: novas execuções automáticas estão pausadas.";
         button.textContent = enabled ? "Desativar exclusão automática" : "Ativar exclusão automática";
       } catch (error) {
         enabled = null;
+        scopeSelect.value = emailScope || "all";
         status.textContent = error.message || "Não foi possível confirmar a configuração. Tente novamente.";
         button.textContent = "Tentar novamente";
       } finally {
@@ -19624,6 +19632,7 @@
       }
     };
     button.onclick = () => refresh(typeof enabled === "boolean" ? !enabled : null);
+    scopeSelect.onchange = () => refresh(null, scopeSelect.value);
     refresh();
   }
 

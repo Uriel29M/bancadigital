@@ -1,5 +1,6 @@
 -- Run as postgres. Test accounts and all side effects are rolled back.
 begin;
+update private.inactive_account_cleanup_settings set email_scope='all' where id;
 do $$
 declare
   v_id uuid;
