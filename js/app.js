@@ -9979,18 +9979,29 @@
     if (!root || readerIsOpen) return;
     const priorityRoot = root.closest?.(".modal-backdrop") || root.classList?.contains("modal-backdrop");
     $$('img', root).forEach(image => {
-      if (priorityRoot) image.loading = "eager";
+      if (priorityRoot || image.closest(".modal-backdrop")) image.loading = "eager";
       else if (!image.hasAttribute("loading")) image.loading = "lazy";
       image.decoding = "async";
     });
-    const backgrounds = $$('[style*="background-image"]', root).filter(element => element.dataset.coverSize !== "hero");
+    const backgrounds = $$('[style*="background-image"]', root).filter(element => {
+      if (priorityRoot || element.closest(".modal-backdrop")) {
+        // Modal covers must not wait for the home hero's loading queue.
+        if (element.dataset.lazyBackground && (!element.style.backgroundImage || element.style.backgroundImage === "none")) {
+          element.style.backgroundImage = element.dataset.lazyBackground;
+        }
+        delete element.dataset.lazyBackground;
+        element.classList.remove("is-lazy-cover");
+        lazyCoverObserver?.unobserve(element);
+        return false;
+      }
+      return element.dataset.coverSize !== "hero";
+    });
     if (!backgrounds.length) return;
     if (!("IntersectionObserver" in window)) {
       backgrounds.forEach(element => element.classList.remove("is-lazy-cover"));
       return;
     }
     if (!lazyCoverObserver) lazyCoverObserver = new IntersectionObserver(entries => {
-      if (state.section === "home" && !homeHeroReady) return;
       entries.sort((a, b) => {
         const first = a.target.getBoundingClientRect();
         const second = b.target.getBoundingClientRect();
@@ -9998,6 +10009,7 @@
       }).forEach(entry => {
         if (!entry.isIntersecting) return;
         const element = entry.target;
+        if (state.section === "home" && !homeHeroReady && !element.closest(".modal-backdrop")) return;
         if (element.dataset.lazyBackground) {
           element.style.backgroundImage = element.dataset.lazyBackground;
           delete element.dataset.lazyBackground;
