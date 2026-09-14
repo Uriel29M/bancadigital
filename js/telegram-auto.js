@@ -1,4 +1,25 @@
 /* Telegram metadata only. The document remains on Telegram. */
+(() => {
+  const repairKey = 'bancaMediaFireReaderCacheRepairV1';
+  if (!('caches' in window)) return;
+  try {
+    if (localStorage.getItem(repairKey) === 'done') return;
+  } catch {}
+  caches.open('banca-reader-files-v2').then(async cache => {
+    const requests = await cache.keys();
+    const mediaFireRequests = requests.filter(request => {
+      try {
+        return /\/functions\/v1\/mediafire-proxy$/.test(new URL(request.url).pathname);
+      } catch {
+        return false;
+      }
+    });
+    await Promise.all(mediaFireRequests.map(request => cache.delete(request)));
+    try { localStorage.setItem(repairKey, 'done'); } catch {}
+    if (mediaFireRequests.length) console.info(`[reader-cache] ${mediaFireRequests.length} cache(s) antigo(s) do MediaFire removido(s).`);
+  }).catch(error => console.warn('[reader-cache] Não foi possível limpar o cache antigo do MediaFire.', error));
+})();
+
 window.BancaTelegram = (() => {
   const supported = new Set(['pdf', 'cbz', 'cbr']);
   const normalized = value => {
