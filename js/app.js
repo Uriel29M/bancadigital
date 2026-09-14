@@ -3269,7 +3269,12 @@
   let libarchiveModulePromise = null;
   function loadLibarchiveModule() {
     if (!libarchiveModulePromise) {
-      libarchiveModulePromise = import(appAssetUrl("libarchive/libarchive.js")).catch(error => {
+      libarchiveModulePromise = Promise.all([
+        import(appAssetUrl("libarchive/libarchive.js")),
+        import(appAssetUrl("libarchive/rar-reader.mjs"))
+      ]).then(([module, { withSolidRarSupport }]) => ({
+        ...module, Archive: withSolidRarSupport(module.Archive)
+      })).catch(error => {
         libarchiveModulePromise = null;
         throw error;
       });

@@ -1,9 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v649-cbr-flat-list";
+const CACHE_VERSION = "banca-digital-shell-v650-solid-rar";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.247-bucho-admin-actions",
-  "./js/app-loader.js?v=1", "./js/cbr-libarchive-fix.js?v=1",
-  "./js/app.js?v=2.2.10.499-cbr-recovery", "./js/catalog-sync.js?v=4-catalog-delete",
+  "./js/app.js?v=2.2.10.499-solid-rar", "./js/catalog-sync.js?v=4-catalog-delete",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
@@ -17,7 +16,8 @@ const APP_SHELL = [
   "./assets/papercomicsbackground.jpg", "./assets/papercomicsbackgroung.jpg",
   "./js/pdfjs/pdf.min.mjs", "./js/pdfjs/pdf.worker.min.mjs",
   "./libarchive/libarchive.js", "./libarchive/libarchive.wasm",
-  "./libarchive/worker-bundle.js"
+  "./libarchive/worker-bundle.js", "./libarchive/rar-reader.mjs",
+  "./libarchive/rar-worker.mjs", "./libarchive/unrar/unrar.mjs", "./libarchive/unrar/unrar.wasm"
 ];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(SHELL_CACHE)
