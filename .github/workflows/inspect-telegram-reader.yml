@@ -1,0 +1,30 @@
+name: Inspect Telegram reader
+on:
+  push:
+    branches: [fix/telegram-reader-live]
+    paths: ['.github/workflows/inspect-telegram-reader.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect current reader and Telegram integration
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          for (const path of ['js/app.js','js/telegram-auto.js','index.html','sw.js']) {
+            const source=fs.readFileSync(path,'utf8');
+            const lines=source.split('\n');
+            console.log('\n===== '+path+' =====');
+            if(path==='js/telegram-auto.js'){console.log(source);continue;}
+            if(path==='index.html'){console.log(lines.filter(x=>/telegram|app\.js|reader|pdfjs|jszip|libarchive|serviceWorker/.test(x)).join('\n'));continue;}
+            if(path==='sw.js'){console.log(lines.slice(0,110).join('\n'));continue;}
+            const hits=[];
+            for(let i=0;i<lines.length;i++)if(/telegram-proxy|BancaTelegram|renderCBRReader|renderCBZReader|renderPDFReader|async function openReader|function openReader|libarchive|archive\.open|download.*[Bb]lob|fetch.*[Rr]eader/.test(lines[i]))hits.push(i);
+            const seen=new Set();
+            for(const i of hits){const start=Math.max(0,i-18),end=Math.min(lines.length,i+48);for(let j=start;j<end;j++)if(!seen.has(j)){console.log(`${j+1}: ${lines[j]}`);seen.add(j);}}
+          }
+          JS

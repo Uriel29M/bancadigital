@@ -1,0 +1,27 @@
+name: Telegram reader source inspection
+on:
+  push:
+    branches: [fix/telegram-reader-live]
+    paths: ['.github/workflows/telegram-reader-source.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect exact reader source
+        run: |
+          mkdir -p /tmp/banca-source
+          cp js/app.js /tmp/banca-source/app.js
+          cp js/telegram-auto.js /tmp/banca-source/telegram-auto.js
+          cp index.html /tmp/banca-source/index.html
+          cp sw.js /tmp/banca-source/sw.js
+          find js -maxdepth 2 -type f \( -iname '*reader*' -o -iname '*archive*' -o -iname '*pdf*' \) -exec cp --parents {} /tmp/banca-source/ \;
+          git rev-parse HEAD > /tmp/banca-source/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: telegram-reader-source
+          path: /tmp/banca-source/
+          retention-days: 1
