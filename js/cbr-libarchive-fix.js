@@ -44,6 +44,27 @@
     }
   }
 
+  function wrapFlatLibarchiveEntries(archive, entries) {
+    const images = (entries || [])
+      .filter(entry => entry?.type === 'FILE' && IMAGE_RE.test(String(entry.fileName || entry.path || '')))
+      .sort((a, b) => naturalCompare(a.fileName || a.path, b.fileName || b.path));
+
+    if (!images.length) return null;
+
+    const output = {};
+    images.forEach((entry, index) => {
+      const name = String(entry.fileName || entry.path || `pagina-${index + 1}.jpg`);
+      const path = String(entry.path || name);
+      output[`page-${String(index + 1).padStart(5, '0')}`] = {
+        name,
+        size: Number(entry.size || 0),
+        lastModified: Number(entry.lastModified || 0),
+        extract: async () => archive.extractSingleFile(path)
+      };
+    });
+    return output;
+  }
+
   async function recoverStoredRar4(file) {
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
@@ -146,6 +167,21 @@
       const listed = await originalGetFilesObject.apply(this, args);
       const listedImages = countImages(listed);
       if (listedImages > 1 || !this.file) return listed;
+
+      // getFilesObject() reconstrói a listagem como árvore de caminhos. Se o RAR
+      // tiver caminhos que colidem, entradas podem ser sobrescritas. Use a lista
+      // plana do worker e preserve cada arquivo com uma chave única.
+      try {
+        const flatEntries = await this.client?.listFiles?.();
+        const flatWrapped = wrapFlatLibarchiveEntries(this, flatEntries);
+        const flatImages = countImages(flatWrapped);
+        if (flatImages > listedImages) {
+          console.info(`[CBR] árvore do libarchive encontrou ${listedImages} página(s); lista plana encontrou ${flatImages}.`);
+          return flatWrapped;
+        }
+      } catch (error) {
+        console.warn('[CBR] Não foi possível usar a listagem plana do libarchive.', error);
+      }
 
       try {
         const recovered = await recoverStoredRar4(this.file);
