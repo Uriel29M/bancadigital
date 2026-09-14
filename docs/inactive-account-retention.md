@@ -30,6 +30,22 @@ execuções, sem interromper uma execução que já tenha começado.
 As RPCs de leitura e alteração exigem uma sessão cujo perfil tenha plano
 `admin`. Outros planos não podem consultar nem alterar o controle.
 
+O campo **Contas a excluir** permite escolher **Somente com e-mail**,
+**Somente sem e-mail** ou **Todas as contas comuns**. A escolha pode ser salva
+mesmo com a limpeza desativada e é mantida ao reativar. O padrão continua sendo
+todas; a migração não ativa o agendamento nem executa uma limpeza.
+
+O filtro usa `auth.users.email`: valores nulos, vazios e endereços internos
+terminados em `@login.banca-digital.local` contam como contas sem e-mail.
+Qualquer outro e-mail cadastrado conta como com e-mail, independentemente da
+confirmação. O valor atual é revalidado antes da exclusão, com Auth e perfil
+bloqueados. Uma configuração alterada durante uma execução aguarda a transação
+atual terminar, assim como o controle de ativação já existente.
+
+A configuração é privada. As RPCs `get_inactive_account_cleanup_settings` e
+`set_inactive_account_cleanup_settings` retornam apenas ativação e filtro;
+as RPCs antigas de ativação continuam compatíveis e preservam o filtro.
+
 ## Verificação administrativa (SQL Editor, postgres)
 
 Prévia sem excluir contas:
