@@ -51,6 +51,11 @@
     });
   }
 
+  function labelAsEditionDetails(overlay) {
+    const eyebrow = overlay?.querySelector(".hero-details-copy .eyebrow");
+    if (eyebrow) eyebrow.textContent = "Sobre a edição";
+  }
+
   function openFallbackDetails(button) {
     const card = editionCardFor(button);
     const itemId = button.dataset.seriesMore;
@@ -71,7 +76,7 @@
 
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop hero-details-backdrop";
-    overlay.innerHTML = `<div class="modal hero-details-modal"><button class="small-btn hero-details-close" data-close aria-label="Fechar">×</button><div class="hero-details-copy"><div class="eyebrow">Destaque da banca</div><h2>${escapeHTML(title)}</h2>${meta ? `<div class="hero-details-meta">${escapeHTML(meta)}</div>` : ""}<p>${escapeHTML(description)}</p><div class="hero-details-actions"><button class="btn btn-primary" data-series-details-open>▶ Ler agora</button><button class="btn btn-secondary" data-close>Fechar</button></div></div><div class="hero-details-cover" data-series-details-open role="button" tabindex="0" aria-label="Ler ${escapeHTML(title)}"></div></div>`;
+    overlay.innerHTML = `<div class="modal hero-details-modal"><button class="small-btn hero-details-close" data-close aria-label="Fechar">×</button><div class="hero-details-copy"><div class="eyebrow">Sobre a edição</div><h2>${escapeHTML(title)}</h2>${meta ? `<div class="hero-details-meta">${escapeHTML(meta)}</div>` : ""}<p>${escapeHTML(description)}</p><div class="hero-details-actions"><button class="btn btn-primary" data-series-details-open>▶ Ler agora</button><button class="btn btn-secondary" data-close>Fechar</button></div></div><div class="hero-details-cover" data-series-details-open role="button" tabindex="0" aria-label="Ler ${escapeHTML(title)}"></div></div>`;
     const cover = overlay.querySelector(".hero-details-cover");
     if (coverBackground) cover.style.backgroundImage = coverBackground;
 
@@ -102,7 +107,8 @@
     if (!itemId) return;
 
     // Quando o destaque da home está no DOM, reutiliza literalmente o mesmo
-    // handler do botão "Ver mais" já existente no app.
+    // handler do botão "Ver mais" já existente no app e apenas adapta o rótulo
+    // para o contexto do seletor de edições.
     const heroMore = [...document.querySelectorAll("[data-hero-about]")]
       .find(element => !element.closest(".series-modal"));
     if (heroMore) {
@@ -110,6 +116,7 @@
       heroMore.dataset.heroAbout = itemId;
       heroMore.click();
       heroMore.dataset.heroAbout = previousId;
+      labelAsEditionDetails(modalRoot.querySelector(".hero-details-backdrop:last-child") || modalRoot.querySelector(".hero-details-backdrop"));
       return;
     }
 
