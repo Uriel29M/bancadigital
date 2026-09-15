@@ -18420,7 +18420,8 @@
     $('[data-unblock-profile]')?.addEventListener("click", () => toggleProfileBlock(state.publicProfile?.profile));
     $("[data-collection-filter-form]")?.addEventListener("submit", event => { event.preventDefault(); const form = new FormData(event.currentTarget); state.collectionFilter = { field: String(form.get("field") || "all"), query: String(form.get("query") || "") }; render(); });
     $("[data-clear-collection-filter]")?.addEventListener("click", () => { state.collectionFilter = { field: "all", query: "" }; render(); });
-    $$("[data-open]").forEach(el => el.addEventListener("click", () => {
+    // Os cards do seletor já possuem um evento próprio que fecha o modal e abre a edição.
+    $$("[data-open]").filter(el => !el.closest(".series-modal")).forEach(el => el.addEventListener("click", () => {
       $$(".card-wrap > .card-actions").forEach(actions => {
         if ($("[data-card-about]", actions)) return;
         const card = actions.parentElement?.querySelector(":scope > .card");
@@ -18908,7 +18909,7 @@
     const status = $('[data-volume-status]', overlay);
     const draw = () => {
       $('[data-volume-list]', overlay).innerHTML = labels.map((label, index) => `<button type="button" class="small-btn" data-volume-remove="${index}" aria-label="Remover volume ${escapeHTML(label)}">${escapeHTML(label)} · Remover</button>`).join('');
-      $('[data-volume-assignments]', overlay).innerHTML = editions.map((item, index) => `<label class="series-volume-assignment"><span>${escapeHTML(item.title || item.id)}</span><select data-volume-edition="${index}">${['Edições', ...labels].map(label => `<option value="${escapeHTML(label)}" ${assignments[index] === label ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`).join('');
+      $('[data-volume-assignments]', overlay).innerHTML = editions.map((item, index) => `<label class="series-volume-assignment"><span>${escapeHTML(item.title || item.id)}${itemIssueDisplay(item) ? ` — ${escapeHTML(itemIssueDisplay(item))}` : ""}</span><select data-volume-edition="${index}">${['Edições', ...labels].map(label => `<option value="${escapeHTML(label)}" ${assignments[index] === label ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}</select></label>`).join('');
       $$('[data-volume-edition]', overlay).forEach(select => select.onchange = () => { assignments[Number(select.dataset.volumeEdition)] = select.value; });
       $$('[data-volume-remove]', overlay).forEach(button => button.onclick = () => {
         const label = labels[Number(button.dataset.volumeRemove)];

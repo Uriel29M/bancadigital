@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 const app = readFileSync('js/app.js', 'utf8');
+const issueDisplayHelper = app.slice(app.indexOf('  function itemIssueDisplay('), app.indexOf('  function itemIssueLabel('));
 const helper = app.slice(app.indexOf('  function openSeriesVolumeManager('), app.indexOf('  function bindSeriesEditionOrder('));
 function setup(fail = false) {
   const nodes = new Map();
@@ -21,7 +22,7 @@ function setup(fail = false) {
     BancaCatalogSync: { publishMany: async (_, items) => { if (fail) throw new Error('offline'); return items.map(edition => ({ item_id: edition.id, edition, updated_at: 'now' })); } },
     editions, onSaved() { saved = true; }
   });
-  vm.runInContext(`${helper}\nopenSeriesVolumeManager(editions, onSaved);`, context);
+  vm.runInContext(`${issueDisplayHelper}\n${helper}\nopenSeriesVolumeManager(editions, onSaved);`, context);
   return { state, node, submit: () => node('form').onsubmit({ preventDefault() {} }), removed: () => removed, saved: () => saved };
 }
 test('removing a volume clears both fields and preserves its edition', async () => {
