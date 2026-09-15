@@ -19247,9 +19247,9 @@
     return clean.match(/\.(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/)?.[1] || "auto";
   }
 
-  function openCoverVariantsAdmin() {
+  function openCoverVariantsAdmin(itemId = null) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
-    const items = state.db.library.filter(item => item.type === "comic").sort((a, b) => itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"));
+    const items = state.db.library.filter(item => itemId ? item.id === itemId : item.type === "comic").sort((a, b) => itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"));
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal cover-variants-admin-modal"><div class="section-head"><div><h2>Capas variantes oficiais</h2><div class="section-subtitle">Cadastre capas hospedadas oficialmente pela DC para usuários Premium.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="cover-variant-admin-form"><div class="field full"><label>Edição</label><select name="itemId" required>${items.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(itemDisplayTitle(item))}${item.issue ? ` — ${escapeHTML(item.issue)}` : ""}</option>`).join("")}</select></div><div class="form-grid"><div class="field"><label>Chave da variante</label><input name="variantKey" required pattern="[A-Za-z0-9_-]{1,80}" placeholder="ex.: variant-a"></div><div class="field"><label>Nome da variante</label><input name="label" required maxlength="80" placeholder="Capa variante A"></div></div><div class="field full"><label>URL oficial da capa</label><input name="coverUrl" type="url" required pattern="https://static\\.dc\\.com/.*" placeholder="https://static.dc.com/2025-01/...jpg"><small class="format-hint">A URL precisa começar com https://static.dc.com/.</small></div><div class="field full"><label>URL da página fonte (opcional)</label><input name="sourceUrl" type="url" placeholder="https://www.dc.com/comics/..."></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar variante</button></div></form><div class="section-subtitle cover-variants-admin-list"></div></div>`;
@@ -19257,6 +19257,10 @@
     $("#modal-root").appendChild(overlay);
     $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     const itemSelect = $("select[name=itemId]", overlay);
+    if (itemId) {
+      itemSelect.value = itemId;
+      itemSelect.disabled = true;
+    }
     const list = $(".cover-variants-admin-list", overlay);
     const refreshList = () => {
       const variants = state.coverVariants.get(itemSelect.value) || [];
@@ -19273,14 +19277,15 @@
     refreshList();
     $("#cover-variant-admin-form", overlay).onsubmit = async event => {
       event.preventDefault();
-      const form = new FormData(event.currentTarget);
+      const formElement = event.currentTarget;
+      const form = new FormData(formElement);
       const coverUrl = String(form.get("coverUrl") || "").trim();
       if (!/^https:\/\/static\.dc\.com\//i.test(coverUrl)) return toast("A capa precisa usar uma URL oficial da DC.");
-      const payload = { item_id: String(form.get("itemId")), variant_key: String(form.get("variantKey") || "").trim(), label: String(form.get("label") || "").trim(), cover_url: coverUrl, source_url: String(form.get("sourceUrl") || "").trim() || null, created_at: new Date().toISOString() };
+      const payload = { item_id: itemId || String(form.get("itemId")), variant_key: String(form.get("variantKey") || "").trim(), label: String(form.get("label") || "").trim(), cover_url: coverUrl, source_url: String(form.get("sourceUrl") || "").trim() || null, created_at: new Date().toISOString() };
       const result = await sb.from("comic_cover_variants").upsert(payload, { onConflict: "item_id,variant_key" });
       if (result.error) return toast(result.error.message);
       await loadCoverCatalog();
-      event.currentTarget.reset();
+      formElement.reset();
       itemSelect.value = payload.item_id;
       refreshList();
       render();
@@ -19761,6 +19766,7 @@
           <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
           <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
+          ${old && sb && isAdminProfile() ? '<div class="field full"><label>Capas variantes</label><div><button type="button" class="small-btn" data-edition-cover-variants>Adicionar capas variantes</button></div><small class="format-hint">Cadastre capas alternativas para esta edição. As variantes são salvas separadamente.</small></div>' : ""}
           <div class="field full"><label>Link da capa (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(x.coverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa.jpg"><small class="format-hint">Aceita imagem direta ou postagem de foto/imagem do Telegram. Se preenchido, substitui a primeira página do arquivo.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="coverUrl">Identificar imagem</button><span data-telegram-cover-status="coverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa-do-destaque.jpg"><small class="format-hint">Aceita imagem direta ou postagem do Telegram. Use uma imagem horizontal ou em alta resolução para o destaque.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="featuredCoverUrl">Identificar imagem</button><span data-telegram-cover-status="featuredCoverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Descrição</label><textarea name="description">${escapeHTML(x.description || "")}</textarea></div><div class="field full"><label>Tags</label><input name="tags" value="${escapeHTML((x.tags || []).join(", "))}"></div><div class="field full"><label><input name="featured" type="checkbox" ${x.featured ? "checked" : ""}> Mostrar como destaque</label></div>
@@ -19768,6 +19774,7 @@
       </div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
     overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
+    $("[data-edition-cover-variants]", overlay)?.addEventListener("click", () => openCoverVariantsAdmin(x.id));
     const source = $("[name=sourceUrl]", overlay), preview = $("[data-format-preview]", overlay), volume = $("[name=volume]", overlay), oneShot = $("[name=oneShot]", overlay);
     const syncOneShot = () => { volume.disabled = oneShot.checked; if (oneShot.checked) volume.value = ""; };
     oneShot.addEventListener("change", syncOneShot); syncOneShot();
