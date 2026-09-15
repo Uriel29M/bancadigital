@@ -10343,7 +10343,7 @@
   }
 
   function itemIssueDisplay(item) {
-    const issue = String(item?.issue || "").trim();
+    const issue = String(item?.issue ?? "").trim();
     if (item?.seriesId !== "series-action-comics-2011-novos-52") return issue;
     return ({
       "2012": "Anual 01",
@@ -10354,9 +10354,21 @@
 
   function itemIssueLabel(item) {
     const issue = itemIssueDisplay(item);
-    if (!item?.seriesId || !issue || !/^\d+(?:\.\d+)?$/.test(issue)) return issue;
-    const availableTotal = state.db.library.filter(entry => entry.seriesId === item.seriesId && (!item.volume || entry.volume === item.volume)).length;
-    return availableTotal > 1 ? `${issue}/${availableTotal}` : issue;
+    const positiveIssueNumber = value => /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+    if (!item?.seriesId || positiveIssueNumber(issue) === null) return issue;
+    // Match the series tabs, including the default tab for unassigned editions.
+    const volumeLabel = entry => entry.volumeTitle || entry.volume || "Edições";
+    const volume = volumeLabel(item);
+    let hasFirstIssue = false;
+    let lastIssue = 0;
+    for (const entry of state.db.library) {
+      if (entry.seriesId !== item.seriesId || volumeLabel(entry) !== volume) continue;
+      const number = positiveIssueNumber(itemIssueDisplay(entry));
+      if (number === null) continue;
+      hasFirstIssue ||= number === 1;
+      lastIssue = Math.max(lastIssue, number);
+    }
+    return hasFirstIssue ? `${issue}/${lastIssue}` : issue;
   }
 
   function rail(title, items, subtitle = "", actionText = "", directOpen = false, deduplicate = true, sectionClass = "") {
@@ -19248,7 +19260,8 @@
   }
 
   function openCoverVariantsAdmin(itemId = null) {
-    if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
+    if (!["moderator", "banca", "admin"].includes(normalizedPlan(state.profile))) return toast("Você não tem permissão para cadastrar capas variantes.");
+    if (!sb) return toast("Conecte-se para cadastrar capas variantes.");
     const items = state.db.library.filter(item => itemId ? item.id === itemId : item.type === "comic").sort((a, b) => itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"));
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
@@ -19755,6 +19768,7 @@
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `
       <div class="modal"><div class="section-head"><div><h2>${id ? "Editar edição" : "Nova edição"}</h2><div class="section-subtitle">A capa será extraída da primeira página</div></div><button class="small-btn" data-close>Fechar</button></div>
+        ${old && (isAdminProfile() || ["moderator", "banca"].includes(state.profile?.plan)) ? '<div class="modal-actions"><button type="button" class="small-btn" data-edition-cover-variants>Adicionar capas variantes</button></div>' : ""}
         <form id="edit-form"><div class="form-grid">
           <div class="field"><label>Título da edição</label><input name="title" required value="${escapeHTML(x.title)}"></div>
           <div class="field"><label for="edition-series-id">ID da série</label><input id="edition-series-id" name="seriesId" value="${escapeHTML(x.seriesId || "")}" placeholder="Ex.: series-minha-serie"><small class="format-hint">Use um ID existente para mover a edição ou um novo para criar uma série. Vazio: gerar pelo nome da série.</small></div>
@@ -19766,7 +19780,6 @@
           <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
           <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
-          ${old && sb && isAdminProfile() ? '<div class="field full"><label>Capas variantes</label><div><button type="button" class="small-btn" data-edition-cover-variants>Adicionar capas variantes</button></div><small class="format-hint">Cadastre capas alternativas para esta edição. As variantes são salvas separadamente.</small></div>' : ""}
           <div class="field full"><label>Link da capa (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(x.coverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa.jpg"><small class="format-hint">Aceita imagem direta ou postagem de foto/imagem do Telegram. Se preenchido, substitui a primeira página do arquivo.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="coverUrl">Identificar imagem</button><span data-telegram-cover-status="coverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa-do-destaque.jpg"><small class="format-hint">Aceita imagem direta ou postagem do Telegram. Use uma imagem horizontal ou em alta resolução para o destaque.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="featuredCoverUrl">Identificar imagem</button><span data-telegram-cover-status="featuredCoverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Descrição</label><textarea name="description">${escapeHTML(x.description || "")}</textarea></div><div class="field full"><label>Tags</label><input name="tags" value="${escapeHTML((x.tags || []).join(", "))}"></div><div class="field full"><label><input name="featured" type="checkbox" ${x.featured ? "checked" : ""}> Mostrar como destaque</label></div>

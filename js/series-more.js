@@ -114,9 +114,15 @@
     if (heroMore) {
       const previousId = heroMore.dataset.heroAbout;
       heroMore.dataset.heroAbout = itemId;
-      heroMore.click();
-      heroMore.dataset.heroAbout = previousId;
-      labelAsEditionDetails(modalRoot.querySelector(".hero-details-backdrop:last-child") || modalRoot.querySelector(".hero-details-backdrop"));
+      const existingPopups = new Set(modalRoot.querySelectorAll(".hero-details-backdrop"));
+      try {
+        heroMore.click();
+        const popup = [...modalRoot.querySelectorAll(".hero-details-backdrop")]
+          .find(element => !existingPopups.has(element));
+        labelAsEditionDetails(popup);
+      } finally {
+        heroMore.dataset.heroAbout = previousId;
+      }
       return;
     }
 
