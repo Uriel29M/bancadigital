@@ -45,7 +45,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.record_community_activity(uuid, text, text, text, jsonb) from anon, authenticated;
+revoke execute on function public.record_community_activity(uuid, text, text, text, jsonb) from public, anon, authenticated;
 
 create or replace function public.record_comic_comment_activity()
 returns trigger language plpgsql security definer set search_path = public

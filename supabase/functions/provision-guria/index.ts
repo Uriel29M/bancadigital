@@ -16,6 +16,6 @@ Deno.serve(async (request) => {
     if (!id) { const users = await admin.auth.admin.listUsers({ perPage: 1000 }); id = users.data.users.find((user) => user.email === email)?.id; }
   }
   if (!id) return Response.json({ error: 'user_not_found' }, { status: 500 });
-  const { error } = await admin.from('profiles').upsert({ id, username: 'guria', account_email: email, title: null, title_color: '#ffffff', avatar_url: null, faction_id: null, is_bot: true, is_official: true, bot_type: 'assistant', allow_messages: true, profile_hidden: false, is_banned: false }, { onConflict: 'id' });
+  const { error } = await admin.from('profiles').upsert({ id, username: 'guria', title: null, title_color: '#ffffff', avatar_url: null, faction_id: null, is_bot: true, is_official: true, bot_type: 'assistant', allow_messages: true, profile_hidden: false, is_banned: false }, { onConflict: 'id' });
   return error ? Response.json({ error: 'profile_failed', detail: error.message }, { status: 500 }) : Response.json({ ok: true, id });
 });

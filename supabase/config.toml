@@ -36,3 +36,7 @@ verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = false
+
+[functions.username-login]
+# Credentials are verified against Supabase Auth inside the handler.
+verify_jwt = false

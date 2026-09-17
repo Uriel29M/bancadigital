@@ -1968,7 +1968,7 @@
       }
       state.rankingMembers = result.data || [];
       const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
-      const factionRows = rankingIds.length ? await sb.from("profiles").select("id, faction_id").in("id", rankingIds) : { data: [] };
+      const factionRows = rankingIds.length ? await sb.from("profiles_public").select("id, faction_id").in("id", rankingIds) : { data: [] };
       state.factionByUser = new Map((factionRows.data || []).map(row => [row.id, row.faction_id]));
       state.rankingMembers = state.rankingMembers.map(member => ({ ...member, faction_id: state.factionByUser.get(member.user_id) || null }));
     } catch (error) {
@@ -2023,7 +2023,7 @@
     await Promise.all(catalogs.map(async catalogRow => {
       const parts = parsePublicCatalogLink(catalogRow.catalog_url);
       if (!parts) return;
-      const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+      const owner = await sb.from("profiles_public").select("id, username").ilike("username", parts.username).maybeSingle();
       if (owner.error || !owner.data) return;
       const collection = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, cover_styles, cover_choices").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
       if (collection.error || !collection.data) return;
@@ -2045,7 +2045,7 @@
     const pinnedPublicIds = [...new Set((pinnedPublicCollections.data || []).map(row => String(row.collection_id)))];
     const publicPinnedDetails = pinnedPublicIds.length ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_public").in("id", pinnedPublicIds).eq("is_public", true).eq("collection_type", "comic") : { data: [] };
     const publicPinnedOwnerIds = [...new Set((publicPinnedDetails.data || []).map(collection => collection.owner_id).filter(Boolean))];
-    const publicPinnedOwners = publicPinnedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", publicPinnedOwnerIds) : { data: [] };
+    const publicPinnedOwners = publicPinnedOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", publicPinnedOwnerIds) : { data: [] };
     const publicPinnedOwnerNames = new Map((publicPinnedOwners.data || []).map(profile => [profile.id, profile.username]));
     state.factionPublicPinnedCollectionDetails = new Map((publicPinnedDetails.data || []).map(collection => [String(collection.id), { ...collection, username: publicPinnedOwnerNames.get(collection.owner_id) || "" }]));
     const catalogIds = state.factionCatalogs.map(catalog => catalog.id);
@@ -2070,12 +2070,12 @@
     const roles = await sb.from("faction_roles").select("user_id, faction_id, role, slot");
     state.factionRoles = roles.error ? [] : (roles.data || []);
     const roleIds = state.factionRoles.map(role => role.user_id).filter(Boolean);
-    const roleProfiles = roleIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, plan, faction_id").in("id", roleIds) : { data: [] };
+    const roleProfiles = roleIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, plan, faction_id").in("id", roleIds) : { data: [] };
     const roleProfileMap = new Map((roleProfiles.data || []).map(profile => [profile.id, profile]));
     state.factionRoleMembers = state.factionRoles.map(role => ({ ...role, profile: roleProfileMap.get(role.user_id) || null }));
     const memberships = await sb.from("faction_memberships").select("user_id, faction_id, joined_at").order("joined_at", { ascending: false });
     const memberIds = (memberships.data || []).map(row => row.user_id).filter(Boolean);
-    const memberProfiles = memberIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan, xp, level, last_seen_at").in("id", memberIds) : { data: [] };
+    const memberProfiles = memberIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, faction_id, plan, xp, level, last_seen_at").in("id", memberIds) : { data: [] };
     const memberProfileMap = new Map((memberProfiles.data || []).map(profile => [profile.id, profile]));
     state.factionMembers = (memberships.data || []).map(row => ({ ...row, profile: memberProfileMap.get(row.user_id) || null }));
     const season = await sb.from("faction_seasons").select("id, starts_at").order("season_key", { ascending: false }).limit(1).maybeSingle();
@@ -2103,7 +2103,7 @@
     state.factionAchievements = new Map(state.factions.map((faction, index) => [faction.id, achievementResults[index]?.error ? [] : (achievementResults[index]?.data || [])]));
     const mandatoryCandidates = (state.db.library || []).filter(item => item?.type === "comic" && item?.id).map(item => ({ id: String(item.id), title: item.title || "Edição", cover_url: item.coverUrl || item.cover || item.cover_url || null }));
     const mandatoryResults = await Promise.all(state.factions.map(async faction => {
-      if (state.session?.user?.id && mandatoryCandidates.length) await sb.rpc("ensure_faction_mandatory_reads", { p_faction_id: faction.id, p_candidates: mandatoryCandidates });
+      if (state.profile?.plan === "admin" && mandatoryCandidates.length) await sb.rpc("ensure_faction_mandatory_reads", { p_faction_id: faction.id, p_candidates: mandatoryCandidates });
       const result = await sb.rpc("get_faction_mandatory_reads", { p_faction_id: faction.id });
       return [faction.id, result.error ? [] : (result.data || [])];
     }));
@@ -2796,7 +2796,7 @@
     } else {
       const posts = result.data || [];
       const authorIds = [...new Set(posts.map(post => post.author_id).filter(Boolean))];
-      const authors = authorIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", authorIds) : { data: [] };
+      const authors = authorIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", authorIds) : { data: [] };
       const authorsById = new Map((authors.data || []).map(author => [author.id, author]));
       state.blogPosts = posts.map(post => ({ ...post, author: authorsById.get(post.author_id) || null }));
       const blogIds = state.blogPosts.map(post => post.id);
@@ -3015,7 +3015,7 @@
     if (result.error) return { error: result.error, comments: [] };
     const comments = result.data || [];
     const userIds = [...new Set(comments.map(comment => comment.user_id).filter(Boolean))];
-    const profilesResult = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan").in("id", userIds) : { data: [] };
+    const profilesResult = userIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan").in("id", userIds) : { data: [] };
     const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
     comments.forEach(comment => { comment.profiles = profiles.get(comment.user_id) || {}; });
     const likes = comments.length ? await sb.from("blog_comment_likes").select("blog_comment_id, user_id").in("blog_comment_id", comments.map(comment => comment.id)) : { data: [] };
@@ -3363,7 +3363,7 @@
       return [];
     }
     const userIds = [...new Set((fallback.data || []).map(comment => comment.user_id).filter(Boolean))];
-    const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan").in("id", userIds) : { data: [] };
+    const profiles = userIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, faction_id, plan").in("id", userIds) : { data: [] };
     const byId = new Map((profiles.data || []).map(profile => [profile.id, profile]));
     return (fallback.data || []).map(comment => ({ ...comment, profiles: byId.get(comment.user_id) || {} }));
   }
@@ -3448,7 +3448,7 @@
     const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
     const publicCollections = publicCollectionsResult.data || [];
     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
-    const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", collectionOwnerIds) : { data: [] };
+    const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", collectionOwnerIds) : { data: [] };
     const collectionOwners = new Map((collectionOwnersResult.data || []).map(profile => [profile.id, profile.username]));
     const collectionLikesResult = await sb.from("shelf_collection_likes").select("owner_id, collection_id");
     const collectionLikeCounts = (collectionLikesResult.data || []).reduce((counts, like) => {
@@ -3485,12 +3485,7 @@
     state.comicLikeCounts = (comicLikes.data || []).reduce((counts, row) => counts.set(row.item_id, (counts.get(row.item_id) || 0) + 1), new Map());
     if (!session?.user) await loadFactions();
     if (session?.user) {
-      let profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, profile_hidden, is_banned, silenced_until, last_seen_at, created_at, plan, profile_background_theme, profile_accent_theme, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, likes_public, wall_description, profile_banner_url, allow_mentions, allow_messages, shelf_sort_orders, shelf_style, shelf_styles, notifications_enabled, guria_proactive_enabled, shelf_blogs_public, profile_wall_public, shelf_saved_public_collections, profile_activity_public, xp, level, daily_streak, last_checkin_at, faction_id, faction_joined_at, faction_changed_at, profile_sticker_award_id, allow_sticker_requests").eq("id", session.user.id).single();
-      if (profile.error) {
-        // Compatibilidade com instalações que ainda não aplicaram os scripts
-        // opcionais do álbum de stickers.
-        profile = await sb.from("profiles").select("id, username, avatar_url, title, title_color, profile_hidden, is_banned, silenced_until, last_seen_at, created_at, plan, profile_background_theme, profile_accent_theme, shelf_saved_public, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, likes_public, wall_description, profile_banner_url, allow_mentions, allow_messages, shelf_sort_orders, shelf_style, shelf_styles, notifications_enabled, shelf_blogs_public, profile_wall_public, shelf_saved_public_collections, profile_activity_public, xp, level, daily_streak, last_checkin_at, faction_id, faction_joined_at, faction_changed_at").eq("id", session.user.id).single();
-      }
+      const profile = await sb.rpc("get_my_profile");
       saveOfflineAccount(profile.data);
       state.profile = effectiveSundayProfile(profile.data);
       const top10LoadRevision = state.top10Revision;
@@ -3528,7 +3523,7 @@
         ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
         : { data: [] };
       const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
-      const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+      const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", savedOwnerIds) : { data: [] };
       const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
       const savedShelfCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
       const savedFactionCollections = publicFactionCollections.filter(collection => state.factionCatalogSaveIds.has(String(collection.catalog_id)));
@@ -3558,7 +3553,7 @@
       const stickerRequests = await sb.from("sticker_requests").select("id, requester_id, owner_id, character_id, character_name, edition_fingerprint, request_type, offered_award_id, offered_award_id_2, status, created_at, resolved_at").or(`requester_id.eq.${session.user.id},owner_id.eq.${session.user.id}`).order("created_at", { ascending: false }).limit(100);
       state.stickerRequests = stickerRequests.data || [];
       const requesterIds = [...new Set(state.stickerRequests.map(request => request.requester_id).filter(id => id && id !== session.user.id))];
-      const requesterProfiles = requesterIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color").in("id", requesterIds) : { data: [] };
+      const requesterProfiles = requesterIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color").in("id", requesterIds) : { data: [] };
       state.stickerRequestProfiles = new Map((requesterProfiles.data || []).map(profile => [profile.id, profile]));
       const offeredIds = [...new Set(state.stickerRequests.flatMap(request => [request.offered_award_id, request.offered_award_id_2]).filter(Boolean))];
       const offeredAwards = offeredIds.length ? await sb.from("sticker_awards").select("id, character_name, rarity, cover_url").in("id", offeredIds) : { data: [] };
@@ -3632,7 +3627,7 @@
     const visibleNotifications = (result.data || []).filter(notification => !chatNotificationTypes.includes(notification.type));
     const actorIds = [...new Set(visibleNotifications.map(notification => notification.actor_id).filter(Boolean))];
     const actorsResult = actorIds.length
-      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
+      ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
       : { data: [] };
     const actors = new Map((actorsResult.data || []).map(actor => [actor.id, actor]));
     state.notifications = visibleNotifications
@@ -3691,7 +3686,7 @@
     const reportReviewerIds = (reports.data || []).map(row => row.reviewed_by).filter(Boolean);
     const reportReporterIds = (reports.data || []).map(row => row.reporter_id).filter(Boolean);
     const ids = [...new Set([...rows.flatMap(row => [row.actor_id, row.target_id]), ...botReviewerIds, ...reportReviewerIds, ...reportReporterIds].filter(Boolean))];
-    const profiles = ids.length ? await sb.from("profiles").select("id, username").in("id", ids) : { data: [] };
+    const profiles = ids.length ? await sb.from("profiles_public").select("id, username").in("id", ids) : { data: [] };
     const names = new Map((profiles.data || []).map(profile => [profile.id, profile.username]));
     state.staffActivities = [
       ...rows.map(row => ({ ...row, kind: "moderation", actorName: names.get(row.actor_id) || "monitor", targetName: names.get(row.target_id) || "usuário" })),
@@ -3769,8 +3764,8 @@
     state.publicStickerChannel = channel;
   }
 
-  const PUBLIC_PROFILE_BASIC_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, faction_id, profile_hidden, is_banned, silenced_until, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_wall_public, profile_activity_public, allow_messages, allow_sticker_requests";
-  const PUBLIC_PROFILE_FULL_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned, silenced_until";
+  const PUBLIC_PROFILE_BASIC_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, faction_id, profile_hidden, is_banned, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_wall_public, profile_activity_public, allow_messages, allow_sticker_requests";
+  const PUBLIC_PROFILE_FULL_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned";
 
   async function loadPublicProfile(username, collectionId = null, album = false, options = {}) {
     if (navigator.onLine === false || state.session?.offline) {
@@ -3794,18 +3789,22 @@
       render();
       return;
     }
-    let profile = await sb.from("profiles").select(`${options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS}, is_bot, is_official, bot_type`)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
+    let profile = await sb.from("profiles_public").select(`${options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS}, is_bot, is_official, bot_type`)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
     if (profile.error) {
       // Uma coluna opcional nova pode ainda não existir em instalações que
       // não aplicaram todas as migrations. Não descarte as preferências de
       // visibilidade nesse caso: elas são necessárias para renderizar o
       // perfil público de outras pessoas corretamente.
-      profile = await sb.from("profiles").select(`${options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS}, is_bot, is_official, bot_type`)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
+      profile = await sb.from("profiles_public").select(`${options.basicOnly ? PUBLIC_PROFILE_BASIC_COLUMNS : PUBLIC_PROFILE_FULL_COLUMNS}, is_bot, is_official, bot_type`)[options.basicOnly ? "eq" : "ilike"]("username", username).maybeSingle();
     }
     if (profile.error || !profile.data) {
       state.publicProfile = { error: "Perfil não encontrado.", username };
       render();
       return;
+    }
+    if (["moderator", "banca", "admin"].includes(state.profile?.plan)) {
+      const moderation = await sb.rpc("get_profile_moderation_status", { p_user_id: profile.data.id });
+      if (!moderation.error && moderation.data) Object.assign(profile.data, moderation.data);
     }
     const viewerId = state.session?.user?.id;
     const blockRows = viewerId && viewerId !== profile.data.id
@@ -3922,7 +3921,7 @@
       : top10Lists;
     const isFollowing = state.session?.user?.id ? (followers.data || []).some(row => row.follower_id === state.session.user.id) : false;
     const actorIds = [...new Set((moderationHistory.data || []).map(entry => entry.actor_id).filter(Boolean))];
-    const actors = actorIds.length ? await sb.from("profiles").select("id, username").in("id", actorIds) : { data: [] };
+    const actors = actorIds.length ? await sb.from("profiles_public").select("id, username").in("id", actorIds) : { data: [] };
     const actorNames = new Map((actors.data || []).map(actor => [actor.id, actor.username]));
     const collectionLikes = new Set((likes.data || []).filter(row => row.user_id === state.session?.user?.id).map(row => row.collection_id));
     const collectionLikeCounts = (likes.data || []).reduce((counts, row) => counts.set(row.collection_id, (counts.get(row.collection_id) || 0) + 1), new Map());
@@ -3934,7 +3933,7 @@
       ? await sb.from("shelf_collections").select("id, owner_id, name, cover_url, is_public, item_ids, collection_type, is_featured").in("id", savedCollectionIds).eq("is_public", true).eq("collection_type", "comic")
       : { data: [] };
     const savedOwnerIds = [...new Set((savedCollectionsResult.data || []).map(collection => collection.owner_id).filter(Boolean))];
-    const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] };
+    const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", savedOwnerIds) : { data: [] };
     const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
     const savedShelfCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
     const savedFactionIdsResult = await sb.from("faction_catalog_saves").select("catalog_id").eq("user_id", profile.data.id);
@@ -4003,7 +4002,7 @@
     if (result.error) return;
     const actorIds = [...new Set((result.data || []).map(activity => activity.actor_id).filter(Boolean))];
     const actorsResult = actorIds.length
-      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
+      ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", actorIds)
       : { data: [] };
     const actors = new Map((actorsResult.data || []).map(actor => [actor.id, actor]));
     state.communityActivities = (result.data || []).map(activity => ({ ...activity, actor: actors.get(activity.actor_id) || null }));
@@ -6612,7 +6611,7 @@
     const comments = result.data || [];
     const userIds = [...new Set(comments.map(comment => comment.user_id).filter(Boolean))];
     const profilesResult = userIds.length
-      ? await sb.from("profiles").select("id, username, avatar_url, title, plan").in("id", userIds)
+      ? await sb.from("profiles_public").select("id, username, avatar_url, title, plan").in("id", userIds)
       : { data: [] };
     const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
     comments.forEach(comment => { comment.profiles = profiles.get(comment.user_id) || {}; });
@@ -6887,10 +6886,7 @@
         const result = await sb.auth.updateUser({ email });
         if (result.error) return toast(result.error.message);
       }
-      const profileEmail = await sb.from("profiles").update({ account_email: email }).eq("id", state.session.user.id);
-      if (profileEmail.error) return toast(profileEmail.error.message);
-      state.session.user.email = email;
-      toast(email === currentEmail ? "Email de recuperação salvo." : "Email atualizado. Verifique sua caixa de entrada para confirmar o endereço.");
+      toast("Solicitação enviada. Confirme a alteração pelos emails enviados pelo serviço de autenticação.");
     });
   }
 
@@ -6944,7 +6940,7 @@
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Distribuir título</h2><div class="section-subtitle">Títulos são frases personalizadas; as insígnias são conquistadas automaticamente.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="achievement-form"><div class="form-grid"><div class="field full"><label>@ do usuário</label><input name="username" required placeholder="usuario"></div><div class="field full"><label>Frase do título</label><input name="title" placeholder="Leitor veterano"></div><div class="field full"><label>Cor de fundo</label><select name="titleColor"><option value="#000000">Preto</option><option value="#ffffff">Branco</option><option value="#e50914">Vermelho</option><option value="#2f80ed">Azul</option><option value="#27ae60">Verde</option><option value="#ffd45c" selected>Amarelo</option><option value="#8e44ad">Roxo</option><option value="#f2994a">Laranja</option></select></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar título</button></div></form></div>`;
     $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
-    $("#achievement-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); const title = String(fd.get("title") || "").trim(); const title_color = safeTitleColor(fd.get("titleColor")); const profile = await sb.from("profiles").select("id").eq("username", username).single(); if (profile.error) return toast("Usuário não encontrado."); let update = await sb.from("profiles").update({ title: title || null, title_color }).eq("id", profile.data.id); if (update.error && /title_color|schema cache/i.test(update.error.message)) update = await sb.from("profiles").update({ title: title || null }).eq("id", profile.data.id); if (update.error) return toast(update.error.message); if (state.profile?.id === profile.data.id) state.profile = { ...state.profile, title, title_color }; overlay.remove(); render(); toast("Título atualizado."); };
+    $("#achievement-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); const title = String(fd.get("title") || "").trim(); const title_color = safeTitleColor(fd.get("titleColor")); const update = await sb.rpc("moderate_user", { p_username: username, p_action: "title", p_title: title || null, p_title_color: title_color }); if (update.error) return toast(update.error.message); if (state.profile?.username === username) state.profile = { ...state.profile, title, title_color }; overlay.remove(); render(); toast("Título atualizado."); };
   }
 
   function readerSourceCandidates(item) {
@@ -10989,18 +10985,7 @@
       const form = new FormData(event.currentTarget);
       const username = cleanUsername(form.get("username"));
       const plan = String(form.get("plan") || "free");
-      let result = await sb.rpc("set_user_plan", { p_username: username, p_plan: plan });
-      if (result.error && /set_user_plan|schema cache|function/i.test(result.error.message)) {
-        const profile = await sb.from("profiles").select("id, faction_id").eq("username", username).maybeSingle();
-        if (!profile.data) return toast("Usuário não encontrado.");
-        if (["moderator", "banca"].includes(plan) && profile.data.faction_id) {
-          await sb.from("faction_roles").delete().eq("user_id", profile.data.id);
-          await sb.from("faction_memberships").delete().eq("user_id", profile.data.id);
-          result = await sb.from("profiles").update({ plan, faction_id: null, faction_joined_at: null, faction_changed_at: null }).eq("id", profile.data.id);
-        } else {
-          result = await sb.from("profiles").update({ plan }).eq("id", profile.data.id);
-        }
-      }
+      const result = await sb.rpc("set_user_plan", { p_username: username, p_plan: plan });
       if (result.error) return toast(result.error.message);
       overlay.remove(); toast("Tipo de conta atualizado.");
     };
@@ -11476,7 +11461,7 @@
       : await sb.from("profile_follows").select("following_id").eq("follower_id", profileId);
     if (relation.error) return toast("Não foi possível carregar essa lista.");
     const ids = (relation.data || []).map(row => isFollowers ? row.follower_id : row.following_id).filter(Boolean);
-    const profiles = ids.length ? await sb.from("profiles").select("id, username, avatar_url, title, plan, faction_id, is_bot, is_official, bot_type").in("id", ids) : { data: [] };
+    const profiles = ids.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, plan, faction_id, is_bot, is_official, bot_type").in("id", ids) : { data: [] };
     if (profiles.error) return toast("Não foi possível carregar os perfis.");
     const byId = new Map((profiles.data || []).map(profile => [profile.id, profile]));
     const title = isFollowers ? "Seguidores" : "Seguindo";
@@ -11588,7 +11573,7 @@
     if (!listId || !username) return null;
     const cacheKey = `${username}:${listId}`;
     if (state.chatTop10PreviewCache.has(cacheKey)) return state.chatTop10PreviewCache.get(cacheKey);
-    const owner = await sb.from("profiles").select("id, username").ilike("username", username).maybeSingle();
+    const owner = await sb.from("profiles_public").select("id, username").ilike("username", username).maybeSingle();
     if (owner.error || !owner.data) return null;
     const listResult = await sb.from("profile_top10_lists").select("id, owner_id, name, list_type, is_public").eq("id", listId).eq("owner_id", owner.data.id).eq("is_public", true).maybeSingle();
     if (listResult.error || !listResult.data) return null;
@@ -11714,7 +11699,7 @@
       if (!username) return;
       let profile = state.chatInternalPreviewCache.get(username);
       if (!profile) {
-        const result = await sb.from("profiles").select("id, username, avatar_url, title, title_color, faction_id, plan").ilike("username", username).maybeSingle();
+        const result = await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, faction_id, plan").ilike("username", username).maybeSingle();
         if (result.error || !result.data) return;
         profile = result.data;
         state.chatInternalPreviewCache.set(username, profile);
@@ -12439,7 +12424,7 @@
     if (contact?.id === state.session.user.id) return toast("Você não pode enviar mensagens para si mesmo.");
     if (contact?.id && contact.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
     if (contact?.id && (contact.allow_messages === undefined || contact.is_bot === undefined || contact.is_official === undefined)) {
-      const recipient = await sb.from("profiles").select("allow_messages, is_bot, is_official, bot_type").eq("id", contact.id).maybeSingle();
+      const recipient = await sb.from("profiles_public").select("allow_messages, is_bot, is_official, bot_type").eq("id", contact.id).maybeSingle();
       if (recipient.data) contact = { ...contact, ...recipient.data };
       if (recipient.data?.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
     }
@@ -12501,7 +12486,7 @@
       });
       const contactIds = [...conversations.keys()];
       if (contactIds.length) {
-        const profilesResult = await sb.from("profiles").select("id, username, avatar_url, title, title_color, allow_messages, is_bot, is_official, bot_type").in("id", contactIds);
+        const profilesResult = await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, allow_messages, is_bot, is_official, bot_type").in("id", contactIds);
         const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
         const cards = contactIds.map(contactId => {
           const profile = profiles.get(contactId);
@@ -12524,7 +12509,7 @@
         event.preventDefault();
         const username = String(new FormData(event.currentTarget).get("username") || "").trim();
         if (!username) return;
-        const result = await sb.from("profiles").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
+        const result = await sb.from("profiles_public").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
         if (result.error || !result.data) return toast("Usuário não encontrado.");
         if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
         overlay.remove();
@@ -12539,7 +12524,7 @@
       const result = await sb.from("chat_messages").select("id, sender_id, body, metadata, created_at").or(`and(sender_id.eq.${state.session.user.id},recipient_id.eq.${contact.id}),and(sender_id.eq.${contact.id},recipient_id.eq.${state.session.user.id})`).gt("expires_at", now).order("created_at", { ascending: true }).limit(200);
       if (result.error) return messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
       const senderIds = [...new Set((result.data || []).map(message => message.sender_id).filter(Boolean))];
-      const profilesResult = senderIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, faction_id, is_bot, is_official, bot_type").in("id", senderIds) : { data: [] };
+      const profilesResult = senderIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan, faction_id, is_bot, is_official, bot_type").in("id", senderIds) : { data: [] };
       const profilesById = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
       const senderVisuals = await loadChatSenderVisuals(senderIds);
       chatMessagesById = new Map((result.data || []).map(message => [String(message.id), { ...message, profile: profilesById.get(message.sender_id) || {} }]));
@@ -13486,7 +13471,7 @@
       const result = await sb.from("profile_top10_list_comments").select("id, parent_id, user_id, body, created_at").eq("list_id", list.id).order("created_at", { ascending: true });
       if (result.error) { commentsList.innerHTML = '<span class="section-subtitle">Não foi possível carregar os comentários.</span>'; return; }
       const userIds = [...new Set((result.data || []).map(comment => comment.user_id).filter(Boolean))];
-      const profiles = userIds.length ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan").in("id", userIds) : { data: [] };
+      const profiles = userIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan").in("id", userIds) : { data: [] };
       const profilesById = new Map((profiles.data || []).map(profile => [profile.id, profile]));
       const comments = (result.data || []).map(comment => ({ ...comment, profiles: profilesById.get(comment.user_id) || {} }));
       renderComments(comments);
@@ -13876,7 +13861,10 @@
     items.forEach(item => characterNames(item).forEach(name => {
       const entity = String(name || "").trim();
       const setting = state.characterSettings.get(publisherKey(entity));
-      if (entity && setting?.character_alignment === alignment && !entities.has(publisherKey(entity))) entities.set(publisherKey(entity), entity);
+      const matchesAlignment = alignment === null
+        ? !setting?.character_alignment && !isTeamCharacter(entity) && !isRedirectedCharacter(entity)
+        : setting?.character_alignment === alignment;
+      if (entity && matchesAlignment && !entities.has(publisherKey(entity))) entities.set(publisherKey(entity), entity);
     }));
     const entries = [...entities.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
     if (!entries.length) return "";
@@ -13893,7 +13881,8 @@
       ["hero", "Heróis", "Explore os heróis presentes nos quadrinhos."],
       ["villain", "Vilões", "Explore os vilões presentes nos quadrinhos."],
       ["antihero", "Anti-heróis", "Explore os anti-heróis presentes nos quadrinhos."],
-      ["support", "Secundários e apoio", "Explore os personagens secundários e de apoio."]
+      ["support", "Secundários e apoio", "Explore os personagens secundários e de apoio."],
+      [null, "Personagens sem categoria", "Explore os personagens que ainda não possuem uma categoria definida."]
     ].map(([alignment, title, subtitle]) => alignmentWikiCarouselMarkup(items, alignment, title, subtitle)).join("");
   }
 
@@ -13972,7 +13961,7 @@
     const saves = await sb.from("publisher_saves").select("user_id, created_at").eq("publisher_key", key).order("created_at", { ascending: false });
     const userIds = (saves.data || []).map(row => row.user_id).filter(Boolean);
     const profiles = userIds.length
-      ? await sb.from("profiles").select("id, username, avatar_url, title, title_color, plan, profile_hidden").in("id", userIds)
+      ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan, profile_hidden").in("id", userIds)
       : { data: [] };
     const profilesById = new Map((profiles.data || []).filter(profile => profile.profile_hidden !== true).map(profile => [profile.id, profile]));
     state.publisherFans = { key, users: userIds.map(id => profilesById.get(id)).filter(Boolean), loading: false, loaded: true };
@@ -14247,7 +14236,7 @@
       if (result.error) throw result.error;
       const collections = result.data || [];
       const ownerIds = [...new Set(collections.map(collection => collection.owner_id).filter(Boolean))];
-      const owners = ownerIds.length ? await sb.from("profiles").select("id, username")
+      const owners = ownerIds.length ? await sb.from("profiles_public").select("id, username")
         .in("id", ownerIds).eq("profile_hidden", false).neq("is_banned", true) : { data: [] };
       if (owners.error) throw owners.error;
       if (request !== state.searchCollectionsRequest) return;
@@ -14278,7 +14267,7 @@
     }
     if (state.section === "search") render();
     const escapedQuery = normalizedQuery.replace(/[\\%_]/g, "\\$&");
-    const result = await sb.from("profiles")
+    const result = await sb.from("profiles_public")
       .select("id, username, avatar_url, title, title_color, faction_id, profile_hidden, is_banned")
       .ilike("username", `%${escapedQuery}%`)
       .eq("profile_hidden", false)
@@ -14619,7 +14608,7 @@
     if (page && !knownPages.has(page)) return false;
     if (!page && !hasCollectionRoute && username) {
       if (!/^[A-Za-z0-9_]{3,24}$/.test(username)) return false;
-      const profile = await sb.from("profiles").select("id").ilike("username", username).maybeSingle();
+      const profile = await sb.from("profiles_public").select("id").ilike("username", username).maybeSingle();
       return !profile.error && Boolean(profile.data);
     }
     if (hasCollectionRoute) {
@@ -14661,7 +14650,7 @@
     if (!raw) return null;
     const parts = parsePublicCatalogLink(raw);
     if (!parts) return false;
-    const owner = await sb.from("profiles").select("id, username").ilike("username", parts.username).maybeSingle();
+    const owner = await sb.from("profiles_public").select("id, username").ilike("username", parts.username).maybeSingle();
     if (owner.error || !owner.data) return false;
     const collection = await sb.from("shelf_collections").select("id, is_public, collection_type").eq("id", parts.collectionId).eq("owner_id", owner.data.id).eq("is_public", true).eq("collection_type", "comic").maybeSingle();
     if (collection.error || !collection.data) return false;
@@ -14707,9 +14696,9 @@
     const savedOwnerIds = [...new Set(collectionSaves.map(row => row.owner_id).filter(Boolean))];
     const [blogsResult, followsResult, wallProfilesResult, savedOwnersResult] = await Promise.all([
       blogIds.length ? sb.from("blog_posts").select("id, title, status").in("id", blogIds) : { data: [] },
-      followIds.length ? sb.from("profiles").select("id, username").in("id", followIds) : { data: [] },
-      wallProfileIds.length ? sb.from("profiles").select("id, username").in("id", wallProfileIds) : { data: [] },
-      savedOwnerIds.length ? sb.from("profiles").select("id, username").in("id", savedOwnerIds) : { data: [] }
+      followIds.length ? sb.from("profiles_public").select("id, username").in("id", followIds) : { data: [] },
+      wallProfileIds.length ? sb.from("profiles_public").select("id, username").in("id", wallProfileIds) : { data: [] },
+      savedOwnerIds.length ? sb.from("profiles_public").select("id, username").in("id", savedOwnerIds) : { data: [] }
     ]);
     const blogNames = new Map((blogsResult.data || []).map(blog => [String(blog.id), blog.title || "blog"]));
     const profileNames = new Map([...(followsResult.data || []), ...(wallProfilesResult.data || []), ...(savedOwnersResult.data || [])].map(row => [row.id, row.username]));
@@ -18841,17 +18830,21 @@
         : username;
       if (mode === "signup" && !/^[a-z0-9_]{3,24}$/.test(signupUsername)) { message.textContent = "Não foi possível definir um usuário a partir deste email. Use um usuário de 3 a 24 caracteres."; return; }
       if (mode === "signup") {
-        const existing = await sb.from("profiles").select("id").eq("username", signupUsername).maybeSingle();
+        const existing = await sb.from("profiles_public").select("id").eq("username", signupUsername).maybeSingle();
         if (existing.data) { message.textContent = "Esse usuário já está em uso. Escolha outro."; return; }
       }
-      let email = mode === "signup" ? (providedEmail || authEmail(username)) : (identifier.includes("@") ? identifier.toLowerCase() : authEmail(username));
-      if (mode === "login" && !identifier.includes("@")) {
-        const lookup = await sb.rpc("get_login_email", { p_username: username });
-        if (lookup.data) email = lookup.data;
+      const email = mode === "signup" ? (providedEmail || authEmail(username)) : identifier.toLowerCase();
+      let result;
+      if (mode === "signup") {
+        result = await sb.auth.signUp({ email, password, options: { data: { username: signupUsername } } });
+      } else if (identifier.includes("@")) {
+        result = await sb.auth.signInWithPassword({ email, password });
+      } else {
+        const login = await sb.functions.invoke("username-login", { body: { username, password } });
+        result = login.error || !login.data?.access_token || !login.data?.refresh_token
+          ? { error: { message: "Usuário ou senha inválidos. Tente novamente mais tarde se o problema persistir." } }
+          : await sb.auth.setSession({ access_token: login.data.access_token, refresh_token: login.data.refresh_token });
       }
-      const result = mode === "signup"
-        ? await sb.auth.signUp({ email, password, options: { data: { username: signupUsername } } })
-        : await sb.auth.signInWithPassword({ email, password });
       if (result.error) {
         if (mode === "signup" && !providedEmail && /email rate limit exceeded/i.test(result.error.message)) {
           message.textContent = "O cadastro sem email exige a confirmação de email desativada no Supabase. Desative-a em Authentication > Providers > Email ou informe um email válido.";

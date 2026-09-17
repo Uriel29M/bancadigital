@@ -24,6 +24,13 @@ as $$
 declare
   v_season public.faction_seasons%rowtype;
 begin
+  if coalesce(current_setting('role', true), 'none') not in ('none','postgres','service_role')
+    and (auth.uid() is null or not public.is_admin()) then
+    raise exception 'Apenas administradores podem definir as leituras obrigatórias' using errcode='42501';
+  end if;
+  if p_candidates is null or jsonb_typeof(p_candidates) <> 'array' then
+    raise exception 'Lista de candidatos inválida' using errcode='22023';
+  end if;
   if not exists (select 1 from public.factions where id = p_faction_id) then return; end if;
   v_season := public.current_faction_season();
   if not exists (select 1 from public.faction_mandatory_reads where season_id = v_season.id and faction_id = p_faction_id) then
@@ -44,7 +51,8 @@ begin
     order by reads.sort_order, reads.item_id;
 end;
 $$;
-grant execute on function public.ensure_faction_mandatory_reads(text, jsonb) to authenticated;
+revoke execute on function public.ensure_faction_mandatory_reads(text, jsonb) from public, anon;
+grant execute on function public.ensure_faction_mandatory_reads(text, jsonb) to authenticated, service_role;
 
 create or replace function public.get_faction_mandatory_reads(p_faction_id text)
 returns table(item_id text, item_title text, cover_url text, reader_count bigint, completed_count bigint)
