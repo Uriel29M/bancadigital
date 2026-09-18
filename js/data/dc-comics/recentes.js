@@ -18931,7 +18931,7 @@ window.DEFAULT_LIBRARY = [
     "name": "Arqueiro Verde",
     "originalTitle": "Green Arrow",
     "type": "comic",
-    "coverUrl": "https://static.dc.com/dc/files/default_images/garrow_v5_1_5b172067b04b84.18177226.jpg",
+    "coverUrl": "https://static.dc.com/dc/files/default_images/garrow_v5_2_5b1720701abba5.54134853.jpg",
     "blogUrl": "http://hqs-soquadrinhos.blogspot.com/2011/08/arqueiro-verde-2011.html",
     "telegramUrl": "",
     "tags": [
@@ -18941,7 +18941,7 @@ window.DEFAULT_LIBRARY = [
       "DC Comics",
       "Novos 52"
     ],
-    "officialUrl": "https://www.dc.com/comics/green-arrow-2011/green-arrow-1",
+    "officialUrl": "https://www.dc.com/comics/green-arrow-2011/green-arrow-2",
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "issue": "2",
     "sortOrder": 2,
@@ -18962,13 +18962,13 @@ window.DEFAULT_LIBRARY = [
     "catalogAddedAt": "2026-09-18T10:26:06.453402+00:00",
     "year": 2011,
     "title": "Arqueiro Verde",
-    "author": "J. T. Krul / Andrea Sorrentino / Jeff Lemire",
+    "author": "J.T. Krul / Richard Horie / Tanya Horie / Dave Wilkins",
     "status": "Cancelada/Terminada",
     "imprint": "Novos 52",
     "editions": "25",
     "character": "Arqueiro Verde",
     "publisher": "DC Comics",
-    "description": "Oliver Queen percorre o mundo em busca de justiça enquanto enfrenta inimigos e segredos ligados à própria família.",
+    "description": "Execuções de super-heróis agora serão televisionadas! Depois de derrotar integrantes de uma gangue de \"celebridades\" — adolescentes privilegiados e decadentes que compram seus poderes e encenam lutas com vítimas desavisadas — o Arqueiro Verde se torna alvo de toda a equipe. É Ollie Queen contra uma dúzia de assassinos em busca de emoção, enquanto o mundo inteiro assiste — ao vivo!",
     "publication": "Série Mensal",
     "seriesTitle": "Arqueiro Verde"
   },
