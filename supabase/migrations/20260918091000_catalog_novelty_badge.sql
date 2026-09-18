@@ -57,4 +57,5 @@ end;
 $$;
 
 revoke all on function public.set_novelty_badge_hours(numeric) from public;
+revoke execute on function public.set_novelty_badge_hours(numeric) from anon;
 grant execute on function public.set_novelty_badge_hours(numeric) to authenticated;
