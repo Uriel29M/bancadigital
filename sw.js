@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v656-novelty-badge";
+const CACHE_VERSION = "banca-digital-shell-v657-xp-metrics-hardening";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.248-novelty-badge",
-  "./js/app.js?v=2.2.10.505-novelty-badge", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./js/app.js?v=2.2.10.506-xp-metrics-hardening", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",

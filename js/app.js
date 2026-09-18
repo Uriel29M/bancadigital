@@ -1983,22 +1983,6 @@
     }
   }
 
-  async function awardProfileXp(eventType, eventKey) {
-    if (!sb || !state.session?.user?.id) return;
-    await sb.rpc("grant_profile_xp", { p_event_type: eventType, p_event_key: eventKey });
-    if (eventType !== "blog") {
-      await sb.rpc("grant_faction_xp", { p_event_type: eventType, p_event_key: eventKey });
-      const factionId = state.profile?.faction_id;
-      if (factionId) {
-        const achievements = await sb.rpc("get_faction_achievements", { p_faction_id: factionId });
-        if (!achievements.error) {
-          state.factionAchievements.set(factionId, achievements.data || []);
-          if (state.section === "factions" && state.factionPageId === factionId) render();
-        }
-      }
-    }
-  }
-
   async function loadFactions() {
     if (!sb) return;
     // Use all public faction columns so older deployments continue to load while
@@ -4443,7 +4427,6 @@
       state.comicLikeAddedAt ||= new Map();
       state.comicLikeAddedAt.set(itemId, new Date().toISOString());
       state.comicLikeCounts.set(itemId, (state.comicLikeCounts.get(itemId) || 0) + 1);
-      awardProfileXp("like", `like:${itemId}`);
     }
     updateComicLikeButtons(itemId);
   }
@@ -4593,15 +4576,10 @@
       if (!mandatory.error) state.factionMandatoryReads.set(state.profile.faction_id, mandatory.data || []);
     }
     if (!result.error && completed && !wasCompleted) {
-      await awardProfileXp("read", `read:${item.id}`);
       if (state.section === "factions" && state.factionPageId === state.profile?.faction_id) {
         await loadFactions();
         render();
       }
-    }
-    if (!result.error && reachedStoryEnd && current?.completion_source !== "normal" && isGlobalRecommendationItem(item)) {
-      await awardProfileXp("curated_read", `curated-read:${item.id}`);
-      toast("Leitura concluída: +25 XP de curadoria!");
     }
   }
 
@@ -6465,7 +6443,7 @@
       button.disabled = true;
       const result = await sb.from("comments").insert({ user_id: state.session.user.id, item_id: item.id, body });
       if (result.error) toast(result.error.message);
-      else { awardAchievement("first_comment"); awardProfileXp("comment", `comment:${item.id}:${Date.now()}`); form.reset(); await refresh(); }
+      else { awardAchievement("first_comment"); form.reset(); await refresh(); }
       button.disabled = false;
     });
   }
@@ -6504,7 +6482,7 @@
       if (!state.session?.user?.id || !body) return;
       const button = $("button", form); button.disabled = true;
       const result = await sb.from("comments").insert({ user_id: state.session.user.id, item_id: item.id, body });
-      if (result.error) toast(result.error.message); else { awardProfileXp("comment", `comment:${item.id}:${Date.now()}`); form.reset(); await refresh(); }
+      if (result.error) toast(result.error.message); else { form.reset(); await refresh(); }
       button.disabled = false;
     });
   }
@@ -6530,7 +6508,7 @@
       if (!body) return;
       const button = $("button", form); button.disabled = true;
       const result = await sb.from("comments").insert({ user_id: state.session.user.id, item_id: item.id, body });
-      if (result.error) toast(commentWriteError(result.error)); else { awardAchievement("first_comment"); awardProfileXp("comment", `comment:${item.id}:${Date.now()}`); form.reset(); await refresh(); }
+      if (result.error) toast(commentWriteError(result.error)); else { awardAchievement("first_comment"); form.reset(); await refresh(); }
       button.disabled = false;
     });
   }
@@ -6731,7 +6709,7 @@
       const parentId = Number(form.closest("[data-comment-id]")?.dataset.commentId);
       const button = $("button", form); button.disabled = true;
       const result = await sb.from("comments").insert({ user_id: state.session.user.id, item_id: item.id, parent_id: parentId, body });
-      if (result.error) toast(commentWriteError(result.error)); else { awardProfileXp("comment", `comment:${item.id}:${Date.now()}`); form.remove(); await refresh(); }
+      if (result.error) toast(commentWriteError(result.error)); else { form.remove(); await refresh(); }
       button.disabled = false;
     });
   }
@@ -12437,8 +12415,7 @@
       const result = await sb.from("chat_messages").insert({ sender_id: state.session.user.id, room_id: room.id, recipient_id: null, body, metadata: { ...prepared.metadata, ...(reply ? { reply_to: reply } : {}) } }).select("id").single();
       if (result.error) { console.error("[chat room] erro ao enviar mensagem", result.error); toast(result.error.message || "Não foi possível enviar a mensagem."); }
       else {
-        if (/@guria\b/i.test(body) && result.data?.id) sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] menção pública indisponível", error?.message || error));
-        awardProfileXp("chat", `chat:${Date.now()}`); composeForm.reset(); getReply.clear(); await renderMessages();
+        if (/@guria\b/i.test(body) && result.data?.id) sb.functions.invoke("guria-chat", { body: { message_id: result.data.id } }).catch(error => console.warn("[guria] menção pública indisponível", error?.message || error)); composeForm.reset(); getReply.clear(); await renderMessages();
       }
       button.disabled = false;
     };
@@ -12604,7 +12581,6 @@
       }
       await renderMessages();
       getReply.clear();
-      awardProfileXp("chat", `chat:${Date.now()}`);
       submitButton.disabled = false;
     };
     $("#chat-compose textarea", overlay)?.addEventListener("keydown", event => {
@@ -12999,7 +12975,7 @@
           ? `Sua conta está silenciada até ${formatCommentDate(state.profile.silenced_until)}.`
           : "Não foi possível publicar. Sua conta pode estar temporariamente limitada por anti-spam ou impedida de comentar.");
       }
-      else { awardProfileXp("comment", `collection-comment:${collection.id}:${Date.now()}`); form.reset(); await refresh(); }
+      else { form.reset(); await refresh(); }
       button.disabled = false;
     });
   }
@@ -13231,7 +13207,6 @@
       : await query.insert({ follower_id: state.session.user.id, following_id: profile.id });
     if (result.error) return toast("Não foi possível atualizar o acompanhamento.");
     publicState.isFollowing = !following;
-    if (!following) await awardProfileXp("follow", `follow:${profile.id}`);
     publicState.followerCount = Math.max(0, (publicState.followerCount || 0) + (following ? -1 : 1));
     state.followingCount = Math.max(0, (state.followingCount || 0) + (following ? -1 : 1));
     render();
