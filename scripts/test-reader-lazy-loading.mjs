@@ -28,7 +28,7 @@ assert.ok(app.includes('import(appAssetUrl("js/reader-formats.js?v=1-reader-spli
 assert.ok(!app.includes('async function fetchPdfBuffer('), 'fetch do PDF deve sair fisicamente do app.js');
 assert.ok(!app.includes('async function renderCBZRangeSinglePage('), 'renderização CBZ deve sair fisicamente do app.js');
 
-assert.ok(sw.includes('reader-deps.js?v=2-reader-runtime-cache'), 'service worker deve guardar o loader local');
+assert.ok(sw.includes('reader-deps.js?v=3-reader-split'), 'service worker deve guardar o loader local');
 assert.ok(sw.includes('readerCdnHosts'), 'service worker deve guardar dependências remotas usadas pelo leitor');
 assert.ok(!sw.includes('"./js/pdfjs/pdf.min.mjs"'), 'PDF.js não deve ser pré-cacheado no shell');
 assert.ok(!sw.includes('"./libarchive/libarchive.js"'), 'libarchive não deve ser pré-cacheado no shell');
