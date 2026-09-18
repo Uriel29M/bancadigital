@@ -1088,6 +1088,7 @@
     const zip = new Zip();
     const check = () => { if (signal.aborted) throw new DOMException("Cancelado", "AbortError"); };
     if (format === "pdf") {
+      await ensureReaderDependency("pdf");
       const pdfjs = await window.pdfjsReady;
       const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
       try {
@@ -1291,6 +1292,7 @@
       let exported = 0;
       const skipButton = $('[data-export-skip]', overlay);
       try {
+        await ensureReaderDependency("cbz");
         const Zip = await window.jszipReady;
         if (!Zip) throw new Error("Não foi possível carregar o gerador de ZIP. Tente novamente.");
         if (!editions.length) throw new Error("Esta série não possui edições visíveis.");
@@ -3251,6 +3253,12 @@
 
   function appAssetUrl(path) {
     return new URL(String(path).replace(/^\/+/, ""), document.baseURI).href;
+  }
+
+  async function ensureReaderDependency(format) {
+    const deps = window.BancaReaderDeps;
+    if (!deps?.ensure) throw new Error("Carregador do leitor não está disponível.");
+    await deps.ensure(format);
   }
 
   let libarchiveModulePromise = null;
@@ -7558,6 +7566,7 @@
         resolvedUrl = sourceCandidates[selectedIndex] || resolvedUrl;
       }
       const selectedFormat = String(item.format || format).toLowerCase();
+      if (selectedFormat === "pdf" || selectedFormat === "cbz") await ensureReaderDependency(selectedFormat);
       const callback = (...args) => { markReaderReady(); saveReadingProgress(...args); };
       if (selectedFormat === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
         await renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
@@ -10072,6 +10081,7 @@
   }
 
   async function pdfCover(url, signal, maxWidth = 480) {
+    await ensureReaderDependency("pdf");
     const response = await fetch(proxiedFileUrl(url), { mode: "cors", credentials: "omit", cache: "no-store", signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise;
@@ -10087,6 +10097,7 @@
   }
 
   async function cbzCover(url, signal, maxWidth = 480) {
+    await ensureReaderDependency("cbz");
     const response = await fetch(proxiedFileUrl(url), { mode: "cors", credentials: "omit", cache: "no-store", signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const JSZipLib = await (window.jszipReady || Promise.resolve(window.JSZip));
@@ -20200,10 +20211,8 @@
     ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { basicOnly: true, top10ListId: queryTop10List })
       .catch(error => console.warn("Perfil público inicial indisponível:", error))
     : null;
-  const warmLibarchive = () => loadLibarchiveModule().catch(error => console.warn("Biblioteca CBR indisponível:", error));
-  // A biblioteca é pequena perto dos arquivos CBR e precisa estar pronta
-  // antes do primeiro clique para não competir com o download.
-  warmLibarchive();
+  // Dependências pesadas do leitor são carregadas apenas quando PDF/CBZ/CBR
+  // ou ferramentas relacionadas realmente precisam delas.
   loadComicReadCounts()
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de leitura indisponíveis:", error));
