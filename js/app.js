@@ -1032,6 +1032,8 @@
     if (shouldWait) return;
     const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("Não foi possível preparar a capa offline:", error); return ""; });
     try {
+      const offlineFormat = String(item.format || extension(url) || "").toLowerCase();
+      if (offlineFormat === "cbz") await ensureReaderDependency("cbz");
       await fetchFileArrayBuffer(url, (received, total) => {
         const current = state.downloads.get(id); if (!current) return;
         current.progress = total ? Math.min(100, received / total * 100) : 0; current.received = received; current.total = total;
