@@ -1,0 +1,59 @@
+name: Testes automáticos
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_external:
+        description: 'Também testar Telegram, MediaFire, Drive e 4shared'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package.json
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+      - name: Instalar Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Testes unitários e regressões do leitor
+        run: npm run test:unit && npm run test:reader
+      - name: Playwright core
+        env:
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+          E2E_CHAT_USERNAME: ${{ secrets.E2E_CHAT_USERNAME }}
+        run: npm run test:e2e
+      - name: Relatório Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+  external:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_external }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Origens e formatos externos
+        run: npm run test:e2e:external

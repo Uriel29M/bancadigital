@@ -6,6 +6,17 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.8",
-    "supabase": "^2.115.0"
+    "supabase": "^2.115.0",
+    "@playwright/test": "^1.55.0",
+    "http-server": "^14.1.1"
+  },
+  "scripts": {
+    "test": "npm run test:unit && npm run test:reader && npm run test:e2e",
+    "test:unit": "node --test scripts/test-catalog-identity.mjs scripts/test-catalog-sync.mjs scripts/test-issue-labels.mjs scripts/test-mediafire-proxy.mjs scripts/test-telegram-download.mjs scripts/test-watchmen-reader.mjs",
+    "test:reader": "node scripts/test-reader-loading-browser.mjs",
+    "test:e2e": "playwright test --grep-invert @external",
+    "test:e2e:external": "playwright test --grep @external",
+    "test:e2e:auth": "playwright test tests/e2e/authenticated.spec.js",
+    "test:ci": "npm run test:unit && npm run test:reader && npm run test:e2e"
   }
 }
