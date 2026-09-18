@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v657-xp-metrics-hardening";
+const CACHE_VERSION = "banca-digital-shell-v658-lazy-reader-deps";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.248-novelty-badge",
-  "./js/app.js?v=2.2.10.506-xp-metrics-hardening", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./js/app.js?v=2.2.10.506-xp-metrics-hardening", "./js/reader-deps.js?v=1-lazy-reader-deps", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
@@ -41,7 +41,28 @@ self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  const readerCdnHosts = new Set(["cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com"]);
+  const isReaderDependency = readerCdnHosts.has(url.hostname) && (
+    url.pathname.includes("/jszip@3.10.1/") ||
+    url.pathname.includes("/jszip/3.10.1/") ||
+    url.pathname.includes("/@zip.js/zip.js@2.7.57/")
+  );
+  if (url.origin !== self.location.origin) {
+    if (!isReaderDependency) return;
+    event.respondWith((async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      try {
+        const response = await fetch(request);
+        const copy = response.clone();
+        caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
+        return response;
+      } catch {
+        return cached || new Response("", { status: 504, statusText: "Offline" });
+      }
+    })());
+    return;
+  }
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).then(response => {
       const copy = response.clone();
@@ -53,6 +74,7 @@ self.addEventListener("fetch", event => {
   const isCatalogData = url.pathname.endsWith("/js/data.js") || url.pathname.includes("/js/data/");
   if (url.pathname.endsWith("/js/app.js") ||
       url.pathname.endsWith("/js/app-loader.js") ||
+      url.pathname.endsWith("/js/reader-deps.js") ||
       url.pathname.endsWith("/js/cbr-libarchive-fix.js") ||
       url.pathname.endsWith("/js/catalog-sync.js") ||
       url.pathname.endsWith("/js/catalog-identity.js") ||
