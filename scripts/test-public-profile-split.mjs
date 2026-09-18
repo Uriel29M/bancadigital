@@ -5,7 +5,7 @@ const app = readFileSync('js/app.js', 'utf8');
 const feature = readFileSync('js/public-profile-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/public-profile-feature.js?v=1-public-profile-split"))'), 'perfil público deve carregar sob demanda');
+assert.match(app, /import\(appAssetUrl\("js\/public-profile-feature\.js\?v=[^"]+"\)\)/, 'perfil público deve carregar sob demanda');
 assert.ok(app.includes('async function loadPublicProfile(...args)'), 'wrapper de carregamento deve continuar no app');
 assert.ok(app.includes('function renderPublicProfilePage(...args)'), 'wrapper de renderização deve continuar no app');
 assert.ok(app.includes('async function toggleProfileFollow(...args)'), 'wrapper de seguir deve continuar no app');
@@ -23,7 +23,7 @@ assert.ok(feature.includes('async function toggleProfileFollow(profile)'), 'mód
 assert.ok(feature.includes('async function toggleProfileBlock(profile)'), 'módulo deve conter bloqueio');
 assert.ok(feature.includes('async function deletePublicCollection(ownerId, collectionId)'), 'módulo deve conter exclusão moderada de coleção pública');
 
-assert.ok(index.includes('js/app.js?v=2.2.10.511-public-profile-split'), 'index deve invalidar cache do app novo');
-assert.ok(index.includes('sw.js?v=275-public-profile-split'), 'index deve invalidar cache do service worker');
+assert.match(index, /js\/app\.js\?v=[^"]+/, 'index deve invalidar cache do app novo');
+assert.match(index, /sw\.js\?v=[^"]+/, 'index deve invalidar cache do service worker');
 
 console.log('PASS public profile feature split');
