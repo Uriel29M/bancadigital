@@ -4,10 +4,35 @@
   const scriptBase = new URL('./', document.currentScript?.src || document.baseURI);
   const pdfModuleUrl = new URL('pdfjs/pdf.min.mjs', scriptBase).href;
   const pdfWorkerUrl = new URL('pdfjs/pdf.worker.min.mjs', scriptBase).href;
+  const appBase = new URL('../', scriptBase);
+  const readerRuntimeCache = 'banca-digital-reader-runtime-v1';
+  const cbrAssetUrls = [
+    'libarchive/libarchive.js',
+    'libarchive/libarchive.wasm',
+    'libarchive/worker-bundle.js',
+    'libarchive/rar-reader.mjs',
+    'libarchive/rar-worker.mjs',
+    'libarchive/unrar/unrar.mjs',
+    'libarchive/unrar/unrar.wasm'
+  ].map(path => new URL(path, appBase).href);
 
   let pdfPromise = null;
   let jszipPromise = null;
   let zipJsPromise = null;
+  let cbrCachePromise = null;
+
+  const cacheLocalAssets = urls => {
+    if (!('caches' in window)) return Promise.resolve();
+    return caches.open(readerRuntimeCache).then(async cache => {
+      for (const url of urls) {
+        if (await cache.match(url)) continue;
+        try {
+          const response = await fetch(url, { cache: 'no-store' });
+          if (response.ok) await cache.put(url, response);
+        } catch {}
+      }
+    });
+  };
 
   const loadClassicScript = (sources, globalName) => new Promise(resolve => {
     const trySource = index => {
@@ -43,7 +68,8 @@
   const loadPdf = () => {
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (!pdfPromise) {
-      pdfPromise = import(pdfModuleUrl)
+      pdfPromise = cacheLocalAssets([pdfModuleUrl, pdfWorkerUrl])
+        .then(() => import(pdfModuleUrl))
         .then(library => {
           window.pdfjsLib = library;
           library.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -85,6 +111,16 @@
     return zipJsPromise;
   };
 
+  const prepareCbr = () => {
+    if (!cbrCachePromise) {
+      cbrCachePromise = cacheLocalAssets(cbrAssetUrls).catch(error => {
+        cbrCachePromise = null;
+        throw error;
+      });
+    }
+    return cbrCachePromise;
+  };
+
   const ensure = async format => {
     const value = String(format || '').toLowerCase();
     if (value === 'pdf') {
@@ -94,8 +130,10 @@
     if (value === 'cbz') {
       const [jszip] = await Promise.all([loadJsZip(), loadZipJs()]);
       if (!jszip) throw new Error('JSZip não carregou.');
+      return;
     }
+    if (value === 'cbr') await prepareCbr();
   };
 
-  window.BancaReaderDeps = { ensure, loadPdf, loadJsZip, loadZipJs };
+  window.BancaReaderDeps = { ensure, loadPdf, loadJsZip, loadZipJs, prepareCbr };
 })();
