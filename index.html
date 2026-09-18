@@ -25,7 +25,7 @@
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=269-xp-metrics-hardening", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=270-lazy-reader-deps", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -75,58 +75,7 @@
   </div>
   <div id="modal-root"></div>
   <div id="toast-root" class="toast-root"></div>
-  <script>
-    window.pdfjsReady = new Promise((resolve, reject) => {
-      window.resolvePdfjs = resolve;
-      window.rejectPdfjs = reject;
-    });
-  </script>
-  <script type="module">
-    import("./js/pdfjs/pdf.min.mjs").then(pdfjsLib => {
-      const library = pdfjsLib;
-      window.pdfjsLib = library;
-      library.GlobalWorkerOptions.workerSrc = "./js/pdfjs/pdf.worker.min.mjs";
-      window.resolvePdfjs(library);
-      return library;
-    }).catch(error => {
-      console.error("Não foi possível carregar o PDF.js.", error);
-      window.rejectPdfjs(error);
-      throw error;
-    });
-  </script>
-  <script>
-    window.jszipReady = navigator.onLine === false ? Promise.resolve(null) : new Promise(resolve => {
-      const sources = [
-        "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
-        "https://unpkg.com/jszip@3.10.1/dist/jszip.min.js",
-        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-      ];
-      const load = index => {
-        if (window.JSZip) return resolve(window.JSZip);
-        if (index >= sources.length) return resolve(null);
-        const script = document.createElement("script");
-        script.src = sources[index];
-        script.async = true;
-        let settled = false;
-        const next = () => {
-          if (settled) return;
-          settled = true;
-          load(index + 1);
-        };
-        script.onload = () => window.JSZip ? (settled = true, resolve(window.JSZip)) : next();
-        script.onerror = next;
-        window.setTimeout(next, 8000);
-        document.head.appendChild(script);
-      };
-      load(0);
-    });
-  </script>
-  <script>
-    window.zipJsReady = navigator.onLine === false
-      ? Promise.resolve(null)
-      : import("https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.57/+esm")
-        .catch(error => { console.warn("zip.js progressivo indisponível:", error); return null; });
-  </script>
+  <script src="js/reader-deps.js?v=1-lazy-reader-deps"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/catalog-sync.js?v=5-catalog-created-at"></script>
