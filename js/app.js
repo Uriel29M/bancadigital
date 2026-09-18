@@ -14492,7 +14492,7 @@
     $$('[data-shelf-expand]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); state.shelfExpanded[el.dataset.shelfExpand] = !state.shelfExpanded[el.dataset.shelfExpand]; render(); }));
     $$('[data-public-shelf-media]').forEach(el => el.addEventListener("click", () => { state.publicShelfTab = el.dataset.publicShelfMedia; render(); }));
     syncTop10Labels();
-    $('[data-public-shelf-tab-panel="top10"]').forEach(panel => bindTop10ListDragCards(panel, state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || "")));
+    document.querySelectorAll('[data-public-shelf-tab-panel="top10"]').forEach(panel => bindTop10ListDragCards(panel, state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || "")));
     $$('[data-top10-share]').forEach(button => button.addEventListener("click", event => {
       event.stopPropagation();
       const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10Share));
