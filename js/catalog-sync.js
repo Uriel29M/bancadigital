@@ -31,11 +31,12 @@ window.BancaCatalogSync = (() => {
   function merge(library, incoming = rows) {
     const result = (library || []).map(item => {
       const record = incoming.get(String(item.id));
-      return normalizeEdition(record && !pending.has(String(item.id)) ? applyEdition(item, record.edition) : item);
+      if (!record || pending.has(String(item.id))) return normalizeEdition(item);
+      return { ...normalizeEdition(applyEdition(item, record.edition)), catalogAddedAt: record.created_at || item.catalogAddedAt || null };
     });
     const known = new Set(result.map(item => String(item.id)));
     for (const [id, record] of incoming) {
-      if (!known.has(id) && !pending.has(id) && valid(record)) result.push(normalizeEdition({ ...record.edition }));
+      if (!known.has(id) && !pending.has(id) && valid(record)) result.push(normalizeEdition({ ...record.edition, catalogAddedAt: record.created_at || null }));
     }
     return result.filter(item => item.catalogDeleted !== true);
   }
@@ -52,7 +53,7 @@ window.BancaCatalogSync = (() => {
   }
   async function read(client) {
     if (!client || (typeof navigator !== "undefined" && navigator.onLine === false)) return [];
-    const result = await client.from(table).select("item_id,edition,updated_at").order("item_id").limit(10000);
+    const result = await client.from(table).select("item_id,edition,created_at,updated_at").order("item_id").limit(10000);
     if (result.error) throw result.error;
     accept(result.data || []);
     return result.data || [];
@@ -63,7 +64,7 @@ window.BancaCatalogSync = (() => {
     const canonical = normalizeEdition(edition);
     pending.add(id);
     try {
-      const result = await client.from(table).upsert({ item_id: id, edition: { ...canonical }, updated_by: userId }, { onConflict: "item_id" }).select("item_id,edition,updated_at").single();
+      const result = await client.from(table).upsert({ item_id: id, edition: { ...canonical }, updated_by: userId }, { onConflict: "item_id" }).select("item_id,edition,created_at,updated_at").single();
       if (result.error) throw result.error;
       if (!valid(result.data)) throw new Error("O banco não confirmou a edição publicada.");
       const record = { ...result.data, edition: normalizeEdition(result.data.edition) };
@@ -79,7 +80,7 @@ window.BancaCatalogSync = (() => {
     if (new Set(ids).size !== ids.length || ids.some(id => pending.has(id))) throw new Error("Há edições duplicadas ou sendo salvas. Tente novamente.");
     ids.forEach(id => pending.add(id));
     try {
-      const result = await client.from(table).upsert(editions.map(edition => ({ item_id: String(edition.id), edition: normalizeEdition({ ...edition }), updated_by: userId })), { onConflict: "item_id" }).select("item_id,edition,updated_at");
+      const result = await client.from(table).upsert(editions.map(edition => ({ item_id: String(edition.id), edition: normalizeEdition({ ...edition }), updated_by: userId })), { onConflict: "item_id" }).select("item_id,edition,created_at,updated_at");
       if (result.error) throw result.error;
       const confirmed = new Set((result.data || []).filter(valid).map(row => String(row.item_id)));
       if (confirmed.size !== ids.length || ids.some(id => !confirmed.has(id))) throw new Error("O banco não confirmou a ordem completa. Tente novamente.");

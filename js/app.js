@@ -508,6 +508,7 @@
      characterSettings: new Map(),
      legendarySundayEnabled: true,
      legendaryManualDate: null,
+     noveltyBadgeHours: 36,
      publisherSeriesExpanded: {},
      comicSeriesCollapsed: (() => { try { return localStorage.getItem("bancaDigitalComicSeriesCollapsed") === "true"; } catch { return false; } })(),
      popularPublicCollections: [],
@@ -1856,7 +1857,7 @@
 
   async function loadHomepageSettings() {
     if (!sb || navigator.onLine === false) return;
-    const result = await sb.from("homepage_settings").select("section_order, hidden_sections, legendary_sunday_enabled, legendary_manual_date").eq("id", true).maybeSingle();
+    const result = await sb.from("homepage_settings").select("section_order, hidden_sections, legendary_sunday_enabled, legendary_manual_date, novelty_badge_hours").eq("id", true).maybeSingle();
     if (result.error) {
       console.warn("Não foi possível carregar a ordem da página inicial:", result.error.message);
       return;
@@ -1867,6 +1868,8 @@
       : []);
     state.legendarySundayEnabled = result.data?.legendary_sunday_enabled !== false;
     state.legendaryManualDate = result.data?.legendary_manual_date || null;
+    const noveltyHours = Number(result.data?.novelty_badge_hours);
+    state.noveltyBadgeHours = Number.isFinite(noveltyHours) && noveltyHours >= 0 ? noveltyHours : 36;
     if (state.profile) {
       const baseProfile = state.profile.legendarySunday ? { ...state.profile, plan: "free" } : state.profile;
       state.profile = effectiveSundayProfile(baseProfile);
@@ -2659,7 +2662,7 @@
       if (edition) {
         if (!sb || state.profile?.plan !== "admin" || !state.session?.user?.id) throw new Error("É necessária uma sessão de administrador para publicar a edição.");
         const record = await BancaCatalogSync.publish(sb, edition, state.session.user.id);
-        const canonical = { ...record.edition, catalogEditedAt: record.updated_at };
+        const canonical = { ...record.edition, catalogEditedAt: record.updated_at, catalogAddedAt: record.created_at || record.updated_at };
         BancaCatalogSync.rows.set(String(canonical.id), { ...record, edition: canonical });
         const index = state.db.library.findIndex(item => String(item.id) === String(canonical.id));
         if (canonical.catalogDeleted === true) {
@@ -10263,6 +10266,35 @@
     }
   }
 
+  function currentNoveltyBadgeHours() {
+    const hours = Number(state.noveltyBadgeHours);
+    return Number.isFinite(hours) && hours >= 0 ? hours : 36;
+  }
+
+  function catalogAddedTimestamp(item) {
+    const timestamp = Date.parse(item?.catalogAddedAt || "");
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  function isNoveltyTimestamp(timestamp) {
+    const hours = currentNoveltyBadgeHours();
+    if (!(hours > 0) || !Number.isFinite(timestamp)) return false;
+    const age = Date.now() - timestamp;
+    return age >= 0 && age <= hours * 60 * 60 * 1000;
+  }
+
+  function isNewCatalogItem(item) {
+    const timestamp = catalogAddedTimestamp(item);
+    return timestamp !== null && isNoveltyTimestamp(timestamp);
+  }
+
+  function isNewCatalogSeries(editions = []) {
+    if (!editions.length) return false;
+    const timestamps = editions.map(catalogAddedTimestamp);
+    if (timestamps.some(timestamp => timestamp === null)) return false;
+    return isNoveltyTimestamp(Math.min(...timestamps));
+  }
+
   function card(item, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, directOpen = false, coverChoices = null, seriesContext = false, collectionContext = null) {
     const publicCollection = state.section === "public-profile" && state.publicProfile?.collectionId
       ? state.publicProfile.collections?.find(collection => collection.id === state.publicProfile.collectionId)
@@ -10273,6 +10305,7 @@
     const completed = progressFor(item, progressMap)?.completed;
     const displayTitle = itemDisplayTitle(item);
     const issueLabel = itemIssueLabel(item);
+    const novelty = isNewCatalogItem(item);
     const coverVariants = usableCoverVariants(item);
     const hasCoverVariants = coverVariants.length > 0;
     const savedForCover = favoriteIds.has(item.id) || (seriesContext && item.seriesId && favoriteIds.has(item.seriesId));
@@ -10290,7 +10323,7 @@
     return `
       <div class="card-wrap"><article class="card ${(hidden || isHiddenCatalogSeries(item.seriesId)) ? "is-hidden-catalog-item" : ""}" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
           <div class="cover" data-cover-id="${escapeHTML(item.id)}" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(coverFor(item, "card", activeCollectionContext?.coverChoices || coverChoices))}')">
-          <span class="cover-number">${escapeHTML(issueLabel)}</span>
+          <div class="cover-labels">${novelty ? '<span class="catalog-novelty-badge">NOVIDADE</span>' : ""}<span class="cover-number">${escapeHTML(issueLabel)}</span></div>
           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
           <button class="card-favorite ${favorite ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="${favoriteLabel}" aria-label="${favoriteLabel}" aria-pressed="${favorite}" ${pendingFavorites.has(item.id) ? "disabled" : ""}>${favorite ? "★" : "☆"}</button>
           ${isAdminProfile() ? `<button type="button" class="card-metadata-toggle" data-edit-item="${escapeHTML(item.id)}" title="Ver e editar metadados" aria-label="Ver e editar metadados">✎</button>` : ""}
@@ -19645,6 +19678,51 @@
     refresh();
   }
 
+  function bindAdminNoveltyBadge(overlay) {
+    if (!isAdminProfile()) return;
+    const section = document.createElement("section");
+    section.className = "admin-novelty-badge";
+    section.setAttribute("aria-label", "Etiqueta NOVIDADE");
+    section.innerHTML = `<h3>Etiqueta NOVIDADE</h3><label class="field"><span>Duração em horas</span><input type="number" min="0" step="0.25" data-novelty-badge-hours value="${escapeHTML(String(currentNoveltyBadgeHours()))}"><small class="format-hint">Padrão: 36 horas. Use 0 para desativar. Valores decimais também são aceitos.</small></label><p data-novelty-badge-status role="status" aria-live="polite"></p><button type="button" class="small-btn" data-novelty-badge-save>Salvar duração</button>`;
+    $(".admin-actions", overlay)?.after(section);
+    const input = $("[data-novelty-badge-hours]", section);
+    const status = $("[data-novelty-badge-status]", section);
+    const button = $("[data-novelty-badge-save]", section);
+    const refreshStatus = () => {
+      const hours = currentNoveltyBadgeHours();
+      status.textContent = hours === 0
+        ? "A etiqueta NOVIDADE está desativada."
+        : `A etiqueta aparece durante ${hours.toLocaleString("pt-BR")} hora(s) após a inclusão.`;
+    };
+    refreshStatus();
+    button.onclick = async () => {
+      const hours = Number(String(input.value || "").replace(",", "."));
+      if (!Number.isFinite(hours) || hours < 0) {
+        status.textContent = "Informe zero ou um número positivo de horas.";
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "Salvando…";
+      status.textContent = "Salvando configuração…";
+      try {
+        if (!sb || state.session?.offline || navigator.onLine === false) throw new Error("Conecte-se à internet para alterar esta opção.");
+        const result = await sb.rpc("set_novelty_badge_hours", { p_hours: hours });
+        if (result.error) throw result.error;
+        const saved = Number(result.data);
+        state.noveltyBadgeHours = Number.isFinite(saved) && saved >= 0 ? saved : hours;
+        input.value = String(state.noveltyBadgeHours);
+        refreshStatus();
+        render();
+        toast("Duração da etiqueta NOVIDADE salva.");
+      } catch (error) {
+        status.textContent = error.message || "Não foi possível salvar a duração da etiqueta.";
+      } finally {
+        button.disabled = false;
+        button.textContent = "Salvar duração";
+      }
+    };
+  }
+
   function openAdmin(editId = null) {
     cancelCoverLoads();
     const overlay = document.createElement("div");
@@ -19664,6 +19742,7 @@
         <div class="admin-collection-list">${state.db.collections.map(c => `<div><b>${escapeHTML(c.title)}</b><span>${c.issueIds.length} edições</span><button class="small-btn danger" data-delete-collection="${escapeHTML(c.id)}">Excluir</button></div>`).join("") || "Nenhuma coleção criada."}</div>
       </div>`;
     $("#modal-root").appendChild(overlay);
+    bindAdminNoveltyBadge(overlay);
     bindAdminAccountRetention(overlay);
     bindAdminLinkChecker(overlay);
     const filterBar = document.createElement("div");
@@ -19988,6 +20067,7 @@
   function seriesCard(item, favoriteIds = state.favoriteIds) {
     const series = seriesDefinitionFor(item);
     const editions = seriesEditions(item);
+    const novelty = isNewCatalogSeries(editions);
     const count = editions.length || series.editions || "—";
     const entityButton = (kind, value) => value ? `<button type="button" class="series-entity-link" data-entity-kind="${escapeHTML(kind)}" data-entity-value="${escapeHTML(value)}">${escapeHTML(value)}</button>` : "";
     const seriesCoverStyle = coverStyleFor({ id: item.seriesId });
@@ -20005,7 +20085,7 @@
     const mainCover = seriesCoverFor(item);
     const stackCovers = [editions[1], editions[2]].map(edition => edition ? seriesCoverFor(edition) : mainCover);
     const stackMarkup = stackCovers.map((cover, index) => `<div class="series-card-stack-cover series-card-stack-cover-${index + 1}" style="background-image:url('${escapeHTML(cover)}')"></div>`).join("");
-    return `<article class="series-card ${hidden ? "is-hidden" : ""}" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div><div class="series-card-body"><div class="eyebrow">Série${hidden ? " · Oculta" : ""}</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}${visibilityButton}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
+    return `<article class="series-card ${hidden ? "is-hidden" : ""}" data-open-series="${escapeHTML(item.seriesId)}" tabindex="0"><div class="series-card-cover" data-series-cover-id="${escapeHTML(item.seriesId)}" data-cover-style-item="${escapeHTML(item.seriesId)}" data-cover-style="${escapeHTML(seriesCoverStyle)}" style="background-image:url('${escapeHTML(seriesCoverFor(item))}')"></div>${novelty ? '<span class="catalog-novelty-badge series-card-novelty">NOVIDADE</span>' : ""}<div class="series-card-body"><div class="eyebrow">Série${hidden ? " · Oculta" : ""}</div><h3 title="${escapeHTML(seriesName)}">${escapeHTML(seriesName)} ${startYear}</h3><p class="series-card-description"${descriptionTitle}>${escapeHTML(description)}</p><div class="series-card-meta">${entityButton("publisher", series.publisher)}${entityButton("publication", series.publication)}${entityButton("status", series.status)}</div><div class="series-card-footer"><span class="series-card-count">${escapeHTML(String(count))} edições</span><div class="series-card-footer-actions">${seriesCoverChoiceButton}${seriesCoverEffects}${visibilityButton}<button type="button" class="series-save-button ${saved ? "is-saved" : ""}" data-series-favorite="${escapeHTML(item.seriesId)}">${saved ? "★ Salva" : "☆ Salvar"}</button></div></div></div></article>`;
   }
 
   function handlePopState() {
