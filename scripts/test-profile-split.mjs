@@ -5,7 +5,7 @@ const app = readFileSync('js/app.js', 'utf8');
 const profile = readFileSync('js/profile-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/profile-feature.js?v=1-profile-split"))'), 'perfil deve carregar sob demanda');
+assert.ok(app.includes('import(appAssetUrl("js/profile-feature.js?v=2-no-blogs"))'), 'perfil deve carregar sob demanda');
 assert.ok(app.includes('async function openProfileSettings(...args)'), 'wrapper de configurações deve continuar no app');
 assert.ok(app.includes('async function openProfileStickerPicker(...args)'), 'wrapper da figurinha deve continuar no app');
 assert.ok(app.includes('async function toggleProfileDisplaySticker(...args)'), 'wrapper das figurinhas expostas deve continuar no app');
