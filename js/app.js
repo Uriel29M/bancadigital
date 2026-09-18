@@ -447,12 +447,7 @@
     top10Lists: [],
     top10PendingOperations: 0,
     top10Revision: 0,
-    blogShelfCategories: [],
-    shelfTab: "collections",
     publicShelfTab: "collections",
-    blogSaveIds: new Set(),
-    authoredBlogPosts: [],
-    savedBlogPosts: [],
     collectionFilter: { field: "all", query: "" },
     comicLikeIds: new Set(),
     comicLikeAddedAt: new Map(),
@@ -513,17 +508,7 @@
      comicSeriesCollapsed: (() => { try { return localStorage.getItem("bancaDigitalComicSeriesCollapsed") === "true"; } catch { return false; } })(),
      popularPublicCollections: [],
     featuredComicCollections: [],
-    featuredBlogCollections: [],
-    blogPosts: [],
-    blogLoading: false,
-    blogTab: "recentes",
-    blogOpenId: null,
-    blogLikeIds: new Set(),
-    blogLikeCounts: new Map(),
-    blogCommentCounts: new Map(),
-    blogCommentThreads: new Map(),
-    blogEditorRange: null
-    ,wallComments: []
+    wallComments: []
     ,factionMandatoryReads: new Map()
     ,rankingPeriod: "week"
     ,rankingFaction: null
@@ -1793,12 +1778,10 @@
       state.stickerAlbumView = section === "album" || params.get("album") === "1" ? "album" : "album";
       state.factionMembersView = section === "factions" && params.get("membros") === "1";
       state.factionMemberSearch = state.factionMembersView ? params.get("busca") || "" : "";
-      if (section === "blog") state.blogOpenId = params.get("blog") || null;
       if (section === "search") state.search = params.get("q") || "";
       if (section === "entity") state.entityFilter = { kind: params.get("tipo") || "character", value: params.get("valor") || "" };
       render();
       if (section === "search") loadSearchUsers(state.search);
-      if (section === "blog" && !state.blogPosts.length) loadBlogPosts();
       if (section === "ranking" && state.authReady) loadRankingData();
       if (section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     }
@@ -2245,11 +2228,7 @@
       ...(state.rankingMembers || []),
       ...(state.factionMembers || []).map(item => item.profile),
       ...(state.factionRoleMembers || []).map(item => item.profile),
-      ...(state.notifications || []).map(item => item.actor),
-      ...(state.blogPosts || []).map(item => item.author),
-      ...(state.authoredBlogPosts || []).map(item => item.author),
-      ...(state.savedBlogPosts || []).map(item => item.author),
-      ...(state.collectionBlogPosts || []).map(item => item.author)
+      ...(state.notifications || []).map(item => item.actor)
     ].filter(profile => profile?.username && profile?.faction_id);
     const byUsername = new Map(profiles.map(profile => [String(profile.username).toLowerCase(), profile]));
     if (!byUsername.size) return;
@@ -2694,452 +2673,6 @@
     return String(value || "").replace(/^@/, "").trim().toLowerCase();
   }
 
-  function safeBlogHtml(value = "") {
-    const template = document.createElement("template");
-    template.innerHTML = String(value || "");
-    const allowed = new Set(["B", "STRONG", "I", "EM", "U", "S", "H2", "H3", "P", "DIV", "BR", "BLOCKQUOTE", "UL", "OL", "LI", "A", "IMG"]);
-    template.content.querySelectorAll("*").forEach(node => {
-      if (!allowed.has(node.tagName)) {
-        node.replaceWith(...Array.from(node.childNodes));
-        return;
-      }
-      const href = node.tagName === "A" ? node.getAttribute("href") || "" : "";
-      const src = node.tagName === "IMG" ? node.getAttribute("src") || "" : "";
-      const style = node.getAttribute("style") || "";
-      [...node.attributes].forEach(attribute => node.removeAttribute(attribute.name));
-      if (node.tagName === "A") {
-        if (!/^https?:\/\//i.test(href)) node.replaceWith(...Array.from(node.childNodes));
-        else {
-          node.setAttribute("href", href);
-          node.setAttribute("target", "_blank");
-          node.setAttribute("rel", "noopener noreferrer");
-        }
-      }
-      if (node.tagName === "IMG") {
-        if (!/^https?:\/\//i.test(src)) node.replaceWith(...Array.from(node.childNodes));
-        else {
-          node.setAttribute("src", src);
-          node.setAttribute("alt", "Imagem inserida no artigo");
-          node.setAttribute("loading", "lazy");
-        }
-      }
-      if ((node.tagName === "P" || node.tagName === "DIV") && /^text-align\s*:\s*(left|center|right|justify)\s*;?$/i.test(style.trim())) {
-        node.setAttribute("style", `text-align: ${style.split(":")[1].replace(";", "").trim()}`);
-      }
-    });
-    return template.innerHTML.trim();
-  }
-
-  function openBlogLinkDialog() {
-    const editor = $("#blog-editor");
-    if (!editor) return;
-    const selection = window.getSelection();
-    const savedRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = '<div class="modal blog-link-modal"><div class="section-head"><div><h2>Adicionar link</h2><div class="section-subtitle">Cole o endereço do link:</div></div><button type="button" class="small-btn" data-close>Fechar</button></div><form id="blog-link-form"><div class="field"><label>Endereço</label><input name="url" type="url" required placeholder="https://exemplo.com"></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="submit" class="btn btn-danger">Adicionar link</button></div></form></div>';
-    $("#modal-root").appendChild(overlay);
-    const close = () => overlay.remove();
-    $$('[data-close]', overlay).forEach(button => button.addEventListener("click", close));
-    overlay.addEventListener("click", event => { if (event.target === overlay) close(); });
-    $("#blog-link-form", overlay)?.addEventListener("submit", event => {
-      event.preventDefault();
-      const url = String(new FormData(event.currentTarget).get("url") || "").trim();
-      if (!/^https?:\/\//i.test(url)) return toast("Use um endereço começando com http:// ou https://.");
-      editor.focus();
-      const currentSelection = window.getSelection();
-      currentSelection?.removeAllRanges();
-      if (savedRange) currentSelection?.addRange(savedRange);
-      if (currentSelection?.toString().trim()) document.execCommand("createLink", false, url);
-      else document.execCommand("insertHTML", false, `<a href="${escapeHTML(url)}">${escapeHTML(url)}</a>`);
-      close();
-    });
-    $("input[name=url]", overlay)?.focus();
-  }
-
-  function blogDate(value) {
-    if (!value) return "";
-    return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
-  }
-
-  function blogImageStyle(url) {
-    return url ? `style="background-image:url('${escapeHTML(url)}')"` : "";
-  }
-
-  async function loadBlogPosts() {
-    if (!sb) {
-      state.blogError = "A autenticação ainda não foi configurada.";
-      render();
-      return;
-    }
-    state.blogLoading = true;
-    state.blogError = "";
-    render();
-    const result = await sb.from("blog_posts")
-      .select("id, author_id, title, excerpt, content_html, cover_url, image_2_url, image_3_url, status, is_featured, created_at, updated_at, published_at")
-      .eq("status", "published")
-      .order("is_featured", { ascending: false })
-      .order("published_at", { ascending: false });
-    state.blogLoading = false;
-    if (result.error) {
-      console.error("[BLOGS] Falha ao carregar blog_posts:", result.error);
-      state.blogError = "Não foi possível carregar os blogs. Execute a atualização do schema no Supabase.";
-      state.blogPosts = [];
-    } else {
-      const posts = result.data || [];
-      const authorIds = [...new Set(posts.map(post => post.author_id).filter(Boolean))];
-      const authors = authorIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan, faction_id").in("id", authorIds) : { data: [] };
-      const authorsById = new Map((authors.data || []).map(author => [author.id, author]));
-      state.blogPosts = posts.map(post => ({ ...post, author: authorsById.get(post.author_id) || null }));
-      const blogIds = state.blogPosts.map(post => post.id);
-      const likes = blogIds.length ? await sb.from("blog_likes").select("blog_id, user_id").in("blog_id", blogIds) : { data: [] };
-      const comments = blogIds.length ? await sb.from("blog_comments").select("blog_id").in("blog_id", blogIds) : { data: [] };
-      const saves = blogIds.length && state.session?.user?.id ? await sb.from("blog_saves").select("blog_id").eq("user_id", state.session.user.id).in("blog_id", blogIds) : { data: [] };
-      state.blogSaveIds = new Set((saves.data || []).map(row => String(row.blog_id)));
-      state.blogLikeIds = new Set((likes.data || []).filter(row => row.user_id === state.session?.user?.id).map(row => String(row.blog_id)));
-      state.blogLikeCounts = (likes.data || []).reduce((counts, row) => counts.set(String(row.blog_id), (counts.get(String(row.blog_id)) || 0) + 1), new Map());
-      state.blogCommentCounts = (comments.data || []).reduce((counts, row) => counts.set(String(row.blog_id), (counts.get(String(row.blog_id)) || 0) + 1), new Map());
-    }
-    render();
-  }
-
-  async function uploadBlogImage(file, index) {
-    if (!file?.size) return null;
-    if (!/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) throw new Error("Use imagens PNG, JPG, WEBP ou GIF.");
-    if (file.size > 8 * 1024 * 1024) throw new Error("Cada imagem pode ter no máximo 8 MB.");
-    const extension = String(file.name || "jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `${state.session.user.id}/${Date.now()}-${index}-${Math.random().toString(36).slice(2)}.${extension}`;
-    const upload = await sb.storage.from("blog-images").upload(path, file, { upsert: false, contentType: file.type || "image/jpeg" });
-    if (upload.error) throw new Error("Não foi possível enviar uma das imagens. Verifique o bucket blog-images no Supabase.");
-    return sb.storage.from("blog-images").getPublicUrl(path).data.publicUrl;
-  }
-
-  function normalizeBlogImageUrl(value, required = false) {
-    const raw = String(value || "").trim();
-    if (!raw) return required ? false : null;
-    try {
-      const url = new URL(raw);
-      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return false;
-      return url.href;
-    } catch {
-      return false;
-    }
-  }
-
-  async function publishBlogPost(form) {
-    if (!state.session) return openAuthPage();
-    const data = new FormData(form);
-    const title = String(data.get("title") || "").trim();
-    const excerpt = String(data.get("excerpt") || "").trim();
-    const content = safeBlogHtml($("#blog-editor")?.innerHTML || "");
-    const coverUrl = normalizeBlogImageUrl(data.get("cover"), true);
-    const image2Url = normalizeBlogImageUrl(data.get("image2"));
-    const image3Url = normalizeBlogImageUrl(data.get("image3"));
-    if (title.length < 3) return toast("Informe um título para o blog.");
-    if (coverUrl === false) return toast("Informe uma URL válida para a capa principal.");
-    if (image2Url === false || image3Url === false) return toast("Confira as URLs das imagens laterais.");
-    if (!content) return toast("Escreva o conteúdo do blog antes de publicar.");
-    const button = $("button[type=submit]", form);
-    if (button) button.disabled = true;
-    try {
-      const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-      const result = await sb.from("blog_posts").insert({
-        author_id: state.session.user.id,
-        title,
-        excerpt: excerpt.slice(0, 500),
-        content_html: content,
-        cover_url: coverUrl,
-        image_2_url: image2Url,
-        image_3_url: image3Url,
-        status: "published",
-        is_featured: staff && data.get("isFeatured") === "on",
-        published_at: new Date().toISOString()
-      });
-      if (result.error) return toast(result.error.message || "Não foi possível publicar o blog.");
-      state.blogTab = "recentes";
-      state.blogOpenId = null;
-      await loadBlogPosts();
-      toast("Blog publicado.");
-    } catch (error) {
-      toast(error.message || "Não foi possível publicar o blog.");
-    } finally {
-      if (button) button.disabled = false;
-    }
-  }
-
-  async function toggleBlogFeatured(id, featured) {
-    if (!["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
-    const result = await sb.from("blog_posts").update({ is_featured: !featured }).eq("id", id);
-    if (result.error) return toast("Não foi possível atualizar o destaque.");
-    await loadBlogPosts();
-    toast(featured ? "Blog removido dos destaques." : "Blog destacado.");
-  }
-
-  function findBlogPost(id) {
-    return [...state.blogPosts, ...state.authoredBlogPosts, ...state.savedBlogPosts].find(item => String(item.id) === String(id));
-  }
-
-  async function deleteBlogPost(id) {
-    if (!state.session) return openAuthPage();
-    const post = findBlogPost(id);
-    if (!post) return;
-    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-    const isAuthor = post.author_id === state.session.user.id;
-    if (!staff && !isAuthor) return toast("Você não pode apagar este blog.");
-    if (!await openSiteConfirm(`Apagar o blog "${post.title}"? Esta ação não pode ser desfeita.`, { title: "Apagar blog?", confirmLabel: "Apagar blog" })) return;
-    const audit = staff && !isAuthor ? await askModerationReason("delete_blog") : { reason: null, internalNote: null };
-    if (!audit) return;
-    const result = staff && !isAuthor
-      ? await sb.rpc("delete_moderated_blog", { p_blog_id: id, p_reason: audit.reason, p_internal_note: audit.internalNote })
-      : await sb.from("blog_posts").delete().eq("id", id);
-    if (result.error) return toast(result.error.message || "Não foi possível apagar o blog.");
-    state.blogOpenId = null;
-    await loadBlogPosts();
-    toast("Blog apagado.");
-  }
-
-  async function toggleBlogLike(id) {
-    if (!state.session) return openAuthPage();
-    const key = String(id);
-    const liked = state.blogLikeIds.has(key);
-    const query = sb.from("blog_likes");
-    const result = liked
-      ? await query.delete().eq("blog_id", id).eq("user_id", state.session.user.id)
-      : await query.insert({ blog_id: id, user_id: state.session.user.id });
-    if (result.error) return toast("Não foi possível atualizar a curtida.");
-    if (liked) {
-      state.blogLikeIds.delete(key);
-      state.blogLikeCounts.set(key, Math.max(0, (state.blogLikeCounts.get(key) || 1) - 1));
-    } else {
-      state.blogLikeIds.add(key);
-      state.blogLikeCounts.set(key, (state.blogLikeCounts.get(key) || 0) + 1);
-    }
-    render();
-  }
-
-  async function toggleBlogSave(id) {
-    if (!state.session) return openAuthPage();
-    const key = String(id);
-    const saved = state.blogSaveIds.has(key);
-    const result = saved
-      ? await sb.from("blog_saves").delete().eq("blog_id", id).eq("user_id", state.session.user.id)
-      : await sb.from("blog_saves").insert({ blog_id: id, user_id: state.session.user.id });
-    if (result.error) return toast("Não foi possível atualizar os blogs salvos. Execute a atualização do schema no Supabase.");
-    saved ? state.blogSaveIds.delete(key) : state.blogSaveIds.add(key);
-    render();
-  }
-
-  async function shareBlog(id, title = "Blog") {
-    const url = new URL(window.location.href);
-    url.search = "";
-    url.searchParams.set("pagina", "blogs");
-    url.searchParams.set("blog", id);
-    const shareData = { title, text: `Leia ${title} na Banca Digital`, url: url.toString() };
-    if (navigator.share) await navigator.share(shareData).catch(() => {});
-    else {
-      await navigator.clipboard?.writeText(url.toString());
-      toast("Link do blog copiado.");
-    }
-  }
-
-  async function openBlogComments(post) {
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal blog-comments-modal"><div class="section-head"><div><h2>Comentários</h2><div class="section-subtitle">${escapeHTML(post.title)}</div></div><button class="small-btn" data-close>Fechar</button></div><div class="blog-comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form" id="blog-comment-form" data-blog-comment-form><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
-    $("#modal-root").appendChild(overlay);
-    overlay.addEventListener("click", event => {
-      if (!event.target.closest?.(".modal")) overlay.remove();
-    });
-    $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
-    const list = $(".blog-comments-list", overlay);
-    const refresh = async () => {
-      const thread = await loadBlogCommentThread(post);
-      state.blogCommentThreads.set(String(post.id), thread);
-      renderBlogCommentThread(list, thread);
-      linkCommentMentions(list);
-      state.blogCommentCounts.set(String(post.id), thread.comments?.length || 0);
-    };
-    await refresh();
-    bindBlogCommentThread(overlay, post, list, refresh);
-  }
-
-  function blogEngagementMarkup(post, showComments = true) {
-    const id = String(post.id);
-    const liked = state.blogLikeIds.has(id);
-    const likes = state.blogLikeCounts.get(id) || 0;
-    const comments = state.blogCommentCounts.get(id) || 0;
-    const saved = state.blogSaveIds.has(id);
-    return `<div class="blog-engagement"><button class="small-btn ${liked ? "is-liked" : ""}" data-blog-like="${escapeHTML(id)}">${liked ? "♥" : "♡"} ${likes}</button><button class="small-btn ${saved ? "is-liked" : ""}" data-blog-save="${escapeHTML(id)}">${saved ? "★ Salvo" : "☆ Salvar"}</button>${showComments ? `<button class="small-btn" data-blog-comments="${escapeHTML(id)}">Comentários · ${comments}</button>` : ""}<button class="small-btn" data-blog-share="${escapeHTML(id)}">Compartilhar</button></div>`;
-  }
-
-  function blogCard(post, featured = false) {
-    const author = post.author || {};
-    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-    const canDelete = staff || state.session?.user?.id === post.author_id;
-    const coverOnly = (!post.image_2_url && !post.image_3_url) || (post.cover_url && post.image_2_url === post.cover_url && post.image_3_url === post.cover_url);
-    return `<article class="blog-card ${featured ? "is-featured" : ""}" data-blog-open="${escapeHTML(post.id)}"><div class="blog-card-images ${coverOnly ? "is-cover-only" : ""}"><div class="blog-card-cover ${post.cover_url ? "has-image" : ""}" ${blogImageStyle(post.cover_url)}></div><div class="blog-card-side"><div class="blog-card-side-image ${post.image_2_url ? "has-image" : ""}" ${blogImageStyle(post.image_2_url)}></div><div class="blog-card-side-image ${post.image_3_url ? "has-image" : ""}" ${blogImageStyle(post.image_3_url)}></div></div></div><div class="blog-card-body"><div class="eyebrow">${post.is_featured ? "Destaque" : "Blog"}</div><h3>${escapeHTML(post.title)}</h3><p>${escapeHTML(post.excerpt || "Confira esta publicação na Banca Digital.")}</p><div class="blog-card-meta">@${escapeHTML(author.username || "usuário")} · ${escapeHTML(blogDate(post.published_at || post.created_at))}</div><div class="blog-card-actions"><button class="small-btn" data-blog-read="${escapeHTML(post.id)}">Ler artigo</button>${staff ? `<button class="small-btn" data-blog-feature="${escapeHTML(post.id)}" data-blog-featured="${post.is_featured ? "true" : "false"}">${post.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}${canDelete ? `<button class="small-btn danger" data-blog-delete="${escapeHTML(post.id)}">Apagar</button>` : ""}</div>${blogEngagementMarkup(post)}</div></article>`;
-  }
-
-  function blogHighlightsSidebar() {
-    const highlights = state.blogPosts.filter(post => post.is_featured).slice(0, 3);
-    const recent = state.blogPosts.filter(post => !post.is_featured).slice(0, 3);
-    if (!highlights.length && !recent.length) return "";
-    const cards = posts => posts.map(post => `<article class="blog-highlight-item" data-blog-open="${escapeHTML(post.id)}"><div class="blog-highlight-cover ${post.cover_url ? "has-image" : ""}" ${blogImageStyle(post.cover_url)}></div><div class="blog-highlight-body"><h3>${escapeHTML(post.title)}</h3><p>${escapeHTML(post.excerpt || "Confira esta publicação.")}</p></div></article>`).join("");
-    return `<aside class="blog-highlights-sidebar">${highlights.length ? `<div class="eyebrow">Em destaque</div><h2>Blogs em destaque</h2><div class="blog-highlights-list">${cards(highlights)}</div>` : ""}${recent.length ? `<div class="blog-sidebar-recent"><div class="eyebrow">Atualizações</div><h2>Recentes</h2><div class="blog-highlights-list">${cards(recent)}</div></div>` : ""}</aside>`;
-  }
-
-  function blogAuthorMarkup(post) {
-    const author = post.author || {};
-    const username = author.username || "usuário";
-    return `<a href="${escapeHTML(publicProfileHref(username))}" class="blog-author-card">${avatarMarkup(author, "blog-author-avatar")}<span><span class="eyebrow">Publicado por</span><span class="blog-author-name">@${escapeHTML(username)}</span>${author.title ? `<span class="blog-author-title" style="color:${escapeHTML(safeTitleColor(author.title_color))}">${escapeHTML(author.title)}</span>` : ""}</span></a>`;
-  }
-
-  function blogCommentsSection(post) {
-    return `<section class="blog-inline-comments" data-blog-inline-comments="${escapeHTML(post.id)}"><div class="section-head"><div><h2>Comentários</h2><div class="section-subtitle">Converse sobre esta publicação.</div></div></div><div class="blog-inline-comments-list"><span class="section-subtitle">Carregando comentários...</span></div>${state.session ? '<form class="comment-form blog-inline-comment-form" data-blog-comment-form><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</section>`;
-  }
-
-  async function loadBlogCommentThread(post) {
-    let result = await sb.from("blog_comments").select("id, parent_id, user_id, body, created_at").eq("blog_id", post.id).order("created_at", { ascending: true });
-    if (result.error && /parent_id|schema cache|column/i.test(result.error.message || "")) {
-      const legacyResult = await sb.from("blog_comments").select("id, user_id, body, created_at").eq("blog_id", post.id).order("created_at", { ascending: true });
-      result = { ...legacyResult, data: (legacyResult.data || []).map(comment => ({ ...comment, parent_id: null })) };
-    }
-    if (result.error) return { error: result.error, comments: [] };
-    const comments = result.data || [];
-    const userIds = [...new Set(comments.map(comment => comment.user_id).filter(Boolean))];
-    const profilesResult = userIds.length ? await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, plan").in("id", userIds) : { data: [] };
-    const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
-    comments.forEach(comment => { comment.profiles = profiles.get(comment.user_id) || {}; });
-    const likes = comments.length ? await sb.from("blog_comment_likes").select("blog_comment_id, user_id").in("blog_comment_id", comments.map(comment => comment.id)) : { data: [] };
-    const likedIds = new Set((likes.data || []).filter(row => row.user_id === state.session?.user?.id).map(row => row.blog_comment_id));
-    const counts = (likes.data || []).reduce((map, row) => map.set(row.blog_comment_id, (map.get(row.blog_comment_id) || 0) + 1), new Map());
-    return { comments, likedIds, counts };
-  }
-
-  function blogCommentMarkup(comment, childrenByParent, likedIds, likeCounts) {
-    const username = cleanUsername(comment.profiles?.username || "usuário");
-    const profile = { ...(comment.profiles || {}), username };
-    const children = childrenByParent.get(comment.id) || [];
-    const replies = children.map(child => blogCommentMarkup(child, childrenByParent, likedIds, likeCounts)).join("");
-    const canDelete = state.session?.user?.id === comment.user_id || ["moderator", "banca", "admin"].includes(state.profile?.plan);
-    return `<article class="comment blog-comment" data-blog-comment-id="${comment.id}"><div class="comment-author-row">${avatarMarkup(profile, "comment-avatar")}<div class="comment-author-info"><a class="comment-author" href="${publicProfileHref(username)}" target="_blank" rel="noopener">@${escapeHTML(username)}</a>${profile.title ? `<span class="comment-title">${escapeHTML(profile.title)}</span>` : ""}</div></div><p>${escapeHTML(comment.body)}</p><div class="comment-actions"><button class="comment-action ${likedIds.has(comment.id) ? "is-liked" : ""}" data-blog-comment-like="${comment.id}">♥ ${likeCounts.get(comment.id) || 0}</button><button class="comment-action" data-blog-comment-reply="${comment.id}">Responder</button>${children.length ? `<button class="comment-action" data-blog-comment-toggle="${comment.id}">Ver ${children.length} resposta${children.length === 1 ? "" : "s"}</button>` : ""}${canDelete ? `<button class="comment-action comment-delete-action" data-blog-comment-delete="${comment.id}">Excluir</button>` : ""}<time class="comment-date" datetime="${escapeHTML(comment.created_at)}">${escapeHTML(formatCommentDate(comment.created_at))}</time></div><div class="comment-replies" data-blog-comment-replies="${comment.id}" hidden>${replies}</div></article>`;
-  }
-
-  function renderBlogCommentThread(list, thread) {
-    if (thread.error) {
-      list.innerHTML = '<span class="section-subtitle">Não foi possível carregar os comentários.</span>';
-      return;
-    }
-    const childrenByParent = new Map();
-    thread.comments.forEach(comment => {
-      if (!childrenByParent.has(comment.parent_id)) childrenByParent.set(comment.parent_id, []);
-      childrenByParent.get(comment.parent_id).push(comment);
-    });
-    list.innerHTML = (childrenByParent.get(null) || []).map(comment => blogCommentMarkup(comment, childrenByParent, thread.likedIds, thread.counts)).join("") || '<span class="section-subtitle">Nenhum comentário ainda.</span>';
-    hydrateCommentFactionRoleTitles(list);
-  }
-
-  function bindBlogCommentThread(root, post, list, refresh) {
-    if (root.dataset.blogCommentBound) return;
-    root.dataset.blogCommentBound = "true";
-    root.addEventListener("click", async event => {
-      const like = event.target.closest("[data-blog-comment-like]");
-      if (like) {
-        event.preventDefault();
-        if (!state.session) return openAuthPage();
-        const id = Number(like.dataset.blogCommentLike);
-        const liked = like.classList.contains("is-liked");
-        const result = liked ? await sb.from("blog_comment_likes").delete().eq("user_id", state.session.user.id).eq("blog_comment_id", id) : await sb.from("blog_comment_likes").insert({ user_id: state.session.user.id, blog_comment_id: id });
-        if (result.error) return toast("Não foi possível atualizar a curtida.");
-        await refresh();
-        return;
-      }
-      const deleteButton = event.target.closest("[data-blog-comment-delete]");
-      if (deleteButton) {
-        event.preventDefault();
-        if (!await openSiteConfirm("Excluir este comentário e suas respostas?", { title: "Excluir comentário?", confirmLabel: "Excluir comentário" })) return;
-        const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-        const audit = staff ? await askModerationReason("delete_comment") : { reason: null, internalNote: null };
-        if (!audit) return;
-        const result = staff
-          ? await sb.rpc("delete_moderated_blog_comment", { p_comment_id: Number(deleteButton.dataset.blogCommentDelete), p_reason: audit.reason, p_internal_note: audit.internalNote })
-          : await sb.from("blog_comments").delete().eq("id", deleteButton.dataset.blogCommentDelete);
-        if (result.error) return toast("Não foi possível excluir o comentário.");
-        await refresh();
-        return;
-      }
-      const toggle = event.target.closest("[data-blog-comment-toggle]");
-      if (toggle) {
-        const replies = $(`[data-blog-comment-replies="${toggle.dataset.blogCommentToggle}"]`, root);
-        if (replies) { replies.hidden = !replies.hidden; toggle.textContent = replies.hidden ? "Ver respostas" : "Ocultar respostas"; }
-        return;
-      }
-      const reply = event.target.closest("[data-blog-comment-reply]");
-      if (reply) {
-        const comment = $(`[data-blog-comment-id="${reply.dataset.blogCommentReply}"]`, root);
-        if (!comment || $("[data-blog-reply-form]", comment)) return;
-        comment.insertAdjacentHTML("beforeend", state.session ? '<form class="comment-form comment-reply-form" data-blog-reply-form><textarea name="body" maxlength="1000" required placeholder="Escreva uma resposta..."></textarea><button class="small-btn" type="submit">Responder</button></form>' : '<p class="section-subtitle">Entre para responder.</p>');
-      }
-    });
-    root.addEventListener("submit", async event => {
-      const form = event.target.closest("[data-blog-comment-form], [data-blog-reply-form]");
-      if (!form) return;
-      event.preventDefault();
-      if (!state.session?.user?.id) return openAuthPage();
-      const body = String(new FormData(form).get("body") || "").trim();
-      if (!body) return;
-      const parentId = Number(form.closest("[data-blog-comment-id]")?.dataset.blogCommentId) || null;
-      const optimisticId = -Date.now();
-      const currentThread = state.blogCommentThreads.get(String(post.id)) || { comments: [], likedIds: new Set(), counts: new Map() };
-      currentThread.comments = [...currentThread.comments, { id: optimisticId, parent_id: parentId, user_id: state.session.user.id, body, created_at: new Date().toISOString(), profiles: { ...(state.profile || {}), username: state.profile?.username || state.session.user.user_metadata?.username || "usuário" } }];
-      state.blogCommentThreads.set(String(post.id), currentThread);
-      renderBlogCommentThread(list, currentThread);
-      linkCommentMentions(list);
-      state.blogCommentCounts.set(String(post.id), currentThread.comments.length);
-      form.reset();
-      if (parentId) form.remove();
-      const button = $("button", form); if (button) button.disabled = true;
-      const result = await sb.from("blog_comments").insert({ blog_id: post.id, user_id: state.session.user.id, parent_id: parentId, body });
-      if (result.error) { toast(commentWriteError(result.error)); await refresh(); }
-      else await refresh();
-      if (button) button.disabled = false;
-    });
-  }
-
-  async function loadBlogCommentsSection(post, section) {
-    const list = $(".blog-inline-comments-list", section);
-    if (!list) return;
-    const thread = await loadBlogCommentThread(post);
-    state.blogCommentThreads.set(String(post.id), thread);
-    renderBlogCommentThread(list, thread);
-    linkCommentMentions(list);
-    state.blogCommentCounts.set(String(post.id), thread.comments?.length || 0);
-    bindBlogCommentThread(section, post, list, () => loadBlogCommentsSection(post, section));
-  }
-
-  function renderBlogEditor() {
-    if (!state.session) return `<div class="notice">Entre na sua conta para escrever e publicar um blog.</div><button class="btn btn-danger" data-action="open-auth">Entrar</button>`;
-    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-    return `<form id="blog-form" class="blog-editor-form"><div class="field"><label>Título</label><input name="title" maxlength="140" required placeholder="Título da sua publicação"></div><div class="field"><label>Resumo</label><textarea name="excerpt" maxlength="500" rows="3" placeholder="Uma chamada curta para os cards da aba Blogs"></textarea></div><div class="blog-image-fields"><div class="field"><label>Capa principal</label><input name="cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><div class="field"><label>Imagem lateral 1</label><input name="image2" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div><div class="field"><label>Imagem lateral 2</label><input name="image3" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></div></div><div class="field"><label>Conteúdo</label><div class="blog-toolbar"><button type="button" data-blog-command="bold"><b>B</b></button><button type="button" data-blog-command="italic"><i>I</i></button><button type="button" data-blog-command="underline"><u>U</u></button><button type="button" data-blog-command="formatBlock" data-blog-value="h2">Título</button><button type="button" data-blog-command="formatBlock" data-blog-value="blockquote">Citação</button><button type="button" data-blog-command="insertUnorderedList">Lista</button><button type="button" data-blog-command="createLink">Link</button></div><div id="blog-editor" class="blog-editor" contenteditable="true" data-placeholder="Escreva sua notícia, análise ou história..."></div></div>${staff ? `<label class="checkbox-inline"><input name="isFeatured" type="checkbox"> Destacar na aba Blogs</label>` : ""}<div class="modal-actions"><button type="submit" class="btn btn-danger">Publicar blog</button></div></form>`;
-  }
-
-  function renderBlogPostPage(post) {
-    const author = post.author || {};
-    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-    const canDelete = staff || state.session?.user?.id === post.author_id;
-    return `<div class="content blog-post-page"><div class="section-head"><div><div class="eyebrow">${post.is_featured ? "Blog em destaque" : "Blog"}</div><h1 class="section-title">${escapeHTML(post.title)}</h1><div class="section-subtitle">@${escapeHTML(author.username || "usuário")} · ${escapeHTML(blogDate(post.published_at || post.created_at))}</div></div><button class="small-btn" data-blog-back>Voltar aos blogs</button></div><div class="blog-post-gallery"><div class="blog-post-cover ${post.cover_url ? "has-image" : ""}" ${blogImageStyle(post.cover_url)}></div><div class="blog-post-side"><div class="blog-post-side-image ${post.image_2_url ? "has-image" : ""}" ${blogImageStyle(post.image_2_url)}></div><div class="blog-post-side-image ${post.image_3_url ? "has-image" : ""}" ${blogImageStyle(post.image_3_url)}></div></div></div>${post.excerpt ? `<p class="blog-post-excerpt">${escapeHTML(post.excerpt)}</p>` : ""}<article class="blog-post-content">${safeBlogHtml(post.content_html)}</article><div class="blog-post-actions">${blogEngagementMarkup(post, false)}${staff ? `<button class="small-btn" data-blog-feature="${escapeHTML(post.id)}" data-blog-featured="${post.is_featured ? "true" : "false"}">${post.is_featured ? "Remover destaque" : "Destacar blog"}</button>` : ""}${canDelete ? `<button class="small-btn danger blog-delete-button" data-blog-delete="${escapeHTML(post.id)}">Apagar blog</button>` : ""}</div>${blogAuthorMarkup(post)}</div>`;
-  }
-
-  function renderBlogsPage() {
-    if (state.blogOpenId) {
-      const post = state.blogPosts.find(item => String(item.id) === String(state.blogOpenId));
-      if (post) return renderBlogPostPage(post);
-    }
-    const featured = state.blogPosts.filter(post => post.is_featured);
-    const recent = state.blogPosts.filter(post => !post.is_featured);
-    return `<div class="content blogs-page"><div class="section-head"><div><div class="eyebrow">Comunidade</div><h1 class="section-title">Blogs</h1><div class="section-subtitle">Notícias, análises e histórias publicadas pelos leitores.</div></div><button class="btn btn-danger" data-blog-tab="escrever">Escrever blog</button></div><div class="blog-tabs"><button class="small-btn ${state.blogTab === "recentes" ? "is-active" : ""}" data-blog-tab="recentes">Recentes</button><button class="small-btn ${state.blogTab === "escrever" ? "is-active" : ""}" data-blog-tab="escrever">Escrever</button></div>${state.blogTab === "escrever" ? renderBlogEditor() : state.blogLoading ? '<div class="empty">Carregando blogs...</div>' : state.blogError ? `<div class="empty">${escapeHTML(state.blogError)}</div>` : `${featured.length ? `<section class="section"><div class="section-head"><div><h2 class="section-title">Em destaque</h2><div class="section-subtitle">Publicações selecionadas pela equipe.</div></div></div><div class="blog-grid blog-featured-grid">${featured.map(post => blogCard(post, true)).join("")}</div></section>` : ""}<section class="section"><div class="section-head"><div><h2 class="section-title">Recentes</h2><div class="section-subtitle">As últimas publicações da comunidade.</div></div></div><div class="blog-grid">${recent.map(post => blogCard(post)).join("") || '<div class="empty">Ainda não há blogs publicados.</div>'}</div></section>`}</div>`;
-  }
-
   function publisherKey(value = "") {
     return String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "sem-editora";
   }
@@ -3512,7 +3045,7 @@
     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
     characterSettingsReady = true;
     wikiCharacterImageCache.clear();
-    const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
+    const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
     const publicCollections = publicCollectionsResult.data || [];
     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
     const collectionOwnersResult = collectionOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", collectionOwnerIds) : { data: [] };
@@ -3530,7 +3063,6 @@
       .slice(0, 8);
     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
-    state.featuredBlogCollections = publicCollectionView.filter(collection => collection.collection_type === "blog" && collection.is_featured).slice(0, 8);
     const factionCatalogRows = (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").order("created_at", { ascending: false })).data || [];
     const factionIds = [...new Set(factionCatalogRows.map(catalog => catalog.faction_id).filter(Boolean))];
     const factionInfoRows = factionIds.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", factionIds)).data || [] : [];
@@ -3582,7 +3114,7 @@
         render();
         return toast("Sua conta está banida.");
       }
-      const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, sort_order").eq("owner_id", session.user.id).order("created_at", { ascending: true });
+      const collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, is_featured, sort_order").eq("owner_id", session.user.id).order("created_at", { ascending: true });
       state.shelfCategories = (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, sortOrder: collection.sort_order || "added_desc", itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [] }));
       const savedCollectionLinks = await sb.from("shelf_collection_saves").select("collection_id, owner_id").eq("user_id", session.user.id);
       const savedCollectionIds = (savedCollectionLinks.data || []).map(row => row.collection_id);
@@ -3596,14 +3128,6 @@
       const savedFactionCollections = publicFactionCollections.filter(collection => state.factionCatalogSaveIds.has(String(collection.catalog_id)));
       state.savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
       state.wallComments = await loadProfileWallComments(session.user.id);
-      state.blogShelfCategories = (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] }));
-      const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", session.user.id).eq("status", "published").order("published_at", { ascending: false });
-      state.authoredBlogPosts = authoredBlogs.data || [];
-      const blogSaves = await sb.from("blog_saves").select("blog_id").eq("user_id", session.user.id);
-      state.blogSaveIds = new Set((blogSaves.data || []).map(row => String(row.blog_id)));
-      const savedBlogIds = [...state.blogSaveIds];
-      const savedBlogs = savedBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", savedBlogIds).eq("status", "published") : { data: [] };
-      state.savedBlogPosts = savedBlogs.data || [];
       const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", session.user.id);
       state.favoriteIds = new Set((favorites.data || []).map(row => row.item_id));
       state.favoriteAddedAt = new Map((favorites.data || []).map(row => [row.item_id, row.created_at]));
@@ -3804,7 +3328,7 @@
   function loadPublicProfileFeature() {
     if (publicProfileFeature) return Promise.resolve(publicProfileFeature);
     if (!publicProfileFeaturePromise) {
-      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=1-public-profile-split"))
+      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=2-profile-cleanup"))
         .then(module => {
           publicProfileFeature = module.createPublicProfileFeature({
             $,
@@ -3830,8 +3354,7 @@
             publicCollectionItems,
             publicProfileHref,
             render,
-            renderPublicBlogCollectionPage,
-            renderPublicCollectionPage,
+                renderPublicCollectionPage,
             renderShelfLikePage,
             safeTitleColor,
             sb,
@@ -9082,8 +8605,7 @@
 
   function shelfSortSelectMarkup(key, selected) {
     const isPublicProfile = state.section === "public-profile";
-    if (!state.session && !isPublicProfile) return "";
-    if (state.section !== "shelf" && !isPublicProfile) return "";
+    if (!state.session || !isPublicProfile) return "";
     const isOwnPublicProfile = isPublicProfile && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || "");
     const disabled = isPublicProfile && !isOwnPublicProfile ? " disabled" : "";
     return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}"${disabled}>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
@@ -9110,8 +8632,7 @@
   }
 
   function isOwnShelfProfile() {
-    return state.section === "shelf"
-      || (state.section === "public-profile" && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || ""));
+    return state.section === "public-profile" && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || "");
   }
 
   function moveFixedShelfSection(key, direction) {
@@ -9182,7 +8703,7 @@
   }
 
   function bindFixedShelfSectionControls() {
-    if (!(state.section === "shelf" || state.section === "public-profile")) return;
+    if (state.section !== "public-profile") return;
     const content = $("#main .content");
     if (!content) return;
     const keyFor = section => $("[data-shelf-section-key]", section)?.dataset.shelfSectionKey;
@@ -9314,7 +8835,7 @@
   function shelfStyleMarkup(selected, key) {
     const isOwnPublicProfile = state.section === "public-profile"
       && String(state.session?.user?.id || "") === String(state.publicProfile?.profile?.id || "");
-    if ((!(["shelf", "public-profile"].includes(state.section)) || (state.section === "public-profile" && !isOwnPublicProfile)) || !state.session) return "";
+    if (state.section !== "public-profile" || !isOwnPublicProfile || !state.session) return "";
     const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
     const options = shelfStyleOptionsFor(profile);
     const current = options.some(([value]) => value === selected) ? selected : "none";
@@ -9338,10 +8859,9 @@
         : null;
     const orderedItems = sortShelfItems(items, sortOrder, addedAtMap, progressMap);
     const visibleItems = fixedCollection || expanded ? orderedItems : orderedItems.slice(0, SHELF_PREVIEW_LIMIT);
-    const likedCollection = key === "read" && state.section === "shelf" ? shelfCollectionMarkup("Curtidas", shelfItemsByIds([...state.comicLikeIds]), "liked") : "";
     // Nas estantes (própria ou pública), um card de edição deve ir direto
     // para a leitura. O seletor permanece apenas para cards de série.
-    const directOpen = state.section === "shelf" || state.section === "public-profile";
+    const directOpen = state.section === "public-profile";
     const publicCategoryId = key.startsWith("public-category:") ? key.slice("public-category:".length) : "";
     const publicCategory = publicCategoryId ? state.publicProfile?.collections?.find(category => category.id === publicCategoryId) : null;
     const shelfStyleProfile = publicState?.profile || state.profile;
@@ -9352,7 +8872,7 @@
     const featureAction = shelfStyleKeyMarker + shelfStyleMarkup(shelfStyle, key) + shelfSortSelectMarkup(key, sortOrder) + fixedShelfSectionControls(sectionKey, isOwnShelfProfile()) + (publicCategory && ["moderator", "banca", "admin"].includes(state.profile?.plan)
       ? `<button class="small-btn" data-collection-feature="${escapeHTML(publicCategory.id)}" data-collection-featured="${publicCategory.is_featured ? "true" : "false"}">${publicCategory.is_featured ? "Remover destaque" : "Destacar"}</button>`
       : "");
-    return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle shelf-item-count">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>${likedCollection}`;
+    return `<section class="section shelf-collection${fixedCollection ? " shelf-fixed-collection" : ""}"><div class="section-head"><div><h2 class="section-title">${escapeHTML(title)}</h2><div class="section-subtitle shelf-item-count">${items.length} item(ns)</div></div><div class="shelf-section-actions">${actions}${featureAction}${!fixedCollection && items.length > SHELF_PREVIEW_LIMIT ? `<button class="small-btn" data-shelf-expand="${escapeHTML(key)}">${expanded ? "Mostrar menos" : "Ver todos"}</button>` : ""}</div></div><div class="results-grid${fixedCollection ? " shelf-fixed-grid" : ""}">${visibleItems.map(item => renderSeriesCards && item.seriesId ? seriesCard(item, favoriteIds) : card(item, progressMap, favoriteIds, directOpen, coverChoices)).join("") || '<div class="empty">Nenhum item nesta coleção.</div>'}</div></section>`;
   }
 
   function isSeriesId(id) {
@@ -9812,7 +9332,6 @@
       const faction = parsed.searchParams.get("faccao");
       const kind = parsed.searchParams.get("tipo");
       const value = parsed.searchParams.get("valor");
-      const blog = parsed.searchParams.get("blog");
       let title = "Banca Digital";
       let subtitle = "Abrir página";
       if (profile) {
@@ -9824,9 +9343,6 @@
         subtitle = kind === "character" ? "Personagem" : kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Página da entidade";
         if (kind === "character") return `<div class="chat-internal-preview" data-chat-character-preview="${escapeHTML(value)}" data-chat-character-url="${escapeHTML(cleanUrl)}"><span>Carregando personagem...</span></div>`;
         if (["publisher", "imprint"].includes(kind)) return `<div class="chat-internal-preview" data-chat-entity-preview="${escapeHTML(value)}" data-chat-entity-preview-kind="${escapeHTML(kind)}" data-chat-entity-preview-url="${escapeHTML(cleanUrl)}"><span>Carregando ${kind === "publisher" ? "editora" : "selo"}...</span></div>`;
-      } else if (page === "blogs" && blog) {
-        title = "Publicação do blog";
-        subtitle = `Blog · ${blog}`;
       } else if (page === "faccoes" && faction) {
         return `<div class="chat-internal-preview" data-chat-faction-preview="${escapeHTML(faction)}" data-chat-faction-preview-url="${escapeHTML(cleanUrl)}"><span>Carregando facção...</span></div>`;
       } else if (page) {
@@ -9940,7 +9456,7 @@
 
   async function saveShelfCategories(categories) {
     if (sb && state.session) {
-      const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], sort_order: category.sortOrder || state.collectionSortOrders?.[`category:${category.id}`] || "added_desc", collection_type: "comic", blog_ids: [], is_featured: category.is_featured === true }));
+      const rows = categories.map(category => ({ id: category.id, owner_id: state.session.user.id, name: category.name, cover_url: category.coverUrl || null, is_public: category.isPublic !== false, item_ids: category.itemIds || [], sort_order: category.sortOrder || state.collectionSortOrders?.[`category:${category.id}`] || "added_desc", collection_type: "comic", is_featured: category.is_featured === true }));
       let result = rows.length ? await sb.from("shelf_collections").upsert(rows, { onConflict: "id" }) : { error: null };
       if (result.error && /sort_order|schema cache|column/i.test(result.error.message || "")) {
         result = rows.length ? await sb.from("shelf_collections").upsert(rows.map(({ sort_order, ...row }) => row), { onConflict: "id" }) : { error: null };
@@ -10082,59 +9598,13 @@
     saveShelfCategories(state.shelfCategories);
   }
 
-  function blogShelfCollectionMarkup(collection, posts, editable = false) {
-    const items = (collection.blogIds || []).map(id => posts.find(post => String(post.id) === String(id))).filter(Boolean);
-    const staff = ["moderator", "banca", "admin"].includes(state.profile?.plan);
-    const profileUsername = state.publicProfile?.profile?.username || state.profile?.username || "";
-    return `<section class="section shelf-collection blog-shelf-collection"><div class="section-head"><div><h2 class="section-title">${escapeHTML(collection.name)}</h2><div class="section-subtitle">${items.length} blog(s)</div></div><div class="shelf-section-actions">${collection.isPublic !== false ? `<span class="shelf-visibility is-public">${collection.is_featured ? "Destaque · " : ""}Pública</span><button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(profileUsername)}">Compartilhar</button>${!editable && profileUsername ? `<a class="small-btn" href="${escapeHTML(publicProfileHref(profileUsername, collection.id))}">Abrir</a>` : ""}` : '<span class="shelf-visibility is-private">Privada</span>'}${staff && collection.isPublic !== false ? `<button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}${editable ? `<button class="small-btn" data-blog-shelf-edit="${escapeHTML(collection.id)}">Editar</button><button class="small-btn danger" data-blog-shelf-delete="${escapeHTML(collection.id)}">Excluir</button>` : ""}</div></div><div class="blog-shelf-grid">${items.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog nesta coleção.</div>'}</div></section>`;
-  }
-
-  function blogShelfPanelMarkup(publicState = null) {
-    const authored = publicState ? publicState.authoredBlogPosts || [] : state.authoredBlogPosts;
-    const saved = publicState ? [...(publicState.savedBlogPosts || []), ...(publicState.collectionBlogPosts || [])] : state.savedBlogPosts;
-    const collections = (publicState ? publicState.blogCollections || [] : state.blogShelfCategories).filter(collection => !publicState || collection.isPublic !== false);
-    const posts = [...new Map([...authored, ...saved].map(post => [String(post.id), post])).values()];
-    const canEdit = !publicState;
-    return `<div class="blog-shelf-panel"><div class="section-head"><div><h2 class="section-title">Blogs</h2><div class="section-subtitle">Blogs escritos e salvos por esta pessoa.</div></div>${canEdit ? '<button class="small-btn" data-blog-shelf-new>+ Nova coleção</button>' : ""}</div><section class="section shelf-collection"><div class="section-head"><div><h2 class="section-title">Escritos</h2><div class="section-subtitle">${authored.length} blog(s)</div></div></div><div class="blog-shelf-grid">${authored.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog escrito ainda.</div>'}</div></section><section class="section shelf-collection"><div class="section-head"><div><h2 class="section-title">Salvos</h2><div class="section-subtitle">${saved.length} blog(s)</div></div></div><div class="blog-shelf-grid">${saved.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog salvo ainda.</div>'}</div></section>${collections.map(collection => blogShelfCollectionMarkup(collection, posts, canEdit)).join("")}</div>`;
-  }
-
-  function openBlogShelfCollectionForm(collectionId = null) {
-    const existing = state.blogShelfCategories.find(collection => collection.id === collectionId);
-    const posts = [...new Map([...state.authoredBlogPosts, ...state.savedBlogPosts].map(post => [String(post.id), post])).values()];
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>${existing ? "Editar coleção de blogs" : "Nova coleção de blogs"}</h2><div class="section-subtitle">Organize blogs escritos ou salvos.</div></div><button class="small-btn" data-close>Fechar</button></div><form id="blog-shelf-collection-form"><div class="field"><label>Nome da coleção</label><input name="name" maxlength="60" required value="${escapeHTML(existing?.name || "")}" placeholder="Ex.: Notícias favoritas"></div><div class="field"><label>Imagem da coleção (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(existing?.coverUrl || "")}" placeholder="https://..."></div><div class="field"><label><input name="isPublic" type="checkbox" ${existing?.isPublic !== false ? "checked" : ""}> Coleção pública</label></div><div class="field"><label>Blogs</label><div class="collection-picker">${posts.map(post => `<label><input type="checkbox" name="blogIds" value="${escapeHTML(post.id)}" ${existing?.blogIds?.includes(String(post.id)) ? "checked" : ""}> ${escapeHTML(post.title)}</label>`).join("") || "Salve ou escreva algum blog primeiro."}</div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger" type="submit">${existing ? "Salvar alterações" : "Criar coleção"}</button></div></form></div>`;
-    $("#modal-root").appendChild(overlay);
-    $$('[data-close]', overlay).forEach(button => button.onclick = () => overlay.remove());
-    overlay.addEventListener("click", event => { if (event.target === overlay) overlay.remove(); });
-    $("#blog-shelf-collection-form", overlay).onsubmit = async event => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const name = String(form.get("name") || "").trim();
-      const blogIds = form.getAll("blogIds");
-      if (!name) return;
-      const payload = { owner_id: state.session.user.id, name, cover_url: String(form.get("coverUrl") || "").trim() || null, is_public: form.get("isPublic") === "on", collection_type: "blog", blog_ids: blogIds, item_ids: [] };
-      const result = existing ? await sb.from("shelf_collections").update(payload).eq("id", existing.id).eq("owner_id", state.session.user.id) : await sb.from("shelf_collections").insert({ id: `blog-shelf-${Date.now()}`, ...payload });
-      if (result.error) return toast("Não foi possível criar a coleção de blogs.");
-      overlay.remove();
-      await loadAccount();
-    };
-  }
-
-  async function deleteBlogShelfCollection(id) {
-    const result = await sb.from("shelf_collections").delete().eq("id", id).eq("owner_id", state.session.user.id);
-    if (result.error) return toast("Não foi possível excluir a coleção.");
-    await loadAccount();
-  }
-
   function publicCollectionCard(collection, canManage = false) {
-    const blog = collection.collection_type === "blog";
     const factionCatalog = collection.is_faction_catalog === true;
-    const count = blog ? (Array.isArray(collection.blog_ids) ? collection.blog_ids.length : 0) : (Array.isArray(collection.item_ids) ? collection.item_ids.length : 0);
+    const count = Array.isArray(collection.item_ids) ? collection.item_ids.length : 0;
     const cover = collection.cover_url || collection.coverUrl || instantCover({ title: collection.name });
     const href = factionCatalog ? `?pagina=faccoes&faccao=${encodeURIComponent(collection.faction_page_key)}&catalogo=${encodeURIComponent(collection.catalog_id)}` : publicProfileHref(collection.username, collection.id);
     const ownerLabel = factionCatalog ? `${collection.faction_emblem || ""} ${collection.faction_name}` : `@${collection.username || "usuário"}`;
-    return `<article class="public-shelf-collection-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username || "")}" ${factionCatalog ? `data-public-faction-page="${escapeHTML(collection.faction_page_key)}" data-public-faction-catalog="${escapeHTML(collection.catalog_id)}"` : ""} role="link" tabindex="0"><div class="public-shelf-collection-cover has-image" style="background-image:url('${escapeHTML(cover)}')"></div><div class="public-shelf-collection-info"><div class="eyebrow">${collection.is_featured ? "Destaque · " : ""}${factionCatalog ? "Catálogo de facção" : blog ? "Blogs" : "Quadrinhos"}</div><h3>${escapeHTML(collection.name)}</h3><p>${count} item(ns) · ${escapeHTML(ownerLabel)}${collection.likes ? ` · ${collection.likes} curtida(s)` : ""}</p><div class="shelf-section-actions"><span class="shelf-visibility is-public">Pública</span><a class="small-btn" href="${escapeHTML(href)}">Abrir</a>${canManage ? `<button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(collection.username)}">Compartilhar</button><button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}</div></div></article>`;
+    return `<article class="public-shelf-collection-card" data-public-collection="${escapeHTML(collection.id)}" data-public-owner="${escapeHTML(collection.username || "")}" ${factionCatalog ? `data-public-faction-page="${escapeHTML(collection.faction_page_key)}" data-public-faction-catalog="${escapeHTML(collection.catalog_id)}"` : ""} role="link" tabindex="0"><div class="public-shelf-collection-cover has-image" style="background-image:url('${escapeHTML(cover)}')"></div><div class="public-shelf-collection-info"><div class="eyebrow">${collection.is_featured ? "Destaque · " : ""}${factionCatalog ? "Catálogo de facção" : "Quadrinhos"}</div><h3>${escapeHTML(collection.name)}</h3><p>${count} item(ns) · ${escapeHTML(ownerLabel)}${collection.likes ? ` · ${collection.likes} curtida(s)` : ""}</p><div class="shelf-section-actions"><span class="shelf-visibility is-public">Pública</span><a class="small-btn" href="${escapeHTML(href)}">Abrir</a>${canManage ? `<button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(collection.username)}">Compartilhar</button><button class="small-btn" data-collection-feature="${escapeHTML(collection.id)}" data-collection-featured="${collection.is_featured ? "true" : "false"}">${collection.is_featured ? "Remover destaque" : "Destacar"}</button>` : ""}</div></div></article>`;
   }
 
   async function toggleShelfCollectionFeatured(id, featured) {
@@ -10211,19 +9681,6 @@
     return `<div class="content shelf-page${own ? "" : " public-profile-page"}"><div class="profile-header">${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile?.username || "")}</div>${profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : own ? "" : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(own ? state.achievements : profileState?.achievements)} </div><div class="profile-actions">${actions}</div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div>${own ? '<button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button>' : ""}</div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${savedItems.visible !== false ? shelfCollectionMarkup("Salvos", savedItems.items || savedItems, `${publicPrefix}saved`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${savedSeries.visible !== false ? shelfCollectionMarkup("Séries salvas", savedSeries.items || savedSeries, `${publicPrefix}series-saved`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, "", null, true) : ""}${readItems.visible !== false ? shelfCollectionMarkup("Lidos", readItems.items || readItems, `${publicPrefix}read`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${completedItems.visible !== false ? shelfCollectionMarkup("Concluídos", completedItems.items || completedItems, `${publicPrefix}completed`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds, "", null, true) : ""}${likedItems.visible !== false ? shelfCollectionMarkup("Curtidos", likedItems.items || likedItems, `${publicPrefix}liked`, own ? state.readingProgress : profileState?.readingProgress, displayedFavoriteIds) : ""}${categoryMarkup}<div class="shelf-tab-panel shelf-top10-panel" data-shelf-tab-panel="top10">${top10Markup(profileTop10Lists, ownTop10Profile)}</div></div>`;
   }
 
-  function renderShelfPage() {
-    if (!state.session) return renderLoginPage();
-    const snapshot = ensureShelfSnapshot();
-    const savedItems = shelfItemsByIds([...snapshot.saved].filter(id => !isSeriesId(id)), false);
-    const savedSeries = shelfItemsByIds([...snapshot.saved].filter(isSeriesId), true);
-    const readItems = shelfItemsByIds([...snapshot.read]);
-    const completedItems = completedSeriesItems(state.readingProgress);
-    const canCustomize = Boolean(state.profile);
-    const categories = state.shelfCategories.map(category => ({ ...category, itemIds: (category.itemIds || []).filter(id => snapshot.saved.has(id)) }));
-    return renderShelfLikePage({ profile: state.profile, own: true, savedItems, savedSeries, readItems, completedItems, likedItems: { items: [], visible: false }, categories: canCustomize ? categories.map(category => ({ ...category, isSeries: false })) : [] });
-    return `<div class="content"><div class="profile-header">${avatarMarkup(state.profile)}<div><div class="eyebrow">@${escapeHTML(state.profile?.username || "")}</div>${state.profile?.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(state.profile.title_color)}">${escapeHTML(state.profile.title)}</div>` : ""}${trophyRoom(state.achievements)}</div><div class="profile-actions"><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button></div></div><div class="section-head"><div><h1 class="section-title">Minha estante</h1><div class="section-subtitle">Coleções fixas para organizar seus quadrinhos e séries</div></div><button class="btn btn-danger" data-action="open-local-box">Abrir caixa</button></div><div class="notice local-box-notice"><b>Minha caixa:</b> leia arquivos do seu computador sem enviá-los para o servidor. Tudo fica apenas neste navegador e some quando você sair.</div>${shelfCollectionMarkup("Salvos", savedItems, "saved")}${state.profile?.shelf_series_public !== false ? shelfCollectionMarkup("Séries salvas", savedSeries, "series-saved", state.readingProgress, state.favoriteIds, "", null, true) : ""}${shelfCollectionMarkup("Lidos", readItems, "read")}${state.profile?.shelf_completed_public !== false ? shelfCollectionMarkup("Concluídos", completedItems, "completed", state.readingProgress, state.favoriteIds, "", null, true) : ""}${canCustomize ? `<section class="section shelf-categories"><div class="section-head"><div><h2 class="section-title">Coleções pessoais</h2><div class="section-subtitle">Misture séries e edições na mesma coleção</div></div><button class="small-btn" data-shelf-new-category>+ Nova coleção</button></div>${categories.map(category => shelfCollectionMarkup(category.name, shelfItemsByIds(category.itemIds), `category:${category.id}`, state.readingProgress, state.favoriteIds, `<span class="shelf-visibility ${category.isPublic !== false ? "is-public" : "is-private"}">${category.isPublic !== false ? "Pública" : "Privada"}</span>${category.isPublic !== false ? `<button class="small-btn" data-copy-collection="${escapeHTML(category.id)}">Compartilhar</button>` : ""}<button class="small-btn" data-shelf-edit-category="${escapeHTML(category.id)}">Editar</button><button class="small-btn danger" data-shelf-delete-category="${escapeHTML(category.id)}">Excluir</button>`)).join("") || '<div class="empty">Crie uma coleção para começar a organizar seus salvos.</div>'}</section>` : ""}</div>`;
-  }
-
   function renderPublicCollectionPage(publicState, category) {
     const profile = publicState.profile;
     const allItems = publicCollectionItems(category, publicState);
@@ -10239,14 +9696,6 @@
     const cover = category.coverUrl ? `style="background-image:url('${escapeHTML(proxiedImageUrl(category.coverUrl))}')"` : "";
     const colorControl = isOwner ? `<div class="public-collection-color-control"><span>Mudar cor</span><div class="public-collection-color-palette" role="group" aria-label="Cores da coleção">${PUBLIC_COLLECTION_COLOR_OPTIONS.map(([color, label]) => `<button type="button" class="public-collection-color-swatch ${color.toLowerCase() === String(collectionColor).toLowerCase() ? "is-selected" : ""}" style="--swatch-color:${color}" data-public-collection-color="${escapeHTML(category.id)}" data-public-collection-color-value="${color}" aria-label="${label}" title="${label}"></button>`).join("")}</div></div>` : "";
     return `<div class="content public-collection-page"><div class="public-collection-hero" style="--public-collection-color:${escapeHTML(collectionColor)}"><div class="public-collection-icon ${category.coverUrl ? "has-cover" : ""}" ${cover}>${category.coverUrl ? "" : "▣"}</div><div><div class="eyebrow">Coleção pública</div><h1 class="section-title">${escapeHTML(category.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${allItems.length} item(ns)</div>${colorControl}</div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(category.name)}</h2><div class="section-subtitle">Uma coleção compartilhada da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn ${isLiked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${isLiked ? "♥ Curtida" : "♡ Curtir"} · ${likes}</button><button class="small-btn" data-copy-collection="${escapeHTML(category.id)}" data-copy-username="${escapeHTML(profile.username)}">Copiar link</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><form class="collection-filter" data-collection-filter-form><select name="field"><option value="all" ${filter.field === "all" ? "selected" : ""}>Filtrar por qualquer campo</option><option value="author" ${filter.field === "author" ? "selected" : ""}>Autor</option><option value="publisher" ${filter.field === "publisher" ? "selected" : ""}>Editora</option><option value="character" ${filter.field === "character" ? "selected" : ""}>Personagem</option><option value="tag" ${filter.field === "tag" ? "selected" : ""}>Gênero / tag</option><option value="seriesTitle" ${filter.field === "seriesTitle" ? "selected" : ""}>Série</option><option value="title" ${filter.field === "title" ? "selected" : ""}>Título</option></select><input name="query" value="${escapeHTML(filter.query)}" placeholder="Digite para filtrar a coleção"><button class="small-btn">Filtrar</button></form><div class="collection-results-meta">${items.length} de ${allItems.length} item(ns)</div><div class="results-grid">${items.map(item => card(item, publicState.readingProgress, publicState.favoriteIds)).join("") || '<div class="empty">Nenhum quadrinho corresponde ao filtro.</div>'}</div></div>`;
-  }
-
-  function renderPublicBlogCollectionPage(publicState, collection) {
-    const profile = publicState.profile;
-    const posts = (collection.blogIds || [])
-      .map(id => (publicState.authoredBlogPosts || []).find(post => String(post.id) === String(id)) || (publicState.savedBlogPosts || []).find(post => String(post.id) === String(id)) || (publicState.collectionBlogPosts || []).find(post => String(post.id) === String(id)))
-      .filter(Boolean);
-    return `<div class="content public-collection-page public-blog-collection-page"><div class="public-collection-hero"><div class="public-collection-icon ${collection.coverUrl ? "has-cover" : ""}" ${collection.coverUrl ? `style="background-image:url('${escapeHTML(proxiedImageUrl(collection.coverUrl))}')"` : ""}>${collection.coverUrl ? "" : "✎"}</div><div><div class="eyebrow">Coleção pública de blogs</div><h1 class="section-title">${escapeHTML(collection.name)}</h1><div class="collection-creator-block">${avatarMarkup(profile, "collection-creator-avatar")}<div><a class="collection-creator" href="${escapeHTML(publicProfileHref(profile.username))}">@${escapeHTML(profile.username)}</a>${profile.title ? `<div class="collection-creator-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : ""}</div></div><div class="section-subtitle">${posts.length} blog(s)</div></div></div><div class="section-head"><div><h2 class="section-title">${escapeHTML(collection.name)}</h2><div class="section-subtitle">Uma coleção pública de blogs da Banca Digital</div></div><div class="shelf-section-actions"><button class="small-btn" data-copy-collection="${escapeHTML(collection.id)}" data-copy-username="${escapeHTML(profile.username)}">Compartilhar</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Ver perfil</a></div></div><div class="blog-shelf-grid">${posts.map(post => blogCard(post)).join("") || '<div class="empty">Nenhum blog nesta coleção.</div>'}</div></div>`;
   }
 
   function filterCollectionItems(items, field, query) {
@@ -10329,7 +9778,7 @@
   }
 
   function moderationActionNeedsReason(action) {
-    return ["ban", "hide", "silence", "delete_comment", "delete_blog", "delete_message"].includes(action);
+    return ["ban", "hide", "silence", "delete_comment", "delete_message"].includes(action);
   }
 
   function askModerationReason(action) {
@@ -10861,7 +10310,7 @@
     $$('[data-top10-panel] > .section-head .section-subtitle').forEach(subtitle => { subtitle.textContent = "Crie listas personalizadas de personagens, histórias, favoritos ou qualquer tema."; });
     $$('[data-top10-new-list]').forEach(button => { button.textContent = "+ Nova lista"; });
     const lists = editableTop10Lists();
-    const canEdit = state.section === "shelf" || (state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || ""));
+    const canEdit = state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || "");
     $$('[data-top10-panel] > .empty').forEach(empty => { empty.textContent = canEdit ? "Crie sua primeira lista para começar." : "Este perfil ainda não criou uma lista pública."; });
     $$('[data-top10-list-card]').forEach(card => {
       const list = lists.find(entry => String(entry.id) === String(card.dataset.top10ListCard));
@@ -10944,11 +10393,6 @@
       return `<article class="top10-list-card" data-top10-list-card="${escapeHTML(list.id)}"><div class="section-head"><div><h3>${escapeHTML(list.name)}</h3><div class="section-subtitle">${items.length}/${TOP10_MAX_ITEMS} itens</div></div>${own ? `<button class="small-btn danger" data-top10-delete-list="${escapeHTML(list.id)}">Excluir lista</button>` : `<span class="shelf-visibility is-public">${list.is_final ? "Definitiva" : "Mutável"}</span>`}</div><ol class="top10-items">${itemMarkup || '<li class="empty">Escolha itens para montar esta lista.</li>'}</ol>${own && !list.is_final && items.length < TOP10_MAX_ITEMS ? `<div class="top10-add-form"><input type="search" placeholder="Digite o nome do item..." aria-label="Buscar item para ${escapeHTML(list.name)}" data-top10-search-list="${escapeHTML(list.id)}" autocomplete="off"><div class="top10-suggestions" data-top10-suggestions="${escapeHTML(list.id)}"></div></div>` : ""}</article>`;
     }).join("");
     return `<section class="section top10-section" data-top10-panel><div class="section-head"><div><h2 class="section-title">Listas</h2><div class="section-subtitle">Crie listas personalizadas de personagens, histórias, favoritos ou qualquer tema.</div></div>${own ? '<button class="small-btn" data-top10-new-list>+ Nova lista</button>' : ''}</div>${cards || `<div class="empty">${own ? "Crie sua primeira lista para começar." : "Este perfil ainda não criou uma lista pública."}</div>`}</section>`;
-  }
-
-  function currentTop10Context() {
-    const own = state.section === "shelf";
-    return { own, lists: own ? state.top10Lists : (state.publicProfile?.top10Lists || []) };
   }
 
   function editableTop10Lists() {
@@ -11470,8 +10914,9 @@
     try {
       const escapedTerm = term.replace(/[\\%_]/g, "\\$&");
       let collectionQuery = sb.from("shelf_collections")
-        .select("id, owner_id, name, cover_url, item_ids, blog_ids, collection_type, is_featured")
-        .eq("is_public", true);
+        .select("id, owner_id, name, cover_url, item_ids, collection_type, is_featured")
+        .eq("is_public", true)
+        .neq("collection_type", "blog");
       if (term) collectionQuery = collectionQuery.ilike("name", `%${escapedTerm}%`);
       const result = await collectionQuery.order("name").limit(50);
       if (result.error) throw result.error;
@@ -11862,12 +11307,6 @@
       const factionKey = String(url.searchParams.get("faccao") || "");
       return state.factions.some(faction => faction.id === factionKey || String(faction.page_key) === factionKey);
     }
-    if (page === "blogs" && url.searchParams.has("blog")) {
-      const blogId = Number(url.searchParams.get("blog"));
-      if (!Number.isInteger(blogId)) return false;
-      const blog = await sb.from("blog_posts").select("id").eq("id", blogId).eq("status", "published").maybeSingle();
-      return !blog.error && Boolean(blog.data);
-    }
     return Boolean(!page || knownPages.has(page));
   }
 
@@ -11930,42 +11369,35 @@
   }
 
   async function buildPublicProfileActivity(profile, rows, collections) {
-    const [comicLikes, blogLikes, collectionLikes, follows, comments, blogComments, wallComments, favorites, blogSaves, collectionSaves, publisherSaves, reads] = rows;
-    const blogIds = [...new Set([...blogLikes, ...blogComments, ...blogSaves].map(row => row.blog_id).filter(Boolean))];
+    const [comicLikes, collectionLikes, follows, comments, wallComments, favorites, collectionSaves, publisherSaves, reads] = rows;
     const followIds = [...new Set(follows.map(row => row.following_id).filter(Boolean))];
     const wallProfileIds = [...new Set(wallComments.map(row => row.profile_id).filter(Boolean))];
     const savedOwnerIds = [...new Set(collectionSaves.map(row => row.owner_id).filter(Boolean))];
-    const [blogsResult, followsResult, wallProfilesResult, savedOwnersResult] = await Promise.all([
-      blogIds.length ? sb.from("blog_posts").select("id, title, status").in("id", blogIds) : { data: [] },
+    const [followsResult, wallProfilesResult, savedOwnersResult] = await Promise.all([
       followIds.length ? sb.from("profiles_public").select("id, username").in("id", followIds) : { data: [] },
       wallProfileIds.length ? sb.from("profiles_public").select("id, username").in("id", wallProfileIds) : { data: [] },
       savedOwnerIds.length ? sb.from("profiles_public").select("id, username").in("id", savedOwnerIds) : { data: [] }
     ]);
-    const blogNames = new Map((blogsResult.data || []).map(blog => [String(blog.id), blog.title || "blog"]));
     const profileNames = new Map([...(followsResult.data || []), ...(wallProfilesResult.data || []), ...(savedOwnersResult.data || [])].map(row => [row.id, row.username]));
     const collectionNames = new Map(collections.map(collection => [String(collection.id), { name: collection.name, owner_id: collection.owner_id }]));
     const itemName = itemId => state.db.library.find(item => item.id === itemId)?.title || itemId;
     const itemHref = itemId => routeUrl({ ler: itemId });
-    const blogHref = blogId => routeUrl({ pagina: "blogs", blog: blogId });
     const publisherHref = publisherName => routeUrl({ pagina: "entidade", tipo: "publisher", valor: publisherName });
     const collectionHref = (ownerId, collectionId) => {
       const owner = profileNames.get(ownerId) || profile.username;
       return publicProfileHref(owner, collectionId);
     };
     const events = [];
-    const add = (rows, type, build, dateKey = "created_at") => rows.forEach(row => events.push({ ...build(row), created_at: row[dateKey] || row.created_at }));
-    add(comicLikes, "like", row => ({ icon: "♥", label: "Curtiu o quadrinho", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
-    add(blogLikes.filter(row => blogNames.has(String(row.blog_id))), "like", row => ({ icon: "♥", label: "Curtiu o blog", subject: blogNames.get(String(row.blog_id)), href: blogHref(row.blog_id) }));
-    add(collectionLikes, "like", row => ({ icon: "♥", label: "Curtiu a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
-    add(follows, "follow", row => ({ icon: "＋", label: "Seguiu", subject: `@${profileNames.get(row.following_id) || "usuário"}`, href: profileNames.get(row.following_id) ? publicProfileHref(profileNames.get(row.following_id)) : "" }));
-    add(comments, "comment", row => ({ icon: "💬", label: "Comentou em", subject: itemName(row.item_id), detail: row.body, href: itemHref(row.item_id) }));
-    add(blogComments.filter(row => blogNames.has(String(row.blog_id))), "comment", row => ({ icon: "💬", label: "Comentou em", subject: blogNames.get(String(row.blog_id)), detail: row.body, href: blogHref(row.blog_id) }));
-    add(wallComments, "comment", row => ({ icon: "💬", label: "Comentou no mural de", subject: `@${profileNames.get(row.profile_id) || "usuário"}`, detail: row.body, href: profileNames.get(row.profile_id) ? publicProfileHref(profileNames.get(row.profile_id)) : "" }));
-    add(favorites, "save", row => ({ icon: "★", label: "Salvou", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
-    add(blogSaves.filter(row => blogNames.has(String(row.blog_id))), "save", row => ({ icon: "★", label: "Salvou o blog", subject: blogNames.get(String(row.blog_id)), href: blogHref(row.blog_id) }));
-    add(collectionSaves, "save", row => ({ icon: "★", label: "Salvou a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
-    add(publisherSaves, "save", row => ({ icon: "★", label: "Salvou a editora", subject: row.publisher_name, href: publisherHref(row.publisher_name) }));
-    add(reads, "read", row => ({ icon: "✓", label: "Concluiu a leitura de", subject: itemName(row.item_id), href: itemHref(row.item_id) }), "updated_at");
+    const add = (rows, build, dateKey = "created_at") => rows.forEach(row => events.push({ ...build(row), created_at: row[dateKey] || row.created_at }));
+    add(comicLikes, row => ({ icon: "♥", label: "Curtiu o quadrinho", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
+    add(collectionLikes, row => ({ icon: "♥", label: "Curtiu a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
+    add(follows, row => ({ icon: "＋", label: "Seguiu", subject: `@${profileNames.get(row.following_id) || "usuário"}`, href: profileNames.get(row.following_id) ? publicProfileHref(profileNames.get(row.following_id)) : "" }));
+    add(comments, row => ({ icon: "💬", label: "Comentou em", subject: itemName(row.item_id), detail: row.body, href: itemHref(row.item_id) }));
+    add(wallComments, row => ({ icon: "💬", label: "Comentou no mural de", subject: `@${profileNames.get(row.profile_id) || "usuário"}`, detail: row.body, href: profileNames.get(row.profile_id) ? publicProfileHref(profileNames.get(row.profile_id)) : "" }));
+    add(favorites, row => ({ icon: "★", label: "Salvou", subject: itemName(row.item_id), href: itemHref(row.item_id) }));
+    add(collectionSaves, row => ({ icon: "★", label: "Salvou a coleção", subject: collectionNames.get(String(row.collection_id))?.name || "coleção", href: collectionHref(row.owner_id, row.collection_id) }));
+    add(publisherSaves, row => ({ icon: "★", label: "Salvou a editora", subject: row.publisher_name, href: publisherHref(row.publisher_name) }));
+    add(reads, row => ({ icon: "✓", label: "Concluiu a leitura de", subject: itemName(row.item_id), href: itemHref(row.item_id) }), "updated_at");
     return events.filter(event => event.created_at).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100);
   }
 
@@ -13607,10 +13039,6 @@
       const item = state.db.library.find(entry => String(entry.id) === String(metadata.item_id));
       return item ? itemDisplayTitle(item) : "Uma história";
     }
-    if (metadata.source === "blog") {
-      const post = (state.blogPosts || []).find(entry => String(entry.id) === String(metadata.blog_id));
-      return post?.title || "Uma publicação no blog";
-    }
     if (metadata.source === "profile_wall") return "Um mural de perfil";
     if (metadata.source === "collection") return "Uma coleção";
     if (metadata.source === "top10") return "Uma lista da comunidade";
@@ -13744,8 +13172,6 @@
         await loadPublicProfile(notification.metadata.profile_username, null, false, { top10ListId: notification.metadata.list_id || null });
       } else if ((notification?.type === "profile_wall_comment" || notification?.type === "profile_wall_reply") && notification.metadata?.profile_username) {
         await loadPublicProfile(notification.metadata.profile_username);
-      } else if ((notification?.type === "comment_reply" || notification?.type === "comment_like" || notification?.type === "mention") && notification.metadata?.blog_id) {
-        navigate({ pagina: "blogs", blog: String(notification.metadata.blog_id) });
       } else if (notification?.type === "mention" && notification.metadata?.item_id) {
         const item = state.db.library.find(entry => String(entry.id) === String(notification.metadata.item_id));
         if (item) openCommentsPopup(item);
@@ -13772,38 +13198,14 @@
   }
 
   function render() {
-    const isBlogTheme = state.section === "blog";
     document.querySelector(".topbar")?.classList.toggle("is-offline", Boolean(state.session?.offline));
     const factionsNav = document.querySelector('.nav-link[data-section="factions"]');
     if (factionsNav) factionsNav.style.display = "";
-    document.body.classList.toggle("blogs-theme", isBlogTheme);
-    const brandLogo = document.querySelector(".brand-logo");
-    const brandName = document.querySelector(".brand > span:last-child");
-    const footerTitle = document.querySelector(".footer > div:first-child > strong");
-    const footerDescription = document.querySelector(".footer > div:first-child > span");
-    if (brandLogo) {
-      brandLogo.src = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/barracabrancaicon.png?v=1";
-      brandLogo.alt = isBlogTheme ? "Bobojaco" : "Banca Digital";
-    }
-    if (brandName) brandName.innerHTML = isBlogTheme ? 'Bobo<span class="brand-accent">jaco</span>' : 'Banca<span class="brand-accent">Digital</span>';
-    if (footerTitle) footerTitle.textContent = isBlogTheme ? "Bobojaco" : "Sobre a Banca";
-    if (footerDescription) footerDescription.textContent = isBlogTheme
-      ? "Um espaço para publicar, descobrir e conversar sobre histórias."
-      : "Diferente de outros sites, não visamos distribuir links de nenhum quadrinho e somos ativamente contra pirataria. temos por objetivo facilitar a leitura online de quadrinhos e apresentar historias que amamos a quem estiver disposto a conhecer novos universos desbravando nossa biblioteca";
-    document.title = isBlogTheme ? "Bobojaco — Blogs" : "Banca Digital — Quadrinhos & Mangás";
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) metaDescription.content = isBlogTheme
-      ? "Bobojaco: um espaço para publicar, descobrir e conversar sobre histórias."
-      : "Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.";
-    const favicon = document.querySelector('link[rel="icon"]');
-    if (favicon) favicon.href = "assets/barracavermelhaicon.png?v=2";
-    const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-    if (appleIcon) appleIcon.href = isBlogTheme ? "assets/bobojacoicon.png?v=1" : "assets/barracabrancaicon.png?v=1";
+    document.body.classList.remove("blogs-theme");
     const main = $("#main");
     let markup = "";
     if (state.section === "home") markup = renderHome();
     else if (state.section === "comic") markup = renderCatalog("comic");
-    else if (state.section === "blog") markup = renderBlogsPage();
     else if (state.section === "ranking") markup = renderRankingPage();
     else if (state.section === "factions") markup = state.factionMembersView ? renderFactionMembersPage() : renderFactionPage();
     else if (state.section === "manga") markup = renderCatalog("manga");
@@ -13820,16 +13222,16 @@
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
     if (state.section === "entity") markup = markup.replace(/<section class="section character-news-section"[\s\S]*?<\/section>/i, "");
     if (state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
-    applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : ["shelf", "album"].includes(state.section) ? state.profile : null);
+    applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : state.section === "album" ? state.profile : null);
     // A estante recebe abas e o Top 10 depois da renderização inicial. Por isso,
     // comparar apenas o HTML base pode esconder alterações nos itens do ranking.
-    const hasDynamicShelfContent = ["shelf", "public-profile"].includes(state.section);
+    const hasDynamicShelfContent = state.section === "public-profile";
     if (main.innerHTML === markup && !hasDynamicShelfContent) {
       syncActiveNav();
       return;
     }
     main.innerHTML = markup;
-    applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : ["shelf", "album"].includes(state.section) ? state.profile : null);
+    applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : state.section === "album" ? state.profile : null);
     $$('[data-wiki-character]', main).forEach(button => button.addEventListener("click", () => openEntityPage("character", button.dataset.wikiCharacter)));
     $$('[data-wiki-toggle]', main).forEach(button => button.addEventListener("click", event => {
       event.preventDefault();
@@ -13853,7 +13255,7 @@
     if (state.section === "entity" && state.entityFilter?.kind === "publisher") loadPublisherFans(state.entityFilter.value);
     // Aguarda as configurações remotas dos personagens para que uma imagem
     // personalizada nunca seja substituída momentaneamente pela Wikipédia.
-    if (state.authReady && (state.section === "comic" || state.section === "shelf" || state.section === "public-profile" || (state.section === "entity" && ["publisher", "imprint", "character"].includes(state.entityFilter?.kind)))) {
+    if (state.authReady && (state.section === "comic" || state.section === "public-profile" || (state.section === "entity" && ["publisher", "imprint", "character"].includes(state.entityFilter?.kind)))) {
       loadCharacterWikiCarousel();
     }
   }
@@ -13916,7 +13318,6 @@
     state.section = section;
     syncActiveNav();
     render();
-    if (section === "blog" && !state.blogPosts.length && !state.blogLoading) loadBlogPosts();
     if (section === "ranking" && state.authReady) loadRankingData();
   }
 
@@ -14333,8 +13734,7 @@
         openHeroDetailsPopup(item);
       });
     }
-    $(".content")?.classList.toggle("shelf-page", ["shelf", "public-profile"].includes(state.section));
-    if (state.section === "shelf" && state.profile) ensureProfileBanner(state.profile);
+    $(".content")?.classList.toggle("shelf-page", state.section === "public-profile");
     if (state.section === "public-profile" && state.publicProfile?.profile) ensureProfileBanner(state.publicProfile.profile);
     if (state.session?.offline && $(".content") && !$(".offline-account-notice")) {
       $(".content").insertAdjacentHTML("afterbegin", `<div class="notice offline-account-notice"><b>Perfil de @${escapeHTML(state.profile?.username || "usuário")}</b> · modo offline. Apenas seus Downloads ficam disponíveis sem internet.</div>`);
@@ -14383,88 +13783,6 @@
         }
         applyRankingSearch();
       }
-    }
-    if (state.section === "shelf" && state.profile && !$(".profile-xp-progress")) {
-      $(".content .profile-header")?.insertAdjacentHTML("afterend", profileXpProgressMarkup(state.profile));
-    }
-    if (state.section === "shelf" && state.profile) {
-      const shelfBanner = $(".profile-banner");
-      const shelfXp = $(".profile-xp-progress", $(".content"));
-      if (shelfBanner && shelfXp && !shelfBanner.contains(shelfXp)) shelfBanner.appendChild(shelfXp);
-    }
-    if (state.section === "shelf" && state.session) {
-      const profileInfo = $(".content .profile-header > div:nth-child(2)");
-      if (profileInfo && !$(".profile-follow-summary", profileInfo)) profileInfo.insertAdjacentHTML("beforeend", followSummary(state.session.user.id, state.followerCount, state.followingCount));
-      const shelfProfileHandle = $(".content .profile-header > div:nth-child(2) > .eyebrow");
-      if (shelfProfileHandle && !shelfProfileHandle.dataset.profileLinkBound) {
-        shelfProfileHandle.dataset.profileLinkBound = "true";
-        shelfProfileHandle.classList.add("profile-shelf-username");
-        shelfProfileHandle.setAttribute("role", "link");
-        shelfProfileHandle.setAttribute("tabindex", "0");
-        const openPublicProfile = () => { window.location.href = publicProfileHref(state.profile.username); };
-        shelfProfileHandle.addEventListener("click", openPublicProfile);
-        shelfProfileHandle.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPublicProfile(); } });
-      }
-      const shelfHeading = $(".content > .section-head .section-title");
-      if (shelfHeading) {
-        shelfHeading.textContent = "Minha estante";
-      }
-    }
-    if (state.section === "shelf" && state.session) {
-      const shelfHead = $(".content > .section-head");
-      if (shelfHead && !$(".shelf-media-tabs")) {
-        shelfHead.insertAdjacentHTML("afterend", `<div class="shelf-media-tabs"><button class="small-btn is-active" data-shelf-media="collections">Coleções</button><button class="small-btn" data-shelf-media="wall">Mural</button><button class="small-btn" data-shelf-media="saved-public">Coleções salvas</button><button class="small-btn" data-shelf-media="top10">Top 10</button><button class="small-btn" data-action="open-local-box">Abrir caixa</button></div><div class="shelf-tab-panel shelf-wall-panel" data-shelf-tab-panel="wall">${profileWallMarkup(null, true)}</div><div class="shelf-tab-panel shelf-saved-public-panel" data-shelf-tab-panel="saved-public">${savedPublicCollectionsMarkup(state.savedPublicCollections)}</div>`);
-        $("[data-action=open-local-box]", shelfHead.nextElementSibling)?.addEventListener("click", () => { state.localBoxVisible = true; setSection("local-box"); });
-        $("[data-shelf-tab-panel=wall]")?.setAttribute("hidden", "");
-        $("[data-shelf-tab-panel=saved-public]")?.setAttribute("hidden", "");
-      }
-       const shelfMediaTabs = $(".shelf-media-tabs");
-       $("[data-shelf-media=collections]", shelfMediaTabs).textContent = "Estante";
-       $("[data-shelf-media=saved-public]", shelfMediaTabs).textContent = "Coleções";
-      if (shelfMediaTabs && !$("[data-section=album]", shelfMediaTabs)) shelfMediaTabs.insertAdjacentHTML("beforeend", `<button class="small-btn" data-section="album">Álbum</button>`);
-       $("[data-section=album]", shelfMediaTabs)?.remove();
-      const ownSavedPublicPanel = $("[data-shelf-tab-panel=saved-public]");
-      const ownSavedPublicTitle = $(".saved-public-collections .section-title", ownSavedPublicPanel);
-      if (ownSavedPublicTitle) ownSavedPublicTitle.textContent = "Coleções";
-      if (ownSavedPublicPanel && !$(".saved-publishers", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("afterbegin", savedPublishersMarkup(state.savedPublishers));
-      if (ownSavedPublicPanel && !$(".saved-imprints", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("beforeend", savedImprintsMarkup(state.savedImprints));
-      if (ownSavedPublicPanel && !$(".saved-characters", ownSavedPublicPanel)) ownSavedPublicPanel.insertAdjacentHTML("beforeend", savedCharactersMarkup(state.savedCharacters));
-      $$(".saved-characters [data-character]", ownSavedPublicPanel).forEach(button => {
-        if (button.previousElementSibling?.dataset.characterWiki) return;
-        const actions = document.createElement("span");
-        actions.className = "saved-entity-actions";
-        const wikiButton = document.createElement("button");
-        wikiButton.className = "small-btn";
-        wikiButton.type = "button";
-        wikiButton.dataset.characterWiki = button.dataset.character;
-        wikiButton.textContent = "Abrir wiki";
-        button.before(actions);
-        actions.append(wikiButton, button);
-      });
-      $$(".saved-publishers [data-publisher], .saved-imprints [data-imprint]", ownSavedPublicPanel).forEach(button => {
-        if (button.previousElementSibling?.dataset.savedEntityWiki) return;
-        const kind = button.dataset.publisher ? "publisher" : "imprint";
-        const name = button.dataset.publisher || button.dataset.imprint;
-        const actions = document.createElement("span");
-        actions.className = "saved-entity-actions";
-        const wikiButton = document.createElement("button");
-        wikiButton.className = "small-btn";
-        wikiButton.type = "button";
-        wikiButton.dataset.savedEntityWiki = kind;
-        wikiButton.dataset.savedEntityName = name;
-        wikiButton.textContent = "Abrir wiki";
-        button.before(actions);
-        actions.append(wikiButton, button);
-      });
-      const top10Panel = $("[data-shelf-tab-panel=top10]");
-      if (top10Panel) {
-        top10Panel.innerHTML = top10Markup(state.top10Lists, true);
-        bindTop10VoteControls(top10Panel, false);
-      }
-      const showSpecialShelfTab = ["wall", "saved-public", "top10"].includes(state.shelfTab);
-      $$(".shelf-page > .shelf-collection, .shelf-page > .shelf-categories, .shelf-page > .local-box-notice").forEach(element => { element.hidden = showSpecialShelfTab; });
-      $$('[data-shelf-tab-panel]').forEach(panel => { panel.hidden = panel.dataset.shelfTabPanel !== state.shelfTab; });
-      $$('[data-shelf-media]').forEach(button => button.classList.toggle("is-active", button.dataset.shelfMedia === state.shelfTab));
     }
     if (state.section === "public-profile" && state.publicProfile?.profile && !state.publicProfile.collectionId) {
       const publicProfile = state.publicProfile.profile;
@@ -15049,107 +14367,6 @@
         textarea.form?.requestSubmit();
       });
     }
-    $$('[data-blog-tab]').forEach(el => el.addEventListener("click", () => { state.blogTab = el.dataset.blogTab; navigate({ pagina: "blogs" }); }));
-    if (state.section === "blog" && !state.blogOpenId && $(".blogs-page") && !$(".blog-highlights-sidebar")) $(".blogs-page").insertAdjacentHTML("beforeend", blogHighlightsSidebar());
-    if (state.section === "blog" && !state.blogOpenId && state.featuredBlogCollections?.length && $(".blogs-page") && !$("[data-featured-blog-collections]")) {
-      const section = `<section class="section featured-blog-collections" data-featured-blog-collections><div class="section-head"><div><h2 class="section-title">Coleções de blogs em destaque</h2><div class="section-subtitle">Coleções públicas escolhidas pela equipe.</div></div></div><div class="public-collections-grid">${state.featuredBlogCollections.map(collection => publicCollectionCard(collection)).join("")}</div></section>`;
-      const sections = $$('.blogs-page > .section').filter(Boolean);
-      const featured = sections.find(item => $("h2", item)?.textContent.includes("Em destaque"));
-      (featured || sections[0])?.insertAdjacentHTML(featured ? "afterend" : "beforebegin", section);
-    }
-    $$('[data-blog-open]').forEach(el => el.addEventListener("click", () => navigate({ pagina: "blogs", blog: el.dataset.blogOpen })));
-    $$('[data-blog-read]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); navigate({ pagina: "blogs", blog: el.dataset.blogRead }); }));
-    $('[data-blog-back]')?.addEventListener("click", () => { state.blogOpenId = null; state.blogTab = "recentes"; navigate({ pagina: "blogs" }); });
-    const openedBlog = state.blogOpenId ? state.blogPosts.find(item => String(item.id) === String(state.blogOpenId)) : null;
-    $$(".blog-card").forEach(card => {
-      const post = state.blogPosts.find(item => String(item.id) === String(card.dataset.blogOpen));
-      const meta = $(".blog-card-meta", card);
-      if (post?.author?.username && meta) meta.innerHTML = `<a class="blog-meta-author" href="${escapeHTML(publicProfileHref(post.author.username))}">@${escapeHTML(post.author.username)}</a> · ${escapeHTML(blogDate(post.published_at || post.created_at))}`;
-    });
-    const postMeta = $(".blog-post-page .section-head .section-subtitle");
-    if (openedBlog?.author?.username && postMeta) postMeta.innerHTML = `<a class="blog-meta-author" href="${escapeHTML(publicProfileHref(openedBlog.author.username))}">@${escapeHTML(openedBlog.author.username)}</a> · ${escapeHTML(blogDate(openedBlog.published_at || openedBlog.created_at))}`;
-    $$(".blog-meta-author").forEach(link => link.addEventListener("click", event => event.stopPropagation()));
-    const authorCard = $(".blog-author-card");
-    if (openedBlog && authorCard && !$("[data-blog-inline-comments]")) {
-      authorCard.insertAdjacentHTML("afterend", blogCommentsSection(openedBlog));
-      const commentsSection = $("[data-blog-inline-comments]");
-      loadBlogCommentsSection(openedBlog, commentsSection);
-    }
-    $$('[data-blog-feature]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleBlogFeatured(el.dataset.blogFeature, el.dataset.blogFeatured === "true"); }));
-    $$('[data-blog-delete]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteBlogPost(el.dataset.blogDelete); }));
-    $$('[data-blog-like]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleBlogLike(el.dataset.blogLike); }));
-    $$('[data-blog-save]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleBlogSave(el.dataset.blogSave); }));
-    $$('[data-blog-comments]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); const post = findBlogPost(el.dataset.blogComments); if (post) openBlogComments(post); }));
-    $$('[data-blog-share]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); const post = findBlogPost(el.dataset.blogShare); if (post) shareBlog(post.id, post.title); }));
-    if ($("#blog-form") && $(".blog-toolbar") && !$("#blog-inline-image")) {
-      $(".blog-toolbar").insertAdjacentHTML("beforeend", '<button type="button" data-blog-command="strikeThrough">Riscado</button><button type="button" data-blog-command="insertOrderedList">1. Lista</button><button type="button" data-blog-command="justifyLeft">Esquerda</button><button type="button" data-blog-command="justifyCenter">Centro</button><button type="button" data-blog-command="justifyRight">Direita</button><button type="button" data-blog-command="undo">Desfazer</button><button type="button" data-blog-command="redo">Refazer</button><button type="button" data-blog-command="removeFormat">Limpar</button><button type="button" data-blog-break-box>Quebrar caixa</button><button type="button" data-blog-image>Imagem no texto</button>');
-    }
-    $$('[data-blog-command]').forEach(el => el.addEventListener("click", () => {
-      const command = el.dataset.blogCommand;
-      const value = el.dataset.blogValue;
-      if (command === "createLink") {
-        openBlogLinkDialog();
-      } else document.execCommand(command, false, value || null);
-      $("#blog-editor")?.focus();
-    }));
-    $('[data-blog-break-box]')?.addEventListener("click", () => {
-      const editor = $("#blog-editor");
-      if (!editor) return;
-      editor.focus();
-      document.execCommand("insertHTML", false, "<p><br></p>");
-    });
-    $('[data-blog-image]')?.addEventListener("click", async () => {
-      const selection = window.getSelection();
-      state.blogEditorRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-      const url = normalizeBlogImageUrl(await openSiteInput("Cole a URL da imagem para inserir no artigo:", "", { title: "Inserir imagem", label: "URL da imagem" }) || "");
-      if (url === false) return toast("Informe uma URL de imagem válida.");
-      if (!url) return;
-      const editor = $("#blog-editor");
-      if (!editor) return;
-      editor.focus();
-      document.execCommand("insertHTML", false, `<p><br></p><img src="${escapeHTML(url)}" alt="Imagem inserida no artigo"><p><br></p>`);
-    });
-    $("#blog-inline-image")?.addEventListener("change", async event => {
-      const file = event.currentTarget.files?.[0];
-      if (!file) return;
-      try {
-        const url = await uploadBlogImage(file, "inline");
-        const editor = $("#blog-editor");
-        if (!editor) return;
-        editor.focus();
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        if (state.blogEditorRange) selection?.addRange(state.blogEditorRange);
-        else {
-          const range = document.createRange();
-          range.selectNodeContents(editor);
-          range.collapse(false);
-          selection?.addRange(range);
-        }
-        document.execCommand("insertHTML", false, `<p><br></p><img src="${escapeHTML(url)}" alt="Imagem inserida no artigo"><p><br></p>`);
-      } catch (error) {
-        toast(error.message || "Não foi possível inserir a imagem.");
-      } finally {
-        event.currentTarget.value = "";
-        state.blogEditorRange = null;
-      }
-    });
-    if ($("#blog-form") && $(".blog-image-fields")) $(".blog-image-fields").insertAdjacentHTML("beforebegin", '<p class="format-hint blog-image-hint">Formato recomendado: capa vertical 720×1440; imagens laterais quadradas 900×900. Elas serão exibidas com a capa maior e as duas laterais empilhadas.</p>');
-    const blogForm = $("#blog-form");
-    if (blogForm) {
-      const imageLabels = { cover: "URL da capa principal", image2: "URL da imagem lateral 1", image3: "URL da imagem lateral 2" };
-      Object.entries(imageLabels).forEach(([name, label]) => {
-        const input = $(`input[name=${name}]`, blogForm);
-        if (!input) return;
-        input.type = "url";
-        input.removeAttribute("accept");
-        input.placeholder = "https://exemplo.com/imagem.jpg";
-        const labelElement = input.closest("label") || input.parentElement?.querySelector("label");
-        if (labelElement) labelElement.textContent = label;
-      });
-    }
-    if (blogForm) $("input[name=cover]", blogForm)?.setAttribute("required", "");
-    $("#blog-form")?.addEventListener("submit", event => { event.preventDefault(); publishBlogPost(event.currentTarget); });
     if (state.section === "home") {
       $$(".featured-collections-rail .public-shelf-collection-cover").forEach((coverElement, index) => {
         const collection = state.featuredComicCollections?.[index];
@@ -15168,7 +14385,7 @@
       if ($('[data-save-public-collection]', cardElement) || !state.session || cardElement.dataset.publicOwner === state.profile?.username) return;
       const collectionId = cardElement.dataset.publicCollection;
       const collection = [...(state.featuredComicCollections || []), ...(state.popularPublicCollections || []), ...(state.savedPublicCollections || [])].find(item => item.id === collectionId);
-      if (!collection || collection.collection_type === "blog") return;
+      if (!collection) return;
       const actions = $(".shelf-section-actions", cardElement);
       if (!actions) return;
       const saved = state.savedPublicCollections?.some(item => item.id === collectionId);
@@ -15215,7 +14432,7 @@
       }
       const managedFactionIds = new Set(state.factionRoles.filter(role => role.user_id === state.session?.user?.id && ["leader", "curator"].includes(role.role)).map(role => String(role.faction_id)));
       const linkedFactionId = [...managedFactionIds][0] || null;
-      if (category && category.collection_type !== "blog" && actions && linkedFactionId && !$("[data-faction-public-catalog-pin]", actions)) {
+      if (category && actions && linkedFactionId && !$("[data-faction-public-catalog-pin]", actions)) {
         const button = document.createElement("button");
         const pinned = state.factionPinnedPublicCollections.has(`${linkedFactionId}:${category.id}`);
         button.className = `small-btn ${pinned ? "is-liked" : ""}`;
@@ -15273,10 +14490,9 @@
       if (item) openCommentsPopup(item);
     }));
     $$('[data-shelf-expand]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); state.shelfExpanded[el.dataset.shelfExpand] = !state.shelfExpanded[el.dataset.shelfExpand]; render(); }));
-    $$('[data-shelf-media]').forEach(el => el.addEventListener("click", () => { state.shelfTab = el.dataset.shelfMedia; render(); }));
     $$('[data-public-shelf-media]').forEach(el => el.addEventListener("click", () => { state.publicShelfTab = el.dataset.publicShelfMedia; render(); }));
     syncTop10Labels();
-    $$('[data-shelf-tab-panel="top10"], [data-public-shelf-tab-panel="top10"]').forEach(panel => bindTop10ListDragCards(panel, state.section === "shelf" || (state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || ""))));
+    document.querySelectorAll('[data-public-shelf-tab-panel="top10"]').forEach(panel => bindTop10ListDragCards(panel, state.section === "public-profile" && String(state.publicProfile?.profile?.id || "") === String(state.session?.user?.id || "")));
     $$('[data-top10-share]').forEach(button => button.addEventListener("click", event => {
       event.stopPropagation();
       const list = editableTop10Lists().find(entry => String(entry.id) === String(button.dataset.top10Share));
@@ -15570,9 +14786,6 @@
       article.appendChild(actions);
     });
      // A descrição agora é editada dentro de “Editar perfil”.
-    $('[data-blog-shelf-new]')?.addEventListener("click", openBlogShelfCollectionForm);
-    $$('[data-blog-shelf-edit]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openBlogShelfCollectionForm(el.dataset.blogShelfEdit); }));
-    $$('[data-blog-shelf-delete]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteBlogShelfCollection(el.dataset.blogShelfDelete); }));
     if (["moderator", "banca", "admin"].includes(state.profile?.plan)) {
       $$('[data-shelf-edit-category]').forEach(edit => {
         const category = state.shelfCategories.find(item => item.id === edit.dataset.shelfEditCategory);
@@ -15600,7 +14813,6 @@
     }));
     $$('[data-shelf-edit-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openShelfCategoryForm(el.dataset.shelfEditCategory); }));
     $$('[data-shelf-delete-category]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); deleteShelfCategory(el.dataset.shelfDeleteCategory); }));
-    if (state.section === "shelf") $$('[data-copy-collection]', $(".blog-shelf-panel-mount") || document).forEach(el => { delete el.dataset.copyUsername; });
     $$('[data-copy-collection]').forEach(el => {
       if (!el.dataset.copyUsername && state.profile?.username && !el.previousElementSibling?.matches("[data-shelf-open]")) {
         const openLink = document.createElement("a");
