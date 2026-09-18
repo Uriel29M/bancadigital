@@ -68,8 +68,8 @@
   const loadPdf = () => {
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (!pdfPromise) {
-      pdfPromise = cacheLocalAssets([pdfModuleUrl, pdfWorkerUrl])
-        .then(() => import(pdfModuleUrl))
+      cacheLocalAssets([pdfModuleUrl, pdfWorkerUrl]).catch(() => {});
+      pdfPromise = import(pdfModuleUrl)
         .then(library => {
           window.pdfjsLib = library;
           library.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -128,8 +128,10 @@
       return;
     }
     if (value === 'cbz') {
-      const [jszip] = await Promise.all([loadJsZip(), loadZipJs()]);
+      const jszip = await loadJsZip();
       if (!jszip) throw new Error('JSZip não carregou.');
+      // zip.js é otimização progressiva: não deve bloquear a abertura nem o bootstrap.
+      loadZipJs().catch(() => {});
       return;
     }
     if (value === 'cbr') await prepareCbr();
