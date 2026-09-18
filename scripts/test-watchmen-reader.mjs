@@ -23,6 +23,7 @@ for (const catalog of ['recentes', 'novos-52']) {
         item, resolvedUrl: item.fileUrl, selectedIndex: 0, prefetchedBuffer: null,
         body: {}, controls: {}, overlay: {}, skipCover: false, resumePage: 1,
         markReaderReady() {}, saveReadingProgress() {},
+        ensureReaderDependency: async () => {},
         renderPDFReader: async () => calls.push('pdf'),
         renderCBZReader: async () => calls.push('cbz'),
         renderCBRReader: async () => calls.push('cbr'),
