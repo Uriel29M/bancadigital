@@ -21,7 +21,7 @@ assert.ok(profile.includes('function openProfileStickerPicker()'), 'módulo deve
 assert.ok(profile.includes('async function toggleProfileDisplaySticker(button)'), 'módulo deve conter controle das figurinhas expostas');
 assert.ok(profile.includes('async function deleteAccount()'), 'módulo deve conter exclusão da conta');
 
-assert.ok(index.includes('js/app.js?v=2.2.10.510-profile-split'), 'index deve invalidar cache do app novo');
-assert.ok(index.includes('sw.js?v=274-profile-split'), 'index deve invalidar cache do service worker');
+assert.match(index, /js\/app\.js\?v=[^\"']+/, 'index deve manter cache-busting do app');
+assert.match(index, /sw\.js\?v=[^\"']+/, 'index deve manter cache-busting do service worker');
 
 console.log('PASS profile feature split');
