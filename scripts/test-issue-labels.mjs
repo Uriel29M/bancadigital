@@ -49,9 +49,12 @@ test('published Arlequina catalogs exclude zero and the annual from the denomina
   const library = context.window.DEFAULT_LIBRARY;
   const label = setup(library);
   const novos52 = library.filter(item => item.seriesId === 'series-arlequina-2013-novos-52');
-  assert.equal(novos52.length, 24);
-  assert.equal(label(novos52.find(item => item.issue === '23')), '23/23');
+  assert.equal(novos52.length, 28);
+  assert.equal(label(novos52.find(item => item.issue === '24')), '24/24');
   assert.equal(label(novos52.find(item => item.issue === '0')), '0');
+  assert.equal(label(novos52.find(item => item.issue === 'Anual 1')), 'Anual 1');
+  assert.equal(label(novos52.find(item => item.issue === 'Especial 1')), 'Especial 1');
+  assert.equal(label(novos52.find(item => item.issue === 'Especial 2')), 'Especial 2');
   const current = library.filter(item => item.seriesId === 'series-harley-quinn-2021');
   assert.equal(current.length, 21);
   assert.equal(label(current.find(item => item.issue === '20')), '20/20');
