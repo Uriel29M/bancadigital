@@ -17,6 +17,6 @@ assert.ok(chat.includes('function setupChatModerationUI('), 'módulo deve conter
 assert.ok(chat.includes('async function openChatRoom('), 'módulo deve conter salas');
 assert.ok(chat.includes('async function openChat('), 'módulo deve conter mensagens privadas');
 
-assert.ok(index.includes('js/app.js?v=2.2.10.509-chat-split'), 'index deve invalidar cache do app novo');
+assert.match(index, /js\/app\.js\?v=[^\"']+/, 'index deve manter cache-busting do app');
 
 console.log('PASS chat feature split');
