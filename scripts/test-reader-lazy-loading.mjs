@@ -24,7 +24,7 @@ assert.ok(app.includes('await ensureReaderDependency("cbz")'), 'ferramentas de C
 assert.ok(app.includes('if (["pdf", "cbz", "cbr"].includes(offlineFormat)) await ensureReaderDependency(offlineFormat)'), 'download deve preparar dependências PDF/CBZ/CBR para uso offline');
 assert.ok(!app.includes('warmLibarchive()'), 'libarchive não deve aquecer durante o bootstrap');
 
-assert.ok(sw.includes('reader-deps.js?v=1-lazy-reader-deps'), 'service worker deve guardar o loader local');
+assert.ok(sw.includes('reader-deps.js?v=2-reader-runtime-cache'), 'service worker deve guardar o loader local');
 assert.ok(sw.includes('readerCdnHosts'), 'service worker deve guardar dependências remotas usadas pelo leitor');
 assert.ok(!sw.includes('"./js/pdfjs/pdf.min.mjs"'), 'PDF.js não deve ser pré-cacheado no shell');
 assert.ok(!sw.includes('"./libarchive/libarchive.js"'), 'libarchive não deve ser pré-cacheado no shell');
