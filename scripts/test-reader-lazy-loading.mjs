@@ -19,6 +19,7 @@ assert.ok(app.includes('async function ensureReaderDependency(format)'), 'app pr
 assert.ok(app.includes('await ensureReaderDependency(selectedFormat)'), 'leitor deve carregar dependências antes de renderizar');
 assert.ok(app.includes('await ensureReaderDependency("pdf")'), 'ferramentas de PDF devem carregar PDF.js sob demanda');
 assert.ok(app.includes('await ensureReaderDependency("cbz")'), 'ferramentas de CBZ devem carregar ZIP sob demanda');
+assert.ok(app.includes('if (offlineFormat === "cbz") await ensureReaderDependency("cbz")'), 'download CBZ deve preparar dependência para uso offline');
 assert.ok(!app.includes('warmLibarchive()'), 'libarchive não deve aquecer durante o bootstrap');
 
 assert.ok(sw.includes('reader-deps.js?v=1-lazy-reader-deps'), 'service worker deve guardar o loader local');
