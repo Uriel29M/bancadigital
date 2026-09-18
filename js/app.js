@@ -1033,7 +1033,7 @@
     const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("Não foi possível preparar a capa offline:", error); return ""; });
     try {
       const offlineFormat = String(item.format || extension(url) || "").toLowerCase();
-      if (offlineFormat === "cbz") await ensureReaderDependency("cbz");
+      if (["pdf", "cbz", "cbr"].includes(offlineFormat)) await ensureReaderDependency(offlineFormat);
       await fetchFileArrayBuffer(url, (received, total) => {
         const current = state.downloads.get(id); if (!current) return;
         current.progress = total ? Math.min(100, received / total * 100) : 0; current.received = received; current.total = total;
@@ -1110,6 +1110,7 @@
         }
       } finally { await pdf.destroy(); }
     } else {
+      await ensureReaderDependency("cbr");
       const { Archive } = await loadLibarchiveModule();
       Archive.init({ workerUrl: appAssetUrl("libarchive/worker-bundle.js") });
       const archive = await Archive.open(new File([buffer], "edition.cbr"));
@@ -7568,7 +7569,7 @@
         resolvedUrl = sourceCandidates[selectedIndex] || resolvedUrl;
       }
       const selectedFormat = String(item.format || format).toLowerCase();
-      if (selectedFormat === "pdf" || selectedFormat === "cbz") await ensureReaderDependency(selectedFormat);
+      if (["pdf", "cbz", "cbr"].includes(selectedFormat)) await ensureReaderDependency(selectedFormat);
       const callback = (...args) => { markReaderReady(); saveReadingProgress(...args); };
       if (selectedFormat === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
         await renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
@@ -10113,6 +10114,7 @@
   }
 
   async function cbrCover(url, signal, maxWidth = 480) {
+    await ensureReaderDependency("cbr");
     const response = await fetch(proxiedFileUrl(url), { mode: "cors", credentials: "omit", cache: "no-store", signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const module = await import(appAssetUrl("libarchive/libarchive.js"));
