@@ -23,7 +23,6 @@ export function createPublicProfileFeature(deps) {
     publicCollectionItems,
     publicProfileHref,
     render,
-    renderPublicBlogCollectionPage,
     renderPublicCollectionPage,
     renderShelfLikePage,
     safeTitleColor,
@@ -71,8 +70,8 @@ export function createPublicProfileFeature(deps) {
     state.publicStickerChannel = channel;
   }
 
-  const PUBLIC_PROFILE_BASIC_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, faction_id, profile_hidden, is_banned, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_wall_public, profile_activity_public, allow_messages, allow_sticker_requests";
-  const PUBLIC_PROFILE_FULL_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, shelf_blogs_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned";
+  const PUBLIC_PROFILE_BASIC_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, faction_id, profile_hidden, is_banned, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, profile_wall_public, profile_activity_public, allow_messages, allow_sticker_requests";
+  const PUBLIC_PROFILE_FULL_COLUMNS = "id, username, avatar_url, profile_banner_url, profile_sticker_award_id, title, title_color, profile_background_theme, profile_accent_theme, plan, xp, level, daily_streak, last_seen_at, faction_id, wall_description, profile_wall_public, shelf_saved_public, shelf_saved_public_collections, shelf_series_public, shelf_read_public, shelf_completed_public, shelf_liked_public, profile_activity_public, allow_messages, allow_sticker_requests, shelf_sort_orders, shelf_styles, profile_hidden, is_banned";
 
   async function loadPublicProfile(username, collectionId = null, album = false, options = {}) {
     if (navigator.onLine === false || state.session?.offline) {
@@ -140,10 +139,6 @@ export function createPublicProfileFeature(deps) {
       profileDisplayStickers: [],
       stickerSlotPreferences: new Map(),
       collections: [],
-      blogCollections: [],
-      authoredBlogPosts: [],
-      savedBlogPosts: [],
-      collectionBlogPosts: [],
       favoriteIds: new Set(),
       favoriteAddedAt: new Map(),
       comicLikeAddedAt: new Map(),
@@ -180,14 +175,11 @@ export function createPublicProfileFeature(deps) {
       sb.from("profile_display_stickers").select("award_id, slot").eq("user_id", profile.data.id).order("slot", { ascending: true }),
       Promise.all([
       sb.from("comic_likes").select("item_id, created_at").eq("user_id", profile.data.id),
-      sb.from("blog_likes").select("blog_id, created_at").eq("user_id", profile.data.id),
       sb.from("shelf_collection_likes").select("owner_id, collection_id, created_at").eq("user_id", profile.data.id),
       sb.from("profile_follows").select("following_id, created_at").eq("follower_id", profile.data.id),
       sb.from("comments").select("id, item_id, body, created_at").eq("user_id", profile.data.id),
-      sb.from("blog_comments").select("id, blog_id, body, created_at").eq("user_id", profile.data.id),
       sb.from("profile_wall_comments").select("id, profile_id, body, created_at").eq("user_id", profile.data.id),
       sb.from("favorites").select("item_id, created_at").eq("user_id", profile.data.id),
-      sb.from("blog_saves").select("blog_id, created_at").eq("user_id", profile.data.id),
       sb.from("shelf_collection_saves").select("owner_id, collection_id, created_at").eq("user_id", profile.data.id),
       sb.from("publisher_saves").select("publisher_name, created_at").eq("user_id", profile.data.id),
       sb.from("reading_progress").select("item_id, updated_at").eq("user_id", profile.data.id).eq("completed", true)
@@ -195,16 +187,10 @@ export function createPublicProfileFeature(deps) {
     ]);
     // A atividade já traz a mesma lista de curtidas necessária para a estante.
     const comicLikes = { data: activityResults[0]?.data || [] };
-    let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+    let collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, is_featured, cover_styles, cover_choices, sort_order").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
     if (collections.error) {
-      collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, blog_ids, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
+      collections = await sb.from("shelf_collections").select("id, name, cover_url, is_public, item_ids, collection_type, is_featured").eq("owner_id", profile.data.id).order("created_at", { ascending: true });
     }
-    const authoredBlogs = await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").eq("author_id", profile.data.id).eq("status", "published").order("published_at", { ascending: false });
-    const publicCollectionBlogIds = [...new Set((collections.data || []).filter(collection => collection.collection_type === "blog" && collection.is_public !== false).flatMap(collection => Array.isArray(collection.blog_ids) ? collection.blog_ids : []))];
-    const collectionBlogs = publicCollectionBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", publicCollectionBlogIds).eq("status", "published") : { data: [] };
-    const publicBlogSaves = profile.data.shelf_blogs_public !== false ? await sb.from("blog_saves").select("blog_id").eq("user_id", profile.data.id) : { data: [] };
-    const publicSavedBlogIds = (publicBlogSaves.data || []).map(row => row.blog_id);
-    const savedBlogs = publicSavedBlogIds.length ? await sb.from("blog_posts").select("id, author_id, title, excerpt, cover_url, image_2_url, image_3_url, status, is_featured, created_at, published_at").in("id", publicSavedBlogIds).eq("status", "published") : { data: [] };
     const [achievements, likes, followers, following, moderationHistory, publicCoverChoicesResult, publicCoverStylesResult, publicSeriesCoverChoicesResult, savedCollectionLinks] = await Promise.all([
       sb.from("user_achievements").select("achievements(name, description, icon)").eq("user_id", profile.data.id),
       sb.from("shelf_collection_likes").select("collection_id, user_id").eq("owner_id", profile.data.id),
@@ -265,10 +251,6 @@ export function createPublicProfileFeature(deps) {
       profileDisplayStickers: profileDisplayStickersResult.data || [],
       stickerSlotPreferences: new Map((stickerSlotPreferences.data || []).map(row => [String(row.character_id), { blocked: row.blocked === true, placedBy: row.placed_by || null }])),
       collections: (collections.data || []).filter(collection => collection.collection_type !== "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, itemIds: Array.isArray(collection.item_ids) ? collection.item_ids : [], sortOrder: collection.sort_order || "added_desc", coverStyles: collection.cover_styles || {}, coverChoices: collection.cover_choices || {} })),
-      blogCollections: (collections.data || []).filter(collection => collection.collection_type === "blog").map(collection => ({ id: collection.id, name: collection.name, coverUrl: collection.cover_url || "", isPublic: collection.is_public !== false, is_featured: collection.is_featured === true, blogIds: Array.isArray(collection.blog_ids) ? collection.blog_ids : [] })),
-      authoredBlogPosts: authoredBlogs.data || [],
-      savedBlogPosts: savedBlogs.data || [],
-      collectionBlogPosts: collectionBlogs.data || [],
       favoriteIds: new Set((favorites.data || []).map(row => row.item_id)),
       favoriteAddedAt: new Map((favorites.data || []).map(row => [row.item_id, row.created_at])),
       comicLikeAddedAt: new Map((comicLikes.data || []).map(row => [row.item_id, row.created_at])),
@@ -367,11 +349,8 @@ export function createPublicProfileFeature(deps) {
     const likedItems = uniqueCatalogItems(state.db.library.filter(item => publicState.comicLikeIds?.has(item.id)));
     const completedItems = completedSeriesItems(publicState.readingProgress);
     const publicCategories = (publicState.collections || []).filter(category => category.isPublic !== false);
-    const publicBlogCollections = (publicState.blogCollections || []).filter(collection => collection.isPublic !== false);
     const selectedCategory = publicCategories.find(category => category.id === publicState.collectionId);
-    const selectedBlogCollection = publicBlogCollections.find(collection => collection.id === publicState.collectionId);
     if (publicState.collectionId && selectedCategory) return renderPublicCollectionPage(publicState, selectedCategory);
-    if (publicState.collectionId && selectedBlogCollection) return renderPublicBlogCollectionPage(publicState, selectedBlogCollection);
     if (publicState.album && !canAccessStickerAlbum(profile)) {
       return '<div class="content"><div class="empty">O álbum não está disponível para usuários Banca.</div></div>';
     }
@@ -379,7 +358,7 @@ export function createPublicProfileFeature(deps) {
       const isOwnAlbum = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
       return stickerAlbumMarkup(profile, publicState.stickerAwards || [], { isOwn: isOwnAlbum, progressMap: publicState.readingProgress });
     }
-    if (publicState.collectionId && !selectedCategory && !selectedBlogCollection) return `<div class="content"><div class="empty">Esta coleção não existe ou é privada.</div><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a></div>`;
+    if (publicState.collectionId && !selectedCategory) return `<div class="content"><div class="empty">Esta coleção não existe ou é privada.</div><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a></div>`;
     const canFollow = Boolean(state.session?.user?.id && state.session.user.id !== profile.id);
     const canBlock = canFollow;
     const isOwnProfile = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
@@ -388,29 +367,6 @@ export function createPublicProfileFeature(deps) {
       ? '<button class="small-btn" data-profile-sticker-choose>Figurinha</button><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button>'
       : `${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}`;
     return renderShelfLikePage({ profile, own: false, savedItems: { items: savedItems, visible: savedVisible }, savedSeries: { items: savedSeries, visible: seriesVisible }, readItems: { items: readItems, visible: readVisible }, completedItems: { items: completedItems, visible: completedVisible }, likedItems: { items: likedItems, visible: likedVisible }, categories: isOwnProfile ? (publicState.collections || []) : publicCategories, profileState: publicState, profileActions: publicProfileActions });
-    const publicShelfMarkup = renderShelfLikePage({ profile, own: false, savedItems: { items: savedItems, visible: savedVisible }, savedSeries: { items: savedSeries, visible: seriesVisible }, readItems: { items: readItems, visible: readVisible }, completedItems: { items: completedItems, visible: completedVisible }, likedItems: { items: likedItems, visible: likedVisible }, categories: publicCategories, profileState: publicState });
-    const profileActions = `${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}`;
-    if (false) {
-    return `<div class="content public-profile-page"><div class="profile-header">${profileStickerMarkup(profile, publicState.stickerAwards || [])}${avatarMarkup(profile)}<div><div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)}</div>${profile.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : '<div class="section-subtitle">Perfil público</div>'}${trophyRoom(publicState.achievements)}${followSummary(profile.id, publicState.followerCount, publicState.followingCount)}</div><div class="profile-actions">${profileActions}</div></div>${wallVisible ? profileWallMarkup(publicState) : '<section class="section"><div class="empty">O mural deste perfil está oculto.</div></section>'}</div>`;
-    }
-    return `<div class="content public-profile-page">
-      <div class="profile-header">
-        ${profileStickerMarkup(profile, publicState.stickerAwards || [])}${avatarMarkup(profile)}
-        <div>
-          <div class="eyebrow">${factionDot(profile)}@${escapeHTML(profile.username)} ${officialAiBadge(profile)}</div>
-          ${profile.title ? `<div class="profile-title" style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(profile.title)}</div>` : '<div class="section-subtitle">Perfil público</div>'}
-          ${trophyRoom(publicState.achievements)}
-          ${followSummary(profile.id, publicState.followerCount, publicState.followingCount)}
-        </div>
-      </div>
-      <div class="section-head"><div><h1 class="section-title">Estante de @${escapeHTML(profile.username)}</h1><div class="section-subtitle">${publicState.followerCount || 0} seguidores · ${publicState.followingCount || 0} seguindo · Coleções públicas do perfil</div></div><div class="profile-actions">${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}</div></div>
-      ${savedVisible ? shelfCollectionMarkup("Salvos", savedItems, "public-saved", publicState.readingProgress, publicState.favoriteIds) : '<div class="notice">A coleção Salvos está oculta neste perfil.</div>'}
-      ${seriesVisible ? shelfCollectionMarkup("Séries salvas", savedSeries, "public-series-saved", publicState.readingProgress, publicState.favoriteIds, "", null, true) : '<div class="notice">A coleção Séries salvas está oculta neste perfil.</div>'}
-      ${readVisible ? shelfCollectionMarkup("Lidos", readItems, "public-read", publicState.readingProgress, publicState.favoriteIds) : '<div class="notice">A coleção Lidos está oculta neste perfil.</div>'}
-      ${completedVisible ? shelfCollectionMarkup("Concluídos", completedItems, "public-completed", publicState.readingProgress, publicState.favoriteIds, "", null, true) : '<div class="notice">A coleção Concluídos está oculta neste perfil.</div>'}
-      ${likedVisible ? shelfCollectionMarkup("Curtidos", likedItems, "public-liked", publicState.readingProgress, publicState.favoriteIds) : '<div class="notice">A coleção Curtidos está oculta neste perfil.</div>'}
-      ${publicCategories.map(category => { const items = publicCollectionItems(category, publicState); const liked = publicState.collectionLikes?.has(category.id); const likes = publicState.collectionLikeCounts?.get(category.id) || 0; return shelfCollectionMarkup(category.name, items, `public-category:${category.id}`, publicState.readingProgress, publicState.favoriteIds, `<span class="shelf-visibility is-public">Pública</span><button class="small-btn ${liked ? "is-liked" : ""}" data-like-collection="${escapeHTML(category.id)}" data-like-owner="${escapeHTML(profile.id)}">${liked ? "♥" : "♡"} ${likes}</button><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username, category.id))}">Abrir coleção</a><button class="small-btn" data-copy-collection="${escapeHTML(category.id)}" data-copy-username="${escapeHTML(profile.username)}">Compartilhar</button>`); }).join("")}
-    </div>`;
   }
 
 
