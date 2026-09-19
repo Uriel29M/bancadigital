@@ -6,7 +6,7 @@ const feature = readFileSync('js/faction-editors-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/faction-editors-feature.js?v=1-faction-editors-split"))'));
+assert.ok(app.includes('import(appAssetUrl("js/faction-editors-feature.js"))'));
 assert.ok(app.includes('async function openFactionIdentityEditorV2(...args)'));
 assert.ok(app.includes('async function openFactionAbafacAddEditor(...args)'));
 assert.ok(app.includes('async function openFactionCatalogEditor(...args)'));
