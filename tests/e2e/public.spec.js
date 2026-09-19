@@ -27,7 +27,7 @@ test.describe('Banca Digital — público', () => {
     const notifications = topbar.locator('[data-action="notifications-popup"]');
     const avatar = topbar.locator('[data-action="open-profile-page"]');
     await expect(search).toBeVisible();
-    await expect(notifications).toBeVisible();
+    await expect(notifications).toBeHidden();
     await expect(avatar).toBeVisible();
 
     const searchBox = await search.boundingBox();
