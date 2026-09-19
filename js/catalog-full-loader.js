@@ -21,25 +21,6 @@ function parseScalarAssignment(source, name, fallback = null) {
   catch { return fallback; }
 }
 
-async function fetchCatalog() {
-  const url = new URL("js/data/dc-comics/recentes.js", document.baseURI);
-  if (window.CATALOG_VERSION) url.searchParams.set("v", String(window.CATALOG_VERSION));
-  const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
-  if (!response.ok) throw new Error(`Catálogo completo indisponível (HTTP ${response.status}).`);
-  const source = await response.text();
-  const series = parseJsonAssignment(source, "DEFAULT_SERIES", "DEFAULT_LIBRARY");
-  const library = parseJsonAssignment(source, "DEFAULT_LIBRARY", "DEFAULT_COLLECTIONS");
-  const collections = parseJsonAssignment(source, "DEFAULT_COLLECTIONS", "__CATALOG_END__");
-  return {
-    version: parseScalarAssignment(source, "CATALOG_VERSION", ""),
-    removedItemIds: parseScalarAssignment(source, "REMOVED_DEFAULT_ITEM_IDS", []),
-    series,
-    library,
-    collections,
-    byId: new Map(library.map(item => [String(item.id), item]))
-  };
-}
-
 function parseCollectionsFallback(source) {
   const marker = "window.DEFAULT_COLLECTIONS = ";
   const start = source.indexOf(marker);
