@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v669-faction-render-split";
+const CACHE_VERSION = "banca-digital-shell-v670-public-trust";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.255-mobile-nav-home",
-  "./js/app.js?v=2.2.10.517-faction-render-split", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./", "./index.html", "./css/style.css?v=2.2.10.256-public-trust",
+  "./js/app.js?v=2.2.10.517-public-trust", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",

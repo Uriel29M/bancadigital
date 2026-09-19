@@ -135,6 +135,15 @@ test.describe('Banca Digital — público', () => {
     await expect(page.locator('.auth-title')).toHaveText('Entrar');
   });
 
+  test('rodapé oferece privacidade, termos e denúncia', async ({ page }) => {
+    await page.goto('/');
+    const footer = page.locator('.footer');
+    await expect(footer.getByRole('link', { name: 'Privacidade' })).toHaveAttribute('href', 'privacidade.html');
+    await expect(footer.getByRole('link', { name: 'Termos e Regras' })).toHaveAttribute('href', 'termos.html');
+    await expect(footer.getByRole('link', { name: 'Contato e Denúncia' })).toHaveAttribute('href', 'contato.html');
+    await expect(footer).not.toContainText('pirataria. temos');
+  });
+
   test('visitante não vê Administração nem envio de quadrinhos', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('[data-action="open-admin"]')).toBeHidden();

@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.255-mobile-nav-home">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.256-public-trust">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -25,7 +25,7 @@
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=282-faction-render-split", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=283-public-trust", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -90,7 +90,7 @@
     <footer class="footer">
       <div>
         <strong>Sobre a Banca</strong>
-        <span>Diferente de outros sites, não visamos distribuir links de nenhum quadrinho e somos ativamente contra pirataria. temos por objetivo facilitar a leitura online de quadrinhos e apresentar historias que amamos a quem estiver disposto a conhecer novos universos desbravando nossa biblioteca</span>
+        <span>A Banca Digital é uma plataforma para descobrir, organizar e ler quadrinhos e mangás em um só lugar, com catálogo, perfis, coleções e recursos comunitários. Nosso objetivo é facilitar a descoberta de histórias e tornar a navegação pela biblioteca mais simples e agradável.</span>
       </div>
       <div class="footer-donation">
         <strong>Apoie a Banca Digital</strong>
@@ -98,6 +98,9 @@
         <div class="donation-pix-key"><code id="donation-pix-key">bancadigitalhq@gmail.com</code><button type="button" class="small-btn" data-copy-donation-pix>Copiar Pix</button></div>
       </div>
       <div class="footer-links">
+        <a href="privacidade.html">Privacidade</a>
+        <a href="termos.html">Termos e Regras</a>
+        <a href="contato.html">Contato e Denúncia</a>
         <button data-action="submit">Enviar quadrinho</button>
         <button data-action="open-admin">Administração</button>
       </div>
@@ -126,7 +129,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.517-faction-render-split"></script>
+    <script src="js/app.js?v=2.2.10.517-public-trust"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     (() => {
