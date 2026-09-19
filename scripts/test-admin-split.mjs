@@ -25,8 +25,8 @@ assert.ok(admin.includes('function bindAdminNoveltyBadge(overlay)'), 'módulo ad
 assert.ok(admin.includes('function openEditForm(id = null, initial = null)'), 'módulo admin deve conter formulário de edição');
 assert.ok(admin.includes('function openSubmission()'), 'módulo admin deve conter envio de quadrinhos');
 
-assert.match(index, /js\/app\.js\?v=2\.2\.10\.513-admin-split/, 'index deve apontar para a versão modular do app');
-assert.match(index, /sw\.js\?v=278-admin-split/, 'index deve invalidar o service worker');
+assert.match(index, /js\\/app\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no app');
+assert.match(index, /sw\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('admin-feature.js'), 'módulo admin não deve entrar no precache inicial');
 
 console.log('PASS admin feature split');
