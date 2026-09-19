@@ -137,7 +137,7 @@ export function createAdminFeature(deps) {
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `
       <div class="modal">
-        <h2>${id ? "Editar edição" : "Nova edição"}</h2>
+        <h2>${old ? "Editar edição" : "Nova edição"}</h2>
         <form id="edit-form">
           <div class="form-grid">
             <div class="field"><label>Título</label><input name="title" required value="${escapeHTML(x.title)}"></div>
@@ -564,8 +564,14 @@ export function createAdminFeature(deps) {
     return { links, error: "" };
   }
 
-  function openEditForm(id = null, initial = null) {
-    const old = id ? state.db.library.find(x => x.id === id) : null;
+  function openEditForm(idOrItem = null, initial = null) {
+    const directItem = idOrItem && typeof idOrItem === "object" ? idOrItem : null;
+    const id = directItem?.id ?? idOrItem;
+    const old = directItem || (id ? state.db.library.find(x => String(x.id) === String(id)) : null);
+    if (id && !old) {
+      toast("Não foi possível localizar esta edição para editar.");
+      return;
+    }
     const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", telegramFileId: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [], ...(initial || {}) };
     const secondaryCharacters = Array.isArray(x.secondaryCharacters)
       ? x.secondaryCharacters
