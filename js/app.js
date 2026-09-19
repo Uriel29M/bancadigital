@@ -14597,7 +14597,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=1-admin-split"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=2-admin-edition-editor"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
