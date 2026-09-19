@@ -4007,3 +4007,26 @@ input:disabled { opacity: .45; cursor: not-allowed; }
     max-height: calc(100vh - 220px);
   }
 }
+
+
+/* Reader advertising pages */
+.reader-ad-page { position:absolute; inset:0; z-index:25; display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:10px; padding:12px; box-sizing:border-box; background:#050505; }
+.reader-ad-badge { justify-self:center; padding:4px 9px; border:1px solid #33333a; border-radius:999px; color:#aaaab2; font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.reader-ad-media { min-height:0; display:grid; place-items:center; overflow:hidden; }
+.reader-ad-media > img,.reader-ad-link,.reader-ad-link > img { display:block; max-width:100%; max-height:100%; }
+.reader-ad-media img { width:auto; height:auto; object-fit:contain; margin:auto; border-radius:4px; }
+.reader-ad-link { cursor:pointer; }
+.reader-ad-footer { display:flex; align-items:center; justify-content:center; gap:12px; min-width:0; }
+.reader-ad-footer > span { overflow:hidden; color:#d2d2d7; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.reader-ad-admin-thumb { display:block; width:54px; height:72px; object-fit:cover; border-radius:4px; background:#111; }
+.reader-ad-current-image { display:flex; align-items:center; gap:10px; }
+.reader-ad-current-image img { width:100px; max-height:140px; object-fit:contain; background:#111; border-radius:5px; }
+.reader-ad-admin-table small { color:var(--muted); }
+@media (max-width:700px) {
+  .reader-ad-page { padding:8px; }
+  .reader-ad-footer { align-items:stretch; flex-direction:column; gap:6px; }
+  .reader-ad-footer > span { text-align:center; }
+  .reader-ad-footer .small-btn { width:100%; min-height:40px; }
+  .reader-ad-admin { overflow-x:auto; }
+  .reader-ad-admin-table { min-width:760px; }
+}

@@ -5956,6 +5956,7 @@
     let readerExitToHome = false;
     let removeReaderSwipeListeners = () => {};
     let readerSingleClickTimer = null;
+    let readerAdControllerPromise = Promise.resolve(null);
     const cleanupReader = () => {
       if (activeReaderCleanup === cleanupReader) activeReaderCleanup = null;
       readerIsOpen = false;
@@ -5968,6 +5969,7 @@
       resumeCoverLoading();
       if (options.localObjectUrl) URL.revokeObjectURL(options.localObjectUrl);
       removeReaderSwipeListeners();
+      void readerAdControllerPromise.then(controller => controller?.destroy()).catch(() => {});
     };
     activeReaderCleanup = cleanupReader;
     // Preserve the temporary Blob URL when the reader is re-opened for a
@@ -6031,6 +6033,11 @@
 
     const body = $("#reader-body", overlay);
     const controls = $("#reader-controls", overlay);
+    if (!item.local && !state.session?.offline && sb) {
+      readerAdControllerPromise = loadReaderAdsFeature()
+        .then(feature => feature.createReaderController(item, body))
+        .catch(error => { console.warn("Propagandas do leitor indisponíveis:", error); return null; });
+    }
     body.addEventListener("contextmenu", async event => {
       if (!event.target.closest("img.reader-image")) return;
       event.preventDefault();
@@ -6426,7 +6433,13 @@
       }
       const selectedFormat = String(item.format || format).toLowerCase();
       if (["pdf", "cbz", "cbr"].includes(selectedFormat)) await ensureReaderDependency(selectedFormat);
-      const callback = (...args) => { markReaderReady(); saveReadingProgress(...args); };
+      const callback = (...args) => {
+        markReaderReady();
+        saveReadingProgress(...args);
+        const page = Number(args[1]) || 0;
+        const total = Number(args[2]) || 0;
+        void readerAdControllerPromise.then(controller => controller?.onPageChange(page, total)).catch(() => {});
+      };
       if (selectedFormat === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
         await renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
       } else if (selectedFormat === "cbz" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbz")) {
@@ -6468,6 +6481,7 @@
       }
       controls.innerHTML = `<span class="reader-page">Imagem</span>`;
       saveReadingProgress(item, 1, 1);
+      void readerAdControllerPromise.then(controller => controller?.onPageChange(1, 1)).catch(() => {});
     } else if (item.seriesUrl && !item.fileUrl && !item.telegramUrl) {
       body.innerHTML = `
         <div class="empty" style="margin:auto;max-width:650px">
@@ -14681,13 +14695,27 @@
     return clean.match(/\.(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/)?.[1] || "auto";
   }
 
+  let readerAdsFeaturePromise = null;
+  function loadReaderAdsFeature() {
+    if (!readerAdsFeaturePromise) {
+      readerAdsFeaturePromise = import(appAssetUrl("js/reader-ads-feature.js?v=1-reader-ads"))
+        .then(module => module.createReaderAdsFeature({ $, $, sb, state, escapeHTML, toast, isAdminProfile }))
+        .catch(error => { readerAdsFeaturePromise = null; throw error; });
+    }
+    return readerAdsFeaturePromise;
+  }
+
+  async function openReaderAdsAdmin() {
+    return (await loadReaderAdsFeature()).openAdmin();
+  }
+
   let adminFeature = null;
   let adminFeaturePromise = null;
 
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=4-edition-custom-links-space"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=5-reader-ads-admin"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
@@ -14708,6 +14736,7 @@
             normalizedPlan,
             openAccountPlanAdmin,
             openAchievementAdmin,
+            openReaderAdsAdmin,
             render,
             save,
             saveCatalog,

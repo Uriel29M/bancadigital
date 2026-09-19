@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v676-chat-v4-cache-bust";
+const CACHE_VERSION = "banca-digital-shell-v677-reader-ads";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.258-reader-mobile-controls",
-  "./js/app.js?v=2.2.10.526-chat-v4-cache-bust", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./", "./index.html", "./css/style.css?v=2.2.10.259-reader-ads",
+  "./js/app.js?v=2.2.10.527-reader-ads", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
