@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v687-faction-chat-body-command";
+const CACHE_VERSION = "banca-digital-shell-v688-faction-chat-black";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.263-faction-chat-bubble",
+  "./", "./index.html", "./css/style.css?v=2.2.10.264-faction-chat-black",
   "./js/app.js?v=2.2.10.537-faction-chat-body-command", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
