@@ -1960,8 +1960,21 @@ main { min-height: calc(100vh - 150px); }
 .chat-message.is-mine { align-self: flex-end; border-radius: 10px 10px 3px 10px; background: #4a2027; }
 .chat-message.is-faction-bubble {
   background: var(--chat-faction-bubble, var(--surface));
+  color: #000 !important;
   box-shadow: none !important;
   filter: none !important;
+  text-shadow: none !important;
+}
+.chat-message.is-faction-bubble *,
+.chat-message.is-faction-bubble *:hover,
+.chat-message.is-faction-bubble *:focus {
+  color: #000 !important;
+  text-shadow: none !important;
+}
+.chat-message.is-faction-bubble svg,
+.chat-message.is-faction-bubble svg * {
+  fill: currentColor !important;
+  stroke: currentColor !important;
 }
 .chat-message.is-mine.is-faction-bubble { background: var(--chat-faction-bubble, #4a2027); }
 .chat-message.is-mine { max-width: 80%; }
