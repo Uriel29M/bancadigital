@@ -4,4 +4,4 @@ COPY gateway ./gateway
 RUN deno cache gateway/server.ts
 ENV PORT=8080
 EXPOSE 8080
-CMD ["run","--allow-net","--allow-env","gateway/server.ts"]
+CMD ["run","--allow-net","--allow-env","--allow-read","gateway/server.ts"]
