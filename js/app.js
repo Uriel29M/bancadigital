@@ -9007,7 +9007,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=2-mobile-chat-page"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=3-no-native-submit"))
         .then(module => module.createChatFeature({
           $,
           $$,
