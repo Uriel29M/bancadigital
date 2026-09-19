@@ -4426,11 +4426,14 @@
     const editions = seriesEditions(item);
     const previousHost = $("#reader-series-prev", overlay);
     const nextHost = $("#reader-series-next", overlay);
-    if (editions.length < 2 || (!previousHost && !nextHost)) return;
+    if (!previousHost && !nextHost) return;
     const offlineReader = navigator.onLine === false || state.session?.offline;
+    // Hidden editions are never part of reader navigation, even for admins.
+    // seriesEditions() may include them for catalog-management screens.
+    const visibleEditions = editions.filter(edition => canViewCatalogItem(edition, false));
     const navigationEditions = offlineReader
-      ? editions.filter(edition => edition.id === item.id || downloaded(edition.id)?.status === "completed")
-      : editions;
+      ? visibleEditions.filter(edition => edition.id === item.id || downloaded(edition.id)?.status === "completed")
+      : visibleEditions;
     if (offlineReader && navigationEditions.length < 2) {
       if (previousHost) previousHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">‹ Anterior</button>';
       if (nextHost) nextHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">Próxima ›</button>';
@@ -4460,7 +4463,7 @@
           return;
         }
         button.addEventListener("click", () => {
-          if (!target || target.id === item.id) return;
+          if (!target || target.id === item.id || !canViewCatalogItem(target, false)) return;
           overlay._seriesObserver?.disconnect();
           overlay.remove();
           openReader(target);
@@ -4468,7 +4471,7 @@
       });
     };
     if (current > 0) createNavigation(previousHost, `${current > 1 ? `<button title="Primeira edição${firstEdition?.issue ? ` — ${itemIssueDisplay(firstEdition)}` : ""}" data-series-target="0">« ${editionButtonLabel(firstEdition)}</button>` : ""}<button title="Edição anterior${previousEdition?.issue ? ` — ${itemIssueDisplay(previousEdition)}` : ""}" data-series-target="${current - 1}">‹ ${editionButtonLabel(previousEdition)}</button>`);
-    if (current < editions.length - 1) createNavigation(nextHost, `<button title="Próxima edição${nextEdition?.issue ? ` — ${itemIssueDisplay(nextEdition)}` : ""}" data-series-target="${current + 1}">${editionButtonLabel(nextEdition)} ›</button>${current < editions.length - 2 ? `<button title="Última edição${lastEdition?.issue ? ` — ${itemIssueDisplay(lastEdition)}` : ""}" data-series-target="${editions.length - 1}">${editionButtonLabel(lastEdition)} »</button>` : ""}`);
+    if (current >= 0 && current < navigationEditions.length - 1) createNavigation(nextHost, `<button title="Próxima edição${nextEdition?.issue ? ` — ${itemIssueDisplay(nextEdition)}` : ""}" data-series-target="${current + 1}">${editionButtonLabel(nextEdition)} ›</button>${current < navigationEditions.length - 2 ? `<button title="Última edição${lastEdition?.issue ? ` — ${itemIssueDisplay(lastEdition)}` : ""}" data-series-target="${navigationEditions.length - 1}">${editionButtonLabel(lastEdition)} »</button>` : ""}`);
   }
 
   function openEntityPage(kind, value) {
