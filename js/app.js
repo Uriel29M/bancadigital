@@ -3740,15 +3740,26 @@
   }
 
   function updateCompletionCards(item, completed) {
-    $$('[data-open]').filter(element => element.dataset.open === item?.id).forEach(cardElement => {
+    $('[data-open]').filter(element => element.dataset.open === item?.id).forEach(cardElement => {
       const existing = $(".card-completed", cardElement);
-      if (completed && !existing) {
-        const status = document.createElement("div");
-        status.className = "card-completed";
-        status.textContent = "✓ Lida";
-        cardElement.querySelector(".card-body")?.before(status);
-      } else if (!completed && existing) {
-        existing.remove();
+      const labelStack = $(".cover-labels", cardElement);
+      const existingCoverBadge = $(".cover-completed-badge", labelStack);
+      if (completed) {
+        if (!existing) {
+          const status = document.createElement("div");
+          status.className = "card-completed";
+          status.textContent = "✓ Lida";
+          cardElement.querySelector(".card-body")?.before(status);
+        }
+        if (labelStack && !existingCoverBadge) {
+          const coverStatus = document.createElement("span");
+          coverStatus.className = "cover-completed-badge";
+          coverStatus.textContent = "✓ Lida";
+          labelStack.appendChild(coverStatus);
+        }
+      } else {
+        existing?.remove();
+        existingCoverBadge?.remove();
       }
     });
   }
@@ -7522,7 +7533,7 @@
     return `
       <div class="card-wrap"><article class="card ${(hidden || isHiddenCatalogSeries(item.seriesId)) ? "is-hidden-catalog-item" : ""}" data-open="${escapeHTML(item.id)}" ${(directOpen || (state.section === "public-profile" && state.publicProfile?.collectionId)) ? "data-open-direct=\"true\"" : ""}>
           <div class="cover" data-cover-id="${escapeHTML(item.id)}" data-cover-style="${escapeHTML(coverStyle)}" style="background-image:url('${escapeHTML(coverFor(item, "card", activeCollectionContext?.coverChoices || coverChoices))}')">
-          <div class="cover-labels">${novelty ? '<span class="catalog-novelty-badge">NOVIDADE</span>' : ""}<span class="cover-number">${escapeHTML(issueLabel)}</span></div>
+          <div class="cover-labels">${novelty ? '<span class="catalog-novelty-badge">NOVIDADE</span>' : ""}<span class="cover-number">${escapeHTML(issueLabel)}</span>${completed ? '<span class="cover-completed-badge">✓ Lida</span>' : ""}</div>
           ${hidden && isStaffProfile() ? '<span class="card-hidden-badge">OCULTA</span>' : ""}
           <button class="card-favorite ${favorite ? 'is-favorite' : ''}" data-favorite="${escapeHTML(item.id)}" title="${favoriteLabel}" aria-label="${favoriteLabel}" aria-pressed="${favorite}" ${pendingFavorites.has(item.id) ? "disabled" : ""}>${favorite ? "★" : "☆"}</button>
           ${isAdminProfile() ? `<button type="button" class="card-metadata-toggle" data-edit-item="${escapeHTML(item.id)}" title="Ver e editar metadados" aria-label="Ver e editar metadados">✎</button>` : ""}
