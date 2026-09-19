@@ -3773,3 +3773,49 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   }
 }
 
+
+
+/* No celular, a seleção de edições vira uma página real da navegação. */
+.series-selection-page {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+.series-page-shell.series-modal {
+  width: 100%;
+  max-width: none;
+  padding: 8px 0 36px;
+}
+.series-page-shell > .section-head {
+  align-items: flex-start;
+  gap: 16px;
+}
+.series-page-shell > .section-head > .modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .series-selection-page.content {
+    width: 100%;
+    margin: 0;
+    padding: 16px 12px calc(88px + env(safe-area-inset-bottom));
+  }
+  .series-page-shell.series-modal {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+  .series-page-shell > .section-head {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .series-page-shell > .section-head > div:first-child,
+  .series-page-shell > .section-head > .modal-actions {
+    width: 100%;
+    max-width: none;
+  }
+  .series-page-shell > .section-head > .modal-actions {
+    justify-content: flex-start;
+  }
+}
