@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.260-reader-footer-actions">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.261-reader-footer-actions-refresh">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -22,10 +22,21 @@
     }
   </style>
   <script>
-    // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
+    // Mantém o app offline, mas também garante que uma versão nova assuma
+    // a aba atual sem deixá-la executando JavaScript antigo.
     if ("serviceWorker" in navigator) {
+      const initialControllerUrl = navigator.serviceWorker.controller?.scriptURL || "";
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        const nextControllerUrl = navigator.serviceWorker.controller?.scriptURL || "";
+        if (!initialControllerUrl || !nextControllerUrl || nextControllerUrl === initialControllerUrl) return;
+        const reloadKey = "bancaDigitalReloadedServiceWorker";
+        if (sessionStorage.getItem(reloadKey) === nextControllerUrl) return;
+        sessionStorage.setItem(reloadKey, nextControllerUrl);
+        window.location.reload();
+      });
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=290-reader-footer-actions", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=291-auto-refresh", { updateViaCache: "none" })
+          .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -129,7 +140,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.529-reader-footer-actions"></script>
+    <script src="js/app.js?v=2.2.10.530-reader-footer-actions-refresh"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     (() => {
