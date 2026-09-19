@@ -6,7 +6,7 @@ const admin = readFileSync('js/admin-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/admin-feature.js?v=1-admin-split"))'), 'administração deve carregar sob demanda');
+assert.ok(app.includes('import(appAssetUrl("js/admin-feature.js"))'), 'administração deve carregar sob demanda');
 assert.ok(app.includes('async function openAdmin(...args)'), 'wrapper openAdmin deve continuar no app');
 assert.ok(app.includes('async function openEditForm(...args)'), 'wrapper openEditForm deve continuar no app');
 assert.ok(app.includes('async function bindEditionEditButtons(...args)'), 'wrapper dos botões de edição deve continuar no app');
