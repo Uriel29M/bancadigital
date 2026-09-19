@@ -18,6 +18,7 @@ const RUNTIME_ASSETS = [
   "js/faction-editors-feature.js",
   "js/admin-feature.js",
   "js/sticker-actions-feature.js",
+  "js/catalog-full-loader.js",
 ];
 
 function read(relative) {

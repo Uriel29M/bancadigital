@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" href="assets/barracavermelhaicon.png?v=432b5667">
-  <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=432b5667">
+  <link rel="icon" type="image/png" href="assets/barracavermelhaicon.png?v=721770ed">
+  <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=721770ed">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-  <script>window.BANCA_BUILD_VERSION = "432b5667";</script>
-    <link rel="stylesheet" href="css/style.css?v=432b5667">
+  <script>window.BANCA_BUILD_VERSION = "721770ed";</script>
+    <link rel="stylesheet" href="css/style.css?v=721770ed">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -36,7 +36,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=432b5667", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=721770ed", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -47,7 +47,7 @@
   <div id="app">
     <header class="topbar">
       <a class="brand" href="#" data-action="home">
-        <span class="brand-mark"><img class="brand-logo" src="assets/barracabrancaicon.png?v=432b5667" alt="Banca Digital"></span>
+        <span class="brand-mark"><img class="brand-logo" src="assets/barracabrancaicon.png?v=721770ed" alt="Banca Digital"></span>
         <span>Banca<span class="brand-accent">Digital</span></span>
       </a>
       <nav class="main-nav" aria-label="Principal">
@@ -65,7 +65,7 @@
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜</button>
         <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
-        <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=432b5667" alt="Perfil"></button>
+        <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=721770ed" alt="Perfil"></button>
       </div>
     </header>
     <nav class="mobile-bottom-nav" aria-label="Ações principais no celular">
@@ -78,7 +78,7 @@
         <span>Ranking</span>
       </button>
       <button type="button" class="mobile-bottom-item" data-mobile-section="home" aria-label="Início">
-        <span class="mobile-bottom-icon" aria-hidden="true"><img class="mobile-bottom-icon-image" src="assets/barracavermelhaicon.png?v=432b5667" alt=""></span>
+        <span class="mobile-bottom-icon" aria-hidden="true"><img class="mobile-bottom-icon-image" src="assets/barracavermelhaicon.png?v=721770ed" alt=""></span>
         <span>Início</span>
       </button>
       <button type="button" class="mobile-bottom-item" data-mobile-action="messages" aria-label="Mensagens">
@@ -120,29 +120,29 @@
   </div>
   <div id="modal-root"></div>
   <div id="toast-root" class="toast-root"></div>
-  <script src="js/reader-deps.js?v=432b5667"></script>
+  <script src="js/reader-deps.js?v=721770ed"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.js?v=432b5667"></script>
-  <script src="js/catalog-sync.js?v=432b5667"></script>
-  <script src="js/telegram-auto.js?v=432b5667"></script>
-  <script src="js/series-default-covers.js?v=432b5667"></script>
-  <script src="js/telegram-covers.js?v=432b5667"></script>
-  <script src="js/data.js?v=432b5667"></script>
+  <script src="js/supabase.js?v=721770ed"></script>
+  <script src="js/catalog-sync.js?v=721770ed"></script>
+  <script src="js/telegram-auto.js?v=721770ed"></script>
+  <script src="js/series-default-covers.js?v=721770ed"></script>
+  <script src="js/telegram-covers.js?v=721770ed"></script>
+  <script src="js/data.js?v=721770ed"></script>
   <!-- Catálogos por editora/selo. -->
-  <script src="js/data/dc-comics/recentes.js?v=432b5667"></script>
+  <script src="js/data/dc-comics/catalog-index.js?v=721770ed"></script>
   <script>
     window.PUBLISHED_CATALOG = structuredClone({
       library: window.DEFAULT_LIBRARY || [],
       series: window.DEFAULT_SERIES || []
     });
   </script>
-  <script src="js/data/dc-comics/black-label.js?v=432b5667"></script>
-  <script src="js/data/dc-comics/milestone.js?v=432b5667"></script>
-  <script src="js/data/dc-comics/novos-52.js?v=432b5667"></script>
-  <script src="js/catalog-identity.js?v=432b5667"></script>
-  <script src="js/data/loading-tips.js?v=432b5667"></script>
-    <script src="js/app.js?v=432b5667"></script>
-  <script src="js/series-more.js?v=432b5667"></script>
+  <script src="js/data/dc-comics/black-label.js?v=721770ed"></script>
+  <script src="js/data/dc-comics/milestone.js?v=721770ed"></script>
+  <script src="js/data/dc-comics/novos-52.js?v=721770ed"></script>
+  <script src="js/catalog-identity.js?v=721770ed"></script>
+  <script src="js/data/loading-tips.js?v=721770ed"></script>
+    <script src="js/app.js?v=721770ed"></script>
+  <script src="js/series-more.js?v=721770ed"></script>
   <script>
     (() => {
       const mobileNav = document.querySelector('.mobile-bottom-nav');
