@@ -704,6 +704,25 @@ export function createChatFeature(deps) {
       if (selectedContact) selectedContact.hidden = true;
     }
     if (!contact) {
+      // O formulário fica visível antes do carregamento das conversas recentes.
+      // Vincule o submit imediatamente para impedir que Enter faça o envio HTML
+      // padrão e recarregue a Banca enquanto as consultas abaixo ainda aguardam.
+      const contactForm = $("#chat-contact-form", overlay);
+      if (contactForm) contactForm.onsubmit = async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const username = String(new FormData(event.currentTarget).get("username") || "").trim();
+        if (!username) return;
+        const submitButton = $("button[type=submit]", event.currentTarget);
+        if (submitButton?.disabled) return;
+        if (submitButton) submitButton.disabled = true;
+        const result = await sb.from("profiles_public").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
+        if (submitButton) submitButton.disabled = false;
+        if (result.error || !result.data) return toast("Usuário não encontrado.");
+        if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
+        teardown();
+        openChat(result.data);
+      };
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
       $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => { const unread = state.chatRoomUnreadCounts?.[room.id] || 0; return `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span>${unread ? `<span class="message-badge" aria-label="${unread} marcação(ões) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : ""}<small>${chatRoomLabel(room)}</small></button>`; }).join("")}</div>`);
       $('[data-chat-room]', overlay).forEach(button => button.onclick = () => { teardown(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
@@ -745,16 +764,6 @@ export function createChatFeature(deps) {
           });
         }
       }
-      $("#chat-contact-form", overlay).onsubmit = async event => {
-        event.preventDefault();
-        const username = String(new FormData(event.currentTarget).get("username") || "").trim();
-        if (!username) return;
-        const result = await sb.from("profiles_public").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
-        if (result.error || !result.data) return toast("Usuário não encontrado.");
-        if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
-        teardown();
-        openChat(result.data);
-      };
       return;
     }
     const messagesRoot = $("[data-chat-messages]", overlay);
