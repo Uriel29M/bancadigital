@@ -6,7 +6,7 @@ const feature = readFileSync('js/sticker-actions-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/sticker-actions-feature.js?v=1-sticker-actions-split"))'));
+assert.ok(app.includes('import(appAssetUrl("js/sticker-actions-feature.js"))'));
 assert.ok(app.includes('async function maybeAwardReadSticker(...args)'));
 assert.ok(app.includes('async function maybeAwardCompletedStickers(...args)'));
 assert.ok(app.includes('async function requestSticker(...args)'));
