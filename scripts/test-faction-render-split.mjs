@@ -6,7 +6,7 @@ const feature = readFileSync('js/faction-render-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/faction-render-feature.js?v=1-faction-render-split"))');
+assert.ok(app.includes('import(appAssetUrl("js/faction-render-feature.js"))'));
 assert.ok(app.includes('function renderFactionPage(...args)'));
 assert.ok(app.includes('function renderFactionMembersPage(...args)'));
 assert.ok(app.includes('function factionMembersResultsMarkup(...args)'));
