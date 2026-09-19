@@ -105,7 +105,9 @@ test.describe('Banca Digital — público', () => {
     await expect(bottomNav).toBeVisible();
     await expect(bottomNav.locator('[data-mobile-action="downloads"]')).toBeVisible();
     await expect(bottomNav.locator('[data-mobile-section="ranking"]')).toBeVisible();
-    await expect(bottomNav.locator('[data-mobile-action="random"]')).toBeVisible();
+    await expect(bottomNav.locator(':scope > [data-mobile-section="home"]')).toBeVisible();
+    await expect(bottomNav.locator(':scope > [data-mobile-section="home"] .mobile-bottom-icon-image')).toHaveAttribute('src', /barracavermelhaicon\.png/);
+    await expect(bottomNav.locator(':scope > [data-mobile-action="random"]')).toHaveCount(0);
     await expect(bottomNav.locator('[data-mobile-action="messages"]')).toBeVisible();
 
     const downloadBox = await bottomNav.locator('[data-mobile-action="downloads"]').boundingBox();
@@ -113,6 +115,9 @@ test.describe('Banca Digital — público', () => {
 
     await bottomNav.locator('summary').click();
     await expect(bottomNav.locator('.mobile-more-popover')).toBeVisible();
+    await expect(bottomNav.locator('.mobile-more-popover [data-mobile-action="random"]')).toBeVisible();
+    await expect(bottomNav.locator('.mobile-more-popover [data-mobile-section="album"]')).toHaveCount(1);
+    await expect(bottomNav.locator('.mobile-more-popover [data-mobile-section="home"]')).toHaveCount(0);
     await bottomNav.locator('[data-mobile-section="comics"]').click();
     await expect(page.locator('main')).toContainText(/Quadrinhos|ediç|série/i);
     await expect(bottomNav.locator('.mobile-more-menu')).not.toHaveAttribute('open', '');
