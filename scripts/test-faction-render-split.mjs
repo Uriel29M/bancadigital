@@ -28,8 +28,8 @@ assert.ok(feature.includes('function factionPinnedCollectionsMarkup(faction)'));
 assert.ok(feature.includes('function factionExtraAbafacsMarkup(faction, stats)'));
 assert.ok(feature.includes('function renderFactionPage()'));
 
-assert.match(index, /js\/app\.js\?v=2\.2\.10\.517-faction-render-split/);
-assert.match(index, /sw\.js\?v=282-faction-render-split/);
+assert.match(index, /js\\/app\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no app');
+assert.match(index, /sw\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('faction-render-feature.js'));
 
 console.log('PASS faction render split');
