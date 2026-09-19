@@ -1617,6 +1617,7 @@
     album: "album",
     login: "entrar",
     signup: "cadastro",
+    series: "serie",
     entity: "entidade"
   };
 
@@ -1770,6 +1771,7 @@
         state.homeRandomCharacter = null;
       }
       state.collectionId = params.get("colecao") || null;
+      state.seriesPageId = section === "series" ? params.get("serie") || null : null;
       state.rankingCategory = section === "ranking" ? params.get("categoria") || null : null;
       const factionRouteValue = section === "factions" ? params.get("faccao") || null : null;
       const routedFaction = factionRouteValue ? state.factions.find(faction => String(faction.page_key) === String(factionRouteValue) || faction.id === factionRouteValue) : null;
@@ -12084,6 +12086,19 @@
     let markup = "";
     if (state.section === "home") markup = renderHome();
     else if (state.section === "comic") markup = renderCatalog("comic");
+    else if (state.section === "series") {
+      const seriesId = state.seriesPageId;
+      const first = state.db.library.find(item => String(item.seriesId || "") === String(seriesId || ""));
+      if (first) {
+        main.replaceChildren();
+        applyProfileTheme(null);
+        openSeriesSelection(first, seriesEditions(first), false, false, null, isAdminProfile(), true);
+        syncActiveNav();
+        prepareLazyImages(main);
+        return;
+      }
+      markup = '<div class="content series-selection-page"><div class="empty">Série indisponível.</div></div>';
+    }
     else if (state.section === "ranking") markup = renderRankingPage();
     else if (state.section === "factions") markup = state.factionMembersView ? renderFactionMembersPage() : renderFactionPage();
     else if (state.section === "manga") markup = renderCatalog("manga");
@@ -14411,14 +14426,20 @@
     };
   }
 
-  function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null, allowHiddenPreview = false) {
+  function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null, allowHiddenPreview = false, forcePage = false) {
+    const seriesRouteId = series?.seriesId || series?.id || "";
+    const pageMode = forcePage || (state.section === "series" && String(state.seriesPageId || "") === String(seriesRouteId));
+    if (!pageMode && window.matchMedia?.("(max-width: 760px)")?.matches && seriesRouteId) {
+      navigate({ pagina: "serie", serie: seriesRouteId });
+      return;
+    }
     if (!allowHiddenPreview && isHiddenCatalogSeries(series?.seriesId || series?.id) && !isAdminProfile()) {
       toast("Esta série está temporariamente oculta.");
       return;
     }
 
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
+    const overlay = document.createElement(pageMode ? "section" : "div");
+    overlay.className = pageMode ? "series-selection-page content" : "modal-backdrop";
     const volumeGroups = new Map();
     editions.slice().sort((a, b) => issueSortValue(a) - issueSortValue(b)).forEach(item => {
       const label = item.volumeTitle || item.volume || "Edições";
@@ -14431,14 +14452,14 @@
       : "";
     const volumePanels = volumeEntries.map(([label, items], index) => `<div class="series-volume-panel" data-series-volume-panel="${index}" ${index ? "hidden" : ""}><div class="section-subtitle series-volume-heading">${escapeHTML(label)}</div><div class="results-grid">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, true)).join("")}</div></div>`).join("");
     overlay.innerHTML = `
-      <div class="modal series-modal">
+      <div class="${pageMode ? "series-page-shell series-modal" : "modal series-modal"}">
         <div class="section-head">
           <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições · capas em vermelho estão indisponíveis</div></div>
-          <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-file-reports ${returnToFileReports ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-reader ${returnToReader ? "" : "hidden"}>Voltar à história</button><button class="small-btn" data-close>Fechar</button></div>
+          <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-file-reports ${returnToFileReports ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-reader ${returnToReader ? "" : "hidden"}>Voltar à história</button><button class="small-btn" data-close>${pageMode ? "Voltar" : "Fechar"}</button></div>
         </div>
         ${volumeTabs}${volumePanels}
       </div>`;
-    $("#modal-root").appendChild(overlay);
+    (pageMode ? $("#main") : $("#modal-root")).appendChild(overlay);
     bindCatalogItemVisibility(overlay);
     const downloadSeriesButton = document.createElement("button");
     downloadSeriesButton.className = "small-btn";
@@ -14459,10 +14480,10 @@
       obtainButton.dataset.seriesExport = series.seriesId || series.id;
       obtainButton.title = "Salvar todas as edições no computador";
       downloadSeriesButton.after(obtainButton);
-      obtainButton.addEventListener("click", () => { overlay.remove(); openSeriesExport(series, editions); });
+      obtainButton.addEventListener("click", () => { if (!pageMode) overlay.remove(); openSeriesExport(series, editions); });
       addEditionButton.addEventListener("click", () => {
         const latest = seriesEditions({ seriesId: series.seriesId || series.id }).at(-1) || series;
-        overlay.remove();
+        if (!pageMode) overlay.remove();
         openEditForm(null, {
           title: latest.title || latest.seriesTitle || "",
           seriesTitle: latest.seriesTitle || latest.title || "",
@@ -14488,15 +14509,21 @@
       volumeButton.onclick = () => openSeriesVolumeManager(editions, () => {
         overlay.remove();
         const ids = new Set(editions.map(item => String(item.id)));
-        openSeriesSelection(series, state.db.library.filter(item => ids.has(String(item.id))), returnToCoverVariants, returnToFileReports, returnToReader);
+        openSeriesSelection(series, state.db.library.filter(item => ids.has(String(item.id))), returnToCoverVariants, returnToFileReports, returnToReader, allowHiddenPreview, pageMode);
       });
     }
     refreshSeriesDownloadButton(series.seriesId);
     hydrateHomeCovers();
-    overlay.addEventListener("click", event => {
-      if (event.target === overlay) overlay.remove();
-    });
-    $("[data-close]", overlay).onclick = () => overlay.remove();
+    if (!pageMode) {
+      overlay.addEventListener("click", event => {
+        if (event.target === overlay) overlay.remove();
+      });
+    }
+    $("[data-close]", overlay).onclick = () => {
+      if (!pageMode) return overlay.remove();
+      if (currentRouteHistoryIndex() > 0) window.history.back();
+      else navigate({}, true);
+    };
     $("[data-back-reader]", overlay)?.addEventListener("click", () => { overlay.remove(); openReader(returnToReader); });
    $('[data-back-cover-variants]', overlay)?.addEventListener("click", () => { overlay.remove(); openCoverVariantsReviewPopup(); });
     $('[data-back-file-reports]', overlay)?.addEventListener("click", () => { overlay.remove(); openFileReportsPopup(); });
