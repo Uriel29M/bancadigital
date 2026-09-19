@@ -303,7 +303,9 @@ export function createPublicProfileFeature(deps) {
   async function toggleProfileBlock(profile) {
     if (!state.session || !sb) return openAuthPage();
     if (!profile?.id || profile.id === state.session.user.id) return;
+    const protectedFromBlocking = ["banca", "admin"].includes(String(profile.plan || "").trim().toLowerCase());
     const blocked = Boolean(state.publicProfile?.blockedByMe);
+    if (protectedFromBlocking && !blocked) return toast("Contas Banca e administradores não podem ser bloqueados.");
     if (!await openProfileBlockConfirm(profile, blocked)) return;
     const query = sb.from("profile_blocks");
     const result = blocked
@@ -360,7 +362,7 @@ export function createPublicProfileFeature(deps) {
     }
     if (publicState.collectionId && !selectedCategory) return `<div class="content"><div class="empty">Esta coleção não existe ou é privada.</div><a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a></div>`;
     const canFollow = Boolean(state.session?.user?.id && state.session.user.id !== profile.id);
-    const canBlock = canFollow;
+    const canBlock = canFollow && !["banca", "admin"].includes(String(profile.plan || "").trim().toLowerCase());
     const isOwnProfile = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
     const canModerate = !isOwnProfile && canModerateProfile(profile);
     const publicProfileActions = isOwnProfile
