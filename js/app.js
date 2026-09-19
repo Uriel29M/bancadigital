@@ -9032,7 +9032,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=3-no-native-submit"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=4-private-list-fix"))
         .then(module => module.createChatFeature({
           $,
           $$,
