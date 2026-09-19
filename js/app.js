@@ -8894,7 +8894,12 @@
       .replace(/(?<!\*)\*([^*\r\n]+)\*(?!\*)/g, '<strong class="chat-emphasis-soft">$1</strong>')
       .replace(/([.!?:])\s+-\s+(?=<strong>)/g, "$1<br>")
       .replace(/\r?\n/g, "<br>");
-    const cleanChatUrl = rawUrl => String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
+    const cleanChatUrl = rawUrl => {
+      const cleanUrl = String(rawUrl || "").replace(/[),.!?;:]+$/g, "");
+      // Links internos antigos da Guria usavam "/?..." e, no GitHub Pages,
+      // isso removia o caminho /bancadigital/. Preserve o diretório atual.
+      return cleanUrl.startsWith("/?") ? cleanUrl.slice(1) : cleanUrl;
+    };
     const isChatImageUrl = rawUrl => {
       let parsed;
       try { parsed = new URL(cleanChatUrl(rawUrl)); } catch { return false; }
