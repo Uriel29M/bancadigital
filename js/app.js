@@ -1056,6 +1056,13 @@
 
   async function startDownload(item) {
     if (!state.session) return openAuthPage();
+    if (window.BANCA_CATALOG_LITE && !item?.local) {
+      try { item = await hydrateCatalogItem(item); }
+      catch (error) {
+        console.warn("Não foi possível carregar a fonte do download:", error);
+        return toast("Não foi possível preparar este download agora.");
+      }
+    }
     const url = downloadSource(item);
     if (!url) return toast("Este quadrinho não possui um arquivo direto para baixar.");
     if (isExternalArchiveLink(url)) {
@@ -2435,7 +2442,8 @@
     if (!sb || state.profile?.plan !== "admin") return { skipped: true };
     // Never let a stale browser snapshot overwrite canonical edition sources.
     await refreshSharedCatalog({ renderPage: false });
-    const library = BancaCatalogSync.merge(state.db.library);
+    const hydratedLibrary = await hydrateCatalogLibrary(state.db.library);
+    const library = BancaCatalogSync.merge(hydratedLibrary);
     const result = await sb.functions.invoke("github-catalog", {
       body: { library: compactSeriesItems(library), series: window.DEFAULT_SERIES || [], collections: state.db.collections },
     });
@@ -2640,6 +2648,26 @@
       url.searchParams.set("v", window.BANCA_BUILD_VERSION);
     }
     return url.href;
+  }
+
+  let catalogFullLoaderPromise = null;
+  function loadCatalogFullLoader() {
+    if (!catalogFullLoaderPromise) {
+      catalogFullLoaderPromise = import(appAssetUrl("js/catalog-full-loader.js"))
+        .catch(error => {
+          catalogFullLoaderPromise = null;
+          throw error;
+        });
+    }
+    return catalogFullLoaderPromise;
+  }
+  async function hydrateCatalogItem(item) {
+    if (!window.BANCA_CATALOG_LITE || item?.local) return item;
+    return (await loadCatalogFullLoader()).hydrateCatalogItem(item);
+  }
+  async function hydrateCatalogLibrary(items = state.db.library) {
+    if (!window.BANCA_CATALOG_LITE) return items;
+    return (await loadCatalogFullLoader()).hydrateCatalogLibrary(items);
   }
 
   async function ensureReaderDependency(format) {
@@ -5902,6 +5930,15 @@
 
   function openReader(item, options = {}) {
     if (!item) return;
+    if (window.BANCA_CATALOG_LITE && !item.local && !options.catalogHydrated) {
+      void hydrateCatalogItem(item).then(fullItem => {
+        openReader(fullItem, { ...options, catalogHydrated: true });
+      }).catch(error => {
+        console.warn("Não foi possível carregar os detalhes da edição:", error);
+        toast("Não foi possível carregar os detalhes desta edição agora.");
+      });
+      return;
+    }
     if (!canViewCatalogItem(item)) {
       toast("Esta edição está indisponível.");
       return;
@@ -14804,7 +14841,11 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js"))
+      adminFeaturePromise = hydrateCatalogLibrary(state.db.library)
+        .then(hydrated => {
+          state.db.library = hydrated;
+          return import(appAssetUrl("js/admin-feature.js"));
+        })
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
