@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.261-reader-footer-actions-refresh">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.262-card-label-stack">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=294-reader-hidden-navigation", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=295-card-label-stack", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -140,7 +140,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.533-reader-hidden-navigation"></script>
+    <script src="js/app.js?v=2.2.10.534-card-label-stack"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     (() => {
