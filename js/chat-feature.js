@@ -35,6 +35,46 @@ export function createChatFeature(deps) {
     toast
   } = deps;
 
+  function usesMobileChatPage() {
+    return window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760;
+  }
+
+  function discardActiveMobileChatPage() {
+    const cleanup = state.chatPageCleanup;
+    state.chatPageCleanup = null;
+    if (typeof cleanup === "function") cleanup();
+    document.querySelectorAll(".chat-page-shell").forEach(node => node.remove());
+    document.body.classList.remove("chat-page-open");
+  }
+
+  function prepareMobileChatPage() {
+    if (state.section !== "messages") state.chatReturnSection = state.section || "home";
+    state.section = "messages";
+    render();
+  }
+
+  function mountChatSurface(markup, mobilePage) {
+    const surface = document.createElement("div");
+    surface.className = mobilePage ? "chat-page-shell" : "modal-backdrop";
+    surface.innerHTML = markup;
+    if (mobilePage) {
+      const main = $("#main");
+      main.replaceChildren(surface);
+      document.body.classList.add("chat-page-open");
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    } else {
+      $("#modal-root").appendChild(surface);
+    }
+    return surface;
+  }
+
+  function restoreChatReturnSection() {
+    const target = state.chatReturnSection && state.chatReturnSection !== "messages" ? state.chatReturnSection : "home";
+    state.chatReturnSection = null;
+    state.section = target;
+    render();
+  }
+
   function chatMessageMarkup(message, profile = {}, senderVisual = null, options = {}) {
     const username = cleanUsername(profile.username || "usuário");
     const isGuria = username.toLowerCase() === "guria";
@@ -472,6 +512,8 @@ export function createChatFeature(deps) {
   }
 
   async function openChatRoom(room) {
+    const mobilePage = usesMobileChatPage();
+    discardActiveMobileChatPage();
     const sheriffResult = isSheriffRoom(room) && sb ? await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id }) : { data: [] };
     const sheriff = sheriffResult.data?.[0] || null;
     const chatCanModerate = ["moderator", "banca", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id) || isFactionChatSheriff(room, state.session?.user?.id);
@@ -480,11 +522,12 @@ export function createChatFeature(deps) {
     await markChatMentionsRead(room?.id);
     await loadNotifications();
     if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
-    $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal chat-conversation-modal"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions"><button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button></div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`;
-    $("#modal-root").appendChild(overlay);
+    $('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
+    if (mobilePage) prepareMobileChatPage();
+    const roomHeaderActions = mobilePage
+      ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>'
+      : '<button class="small-btn" type="button" data-chat-back>Voltar</button><button class="small-btn" type="button" data-close>Fechar</button>';
+    const overlay = mountChatSurface(`<div class="modal chat-modal chat-conversation-modal${mobilePage ? " chat-page" : ""}"><div class="section-head"><div><h2>${escapeHTML(room.name)}</h2><div class="section-subtitle">Sala ${chatRoomLabel(room).toLowerCase()} · mensagens expiram em 24 horas</div></div><div class="chat-modal-actions">${roomHeaderActions}</div></div><div class="chat-pins" data-chat-pins hidden></div><div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-room-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form></div>`, mobilePage);
     if (chatCanModerate) {
       const toolsButton = document.createElement("button");
       toolsButton.className = "small-btn"; toolsButton.type = "button"; toolsButton.textContent = "⚙ Moderação";
@@ -524,10 +567,15 @@ export function createChatFeature(deps) {
       channel?.unsubscribe();
       pinsRoot?._chatPinCleanup?.();
       overlay.remove();
+      if (mobilePage) {
+        if (state.chatPageCleanup === close) state.chatPageCleanup = null;
+        document.body.classList.remove("chat-page-open");
+      }
     };
-    $("[data-close]", overlay).onclick = close;
+    if (mobilePage) state.chatPageCleanup = close;
+    $("[data-close]", overlay)?.addEventListener("click", close);
     $("[data-chat-back]", overlay).onclick = event => { close(event); openChat(); };
-    overlay.addEventListener("click", event => {
+    if (!mobilePage) overlay.addEventListener("click", event => {
       if (event.target === overlay) close(event);
     });
     const messagesRoot = $("[data-chat-messages]", overlay);
@@ -597,6 +645,8 @@ export function createChatFeature(deps) {
   }
 
   async function openChat(contact = null) {
+    const mobilePage = usesMobileChatPage();
+    discardActiveMobileChatPage();
     removeLegacyChatScrollControls();
     $$('.notifications-popup-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
@@ -615,26 +665,36 @@ export function createChatFeature(deps) {
     }
     if (contact?.id) await markChatNotificationsRead(contact.id);
     await loadNotifications();
-    render();
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${contact ? `<button class="small-btn" type="button" data-chat-back>Voltar</button>` : ""}<button class="small-btn" data-close>Fechar</button></div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)} ${officialAiBadge(contact)}</b>${contact.is_bot ? '<small>Mensagens para a IA podem passar por moderação automatizada.</small>' : ''}</div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`;
-    $("#modal-root").appendChild(overlay);
+    if (mobilePage) prepareMobileChatPage();
+    else render();
+    const chatHeaderActions = mobilePage
+      ? (contact ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>' : '<button class="small-btn" type="button" data-close>Voltar</button>')
+      : `${contact ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>' : ""}<button class="small-btn" data-close>Fechar</button>`;
+    const overlay = mountChatSurface(`<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}${mobilePage ? " chat-page" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${chatHeaderActions}</div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)} ${officialAiBadge(contact)}</b>${contact.is_bot ? '<small>Mensagens para a IA podem passar por moderação automatizada.</small>' : ''}</div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`, mobilePage);
     let channel = null;
     let closed = false;
-    const close = event => {
-      event?.preventDefault();
-      event?.stopPropagation();
+    const teardown = () => {
       if (closed) return;
       closed = true;
       state.chatContact = null;
       channel?.unsubscribe();
       overlay.remove();
-      loadNotifications().then(() => render());
+      if (mobilePage) {
+        if (state.chatPageCleanup === teardown) state.chatPageCleanup = null;
+        document.body.classList.remove("chat-page-open");
+      }
     };
-    $("[data-close]", overlay).onclick = close;
-    $("[data-chat-back]", overlay)?.addEventListener("click", event => { close(event); openChat(); });
-    overlay.addEventListener("click", event => {
+    const close = event => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      teardown();
+      if (mobilePage) restoreChatReturnSection();
+      else loadNotifications().then(() => render());
+    };
+    if (mobilePage) state.chatPageCleanup = teardown;
+    $("[data-close]", overlay)?.addEventListener("click", close);
+    $("[data-chat-back]", overlay)?.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); teardown(); openChat(); });
+    if (!mobilePage) overlay.addEventListener("click", event => {
       if (event.target === overlay) close(event);
     });
     if (contact) {
@@ -646,7 +706,7 @@ export function createChatFeature(deps) {
     if (!contact) {
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
       $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => { const unread = state.chatRoomUnreadCounts?.[room.id] || 0; return `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span>${unread ? `<span class="message-badge" aria-label="${unread} marcação(ões) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : ""}<small>${chatRoomLabel(room)}</small></button>`; }).join("")}</div>`);
-      $$('[data-chat-room]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
+      $('[data-chat-room]', overlay).forEach(button => button.onclick = () => { teardown(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
       const privateChatList = $("[data-private-chat-list]", overlay);
       const privateMessages = await sb.from("chat_messages")
         .select("id, sender_id, recipient_id, body, created_at")
@@ -680,7 +740,7 @@ export function createChatFeature(deps) {
           $$('[data-private-chat-user]', privateChatList).forEach(button => button.onclick = () => {
             const contact = profiles.get(button.dataset.privateChatUser);
             if (!contact) return;
-            overlay.remove();
+            teardown();
             openChat(contact);
           });
         }
@@ -692,7 +752,7 @@ export function createChatFeature(deps) {
         const result = await sb.from("profiles_public").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
         if (result.error || !result.data) return toast("Usuário não encontrado.");
         if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
-        overlay.remove();
+        teardown();
         openChat(result.data);
       };
       return;

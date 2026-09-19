@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v666-sticker-actions-split";
+const CACHE_VERSION = "banca-digital-shell-v667-mobile-chat-page";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.253-mobile-collections-align",
-  "./js/app.js?v=2.2.10.514-sticker-actions-split", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./", "./index.html", "./css/style.css?v=2.2.10.254-mobile-chat-page",
+  "./js/app.js?v=2.2.10.515-mobile-chat-page", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",

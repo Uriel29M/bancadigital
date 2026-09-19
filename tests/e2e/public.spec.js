@@ -86,6 +86,21 @@ test.describe('Banca Digital — público', () => {
     expect(publicCollectionsAlignment.gridTransform).toBe('none');
     expect(publicCollectionsAlignment.gridMarginLeft).toBe('0px');
 
+    const mobileTouchTargets = await page.evaluate(() => {
+      const host = document.querySelector('#main');
+      const probe = document.createElement('div');
+      probe.innerHTML = '<button class="small-btn" data-touch-small>Teste</button><button class="chat-pin-action" data-touch-chat aria-label="Fixar">📌</button>';
+      host.appendChild(probe);
+      const small = probe.querySelector('[data-touch-small]').getBoundingClientRect();
+      const chat = probe.querySelector('[data-touch-chat]').getBoundingClientRect();
+      const result = { smallHeight: small.height, chatWidth: chat.width, chatHeight: chat.height };
+      probe.remove();
+      return result;
+    });
+    expect(mobileTouchTargets.smallHeight).toBeGreaterThanOrEqual(44);
+    expect(mobileTouchTargets.chatWidth).toBeGreaterThanOrEqual(44);
+    expect(mobileTouchTargets.chatHeight).toBeGreaterThanOrEqual(44);
+
     const bottomNav = page.locator('.mobile-bottom-nav');
     await expect(bottomNav).toBeVisible();
     await expect(bottomNav.locator('[data-mobile-action="downloads"]')).toBeVisible();

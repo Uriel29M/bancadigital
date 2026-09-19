@@ -9220,7 +9220,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=1-chat-split"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=2-mobile-chat-page"))
         .then(module => module.createChatFeature({
           $,
           $$,
@@ -13017,6 +13017,11 @@
   }
 
   function render() {
+    if (state.section !== "messages" && typeof state.chatPageCleanup === "function") {
+      const cleanup = state.chatPageCleanup;
+      state.chatPageCleanup = null;
+      cleanup();
+    }
     document.querySelector(".topbar")?.classList.toggle("is-offline", Boolean(state.session?.offline));
     const factionsNav = document.querySelector('.nav-link[data-section="factions"]');
     if (factionsNav) factionsNav.style.display = "";
@@ -13037,6 +13042,7 @@
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
     else if (state.section === "album") markup = canAccessStickerAlbum() ? stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true }) : '<div class="content"><div class="empty">É preciso criar uma conta para usar o álbum.</div></div>';
+    else if (state.section === "messages") markup = main.querySelector(".chat-page-shell") ? main.innerHTML : '<div class="content chat-page-loading"><div class="empty">Carregando mensagens...</div></div>';
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
     if (state.section === "entity") markup = markup.replace(/<section class="section character-news-section"[\s\S]*?<\/section>/i, "");
@@ -13126,7 +13132,12 @@
 
   function syncActiveNav() {
     const navSection = { comic: "comics", collection: "collections" }[state.section] || state.section;
-    $$(".nav-link").forEach(button => button.classList.toggle("active", button.dataset.section === navSection));
+    $(".nav-link").forEach(button => button.classList.toggle("active", button.dataset.section === navSection));
+    $(".mobile-bottom-item").forEach(button => {
+      const section = button.dataset.mobileSection || "";
+      const action = button.dataset.mobileAction || "";
+      button.classList.toggle("active", section === navSection || (state.section === "messages" && action === "messages"));
+    });
   }
 
   function setSection(section) {
