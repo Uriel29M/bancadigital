@@ -772,7 +772,9 @@ export function createChatFeature(deps) {
           const profile = profiles.get(String(contactId));
           const conversation = conversations.get(contactId);
           if (!profile || !conversation) return "";
-          return `<button type="button" class="chat-private-card" data-private-chat-user="${escapeHTML(profile.id)}">${avatarMarkup(profile, "chat-private-card-avatar")}<span class="chat-private-card-copy"><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b><small>${escapeHTML(conversation.latest.body.slice(0, 100))}</small></span><time>${escapeHTML(formatCommentDate(conversation.latest.created_at))}</time></button>`;
+          const unread = state.chatPrivateUnreadCounts?.[String(contactId)] || 0;
+          const unreadBadge = unread ? `<span class="message-badge" aria-label="${unread} mensagem(ns) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : "";
+          return `<button type="button" class="chat-private-card${unread ? " has-unread" : ""}" data-private-chat-user="${escapeHTML(profile.id)}">${avatarMarkup(profile, "chat-private-card-avatar")}<span class="chat-private-card-copy"><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b><small>${escapeHTML(conversation.latest.body.slice(0, 100))}</small></span>${unreadBadge}<time>${escapeHTML(formatCommentDate(conversation.latest.created_at))}</time></button>`;
         }).join("");
         if (cards) {
           privateChatList.hidden = false;
