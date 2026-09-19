@@ -14460,7 +14460,7 @@
     overlay.innerHTML = `
       <div class="${pageMode ? "series-page-shell series-modal" : "modal series-modal"}">
         <div class="section-head">
-          <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições · capas em vermelho estão indisponíveis</div></div>
+          <div><div class="eyebrow">Série</div><h2>${escapeHTML(series.seriesTitle || series.title)}</h2><div class="section-subtitle">${editions.length} edições · selecione uma edição para abrir</div></div>
           <div class="modal-actions"><button class="small-btn" data-back-cover-variants ${returnToCoverVariants ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-file-reports ${returnToFileReports ? "" : "hidden"}>Voltar</button><button class="small-btn" data-back-reader ${returnToReader ? "" : "hidden"}>Voltar à história</button><button class="small-btn" data-close>${pageMode ? "Voltar" : "Fechar"}</button></div>
         </div>
         ${volumeTabs}${volumePanels}
