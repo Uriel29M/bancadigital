@@ -1958,6 +1958,12 @@ main { min-height: calc(100vh - 150px); }
 .chat-message > .profile-faction-role { top: -10px; margin: 0 0 6px 4px; padding: 1px 3px; font-size: 8px; line-height: 1.15; vertical-align: middle; }
 .chat-message > .profile-staff-role { top: -10px; margin: 0 0 6px 4px; padding: 1px 3px; color: #fff; border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); font-size: 8px; line-height: 1.15; vertical-align: middle; }
 .chat-message.is-mine { align-self: flex-end; border-radius: 10px 10px 3px 10px; background: #4a2027; }
+.chat-message.is-faction-bubble {
+  background: var(--chat-faction-bubble, var(--surface));
+  box-shadow: none !important;
+  filter: none !important;
+}
+.chat-message.is-mine.is-faction-bubble { background: var(--chat-faction-bubble, #4a2027); }
 .chat-message.is-mine { max-width: 80%; }
 .chat-message-pending { opacity: .68; }
 .chat-message small { display: block; color: var(--muted); font-size: 10px; }
