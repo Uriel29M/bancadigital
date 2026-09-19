@@ -12,8 +12,8 @@ assert.ok(indexHtml.includes("js/data/dc-comics/catalog-index.js"), "bootstrap d
 assert.ok(!indexHtml.includes("js/data/dc-comics/recentes.js"), "catálogo completo não deve entrar no HTML inicial");
 assert.ok(sw.includes("js/data/dc-comics/catalog-index.js"), "service worker deve precachear o índice");
 assert.ok(!sw.includes("js/data/dc-comics/recentes.js"), "service worker não deve precachear o catálogo completo");
-assert.ok(indexCatalog.includes("window.BANCA_CATALOG_LITE = true"), "índice deve anunciar modo leve");
-assert.ok(indexCatalog.length < fullCatalog.length * 0.75, "índice inicial deve ser pelo menos 25% menor que o catálogo completo");
+assert.match(indexCatalog, /window\.BANCA_CATALOG_LITE\s*=\s*true/, "índice deve anunciar modo leve");
+assert.ok(indexCatalog.length < fullCatalog.length * 0.6, "índice inicial deve ser pelo menos 40% menor que o catálogo completo");
 assert.ok(!indexCatalog.includes('"fileUrl":'), "índice não deve conter URLs de arquivo");
 assert.ok(!indexCatalog.includes('"telegramFileId":'), "índice não deve conter IDs de arquivo do Telegram");
 assert.ok(!indexCatalog.includes('"backupUrls":'), "índice não deve conter fontes de backup");
