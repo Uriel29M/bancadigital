@@ -2355,6 +2355,8 @@
   async function openFactionChoice(...args) {
     return (await loadFactionEditorsFeature()).openFactionChoice(...args);
   }
+  let sharedCatalogRefresh = null;
+
   async function refreshSharedCatalog(options = {}) {
     if (!sb || navigator.onLine === false) return false;
     if (sharedCatalogRefresh) return sharedCatalogRefresh;
@@ -5929,6 +5931,7 @@
     const readerHomeButton = $("[data-reader-home]", overlay);
     let readerExitToHome = false;
     let removeReaderSwipeListeners = () => {};
+    let readerSingleClickTimer = null;
     const cleanupReader = () => {
       if (activeReaderCleanup === cleanupReader) activeReaderCleanup = null;
       readerIsOpen = false;
@@ -5983,7 +5986,7 @@
       setSection("home");
       openSeriesSelection(item, editions, false, false, item);
     });
-    $("[data-reader-custom-link]", overlay).forEach(button => button.addEventListener("click", () => window.open(button.dataset.readerCustomLink, "_blank", "noopener")));
+    $('[data-reader-custom-link]', overlay).forEach(button => button.addEventListener("click", () => window.open(button.dataset.readerCustomLink, "_blank", "noopener")));
     $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
@@ -6057,7 +6060,6 @@
     let readerZoomOrigin = { x: "50%", y: "50%" };
     let readerPan = { x: 0, y: 0 };
     let readerPanPointer = null;
-    let readerSingleClickTimer = null;
     let lastReaderZoomAt = 0;
     const setReaderZoom = (nextZoom, origin = readerZoomOrigin) => {
       readerZoom = Math.max(1, Math.min(3, nextZoom));
