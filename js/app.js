@@ -7731,7 +7731,9 @@
   }
 
   function renderHome() {
-    const lib = visibleCatalogItems();
+    // A home nunca usa edições ocultas como destaque/recomendação, nem para ADM.
+    // Itens ocultos continuam disponíveis nas áreas específicas de administração/Bucho.
+    const lib = visibleCatalogItems(state.db.library, false);
     let heroItem = lib.find(item => item.id === state.homeHeroId);
     if (!heroItem) {
       heroItem = weightedRandom(lib.filter(x => x.featured)) || lib[0];
