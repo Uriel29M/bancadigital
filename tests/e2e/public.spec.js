@@ -11,6 +11,46 @@ test.describe('Banca Digital — público', () => {
     expect(errors.filter(message => !/ResizeObserver/i.test(message))).toEqual([]);
   });
 
+  test('cabeçalho mobile fica compacto e usa navegação inferior', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto('/');
+
+    const topbar = page.locator('.topbar');
+    await expect(topbar.locator('.main-nav')).toBeHidden();
+    await expect(topbar.locator('[data-action="downloads"]')).toBeHidden();
+    await expect(topbar.locator('[data-action="ranking"]')).toHaveCount(0);
+    await expect(topbar.locator('[data-section="ranking"]')).toBeHidden();
+    await expect(topbar.locator('[data-action="random"]')).toBeHidden();
+    await expect(topbar.locator('[data-action="messages"]')).toBeHidden();
+
+    const search = topbar.locator('[data-action="focus-search"]');
+    const notifications = topbar.locator('[data-action="notifications-popup"]');
+    const avatar = topbar.locator('[data-action="open-profile-page"]');
+    await expect(search).toBeVisible();
+    await expect(notifications).toBeVisible();
+    await expect(avatar).toBeVisible();
+
+    const searchBox = await search.boundingBox();
+    expect(searchBox?.width).toBeGreaterThanOrEqual(44);
+    expect(searchBox?.height).toBeGreaterThanOrEqual(44);
+
+    const bottomNav = page.locator('.mobile-bottom-nav');
+    await expect(bottomNav).toBeVisible();
+    await expect(bottomNav.locator('[data-mobile-action="downloads"]')).toBeVisible();
+    await expect(bottomNav.locator('[data-mobile-section="ranking"]')).toBeVisible();
+    await expect(bottomNav.locator('[data-mobile-action="random"]')).toBeVisible();
+    await expect(bottomNav.locator('[data-mobile-action="messages"]')).toBeVisible();
+
+    const downloadBox = await bottomNav.locator('[data-mobile-action="downloads"]').boundingBox();
+    expect(downloadBox?.height).toBeGreaterThanOrEqual(48);
+
+    await bottomNav.locator('summary').click();
+    await expect(bottomNav.locator('.mobile-more-popover')).toBeVisible();
+    await bottomNav.locator('[data-mobile-section="comics"]').click();
+    await expect(page.locator('main')).toContainText(/Quadrinhos|ediç|série/i);
+    await expect(bottomNav.locator('.mobile-more-menu')).not.toHaveAttribute('open', '');
+  });
+
   test('cadastro e login continuam acessíveis', async ({ page }) => {
     await page.goto('/');
     await page.locator('[data-action="open-profile-page"]').click();

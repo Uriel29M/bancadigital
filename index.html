@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.249-profile-cleanup">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.250-mobile-nav">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -25,7 +25,7 @@
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=276-profile-cleanup", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=277-mobile-nav", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -56,6 +56,35 @@
         <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
       </div>
     </header>
+    <nav class="mobile-bottom-nav" aria-label="Ações principais no celular">
+      <button type="button" class="mobile-bottom-item" data-mobile-action="downloads" aria-label="Downloads">
+        <span class="mobile-bottom-icon" aria-hidden="true">↓</span>
+        <span>Downloads</span>
+      </button>
+      <button type="button" class="mobile-bottom-item" data-mobile-section="ranking" aria-label="Ranking">
+        <span class="mobile-bottom-icon" aria-hidden="true">🏆</span>
+        <span>Ranking</span>
+      </button>
+      <button type="button" class="mobile-bottom-item" data-mobile-action="random" aria-label="Surpreenda-me">
+        <span class="mobile-bottom-icon" aria-hidden="true">🎲</span>
+        <span>Aleatório</span>
+      </button>
+      <button type="button" class="mobile-bottom-item" data-mobile-action="messages" aria-label="Mensagens">
+        <span class="mobile-bottom-icon" aria-hidden="true">💬</span>
+        <span>Mensagens</span>
+      </button>
+      <details class="mobile-more-menu">
+        <summary class="mobile-bottom-item" aria-label="Mais opções">
+          <span class="mobile-bottom-icon" aria-hidden="true">•••</span>
+          <span>Mais</span>
+        </summary>
+        <div class="mobile-more-popover" role="menu" aria-label="Mais opções de navegação">
+          <button type="button" data-mobile-section="home" role="menuitem">Início</button>
+          <button type="button" data-mobile-section="comics" role="menuitem">Quadrinhos</button>
+          <button type="button" data-mobile-section="factions" role="menuitem">Facção</button>
+        </div>
+      </details>
+    </nav>
     <main id="main"></main>
     <footer class="footer">
       <div>
@@ -98,5 +127,44 @@
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
     <script src="js/app.js?v=2.2.10.512-profile-cleanup"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
+  <script>
+    (() => {
+      const mobileNav = document.querySelector('.mobile-bottom-nav');
+      if (!mobileNav) return;
+
+      const findTopbarControl = (kind, value) => {
+        const selector = kind === 'section' ? '.topbar [data-section]' : '.topbar [data-action]';
+        return Array.from(document.querySelectorAll(selector)).find(element => (
+          kind === 'section' ? element.dataset.section === value : element.dataset.action === value
+        ));
+      };
+
+      mobileNav.addEventListener('click', event => {
+        const trigger = event.target.closest('[data-mobile-action], [data-mobile-section]');
+        if (!trigger) return;
+
+        const topbar = document.querySelector('.topbar');
+        const action = trigger.dataset.mobileAction || '';
+        const section = trigger.dataset.mobileSection || '';
+
+        if (topbar?.classList.contains('is-offline') && action !== 'downloads') return;
+
+        const target = section
+          ? findTopbarControl('section', section)
+          : findTopbarControl('action', action);
+        if (!target) return;
+
+        event.preventDefault();
+        const openMenu = trigger.closest('.mobile-more-menu') || mobileNav.querySelector('.mobile-more-menu[open]');
+        openMenu?.removeAttribute('open');
+        target.click();
+      });
+
+      document.addEventListener('click', event => {
+        const openMenu = mobileNav.querySelector('.mobile-more-menu[open]');
+        if (openMenu && !openMenu.contains(event.target)) openMenu.removeAttribute('open');
+      });
+    })();
+  </script>
 </body>
 </html>
