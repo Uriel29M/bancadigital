@@ -19,5 +19,6 @@ assert.ok(app.includes('const detailsFactionId = state.section === "factions"'),
 
 assert.equal((app.match(/await sb\.rpc\("touch_profile"\)/g) || []).length, 1,
   "presença não deve duplicar touch_profile antes do heartbeat");
+assert.ok(app.includes("}, 120000);"), "heartbeat de presença deve evitar RPC por minuto sem necessidade");
 
 console.log("PASS soak stability regressions");
