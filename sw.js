@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v674-chat-feature-network-first";
+const CACHE_VERSION = "banca-digital-shell-v675-dynamic-js-network-first";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.258-reader-mobile-controls",
-  "./js/app.js?v=2.2.10.521-chat-cache-fix", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./js/app.js?v=2.2.10.522-staff-blocking-cache-fix", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
@@ -62,16 +62,8 @@ self.addEventListener("fetch", event => {
     return;
   }
   const isCatalogData = url.pathname.endsWith("/js/data.js") || url.pathname.includes("/js/data/");
-  if (url.pathname.endsWith("/js/app.js") ||
-      url.pathname.endsWith("/js/chat-feature.js") ||
-      url.pathname.endsWith("/js/app-loader.js") ||
-      url.pathname.endsWith("/js/reader-deps.js") ||
-      url.pathname.endsWith("/js/cbr-libarchive-fix.js") ||
-      url.pathname.endsWith("/js/catalog-sync.js") ||
-      url.pathname.endsWith("/js/catalog-identity.js") ||
-      url.pathname.endsWith("/js/telegram-auto.js") ||
-      url.pathname.endsWith("/js/telegram-covers.js") ||
-      url.pathname.endsWith("/css/style.css") || isCatalogData) {
+  const isAppJavascript = url.pathname.includes("/js/") && url.pathname.endsWith(".js");
+  if (isAppJavascript || url.pathname.endsWith("/css/style.css") || isCatalogData) {
     event.respondWith((async () => {
       try {
         const response = await fetch(request, { cache: "no-store" });
