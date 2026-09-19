@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=293-reader-edit-resolution", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=294-reader-hidden-navigation", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -140,7 +140,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.532-reader-edit-resolution"></script>
+    <script src="js/app.js?v=2.2.10.533-reader-hidden-navigation"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     (() => {
