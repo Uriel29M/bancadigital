@@ -22,7 +22,7 @@ assert.ok(admin.includes('function openAdmin(editId = null)'), 'módulo admin de
 assert.ok(admin.includes('function bindAdminLinkChecker(overlay)'), 'módulo admin deve conter verificador de links');
 assert.ok(admin.includes('function bindAdminAccountRetention(overlay)'), 'módulo admin deve conter retenção');
 assert.ok(admin.includes('function bindAdminNoveltyBadge(overlay)'), 'módulo admin deve conter configuração da etiqueta novidade');
-assert.ok(admin.includes('function openEditForm(id = null, initial = null)'), 'módulo admin deve conter formulário de edição');
+assert.ok(admin.includes('function openEditForm(idOrItem = null, initial = null)'), 'módulo admin deve conter formulário de edição');
 assert.ok(admin.includes('function openSubmission()'), 'módulo admin deve conter envio de quadrinhos');
 
 assert.ok(index.includes('js/app.js?v='), 'index deve usar BUILD_ID no app');
