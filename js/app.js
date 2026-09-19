@@ -5510,11 +5510,18 @@
   }
 
   async function attachComments(item, overlay) {
-    if (!sb || state.session?.offline || navigator.onLine === false) return;
-    const panel = document.createElement("details");
-    panel.className = "reader-comments";
-    panel.innerHTML = `<summary>Comentários</summary><div class="comments-content"><div class="comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form"><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
-    overlay.appendChild(panel);
+    if (!sb || state.session?.offline || navigator.onLine === false || item.local) return;
+    const panel = $("[data-reader-comments-panel]", overlay);
+    const toggle = $("[data-reader-comments-toggle]", overlay);
+    if (!panel || !toggle) return;
+    panel.innerHTML = `<div class="comments-content"><div class="comments-list"><span class="section-subtitle">Carregando...</span></div>${state.session ? '<form class="comment-form"><textarea name="body" maxlength="1000" required placeholder="Escreva um comentário..."></textarea><button class="small-btn" type="submit">Comentar</button></form>' : '<p class="section-subtitle">Entre para comentar.</p>'}</div>`;
+    toggle.onclick = event => {
+      event.stopPropagation();
+      const opening = panel.hidden;
+      panel.hidden = !opening;
+      toggle.textContent = opening ? "− Comentários" : "＋ Comentários";
+      toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+    };
     const list = $(".comments-list", panel);
     const refresh = async () => {
       renderCommentThread(list, await loadCommentThread(item));
@@ -5933,11 +5940,6 @@
           ${state.session && !item.local ? `<button class="small-btn" data-toggle-read>${savedProgress?.completed ? 'Desmarcar como lida' : 'Marcar como lida'}</button>` : ''}
         </div>
         <div class="reader-top-actions">
-          ${!state.session?.offline && characterNames(item)[0] ? `<button class="small-btn" data-browse-character="${escapeHTML(characterNames(item)[0])}">Ver personagem</button>` : ''}
-          ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
-          ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
-          ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
-          ${item.seriesId ? `<button class="small-btn" data-view-series="${escapeHTML(item.seriesId)}">Série</button>` : ""}
           ${!state.session?.offline ? readerCustomLinksMarkup(item) : ""}
           ${state.profile?.plan === "admin" && !state.session?.offline ? `<button class="small-btn" data-open-external>Ver arquivo</button>` : ''}
         </div>
@@ -5947,6 +5949,17 @@
         <div class="reader-series-controls reader-series-prev" id="reader-series-prev"></div>
         <div class="reader-controls" id="reader-controls"><span class="reader-page">O primeiro carregamento costuma ser demorado.</span></div>
         <div class="reader-series-controls reader-series-next" id="reader-series-next"></div>
+      </div>
+      <div class="reader-footer">
+        ${!item.local && !state.session?.offline && sb ? '<button type="button" class="reader-comments-toggle" data-reader-comments-toggle aria-expanded="false">＋ Comentários</button>' : '<span></span>'}
+        <div class="reader-footer-actions">
+          ${!state.session?.offline && characterNames(item)[0] ? `<button class="small-btn" data-browse-character="${escapeHTML(characterNames(item)[0])}">Ver personagem</button>` : ''}
+          ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
+          ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
+          ${item.seriesId ? `<button class="small-btn" data-view-series="${escapeHTML(item.seriesId)}">Série</button>` : ""}
+          ${isAdminProfile() && !item.local && !state.session?.offline ? '<button class="small-btn" type="button" data-reader-edit>Editar</button>' : ''}
+        </div>
+        <div class="reader-comments" data-reader-comments-panel hidden></div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -6014,6 +6027,10 @@
     });
     $$('[data-reader-custom-link]', overlay).forEach(button => button.addEventListener("click", () => window.open(button.dataset.readerCustomLink, "_blank", "noopener")));
     $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
+    $("[data-reader-edit]", overlay)?.addEventListener("click", event => {
+      event.stopPropagation();
+      openEditForm(item);
+    });
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
       if (state.session?.user?.id) saveSkipCoverPreference(nextSkipCover);
