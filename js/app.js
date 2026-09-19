@@ -478,6 +478,7 @@
     chatContact: null,
     messageUnreadCount: 0,
     chatRoomUnreadCounts: {},
+    chatPrivateUnreadCounts: {},
     downloads: new Map(),
     downloadsSortOrder: localStorage.getItem("bancaDigitalDownloadsSort") || "added_desc",
     downloadsSeriesSortOrders: (() => { try { return JSON.parse(localStorage.getItem("bancaDigitalDownloadsSeriesSort") || "{}"); } catch { return {}; } })(),
@@ -2966,6 +2967,7 @@
       state.notificationUnreadCount = 0;
       state.messageUnreadCount = 0;
       state.chatRoomUnreadCounts = {};
+      state.chatPrivateUnreadCounts = {};
       return;
     }
     await sb.rpc("purge_my_expired_notifications");
@@ -2980,6 +2982,7 @@
       state.notificationUnreadCount = 0;
       state.messageUnreadCount = 0;
       state.chatRoomUnreadCounts = {};
+      state.chatPrivateUnreadCounts = {};
       return;
     }
     const chatNotificationTypes = ["message", "chat_mention"];
@@ -2988,6 +2991,12 @@
     state.chatRoomUnreadCounts = unreadChatNotifications.reduce((counts, notification) => {
       const roomId = notification.type === "chat_mention" ? notification.metadata?.room_id : null;
       if (roomId) counts[roomId] = (counts[roomId] || 0) + 1;
+      return counts;
+    }, {});
+    state.chatPrivateUnreadCounts = unreadChatNotifications.reduce((counts, notification) => {
+      if (notification.type !== "message" || !notification.actor_id) return counts;
+      const contactId = String(notification.actor_id);
+      counts[contactId] = (counts[contactId] || 0) + 1;
       return counts;
     }, {});
     const visibleNotifications = (result.data || []).filter(notification => !chatNotificationTypes.includes(notification.type));
@@ -3006,7 +3015,7 @@
           await markChatNotificationsRead(payload.new.actor_id);
         }
         await loadNotifications();
-        $$('[data-chat-room]').forEach(button => {
+        $('[data-chat-room]').forEach(button => {
           const unread = state.chatRoomUnreadCounts?.[button.dataset.chatRoom] || 0;
           let badge = $(".message-badge", button);
           if (unread) {
@@ -3017,6 +3026,21 @@
             }
             badge.textContent = unread > 99 ? "99+" : String(unread);
             badge.setAttribute("aria-label", `${unread} marcação(ões) não lida(s)`);
+          } else {
+            badge?.remove();
+          }
+        });
+        $('[data-private-chat-user]').forEach(button => {
+          const unread = state.chatPrivateUnreadCounts?.[String(button.dataset.privateChatUser)] || 0;
+          let badge = $(".message-badge", button);
+          if (unread) {
+            if (!badge) {
+              badge = document.createElement("span");
+              badge.className = "message-badge";
+              button.querySelector("time")?.before(badge);
+            }
+            badge.textContent = unread > 99 ? "99+" : String(unread);
+            badge.setAttribute("aria-label", `${unread} mensagem(ns) não lida(s)`);
           } else {
             badge?.remove();
           }
@@ -9032,7 +9056,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=4-private-list-fix"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=5-private-unread-badges"))
         .then(module => module.createChatFeature({
           $,
           $$,
