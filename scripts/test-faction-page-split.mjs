@@ -16,8 +16,8 @@ assert.ok(feature.includes('data-faction-abafac'));
 assert.ok(feature.includes('openFactionAbafacManager'));
 assert.ok(feature.includes('toggleFactionCatalogLike'));
 
-assert.match(index, /js\\/app\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no app');
-assert.match(index, /sw\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no service worker');
+assert.ok(index.includes('js/app.js?v='), 'index deve usar BUILD_ID no app');
+assert.ok(index.includes('sw.js?v='), 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('faction-page-feature.js'));
 
 console.log('PASS faction page split');
