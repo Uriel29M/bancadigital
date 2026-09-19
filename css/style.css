@@ -1896,7 +1896,7 @@ main { min-height: calc(100vh - 150px); }
 .chat-room-option .message-badge { position: static; flex: 0 0 auto; margin-left: auto; }
 .chat-room-option small { color: var(--muted); font-size: 10px; }
 .chat-contact-picker { margin-bottom: 12px; }
-.chat-contact-picker form { display: flex; gap: 8px; }
+.chat-contact-picker form, #chat-contact-form { display: flex; gap: 8px; }
 .chat-contact-picker input { flex: 1; min-width: 0; background: #1a1a1f; color: white; border: 1px solid #303037; border-radius: 7px; padding: 10px; }
 .chat-contact-selected { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); }
 .chat-private-list { display: grid; gap: 8px; margin-top: 14px; }
