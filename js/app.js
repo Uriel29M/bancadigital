@@ -3101,7 +3101,7 @@
   function loadPublicProfileFeature() {
     if (publicProfileFeature) return Promise.resolve(publicProfileFeature);
     if (!publicProfileFeaturePromise) {
-      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=2-profile-cleanup"))
+      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=3-protected-staff-blocking"))
         .then(module => {
           publicProfileFeature = module.createPublicProfileFeature({
             $,
