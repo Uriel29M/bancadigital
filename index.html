@@ -25,7 +25,7 @@
     // Garante que uma nova abertura/recarregamento possa usar o app sem internet.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=281-mobile-chat-nav-fix", { updateViaCache: "none" })
+    navigator.serviceWorker.register("./sw.js?v=281-faction-editors-split", { updateViaCache: "none" })
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
     }
@@ -125,7 +125,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.516-mobile-chat-nav-fix"></script>
+    <script src="js/app.js?v=2.2.10.516-faction-editors-split"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     (() => {
