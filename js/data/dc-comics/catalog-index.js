@@ -1,4 +1,5 @@
 /* Generated lightweight catalog index. Full edition sources load on demand. */
+window.BANCA_CATALOG_LITE = true;
 window.CATALOG_VERSION = "2026-09-19T19:13:05.269Z";
 window.REMOVED_DEFAULT_ITEM_IDS = ["series-aquaman-2011-novos-52-023","series-superman-2023-38"];
 window.DEFAULT_SERIES = [
@@ -2409,9 +2410,7 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "1",
     "format": "cbz",
-    "clicks": 122,
     "featured": true,
-    "downloadCount": 3,
     "featuredCoverUrl": "",
     "secondaryCharacters": []
   },
@@ -2423,10 +2422,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "2",
     "format": "cbr",
-    "clicks": 9,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-003",
@@ -2436,10 +2433,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "3",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-004",
@@ -2449,10 +2444,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "4",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-005",
@@ -2462,10 +2455,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-006",
@@ -2475,10 +2466,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "6",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-007",
@@ -2488,10 +2477,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "7",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-008",
@@ -2501,10 +2488,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "8",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-009",
@@ -2514,10 +2499,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "9",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-010",
@@ -2527,10 +2510,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-011",
@@ -2540,10 +2521,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-012",
@@ -2553,10 +2532,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-013",
@@ -2566,10 +2543,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-014",
@@ -2579,10 +2554,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "14",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-015",
@@ -2592,10 +2565,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-016",
@@ -2605,10 +2576,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "16",
     "format": "cbr",
-    "clicks": 7,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-017",
@@ -2618,10 +2587,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "17",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-018",
@@ -2631,10 +2598,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "18",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-019",
@@ -2644,10 +2609,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "19",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-020",
@@ -2657,10 +2620,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "20",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-batman-021",
@@ -2670,10 +2631,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-batman",
     "issue": "21",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-001",
@@ -2683,10 +2642,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-002",
@@ -2696,10 +2653,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "2",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-003",
@@ -2709,10 +2664,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-004",
@@ -2722,10 +2675,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-005",
@@ -2735,10 +2686,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-006",
@@ -2748,10 +2697,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "absolute-superman-007",
@@ -2761,10 +2708,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-superman",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-001",
@@ -2774,10 +2719,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-teen-titans-academy",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-002",
@@ -2787,10 +2730,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-teen-titans-academy",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-003",
@@ -2800,10 +2741,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-teen-titans-academy",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-004",
@@ -2813,10 +2752,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-teen-titans-academy",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-anuario",
@@ -2827,10 +2764,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anuário",
     "sortOrder": 4.5,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-005",
@@ -2840,10 +2775,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-teen-titans-academy",
     "issue": "5",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "teen-titans-academy-006",
@@ -2853,10 +2786,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-teen-titans-academy",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-adam-justice-society-files-001",
@@ -2873,10 +2804,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-adam-justice-society-files",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "",
     "volumeTitle": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -2907,10 +2836,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-adam-justice-society-files",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "",
     "volumeTitle": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -2941,10 +2868,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-adam-justice-society-files",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "",
     "volumeTitle": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -2975,10 +2900,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-adam-justice-society-files",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "",
     "volumeTitle": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -3003,10 +2926,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "0",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "flashpoint-beyond-001",
@@ -3017,10 +2938,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "flashpoint-beyond-002",
@@ -3031,10 +2950,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "flashpoint-beyond-003",
@@ -3045,10 +2962,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "3",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "flashpoint-beyond-004",
@@ -3059,10 +2974,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "flashpoint-beyond-005",
@@ -3073,10 +2986,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "flashpoint-beyond-006",
@@ -3087,10 +2998,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flashpoint-beyond",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "aquaman-the-becoming-001",
@@ -3101,10 +3010,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-aquaman-the-becoming",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "aquaman-the-becoming-002",
@@ -3115,10 +3022,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-aquaman-the-becoming",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "aquaman-the-becoming-003",
@@ -3129,10 +3034,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-aquaman-the-becoming",
     "issue": "3",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "aquaman-the-becoming-004",
@@ -3143,10 +3046,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-aquaman-the-becoming",
     "issue": "4",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "aquaman-the-becoming-005",
@@ -3157,10 +3058,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-aquaman-the-becoming",
     "issue": "5",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "aquaman-the-becoming-006",
@@ -3171,10 +3070,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-aquaman-the-becoming",
     "issue": "6",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-001",
@@ -3185,10 +3082,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-002",
@@ -3199,10 +3094,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-003",
@@ -3220,11 +3113,9 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "3",
     "format": "auto",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
-    "featuredCoverUrl": "https://i.postimg.cc/6q2N4CbR/001.jpg",
-    "downloadCount": 0
+    "featuredCoverUrl": "https://i.postimg.cc/6q2N4CbR/001.jpg"
   },
   {
     "id": "harley-quinn-2021-004",
@@ -3235,10 +3126,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-005",
@@ -3249,10 +3138,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-006",
@@ -3263,10 +3150,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-007",
@@ -3277,10 +3162,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-008",
@@ -3291,10 +3174,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-009",
@@ -3305,10 +3186,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-010",
@@ -3319,10 +3198,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "10",
     "format": "cbr",
-    "clicks": 87,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-011",
@@ -3333,10 +3210,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-012",
@@ -3347,10 +3222,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-013",
@@ -3361,10 +3234,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-014",
@@ -3375,10 +3246,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "14",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-015",
@@ -3389,10 +3258,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-016",
@@ -3403,10 +3270,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-017",
@@ -3417,10 +3282,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "17",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-018",
@@ -3431,10 +3294,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "18",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-annual",
@@ -3446,10 +3307,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anuário",
     "sortOrder": 6.5,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-019",
@@ -3460,10 +3319,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "19",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "harley-quinn-2021-020",
@@ -3474,10 +3331,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harley-quinn-2021",
     "issue": "20",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "green-arrow-2023-001",
@@ -3488,10 +3343,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-arrow-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "green-arrow-2023-002",
@@ -3502,10 +3355,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-arrow-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "green-arrow-2023-003",
@@ -3516,10 +3367,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-arrow-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "green-arrow-2023-004",
@@ -3530,10 +3379,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-arrow-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-manta-2021-001",
@@ -3544,10 +3391,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-manta-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-manta-2021-002",
@@ -3558,10 +3403,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-manta-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-manta-2021-003",
@@ -3572,10 +3415,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-manta-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-manta-2021-004",
@@ -3586,10 +3427,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-manta-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-manta-2021-005",
@@ -3600,10 +3439,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-manta-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "black-manta-2021-006",
@@ -3614,10 +3451,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-black-manta-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "adventures-superman-jon-kent-001",
@@ -3628,10 +3463,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-adventures-superman-jon-kent",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "adventures-superman-jon-kent-002",
@@ -3642,10 +3475,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-adventures-superman-jon-kent",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "adventures-superman-jon-kent-003",
@@ -3656,10 +3487,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-adventures-superman-jon-kent",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "adventures-superman-jon-kent-004",
@@ -3670,10 +3499,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-adventures-superman-jon-kent",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "adventures-superman-jon-kent-005",
@@ -3684,10 +3511,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-adventures-superman-jon-kent",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "adventures-superman-jon-kent-006",
@@ -3698,10 +3523,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-adventures-superman-jon-kent",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "birds-of-prey-2023-001",
@@ -3720,11 +3543,9 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-birds-of-prey-2023",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -3749,10 +3570,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fury-of-firestorm-2026",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fury-of-firestorm-2026-002",
@@ -3763,10 +3582,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fury-of-firestorm-2026",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fury-of-firestorm-2026-003",
@@ -3777,10 +3594,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fury-of-firestorm-2026",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fury-of-firestorm-2026-004",
@@ -3791,10 +3606,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fury-of-firestorm-2026",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fury-of-firestorm-2026-005",
@@ -3805,10 +3618,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fury-of-firestorm-2026",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "unstoppable-doom-patrol-2023-001",
@@ -3819,10 +3630,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-unstoppable-doom-patrol-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "immortal-legend-batman-2025-001",
@@ -3833,10 +3642,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-immortal-legend-batman-2025",
     "issue": "1",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "immortal-legend-batman-2025-002",
@@ -3847,10 +3654,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-immortal-legend-batman-2025",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "immortal-legend-batman-2025-003",
@@ -3861,10 +3666,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-immortal-legend-batman-2025",
     "issue": "3",
     "format": "cbr",
-    "clicks": 7,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "immortal-legend-batman-2025-004",
@@ -3875,10 +3678,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-immortal-legend-batman-2025",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "immortal-legend-batman-2025-005",
@@ -3889,10 +3690,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-immortal-legend-batman-2025",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "immortal-legend-batman-2025-006",
@@ -3903,10 +3702,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-immortal-legend-batman-2025",
     "issue": "6",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "jurassic-league-2022-001",
@@ -3917,10 +3714,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-jurassic-league-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "jurassic-league-2022-002",
@@ -3931,10 +3726,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-jurassic-league-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "jurassic-league-2022-003",
@@ -3945,10 +3738,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-jurassic-league-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "jurassic-league-2022-004",
@@ -3959,10 +3750,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-jurassic-league-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "jurassic-league-2022-005",
@@ -3973,10 +3762,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-jurassic-league-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "jurassic-league-2022-006",
@@ -3987,10 +3774,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-jurassic-league-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "new-champion-of-shazam-001",
@@ -4001,10 +3786,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-champion-of-shazam",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "new-golden-age-001",
@@ -4015,10 +3798,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-golden-age",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "death-of-superman-30th-anniversary-001",
@@ -4029,10 +3810,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-death-of-superman-30th-anniversary",
     "issue": "1",
     "format": "cbr",
-    "clicks": 57,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-001",
@@ -4043,10 +3822,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-002",
@@ -4057,10 +3834,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-003",
@@ -4071,10 +3846,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-004",
@@ -4085,10 +3858,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-005",
@@ -4099,10 +3870,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-006",
@@ -4113,10 +3882,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batgirls-2022-007",
@@ -4127,10 +3894,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batgirls-2022",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2022-001",
@@ -4143,10 +3908,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 1",
     "volumeTitle": "Batman do Futuro – NeoAno (2022)",
     "format": "cbr",
-    "clicks": 24,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2022-002",
@@ -4159,10 +3922,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 1",
     "volumeTitle": "Batman do Futuro – NeoAno (2022)",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2022-003",
@@ -4175,10 +3936,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 1",
     "volumeTitle": "Batman do Futuro – NeoAno (2022)",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2022-004",
@@ -4191,10 +3950,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 1",
     "volumeTitle": "Batman do Futuro – NeoAno (2022)",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2022-005",
@@ -4207,10 +3964,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 1",
     "volumeTitle": "Batman do Futuro – NeoAno (2022)",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2022-006",
@@ -4223,10 +3978,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 1",
     "volumeTitle": "Batman do Futuro – NeoAno (2022)",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-beyond-neo-year-2023-001",
@@ -4241,10 +3994,8 @@ window.DEFAULT_LIBRARY = [
     "volume": "Volume 2",
     "volumeTitle": "Batman do Futuro – Neogótico (2023)",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-and-robin-2023-001",
@@ -4255,10 +4006,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-and-robin-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-vs-robin-2022-001",
@@ -4269,10 +4018,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-vs-robin-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-vs-robin-2022-002",
@@ -4283,10 +4030,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-vs-robin-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-vs-robin-2022-003",
@@ -4297,10 +4042,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-vs-robin-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-vs-robin-2022-004",
@@ -4311,10 +4054,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-vs-robin-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-vs-robin-2022-005",
@@ -4325,10 +4066,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-vs-robin-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-killing-time-2022-001",
@@ -4339,10 +4078,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-killing-time-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-killing-time-2022-002",
@@ -4353,10 +4090,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-killing-time-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-killing-time-2022-003",
@@ -4367,10 +4102,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-killing-time-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-killing-time-2022-004",
@@ -4381,10 +4114,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-killing-time-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-killing-time-2022-005",
@@ -4395,10 +4126,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-killing-time-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-killing-time-2022-006",
@@ -4409,10 +4138,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-killing-time-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-001",
@@ -4424,10 +4151,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Charada",
     "issue": "1",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-002",
@@ -4439,10 +4164,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Duas-Caras",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-003",
@@ -4454,10 +4177,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Pinguim",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-004",
@@ -4469,10 +4190,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Sr. Frio",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-005",
@@ -4484,10 +4203,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Mulher-Gato",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-006",
@@ -4499,10 +4216,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Bane",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-007",
@@ -4514,10 +4229,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Cara-de-Barro",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-one-bad-day-2022-008",
@@ -4529,10 +4242,8 @@ window.DEFAULT_LIBRARY = [
     "title": "Batman – Um Dia Ruim: Ra’s al Ghul",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-001",
@@ -4543,10 +4254,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-002",
@@ -4557,10 +4266,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-003",
@@ -4571,10 +4278,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-004",
@@ -4585,10 +4290,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-005",
@@ -4599,10 +4302,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-006",
@@ -4613,10 +4314,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-catwoman-gotham-war-2023-007",
@@ -4627,10 +4326,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-catwoman-gotham-war-2023",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-001",
@@ -4641,10 +4338,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-002",
@@ -4655,10 +4350,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-003",
@@ -4669,10 +4362,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-004",
@@ -4683,10 +4374,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-005",
@@ -4697,10 +4386,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-006",
@@ -4711,10 +4398,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-007",
@@ -4725,10 +4410,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-008",
@@ -4739,10 +4422,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-009",
@@ -4753,10 +4434,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-010",
@@ -4767,10 +4446,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-011",
@@ -4781,10 +4458,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-012",
@@ -4795,10 +4470,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-013",
@@ -4809,10 +4482,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-014",
@@ -4823,10 +4494,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "14",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-015",
@@ -4837,10 +4506,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-016",
@@ -4851,10 +4518,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-017",
@@ -4865,10 +4530,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "17",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-urban-legends-2021-001",
@@ -4879,10 +4542,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-urban-legends-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-urban-legends-2021-002",
@@ -4893,10 +4554,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-urban-legends-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-urban-legends-2021-003",
@@ -4907,10 +4566,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-urban-legends-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-urban-legends-2021-004",
@@ -4921,10 +4578,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-urban-legends-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-urban-legends-2021-005",
@@ -4935,10 +4590,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-urban-legends-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-urban-legends-2021-006",
@@ -4949,10 +4602,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-urban-legends-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-018",
@@ -4963,10 +4614,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "18",
     "format": "cbr",
-    "clicks": 76,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-019",
@@ -4977,10 +4626,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "19",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-020",
@@ -4991,10 +4638,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "20",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-021",
@@ -5005,10 +4650,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "21",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-022",
@@ -5019,10 +4662,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "22",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-023",
@@ -5033,10 +4674,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "23",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-024",
@@ -5047,10 +4686,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "24",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-025",
@@ -5061,10 +4698,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "25",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-026",
@@ -5075,10 +4710,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "26",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-027",
@@ -5089,10 +4722,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "27",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-028",
@@ -5103,10 +4734,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "28",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-029",
@@ -5117,10 +4746,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "29",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-030",
@@ -5131,10 +4758,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "30",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-031",
@@ -5145,10 +4770,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "31",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-032",
@@ -5159,10 +4782,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "32",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-033",
@@ -5173,10 +4794,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "33",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-034",
@@ -5187,10 +4806,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "34",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-035",
@@ -5201,10 +4818,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "35",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-036",
@@ -5215,10 +4830,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "36",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-037",
@@ -5229,10 +4842,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "37",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-038",
@@ -5243,10 +4854,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "38",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-039",
@@ -5257,10 +4866,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "39",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-040",
@@ -5271,10 +4878,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "40",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-041",
@@ -5285,10 +4890,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "41",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-042",
@@ -5299,10 +4902,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "42",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-043",
@@ -5313,10 +4914,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "43",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-044",
@@ -5327,10 +4926,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "44",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-045",
@@ -5341,10 +4938,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "45",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-046",
@@ -5355,10 +4950,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "46",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-047",
@@ -5369,10 +4962,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "47",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-048",
@@ -5383,10 +4974,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "48",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-049",
@@ -5397,10 +4986,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "49",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-050",
@@ -5411,10 +4998,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "50",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-051",
@@ -5425,10 +5010,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "51",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-052",
@@ -5439,10 +5022,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "52",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2022-053",
@@ -5453,10 +5034,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-superman-worlds-finest-2022",
     "issue": "53",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2024-annual",
@@ -5469,10 +5048,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anual 2024",
     "sortOrder": 54.1,
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-lv-av",
@@ -5485,10 +5062,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Especial",
     "sortOrder": 54.2,
     "format": "cbr",
-    "clicks": 11,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2025-annual",
@@ -5501,10 +5076,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anual 2025",
     "sortOrder": 54.3,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "batman-superman-worlds-finest-2026-annual",
@@ -5517,10 +5090,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anual 2026",
     "sortOrder": 54.4,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "joker-2021-001",
@@ -5530,10 +5101,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-joker-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 5,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "joker-2021-002",
@@ -5544,10 +5113,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-joker-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "joker-2021-003",
@@ -5558,10 +5125,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-joker-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "joker-2021-004",
@@ -5572,10 +5137,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-joker-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-001",
@@ -5585,10 +5148,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-002",
@@ -5599,10 +5160,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-003",
@@ -5613,10 +5172,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-004",
@@ -5627,10 +5184,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-005",
@@ -5641,10 +5196,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-006",
@@ -5655,10 +5208,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-007",
@@ -5669,10 +5220,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-008",
@@ -5683,10 +5232,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "8",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "deathstroke-inc-2021-009",
@@ -5697,10 +5244,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-deathstroke-inc-2021",
     "issue": "9",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-01",
@@ -5710,10 +5255,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-02",
@@ -5724,10 +5267,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-03",
@@ -5738,10 +5279,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-04",
@@ -5752,10 +5291,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-05",
@@ -5766,10 +5303,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-06",
@@ -5780,10 +5315,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-07",
@@ -5794,10 +5327,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-08",
@@ -5808,10 +5339,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-09",
@@ -5822,10 +5351,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-10",
@@ -5836,10 +5363,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-11",
@@ -5850,10 +5375,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-12",
@@ -5864,10 +5387,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-13",
@@ -5878,10 +5399,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-14",
@@ -5892,10 +5411,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "14",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-15",
@@ -5906,10 +5423,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-16",
@@ -5920,10 +5435,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-17",
@@ -5934,10 +5447,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "17",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-18",
@@ -5948,10 +5459,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "18",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-19",
@@ -5962,10 +5471,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "19",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-20",
@@ -5976,10 +5483,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "20",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-21",
@@ -5990,10 +5495,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "21",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-22",
@@ -6004,10 +5507,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "22",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-23",
@@ -6018,10 +5519,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "23",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-24",
@@ -6032,10 +5531,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "24",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-25",
@@ -6046,10 +5543,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "25",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-26",
@@ -6060,10 +5555,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "26",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-27",
@@ -6074,10 +5567,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "27",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dark-crisis-2022-28",
@@ -6088,10 +5579,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dark-crisis-2022",
     "issue": "28",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "cyborg-2023-001",
@@ -6101,10 +5590,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-cyborg-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "cyborg-2023-002",
@@ -6115,10 +5602,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-cyborg-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-all-in-2024-001",
@@ -6128,10 +5613,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-all-in-2024",
     "issue": "1",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-01",
@@ -6141,10 +5624,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "1",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-02",
@@ -6155,10 +5636,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "2",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-03",
@@ -6169,10 +5648,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-04",
@@ -6183,10 +5660,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-05",
@@ -6197,10 +5672,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-06",
@@ -6211,10 +5684,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-07",
@@ -6225,10 +5696,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-08",
@@ -6239,10 +5708,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-09",
@@ -6253,10 +5720,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "9",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-10",
@@ -6267,10 +5732,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "10",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-11",
@@ -6281,10 +5744,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "11",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-12",
@@ -6295,10 +5756,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-13",
@@ -6309,10 +5768,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "13",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "dc-ko-2025-14",
@@ -6323,10 +5780,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-dc-ko-2025",
     "issue": "14",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "challengers-unknown-2025-01",
@@ -6336,10 +5791,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-challengers-unknown-2025",
     "issue": "1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "challengers-unknown-2025-02",
@@ -6350,10 +5803,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-challengers-unknown-2025",
     "issue": "2",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "challengers-unknown-2025-03",
@@ -6364,10 +5815,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-challengers-unknown-2025",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "challengers-unknown-2025-04",
@@ -6378,10 +5827,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-challengers-unknown-2025",
     "issue": "4",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "challengers-unknown-2025-05",
@@ -6392,10 +5839,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-challengers-unknown-2025",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "one-star-squadron-2022-01",
@@ -6405,10 +5850,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-one-star-squadron-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "one-star-squadron-2022-02",
@@ -6419,10 +5862,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-one-star-squadron-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "one-star-squadron-2022-03",
@@ -6433,10 +5874,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-one-star-squadron-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "one-star-squadron-2022-04",
@@ -6447,10 +5886,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-one-star-squadron-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "one-star-squadron-2022-05",
@@ -6461,10 +5898,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-one-star-squadron-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "one-star-squadron-2022-06",
@@ -6475,10 +5910,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-one-star-squadron-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fire-ice-smallville-2023-01",
@@ -6488,10 +5921,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fire-ice-smallville-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fire-ice-smallville-2023-02",
@@ -6502,10 +5933,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fire-ice-smallville-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "fire-ice-smallville-2023-03",
@@ -6516,10 +5945,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-fire-ice-smallville-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "infinite-frontier-2021-001",
@@ -6529,10 +5956,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-infinite-frontier-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-01",
@@ -6542,10 +5967,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-02",
@@ -6556,10 +5979,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-03",
@@ -6570,10 +5991,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-04",
@@ -6584,10 +6003,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-05",
@@ -6598,10 +6015,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-06",
@@ -6612,10 +6027,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-07",
@@ -6626,10 +6039,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-08",
@@ -6640,10 +6051,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "shadow-war-2022-09",
@@ -6654,10 +6063,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shadow-war-2022",
     "issue": "9",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "war-earth-3-2022-01",
@@ -6667,10 +6074,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-war-earth-3-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "war-earth-3-2022-02",
@@ -6681,10 +6086,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-war-earth-3-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "war-earth-3-2022-03",
@@ -6695,10 +6098,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-war-earth-3-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "war-earth-3-2022-04",
@@ -6709,10 +6110,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-war-earth-3-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "war-earth-3-2022-05",
@@ -6723,10 +6122,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-war-earth-3-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-01",
@@ -6736,10 +6133,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-02",
@@ -6750,10 +6145,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-03",
@@ -6764,10 +6157,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-04",
@@ -6778,10 +6169,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-05",
@@ -6792,10 +6181,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-06",
@@ -6810,11 +6197,9 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 10,
     "format": "cbz",
     "featured": true,
     "seriesId": "series-poison-ivy-2022",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -6839,10 +6224,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "7",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-08",
@@ -6853,10 +6236,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-09",
@@ -6867,10 +6248,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-10",
@@ -6881,10 +6260,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-11",
@@ -6895,10 +6272,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-12",
@@ -6909,10 +6284,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "12",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-13",
@@ -6923,10 +6296,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-14",
@@ -6937,10 +6308,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "14",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-15",
@@ -6951,10 +6320,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-16",
@@ -6965,10 +6332,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-poison-ivy-2022-17",
@@ -6979,10 +6344,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-poison-ivy-2022",
     "issue": "17",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-2023-01",
@@ -6992,10 +6355,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-2023-02",
@@ -7006,10 +6367,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-2023-03",
@@ -7020,10 +6379,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-2021-01",
@@ -7033,10 +6390,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-2021-02",
@@ -7047,10 +6402,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-2021-03",
@@ -7061,10 +6414,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-war-journal-2023-01",
@@ -7074,10 +6425,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-war-journal-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-green-lantern-war-journal-2023-02",
@@ -7088,10 +6437,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-green-lantern-war-journal-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-01",
@@ -7101,10 +6448,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-02",
@@ -7115,10 +6460,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "2",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-03",
@@ -7129,10 +6472,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-04",
@@ -7143,10 +6484,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-05",
@@ -7157,10 +6496,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-06",
@@ -7171,10 +6508,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-07",
@@ -7185,10 +6520,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-08",
@@ -7199,10 +6532,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-09",
@@ -7213,10 +6544,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "9",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-10",
@@ -7227,10 +6556,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "Futuro Sombrio 1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-11",
@@ -7241,10 +6568,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "10",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-12",
@@ -7255,10 +6580,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "11",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-13",
@@ -7269,10 +6592,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "O Ato Omega 1",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-14",
@@ -7283,10 +6604,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-15",
@@ -7297,10 +6616,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "13",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-16",
@@ -7311,10 +6628,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "14",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-17",
@@ -7325,10 +6640,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "15",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-18",
@@ -7339,10 +6652,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "16",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-19",
@@ -7353,10 +6664,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "17",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-20",
@@ -7367,10 +6676,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "18",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-21",
@@ -7381,10 +6688,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "19",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-22",
@@ -7395,10 +6700,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "20",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-23",
@@ -7409,10 +6712,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "21",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-league-unlimited-2025-24",
@@ -7423,10 +6724,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-league-unlimited-2025",
     "issue": "Visoes Sombrias 1",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-godzilla-kong-2023-01",
@@ -7436,12 +6735,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-02",
@@ -7452,12 +6749,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-03",
@@ -7468,12 +6763,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-04",
@@ -7484,12 +6777,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-05",
@@ -7500,12 +6791,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-06",
@@ -7516,12 +6805,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-07",
@@ -7532,12 +6819,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "7",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong (2023)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-08",
@@ -7548,12 +6833,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "8",
     "format": "cbr",
-    "clicks": 38,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-09",
@@ -7564,12 +6847,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "9",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-10",
@@ -7580,12 +6861,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "10",
     "format": "cbr",
-    "clicks": 5,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-11",
@@ -7596,12 +6875,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "11",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-12",
@@ -7612,12 +6889,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "12",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-13",
@@ -7628,12 +6903,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-justice-godzilla-kong-2023-14",
@@ -7644,12 +6917,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-godzilla-kong-2023",
     "issue": "14",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)",
-    "downloadCount": 0
+    "volumeTitle": "Liga da Justiça vs. Godzilla vs. Kong 2 (2025)"
   },
   {
     "id": "series-atom-project-2025-01",
@@ -7659,10 +6930,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-atom-project-2025",
     "issue": "1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-atom-project-2025-02",
@@ -7673,10 +6942,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-atom-project-2025",
     "issue": "2",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-atom-project-2025-03",
@@ -7687,10 +6954,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-atom-project-2025",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-atom-project-2025-04",
@@ -7701,10 +6966,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-atom-project-2025",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-atom-project-2025-05",
@@ -7715,10 +6978,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-atom-project-2025",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-atom-project-2025-06",
@@ -7729,10 +6990,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-atom-project-2025",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-01",
@@ -7742,10 +7001,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-02",
@@ -7756,10 +7013,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-03",
@@ -7770,10 +7025,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-04",
@@ -7784,10 +7037,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 25,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-05",
@@ -7798,10 +7049,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 49,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-06",
@@ -7812,10 +7061,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-girl-2021-07",
@@ -7826,10 +7073,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-girl-2021",
     "issue": "7",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-woman-2023-01",
@@ -7839,10 +7084,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-woman-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-woman-2023-02",
@@ -7853,10 +7096,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-woman-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-woman-2023-03",
@@ -7867,10 +7108,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-woman-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-woman-2023-04",
@@ -7881,10 +7120,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-woman-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wonder-woman-2023-05",
@@ -7895,10 +7132,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wonder-woman-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-we-are-yesterday-2025-01",
@@ -7908,10 +7143,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-we-are-yesterday-2025",
     "issue": "1",
     "format": "cbr",
-    "clicks": 12,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 2
+    "randomWeight": 5
   },
   {
     "id": "series-we-are-yesterday-2025-02",
@@ -7922,10 +7155,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-we-are-yesterday-2025",
     "issue": "2",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-we-are-yesterday-2025-03",
@@ -7936,10 +7167,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-we-are-yesterday-2025",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-we-are-yesterday-2025-04",
@@ -7950,10 +7179,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-we-are-yesterday-2025",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-we-are-yesterday-2025-05",
@@ -7964,10 +7191,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-we-are-yesterday-2025",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-we-are-yesterday-2025-06",
@@ -7978,10 +7203,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-we-are-yesterday-2025",
     "issue": "6",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-nubia-amazons-2021-01",
@@ -7991,10 +7214,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-nubia-amazons-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-nubia-amazons-2021-02",
@@ -8005,10 +7226,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-nubia-amazons-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-nubia-amazons-2021-03",
@@ -8019,10 +7238,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-nubia-amazons-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-nubia-amazons-2021-04",
@@ -8033,10 +7250,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-nubia-amazons-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-nubia-amazons-2021-05",
@@ -8047,10 +7262,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-nubia-amazons-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-nubia-amazons-2021-06",
@@ -8061,10 +7274,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-nubia-amazons-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-01",
@@ -8074,10 +7285,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-02",
@@ -8088,10 +7297,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "2",
     "format": "cbz",
-    "clicks": 7,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-03",
@@ -8102,10 +7309,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-04",
@@ -8116,10 +7321,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-05",
@@ -8130,10 +7333,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-06",
@@ -8144,10 +7345,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-07",
@@ -8158,10 +7357,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-08",
@@ -8172,10 +7369,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-09",
@@ -8186,10 +7381,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "9",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-10",
@@ -8200,10 +7393,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "10",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-11",
@@ -8214,10 +7405,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "11",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-new-gods-2025-12",
@@ -8228,10 +7417,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-new-gods-2025",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-trial-amazons-2022-01",
@@ -8241,12 +7428,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-trial-amazons-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Estrada para O Julgamento das Amazonas",
-    "downloadCount": 0
+    "volumeTitle": "Estrada para O Julgamento das Amazonas"
   },
   {
     "id": "series-trial-amazons-2022-02",
@@ -8257,12 +7442,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-trial-amazons-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Estrada para O Julgamento das Amazonas",
-    "downloadCount": 0
+    "volumeTitle": "Estrada para O Julgamento das Amazonas"
   },
   {
     "id": "series-trial-amazons-2022-03",
@@ -8273,12 +7456,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-trial-amazons-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Estrada para O Julgamento das Amazonas",
-    "downloadCount": 0
+    "volumeTitle": "Estrada para O Julgamento das Amazonas"
   },
   {
     "id": "series-trial-amazons-2022-04",
@@ -8289,12 +7470,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-trial-amazons-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Estrada para O Julgamento das Amazonas",
-    "downloadCount": 0
+    "volumeTitle": "Estrada para O Julgamento das Amazonas"
   },
   {
     "id": "series-trial-amazons-2022-05",
@@ -8305,12 +7484,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-trial-amazons-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "O Julgamento das Amazonas",
-    "downloadCount": 0
+    "volumeTitle": "O Julgamento das Amazonas"
   },
   {
     "id": "series-trial-amazons-2022-06",
@@ -8321,12 +7498,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-trial-amazons-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "O Julgamento das Amazonas",
-    "downloadCount": 0
+    "volumeTitle": "O Julgamento das Amazonas"
   },
   {
     "id": "series-swamp-thing-2021-01",
@@ -8336,10 +7511,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-swamp-thing-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-swamp-thing-2021-02",
@@ -8350,10 +7523,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-swamp-thing-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-swamp-thing-2021-03",
@@ -8364,10 +7535,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-swamp-thing-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-swamp-thing-2021-04",
@@ -8378,10 +7547,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-swamp-thing-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-swamp-thing-2021-05",
@@ -8392,10 +7559,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-swamp-thing-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-swamp-thing-2021-06",
@@ -8406,10 +7571,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-swamp-thing-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-next-batman-second-son-2021-01",
@@ -8419,10 +7582,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-next-batman-second-son-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-next-batman-second-son-2021-02",
@@ -8433,10 +7594,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-next-batman-second-son-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-penguin-2023-01",
@@ -8446,10 +7605,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-penguin-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-01",
@@ -8459,10 +7616,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Planeta Lázaro: Alfa",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-02",
@@ -8473,10 +7628,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Príncipe Macaco #10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-03",
@@ -8487,10 +7640,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Ataque a Krypton",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-04",
@@ -8501,10 +7652,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "We Once Were Gods",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-05",
@@ -8515,10 +7664,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Legends Reborn",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-06",
@@ -8529,10 +7676,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Next Evolution",
     "format": "cbr",
-    "clicks": 27,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-07",
@@ -8543,10 +7688,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Príncipe Macaco #11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-08",
@@ -8557,10 +7700,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Dark Fate",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-09",
@@ -8571,10 +7712,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Planeta Lázaro: Ômega",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-lazarus-planet-2023-10",
@@ -8585,10 +7724,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-lazarus-planet-2023",
     "issue": "Batman vs Robin #05",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-power-girl-special-2023-01",
@@ -8599,12 +7736,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-power-girl-special-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 2",
-    "volumeTitle": "Prelúdio: Ataque a Krypton",
-    "downloadCount": 0
+    "volumeTitle": "Prelúdio: Ataque a Krypton"
   },
   {
     "id": "series-power-girl-special-2023-02",
@@ -8615,12 +7750,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-power-girl-special-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 3",
-    "volumeTitle": "Histórias complementares",
-    "downloadCount": 0
+    "volumeTitle": "Histórias complementares"
   },
   {
     "id": "series-power-girl-special-2023-03",
@@ -8631,12 +7764,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-power-girl-special-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 3",
-    "volumeTitle": "Histórias complementares",
-    "downloadCount": 0
+    "volumeTitle": "Histórias complementares"
   },
   {
     "id": "series-power-girl-special-2023-04",
@@ -8646,12 +7777,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-power-girl-special-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Volume 1",
-    "volumeTitle": "Poderosa Especial",
-    "downloadCount": 0
+    "volumeTitle": "Poderosa Especial"
   },
   {
     "id": "series-absolute-power-2024-01",
@@ -8661,10 +7790,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-power-2024",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-absolute-power-2024-02",
@@ -8675,10 +7802,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-power-2024",
     "issue": "3",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-absolute-power-2024-03",
@@ -8689,10 +7814,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-power-2024",
     "issue": "4",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-absolute-power-2024-04",
@@ -8703,10 +7826,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-absolute-power-2024",
     "issue": "5",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-01",
@@ -8716,10 +7837,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-02",
@@ -8730,10 +7849,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-03",
@@ -8744,10 +7861,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-04",
@@ -8758,10 +7873,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-05",
@@ -8772,10 +7885,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-06",
@@ -8786,10 +7897,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-07",
@@ -8800,10 +7909,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-08",
@@ -8814,10 +7921,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-09",
@@ -8828,10 +7933,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-10",
@@ -8842,10 +7945,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-11",
@@ -8856,10 +7957,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "11",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-monkey-prince-2022-12",
@@ -8870,10 +7969,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-monkey-prince-2022",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-watchtower-2024-01",
@@ -8883,10 +7980,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-watchtower-2024",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-watchtower-2024-02",
@@ -8897,10 +7992,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-watchtower-2024",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-watchtower-2024-03",
@@ -8911,10 +8004,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-watchtower-2024",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-watchtower-2024-04",
@@ -8925,10 +8016,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-watchtower-2024",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-watchtower-2024-05",
@@ -8939,10 +8028,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-watchtower-2024",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-watchtower-2024-06",
@@ -8953,10 +8040,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-watchtower-2024",
     "issue": "6",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-01",
@@ -8966,10 +8051,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-02",
@@ -8980,10 +8063,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-03",
@@ -8994,10 +8075,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-04",
@@ -9008,10 +8087,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-05",
@@ -9022,10 +8099,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-06",
@@ -9036,10 +8111,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-07",
@@ -9050,10 +8123,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-08",
@@ -9064,10 +8135,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-09",
@@ -9078,10 +8147,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-10",
@@ -9092,10 +8159,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-11",
@@ -9106,10 +8171,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-12",
@@ -9120,10 +8183,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-13",
@@ -9134,10 +8195,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-14",
@@ -9148,10 +8207,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "14",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-robin-2021-15",
@@ -9162,10 +8219,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-robin-2021",
     "issue": "Anual",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2021-01",
@@ -9175,10 +8230,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2021-02",
@@ -9189,10 +8242,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2021",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2021-03",
@@ -9203,10 +8254,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2021",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-01",
@@ -9217,10 +8266,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-02",
@@ -9231,10 +8278,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-03",
@@ -9245,10 +8290,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-04",
@@ -9259,10 +8302,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-05",
@@ -9273,10 +8314,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-06",
@@ -9287,10 +8326,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-07",
@@ -9301,10 +8338,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-08",
@@ -9315,10 +8350,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "8",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-09",
@@ -9329,10 +8362,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "9",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-10",
@@ -9343,10 +8374,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-11",
@@ -9357,10 +8386,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-justice-society-2023-12",
@@ -9371,10 +8398,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-justice-society-2023",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-stargirl-lost-children-2022-01",
@@ -9385,10 +8410,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-stargirl-lost-children-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 7,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-stargirl-lost-children-2022-02",
@@ -9399,10 +8422,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-stargirl-lost-children-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 6,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superboy-tomorrow-2023-01",
@@ -9413,10 +8434,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superboy-tomorrow-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superboy-tomorrow-2023-02",
@@ -9427,10 +8446,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superboy-tomorrow-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superboy-tomorrow-2023-03",
@@ -9441,10 +8458,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superboy-tomorrow-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superboy-tomorrow-2023-04",
@@ -9455,10 +8470,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superboy-tomorrow-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-01",
@@ -9469,10 +8482,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-02",
@@ -9483,10 +8494,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-03",
@@ -9497,10 +8506,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-04",
@@ -9511,10 +8518,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-05",
@@ -9525,10 +8530,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-06",
@@ -9539,10 +8542,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-07",
@@ -9553,10 +8554,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-08",
@@ -9567,10 +8566,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-09",
@@ -9581,10 +8578,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-lost-2023-10",
@@ -9595,10 +8590,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-lost-2023",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-01",
@@ -9609,10 +8602,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "1",
     "format": "cbz",
-    "clicks": 74,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-02",
@@ -9623,10 +8614,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "2",
     "format": "cbz",
-    "clicks": 15,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-03",
@@ -9637,10 +8626,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "3",
     "format": "cbz",
-    "clicks": 42,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-04",
@@ -9651,10 +8638,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-05",
@@ -9665,10 +8650,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "5",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-06",
@@ -9679,10 +8662,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-07",
@@ -9693,10 +8674,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-08",
@@ -9707,10 +8686,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-09",
@@ -9721,10 +8698,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "9",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-10",
@@ -9735,10 +8710,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "10",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-11",
@@ -9749,10 +8722,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "11",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-12",
@@ -9763,10 +8734,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-13",
@@ -9777,10 +8746,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "13",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-14",
@@ -9791,10 +8758,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "14",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-15",
@@ -9805,10 +8770,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "15",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-16",
@@ -9819,10 +8782,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "16",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-17",
@@ -9833,10 +8794,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "17",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-18",
@@ -9847,10 +8806,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "18",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-19",
@@ -9861,10 +8818,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "19",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-20",
@@ -9875,10 +8830,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "20",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-21",
@@ -9889,10 +8842,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "21",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-22",
@@ -9903,10 +8854,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "22",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-23",
@@ -9917,10 +8866,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "23",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-24",
@@ -9931,10 +8878,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "24",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-25",
@@ -9945,10 +8890,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "25",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-26",
@@ -9959,10 +8902,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "26",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-27",
@@ -9973,10 +8914,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "27",
     "format": "cbz",
-    "clicks": 7,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-28",
@@ -9987,10 +8926,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "28",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-29",
@@ -10001,10 +8938,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "29",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-30",
@@ -10015,10 +8950,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "30",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-31",
@@ -10029,10 +8962,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "31",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-32",
@@ -10043,10 +8974,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "32",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-33",
@@ -10057,10 +8986,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "33",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-34",
@@ -10071,10 +8998,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "34",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-35",
@@ -10085,10 +9010,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-2023",
     "issue": "35",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-2023-36",
@@ -10104,11 +9027,9 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "Anual 2023",
     "author": "",
-    "clicks": 2,
     "format": "cbz",
     "featured": true,
     "seriesId": "series-superman-2023",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -10137,11 +9058,9 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "Anual 2026",
     "author": "",
-    "clicks": 0,
     "format": "cbz",
     "featured": true,
     "seriesId": "series-superman-2023",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -10165,10 +9084,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-son-kal-el-2021",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "series-superman-son-kal-el-2021-02",
@@ -10179,10 +9096,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-son-kal-el-2021",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-son-kal-el-2021-03",
@@ -10193,10 +9108,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-son-kal-el-2021",
     "issue": "17",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-son-kal-el-2021-04",
@@ -10207,10 +9120,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-son-kal-el-2021",
     "issue": "18",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-son-kal-el-2021-05",
@@ -10221,10 +9132,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-son-kal-el-2021",
     "issue": "Especial",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-01",
@@ -10235,10 +9144,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-kal-el-returns-2022",
     "issue": "Action Comics #1047",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-02",
@@ -10249,10 +9156,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-kal-el-returns-2022",
     "issue": "Superman: Son of Kal-El #16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-03",
@@ -10263,10 +9168,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-kal-el-returns-2022",
     "issue": "Action Comics #1048",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-04",
@@ -10277,10 +9180,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-kal-el-returns-2022",
     "issue": "Superman: Son of Kal-El #17",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-05",
@@ -10291,10 +9192,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-kal-el-returns-2022",
     "issue": "Action Comics #1049",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-06",
@@ -10305,10 +9204,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-kal-el-returns-2022",
     "issue": "Kal-El Returns Special #1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-kal-el-returns-2022-07",
@@ -10324,11 +9221,9 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "Superman: Son of Kal-El #18",
     "author": "",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-superman-kal-el-returns-2022",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -10351,10 +9246,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flash-fastest-2022",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-flash-fastest-2022-02",
@@ -10365,10 +9258,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-flash-fastest-2022",
     "issue": "2",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-titans-2023-01",
@@ -10379,10 +9270,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-titans-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-titans-2023-02",
@@ -10393,10 +9282,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-titans-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wildcats-2023-01",
@@ -10406,10 +9293,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wildcats-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wildcats-2023-02",
@@ -10420,10 +9305,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wildcats-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wildcats-2023-03",
@@ -10434,10 +9317,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wildcats-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wildcats-2023-04",
@@ -10448,10 +9329,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wildcats-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-wildcats-2023-05",
@@ -10462,10 +9341,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-wildcats-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-knight-terrors-2023-01",
@@ -10476,12 +9353,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-02",
@@ -10492,12 +9367,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-03",
@@ -10508,12 +9381,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 85,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-04",
@@ -10524,12 +9395,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-05",
@@ -10540,12 +9409,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-06",
@@ -10556,12 +9423,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "6",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-07",
@@ -10572,12 +9437,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "7",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Principal",
-    "volumeTitle": "Principal",
-    "downloadCount": 0
+    "volumeTitle": "Principal"
   },
   {
     "id": "series-knight-terrors-2023-08",
@@ -10588,12 +9451,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "8",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
     "randomWeight": 5,
     "volume": "Batman",
-    "volumeTitle": "Batman",
-    "downloadCount": 0
+    "volumeTitle": "Batman"
   },
   {
     "id": "series-knight-terrors-2023-09",
@@ -10604,12 +9465,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Batman",
-    "volumeTitle": "Batman",
-    "downloadCount": 0
+    "volumeTitle": "Batman"
   },
   {
     "id": "series-knight-terrors-2023-10",
@@ -10620,12 +9479,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "10",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Devastadora",
-    "volumeTitle": "Devastadora",
-    "downloadCount": 0
+    "volumeTitle": "Devastadora"
   },
   {
     "id": "series-knight-terrors-2023-11",
@@ -10636,12 +9493,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Devastadora",
-    "volumeTitle": "Devastadora",
-    "downloadCount": 0
+    "volumeTitle": "Devastadora"
   },
   {
     "id": "series-knight-terrors-2023-12",
@@ -10652,12 +9507,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Coringa",
-    "volumeTitle": "Coringa",
-    "downloadCount": 0
+    "volumeTitle": "Coringa"
   },
   {
     "id": "series-knight-terrors-2023-13",
@@ -10668,12 +9521,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "13",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Coringa",
-    "volumeTitle": "Coringa",
-    "downloadCount": 0
+    "volumeTitle": "Coringa"
   },
   {
     "id": "series-knight-terrors-2023-14",
@@ -10684,12 +9535,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "14",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Hera Venenosa",
-    "volumeTitle": "Hera Venenosa",
-    "downloadCount": 0
+    "volumeTitle": "Hera Venenosa"
   },
   {
     "id": "series-knight-terrors-2023-15",
@@ -10700,12 +9549,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Hera Venenosa",
-    "volumeTitle": "Hera Venenosa",
-    "downloadCount": 0
+    "volumeTitle": "Hera Venenosa"
   },
   {
     "id": "series-knight-terrors-2023-16",
@@ -10716,12 +9563,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Adão Negro",
-    "volumeTitle": "Adão Negro",
-    "downloadCount": 0
+    "volumeTitle": "Adão Negro"
   },
   {
     "id": "series-knight-terrors-2023-17",
@@ -10732,12 +9577,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "17",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Adão Negro",
-    "volumeTitle": "Adão Negro",
-    "downloadCount": 0
+    "volumeTitle": "Adão Negro"
   },
   {
     "id": "series-knight-terrors-2023-18",
@@ -10748,12 +9591,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "18",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Robin",
-    "volumeTitle": "Robin",
-    "downloadCount": 0
+    "volumeTitle": "Robin"
   },
   {
     "id": "series-knight-terrors-2023-19",
@@ -10764,12 +9605,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "19",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Robin",
-    "volumeTitle": "Robin",
-    "downloadCount": 0
+    "volumeTitle": "Robin"
   },
   {
     "id": "series-knight-terrors-2023-20",
@@ -10780,12 +9619,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "20",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Flash",
-    "volumeTitle": "Flash",
-    "downloadCount": 0
+    "volumeTitle": "Flash"
   },
   {
     "id": "series-knight-terrors-2023-21",
@@ -10796,12 +9633,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "21",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Flash",
-    "volumeTitle": "Flash",
-    "downloadCount": 0
+    "volumeTitle": "Flash"
   },
   {
     "id": "series-knight-terrors-2023-22",
@@ -10812,12 +9647,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "22",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Zatanna",
-    "volumeTitle": "Zatanna",
-    "downloadCount": 0
+    "volumeTitle": "Zatanna"
   },
   {
     "id": "series-knight-terrors-2023-23",
@@ -10828,12 +9661,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "23",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Zatanna",
-    "volumeTitle": "Zatanna",
-    "downloadCount": 1
+    "volumeTitle": "Zatanna"
   },
   {
     "id": "series-knight-terrors-2023-24",
@@ -10844,12 +9675,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "24",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Shazam",
-    "volumeTitle": "Shazam",
-    "downloadCount": 0
+    "volumeTitle": "Shazam"
   },
   {
     "id": "series-knight-terrors-2023-25",
@@ -10860,12 +9689,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "25",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Shazam",
-    "volumeTitle": "Shazam",
-    "downloadCount": 0
+    "volumeTitle": "Shazam"
   },
   {
     "id": "series-knight-terrors-2023-26",
@@ -10876,12 +9703,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "26",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Lanterna Verde",
-    "volumeTitle": "Lanterna Verde",
-    "downloadCount": 0
+    "volumeTitle": "Lanterna Verde"
   },
   {
     "id": "series-knight-terrors-2023-27",
@@ -10892,12 +9717,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "27",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
     "randomWeight": 5,
     "volume": "Lanterna Verde",
-    "volumeTitle": "Lanterna Verde",
-    "downloadCount": 0
+    "volumeTitle": "Lanterna Verde"
   },
   {
     "id": "series-knight-terrors-2023-28",
@@ -10908,12 +9731,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "28",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Mulher-Maravilha",
-    "volumeTitle": "Mulher-Maravilha",
-    "downloadCount": 0
+    "volumeTitle": "Mulher-Maravilha"
   },
   {
     "id": "series-knight-terrors-2023-29",
@@ -10924,12 +9745,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "29",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Mulher-Maravilha",
-    "volumeTitle": "Mulher-Maravilha",
-    "downloadCount": 0
+    "volumeTitle": "Mulher-Maravilha"
   },
   {
     "id": "series-knight-terrors-2023-30",
@@ -10940,12 +9759,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "30",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
     "volume": "Superman",
-    "volumeTitle": "Superman",
-    "downloadCount": 0
+    "volumeTitle": "Superman"
   },
   {
     "id": "series-knight-terrors-2023-31",
@@ -10956,12 +9773,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "31",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Superman",
-    "volumeTitle": "Superman",
-    "downloadCount": 0
+    "volumeTitle": "Superman"
   },
   {
     "id": "series-knight-terrors-2023-32",
@@ -10972,12 +9787,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "32",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Asa Noturna",
-    "volumeTitle": "Asa Noturna",
-    "downloadCount": 0
+    "volumeTitle": "Asa Noturna"
   },
   {
     "id": "series-knight-terrors-2023-33",
@@ -10988,12 +9801,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "33",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Asa Noturna",
-    "volumeTitle": "Asa Noturna",
-    "downloadCount": 0
+    "volumeTitle": "Asa Noturna"
   },
   {
     "id": "series-knight-terrors-2023-34",
@@ -11004,12 +9815,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "34",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Mulher-Gato",
-    "volumeTitle": "Mulher-Gato",
-    "downloadCount": 0
+    "volumeTitle": "Mulher-Gato"
   },
   {
     "id": "series-knight-terrors-2023-35",
@@ -11020,12 +9829,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "35",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Mulher-Gato",
-    "volumeTitle": "Mulher-Gato",
-    "downloadCount": 0
+    "volumeTitle": "Mulher-Gato"
   },
   {
     "id": "series-knight-terrors-2023-36",
@@ -11036,12 +9843,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "36",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Anedota",
-    "volumeTitle": "Anedota",
-    "downloadCount": 0
+    "volumeTitle": "Anedota"
   },
   {
     "id": "series-knight-terrors-2023-37",
@@ -11052,12 +9857,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "37",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Anedota",
-    "volumeTitle": "Anedota",
-    "downloadCount": 0
+    "volumeTitle": "Anedota"
   },
   {
     "id": "series-knight-terrors-2023-38",
@@ -11068,12 +9871,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "38",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Titãs",
-    "volumeTitle": "Titãs",
-    "downloadCount": 0
+    "volumeTitle": "Titãs"
   },
   {
     "id": "series-knight-terrors-2023-39",
@@ -11084,12 +9885,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "39",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Titãs",
-    "volumeTitle": "Titãs",
-    "downloadCount": 0
+    "volumeTitle": "Titãs"
   },
   {
     "id": "series-knight-terrors-2023-40",
@@ -11100,12 +9899,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "40",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Action Comics",
-    "volumeTitle": "Action Comics",
-    "downloadCount": 0
+    "volumeTitle": "Action Comics"
   },
   {
     "id": "series-knight-terrors-2023-41",
@@ -11116,12 +9913,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "41",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Action Comics",
-    "volumeTitle": "Action Comics",
-    "downloadCount": 0
+    "volumeTitle": "Action Comics"
   },
   {
     "id": "series-knight-terrors-2023-42",
@@ -11132,12 +9927,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "42",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
     "volume": "Detective Comics",
-    "volumeTitle": "Detective Comics",
-    "downloadCount": 0
+    "volumeTitle": "Detective Comics"
   },
   {
     "id": "series-knight-terrors-2023-43",
@@ -11148,12 +9941,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "43",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Detective Comics",
-    "volumeTitle": "Detective Comics",
-    "downloadCount": 0
+    "volumeTitle": "Detective Comics"
   },
   {
     "id": "series-knight-terrors-2023-44",
@@ -11164,12 +9955,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "44",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Arlequina",
-    "volumeTitle": "Arlequina",
-    "downloadCount": 0
+    "volumeTitle": "Arlequina"
   },
   {
     "id": "series-knight-terrors-2023-45",
@@ -11180,12 +9969,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "45",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Arlequina",
-    "volumeTitle": "Arlequina",
-    "downloadCount": 0
+    "volumeTitle": "Arlequina"
   },
   {
     "id": "series-knight-terrors-2023-46",
@@ -11196,12 +9983,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "46",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Algoz dos Anjos",
-    "volumeTitle": "Algoz dos Anjos",
-    "downloadCount": 0
+    "volumeTitle": "Algoz dos Anjos"
   },
   {
     "id": "series-knight-terrors-2023-47",
@@ -11212,12 +9997,10 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-knight-terrors-2023",
     "issue": "47",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
     "volume": "Algoz dos Anjos",
-    "volumeTitle": "Algoz dos Anjos",
-    "downloadCount": 0
+    "volumeTitle": "Algoz dos Anjos"
   },
   {
     "id": "series-batman-damned-2018-001",
@@ -11234,11 +10017,9 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 14,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-batman-damned-2018",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -11270,10 +10051,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-damned-2018",
     "issue": "2",
     "format": "cbr",
-    "clicks": 10,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "cover": "",
     "featuredCoverUrl": "",
@@ -11305,11 +10084,9 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "3",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-batman-damned-2018",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -11334,10 +10111,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-002",
@@ -11348,10 +10123,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-003",
@@ -11362,10 +10135,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "3",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-004",
@@ -11376,10 +10147,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "4",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-005",
@@ -11390,10 +10159,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "5",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-006",
@@ -11404,10 +10171,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "6",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-007",
@@ -11418,10 +10183,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "7",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-white-knight-2017-008",
@@ -11432,10 +10195,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-white-knight-2017",
     "issue": "8",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-last-knight-on-earth-2019-001",
@@ -11446,10 +10207,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-last-knight-on-earth-2019",
     "issue": "1",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-last-knight-on-earth-2019-002",
@@ -11460,10 +10219,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-last-knight-on-earth-2019",
     "issue": "2",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-last-knight-on-earth-2019-003",
@@ -11474,10 +10231,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-last-knight-on-earth-2019",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-three-jokers-2020-001",
@@ -11487,10 +10242,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-three-jokers-2020",
     "issue": "1",
     "format": "cbr",
-    "clicks": 7,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-three-jokers-2020-002",
@@ -11501,10 +10254,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-three-jokers-2020",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-batman-three-jokers-2020-003",
@@ -11515,10 +10266,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-batman-three-jokers-2020",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-joker-killer-smile-2019-001",
@@ -11528,10 +10277,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-joker-killer-smile-2019",
     "issue": "1",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-harleen-2019-001",
@@ -11541,10 +10288,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harleen-2019",
     "issue": "1",
     "format": "cbr",
-    "clicks": 8,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-harleen-2019-002",
@@ -11555,10 +10300,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harleen-2019",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-harleen-2019-003",
@@ -11569,10 +10312,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-harleen-2019",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-deaths-vic-sage-2019-001",
@@ -11582,10 +10323,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-deaths-vic-sage-2019",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-deaths-vic-sage-2019-002",
@@ -11596,10 +10335,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-deaths-vic-sage-2019",
     "issue": "2",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-deaths-vic-sage-2019-003",
@@ -11610,10 +10347,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-deaths-vic-sage-2019",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-question-deaths-vic-sage-2019-004",
@@ -11624,10 +10359,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-question-deaths-vic-sage-2019",
     "issue": "4",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-danger-street-2023-001",
@@ -11638,10 +10371,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-danger-street-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-danger-street-2023-002",
@@ -11652,10 +10383,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-danger-street-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-danger-street-2023-003",
@@ -11666,10 +10395,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-danger-street-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-danger-street-2023-004",
@@ -11680,10 +10407,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-danger-street-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-year-one-2019-001",
@@ -11693,10 +10418,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-year-one-2019",
     "issue": "1",
     "format": "cbr",
-    "clicks": 5,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-year-one-2019-002",
@@ -11707,10 +10430,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-year-one-2019",
     "issue": "2",
     "format": "cbr",
-    "clicks": 4,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superman-year-one-2019-003",
@@ -11721,10 +10442,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superman-year-one-2019",
     "issue": "3",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2021-04",
@@ -11735,10 +10454,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2021",
     "issue": "4",
     "format": "cbr",
-    "clicks": 12,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-01",
@@ -11749,10 +10466,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "1",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-02",
@@ -11763,10 +10478,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "2",
     "format": "cbr",
-    "clicks": 713,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-03",
@@ -11777,10 +10490,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "3",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-04",
@@ -11791,10 +10502,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "4",
     "format": "cbr",
-    "clicks": 67,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-05",
@@ -11805,10 +10514,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "5",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-06",
@@ -11819,10 +10526,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "6",
     "format": "cbr",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-07",
@@ -11833,10 +10538,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "7",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-08",
@@ -11847,10 +10550,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "8",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-09",
@@ -11861,10 +10562,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "9",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-10",
@@ -11875,10 +10574,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "10",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-11",
@@ -11889,10 +10586,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "11",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-12",
@@ -11903,10 +10598,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "12",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-13",
@@ -11917,10 +10610,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "13",
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-14",
@@ -11931,10 +10622,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "14",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-15",
@@ -11945,10 +10634,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "15",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-16",
@@ -11959,10 +10646,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "16",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-17",
@@ -11973,10 +10658,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "17",
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-18",
@@ -11987,10 +10670,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "18",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-19",
@@ -12001,10 +10682,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "19",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-20",
@@ -12015,10 +10694,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "20",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-shazam-2023-21",
@@ -12029,10 +10706,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-shazam-2023",
     "issue": "21",
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-guerra-das-sombras-milestone-1994-001",
@@ -12043,10 +10718,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-guerra-das-sombras-milestone-1994",
     "issue": "1",
     "format": "cbz",
-    "clicks": 11,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-guerra-das-sombras-milestone-1994-002",
@@ -12057,10 +10730,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-guerra-das-sombras-milestone-1994",
     "issue": "2",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-guerra-das-sombras-milestone-1994-003",
@@ -12071,10 +10742,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-guerra-das-sombras-milestone-1994",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-guerra-das-sombras-milestone-1994-004",
@@ -12085,10 +10754,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-guerra-das-sombras-milestone-1994",
     "issue": "4",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-guerra-das-sombras-milestone-1994-005",
@@ -12099,10 +10766,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-guerra-das-sombras-milestone-1994",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-guerra-das-sombras-milestone-1994-006",
@@ -12113,10 +10778,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-guerra-das-sombras-milestone-1994",
     "issue": "6",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-001",
@@ -12127,10 +10790,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "1",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-002",
@@ -12141,10 +10802,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "2",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-003",
@@ -12155,10 +10814,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-004",
@@ -12169,10 +10826,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-005",
@@ -12183,10 +10838,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-006",
@@ -12197,10 +10850,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-007",
@@ -12211,10 +10862,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-008",
@@ -12225,10 +10874,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-009",
@@ -12239,10 +10886,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "9",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-010",
@@ -12253,10 +10898,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "10",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-011",
@@ -12267,10 +10910,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "11",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-012",
@@ -12281,10 +10922,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-013",
@@ -12295,10 +10934,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "13",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-014",
@@ -12309,10 +10946,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "14",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-015",
@@ -12323,10 +10958,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "15",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-hardware-milestone-1993-016",
@@ -12337,10 +10970,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-hardware-milestone-1993",
     "issue": "16",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-001",
@@ -12351,10 +10982,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-002",
@@ -12365,10 +10994,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "2",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 1
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-003",
@@ -12379,10 +11006,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-004",
@@ -12393,10 +11018,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-005",
@@ -12407,10 +11030,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-006",
@@ -12421,10 +11042,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-007",
@@ -12435,10 +11054,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-008",
@@ -12449,10 +11066,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-009",
@@ -12463,10 +11078,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "9",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-sindicato-de-sangue-milestone-1993-010",
@@ -12477,10 +11090,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-sindicato-de-sangue-milestone-1993",
     "issue": "10",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-001",
@@ -12490,10 +11101,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "1",
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-002",
@@ -12504,10 +11113,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "2",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-003",
@@ -12518,10 +11125,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "3",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-004",
@@ -12532,10 +11137,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-005",
@@ -12546,10 +11149,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-006",
@@ -12560,10 +11161,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-007",
@@ -12574,10 +11173,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-008",
@@ -12588,10 +11185,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-009",
@@ -12602,10 +11197,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "9",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-010",
@@ -12616,10 +11209,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "10",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-011",
@@ -12630,10 +11221,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "11",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-012",
@@ -12644,10 +11233,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-013",
@@ -12658,10 +11245,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "13",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-014",
@@ -12672,10 +11257,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "14",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-015",
@@ -12686,10 +11269,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "15",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-016",
@@ -12700,10 +11281,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "16",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-017",
@@ -12714,10 +11293,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "17",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-018",
@@ -12728,10 +11305,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "18",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-019",
@@ -12742,10 +11317,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "19",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-020",
@@ -12756,10 +11329,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "20",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-021",
@@ -12770,10 +11341,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "21",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-022",
@@ -12784,10 +11353,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "22",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-023",
@@ -12798,10 +11365,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "23",
     "format": "cbz",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-superchoque-milestone-1993-024",
@@ -12812,10 +11377,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-superchoque-milestone-1993",
     "issue": "24",
     "format": "cbz",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-sneak-peek",
@@ -12827,10 +11390,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Sneak Peek",
     "sortOrder": 1,
     "format": "pdf",
-    "clicks": 30,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-001",
@@ -12842,10 +11403,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "001",
     "sortOrder": 2,
     "format": "pdf",
-    "clicks": 42,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-002",
@@ -12857,10 +11416,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "002",
     "sortOrder": 3,
     "format": "pdf",
-    "clicks": 26,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-003",
@@ -12872,10 +11429,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "003",
     "sortOrder": 4,
     "format": "pdf",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-004",
@@ -12887,10 +11442,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "004",
     "sortOrder": 5,
     "format": "pdf",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-005",
@@ -12902,10 +11455,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "005",
     "sortOrder": 6,
     "format": "pdf",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-006",
@@ -12917,10 +11468,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "006",
     "sortOrder": 7,
     "format": "pdf",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-007",
@@ -12932,10 +11481,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "007",
     "sortOrder": 8,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-008",
@@ -12947,10 +11494,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "008",
     "sortOrder": 9,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-009",
@@ -12962,10 +11507,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "009",
     "sortOrder": 10,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-010",
@@ -12977,10 +11520,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "010",
     "sortOrder": 11,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-011",
@@ -12992,10 +11533,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "011",
     "sortOrder": 12,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-012",
@@ -13007,10 +11546,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "012",
     "sortOrder": 13,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-000",
@@ -13022,10 +11559,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "000",
     "sortOrder": 14,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-013",
@@ -13037,10 +11572,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "013",
     "sortOrder": 15,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-014",
@@ -13052,10 +11585,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "014",
     "sortOrder": 16,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-015",
@@ -13067,10 +11598,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "015",
     "sortOrder": 17,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-016",
@@ -13082,10 +11611,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "016",
     "sortOrder": 18,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-017",
@@ -13097,10 +11624,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "017",
     "sortOrder": 19,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-018",
@@ -13112,10 +11637,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "018",
     "sortOrder": 20,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-019",
@@ -13127,10 +11650,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "019",
     "sortOrder": 21,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-020",
@@ -13142,10 +11663,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "020",
     "sortOrder": 22,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-021",
@@ -13157,10 +11676,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "021",
     "sortOrder": 23,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-022",
@@ -13172,10 +11689,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "022",
     "sortOrder": 24,
     "format": "pdf",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-023",
@@ -13187,10 +11702,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "023",
     "sortOrder": 25,
     "format": "pdf",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-023-1",
@@ -13202,10 +11715,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "023-1",
     "sortOrder": 26,
     "format": "pdf",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-023-2",
@@ -13217,10 +11728,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "023-2",
     "sortOrder": 27,
     "format": "pdf",
-    "clicks": 2,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-023-3",
@@ -13232,10 +11741,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "023-3",
     "sortOrder": 28,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-023-4",
@@ -13247,10 +11754,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "023-4",
     "sortOrder": 29,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-024",
@@ -13262,10 +11767,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "024",
     "sortOrder": 30,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-025",
@@ -13277,10 +11780,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "025",
     "sortOrder": 31,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-026",
@@ -13292,10 +11793,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "026",
     "sortOrder": 32,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-027",
@@ -13307,10 +11806,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "027",
     "sortOrder": 33,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-028",
@@ -13322,10 +11819,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "028",
     "sortOrder": 34,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-029",
@@ -13337,10 +11832,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "029",
     "sortOrder": 35,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-030",
@@ -13352,10 +11845,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "030",
     "sortOrder": 36,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-031",
@@ -13367,10 +11858,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "031",
     "sortOrder": 37,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-032",
@@ -13382,10 +11871,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "032",
     "sortOrder": 38,
     "format": "pdf",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-033",
@@ -13397,10 +11884,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "033",
     "sortOrder": 39,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-034",
@@ -13412,10 +11897,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "034",
     "sortOrder": 40,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-035",
@@ -13427,10 +11910,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "035",
     "sortOrder": 41,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-036",
@@ -13442,10 +11923,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "036",
     "sortOrder": 42,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-037",
@@ -13457,10 +11936,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "037",
     "sortOrder": 43,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-038",
@@ -13472,10 +11949,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "038",
     "sortOrder": 44,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-039",
@@ -13487,10 +11962,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "039",
     "sortOrder": 45,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-040",
@@ -13502,10 +11975,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "040",
     "sortOrder": 46,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-041",
@@ -13517,10 +11988,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "041",
     "sortOrder": 47,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-042",
@@ -13532,10 +12001,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "042",
     "sortOrder": 48,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-043",
@@ -13547,10 +12014,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "043",
     "sortOrder": 49,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-044",
@@ -13562,10 +12027,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "044",
     "sortOrder": 50,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-045",
@@ -13577,10 +12040,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "045",
     "sortOrder": 51,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-046",
@@ -13592,10 +12053,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "046",
     "sortOrder": 52,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-047",
@@ -13607,10 +12066,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "047",
     "sortOrder": 53,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-048",
@@ -13622,10 +12079,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "048",
     "sortOrder": 54,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-049",
@@ -13637,10 +12092,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "049",
     "sortOrder": 55,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-050",
@@ -13652,10 +12105,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "050",
     "sortOrder": 56,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-051",
@@ -13667,10 +12118,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "051",
     "sortOrder": 57,
     "format": "pdf",
-    "clicks": 16,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-052",
@@ -13682,10 +12131,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "052",
     "sortOrder": 58,
     "format": "pdf",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-Anual 01",
@@ -13698,10 +12145,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anual 01",
     "sortOrder": 59,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-Anual 02",
@@ -13714,10 +12159,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anual 02",
     "sortOrder": 60,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-2014",
@@ -13730,10 +12173,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Anual 03",
     "sortOrder": 61,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-action-comics-2011-novos-52-futures-end",
@@ -13746,10 +12187,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Futures End",
     "sortOrder": 62,
     "format": "pdf",
-    "clicks": 1,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-all-star-western-2011-novos-52-001",
@@ -13761,9 +12200,7 @@ window.DEFAULT_LIBRARY = [
     "issue": "1",
     "sortOrder": 1,
     "format": "cbr",
-    "clicks": 7,
     "featured": true,
-    "downloadCount": 1,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "catalogEditedAt": "2026-09-07T20:09:16.233Z",
@@ -13779,9 +12216,7 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "sortOrder": 2,
     "format": "cbr",
-    "clicks": 8,
     "featured": true,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "catalogEditedAt": "2026-09-07T21:23:17.683Z",
@@ -13797,9 +12232,7 @@ window.DEFAULT_LIBRARY = [
     "issue": "3",
     "sortOrder": 3,
     "format": "cbr",
-    "clicks": 8,
     "featured": true,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "catalogEditedAt": "2026-09-07T21:27:50.991Z",
@@ -13815,9 +12248,7 @@ window.DEFAULT_LIBRARY = [
     "issue": "4",
     "sortOrder": 4,
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "catalogEditedAt": "2026-09-07T21:38:44.224Z",
@@ -13838,12 +12269,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 4,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -13874,12 +12303,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 3,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 6,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -13910,12 +12337,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "7",
-    "clicks": 3,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 7,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -13946,12 +12371,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -13982,12 +12405,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "9",
-    "clicks": 6,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14018,12 +12439,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "10",
-    "clicks": 3,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14054,12 +12473,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "11",
-    "clicks": 4,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14092,10 +12509,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "12",
     "sortOrder": 12,
     "format": "cbr",
-    "clicks": 5,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "cover": "",
@@ -14129,10 +12544,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "13",
     "sortOrder": 14,
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "cover": "",
@@ -14164,12 +12577,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "14",
-    "clicks": 3,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14202,10 +12613,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "15",
     "sortOrder": 16,
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "cover": "",
@@ -14237,12 +12646,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "16",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 17,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14273,12 +12680,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "17",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14311,10 +12716,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "18",
     "sortOrder": 19,
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "cover": "",
@@ -14346,12 +12749,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "19",
-    "clicks": 3,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 20,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14382,12 +12783,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "20",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 21,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14418,12 +12817,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "21",
-    "clicks": 3,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 22,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14454,12 +12851,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "22",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 23,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14492,10 +12887,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "23",
     "sortOrder": 24,
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "cover": "",
@@ -14529,10 +12922,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "24",
     "sortOrder": 25,
     "format": "cbr",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "secondaryCharacters": [],
     "featuredCoverUrl": "",
     "cover": "",
@@ -14564,12 +12955,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "25",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 26,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14600,12 +12989,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "26",
-    "clicks": 16,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 27,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -14637,12 +13024,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 1,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 0,
     "featuredCoverUrl": "",
@@ -14677,12 +13062,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "2",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 2,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 1,
     "featuredCoverUrl": "",
@@ -14717,12 +13100,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "3",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 3,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 2,
     "featuredCoverUrl": "",
@@ -14757,12 +13138,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "4",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 3,
     "featuredCoverUrl": "",
@@ -14794,13 +13173,11 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 5,
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 4,
     "featuredCoverUrl": "",
@@ -14836,12 +13213,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 6,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 5,
     "featuredCoverUrl": "",
@@ -14873,12 +13248,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "7",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 7,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 6,
     "featuredCoverUrl": "",
@@ -14913,12 +13286,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 7,
     "featuredCoverUrl": "",
@@ -14954,12 +13325,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "9",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 8,
     "featuredCoverUrl": "",
@@ -14990,12 +13359,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "10",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 9,
     "featuredCoverUrl": "",
@@ -15030,12 +13397,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "11",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 10,
     "featuredCoverUrl": "",
@@ -15071,12 +13436,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "12",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 12,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 11,
     "featuredCoverUrl": "",
@@ -15111,12 +13474,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "13",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 13,
     "featuredCoverUrl": "",
@@ -15153,12 +13514,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "14",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 14,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 14,
     "featuredCoverUrl": "",
@@ -15195,12 +13554,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "15",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 15,
     "featuredCoverUrl": "",
@@ -15244,12 +13601,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "16",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 16,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 16,
     "featuredCoverUrl": "",
@@ -15294,13 +13649,11 @@ window.DEFAULT_LIBRARY = [
       "Novos 52"
     ],
     "issue": "17",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 17,
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 17,
     "cover": "",
@@ -15334,12 +13687,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "18",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 18,
     "featuredCoverUrl": "",
@@ -15374,12 +13725,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "19",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 19,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 19,
     "featuredCoverUrl": "",
@@ -15414,12 +13763,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "20",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 20,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 20,
     "featuredCoverUrl": "",
@@ -15451,12 +13798,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "21",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 21,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 21,
     "featuredCoverUrl": "",
@@ -15492,12 +13837,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "22",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aquaman-2011-novos-52",
     "sortOrder": 22,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 22,
     "featuredCoverUrl": "",
@@ -15532,12 +13875,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 1,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -15589,12 +13930,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "2",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 2,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -15629,10 +13968,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "3",
     "sortOrder": 3,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
@@ -15664,12 +14001,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "4",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -15706,12 +14041,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -15744,10 +14077,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "6",
     "sortOrder": 6,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
@@ -15783,10 +14114,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "7",
     "sortOrder": 7,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
@@ -15821,12 +14150,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -15857,12 +14184,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "9",
-    "clicks": 0,
     "format": "auto",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -15893,12 +14218,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "10",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -15928,12 +14251,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "11",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -15967,12 +14288,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "12",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 12,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16004,12 +14323,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "13",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16043,12 +14360,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "14",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 14,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16082,12 +14397,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "15",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16120,12 +14433,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "16",
-    "clicks": 22,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 16,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16159,12 +14470,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "17",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 17,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16197,12 +14506,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "18",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16245,12 +14552,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "19",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "sortOrder": 19,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16284,10 +14589,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "1",
     "sortOrder": 1,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
@@ -16324,10 +14627,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "sortOrder": 2,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
@@ -16362,10 +14663,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "3",
     "sortOrder": 3,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
@@ -16400,10 +14699,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "4",
     "sortOrder": 4,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
@@ -16437,12 +14734,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogAddedAt": "2026-09-18T10:27:13.631547+00:00",
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
@@ -16474,12 +14769,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 6,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16511,12 +14804,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "7",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 7,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16548,12 +14839,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16585,12 +14874,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "9",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16622,12 +14909,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "10",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16659,12 +14944,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "11",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16696,12 +14979,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "12",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 12,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16733,12 +15014,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "13",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16772,12 +15051,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "14",
-    "clicks": 0,
     "format": "auto",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 14,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16811,12 +15088,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "15",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16848,12 +15123,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "16",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 16,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16885,12 +15158,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "17",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 17,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16922,12 +15193,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "18",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -16961,12 +15230,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "19",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 19,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -16998,12 +15265,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "20",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 20,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17035,12 +15300,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "21",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 21,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17072,12 +15335,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "22",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 22,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17109,12 +15370,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "23",
-    "clicks": 0,
     "format": "auto",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 23,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17146,12 +15405,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "23.1",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 24,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17183,12 +15440,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "24",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 25,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17220,12 +15475,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "25",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 26,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17259,12 +15512,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "26",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 27,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17295,12 +15546,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "27",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 28,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17333,12 +15582,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "28",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 29,
-    "downloadCount": 0,
     "catalogAddedAt": "2026-09-18T20:18:38.982993+00:00",
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
@@ -17369,12 +15616,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "29",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 30,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17405,12 +15650,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "30",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 31,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17443,12 +15686,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "31",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 32,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17481,12 +15722,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "32",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 33,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17517,12 +15756,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "33",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 34,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17553,12 +15790,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "34",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 35,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17589,12 +15824,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "35",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 36,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17628,12 +15861,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "36",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 37,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17664,12 +15895,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "37",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-arqueiro-verde-2011-novos-52",
     "sortOrder": 38,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T20:38:05.030553+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17703,12 +15932,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Bem Vindo a Gotham",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 1,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 0,
     "featuredCoverUrl": "",
@@ -17742,12 +15969,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "2",
     "title": "O Desejo de Haly",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 2,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 1,
     "featuredCoverUrl": "",
@@ -17779,12 +16004,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "3",
     "title": "Passado e Presente",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 3,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 2,
     "featuredCoverUrl": "",
@@ -17816,12 +16039,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "4",
     "title": "Conexão Litoral Sul",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 3,
     "featuredCoverUrl": "",
@@ -17854,12 +16075,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -17892,12 +16111,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 6,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17931,12 +16148,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "7",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 7,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -17971,12 +16186,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -18010,12 +16223,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "9",
     "title": "O Filho Cinzento",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 8,
     "featuredCoverUrl": "",
@@ -18048,12 +16259,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "10",
     "title": "O Povo do Amanhã",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 9,
     "featuredCoverUrl": "",
@@ -18089,12 +16298,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "11",
     "title": "O Amanhã Não Pode Esperar",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 10,
     "featuredCoverUrl": "",
@@ -18129,12 +16336,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "12",
     "title": "De Dentro Para Fora",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 12,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 11,
     "featuredCoverUrl": "",
@@ -18169,12 +16374,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "13",
     "title": "O Caçador",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 13,
     "featuredCoverUrl": "",
@@ -18209,12 +16412,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "14",
     "title": "Morra Por Mim",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 14,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 14,
     "featuredCoverUrl": "",
@@ -18250,12 +16451,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "15",
     "title": "Limpando A Casa",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 15,
     "featuredCoverUrl": "",
@@ -18287,12 +16486,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "16",
     "title": "Baixando As Cortinas",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 16,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 16,
     "featuredCoverUrl": "",
@@ -18326,12 +16523,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "17",
     "title": "Uma Longa Semana",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 17,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 17,
     "featuredCoverUrl": "",
@@ -18369,12 +16564,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "18",
     "title": "Queimando Lentamente",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 18,
     "featuredCoverUrl": "",
@@ -18409,12 +16602,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "19",
     "title": "Segunda Cidade",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 19,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 19,
     "featuredCoverUrl": "",
@@ -18446,12 +16637,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "20",
     "title": "Voo Cego",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 20,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 20,
     "featuredCoverUrl": "",
@@ -18483,12 +16672,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "21",
     "title": "O Custo Da Vida",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 21,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 21,
     "featuredCoverUrl": "",
@@ -18520,12 +16707,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "22",
     "title": "Hora do Show",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 22,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 22,
     "featuredCoverUrl": "",
@@ -18557,12 +16742,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "23",
     "title": "Mundo de Cabeça Pra Baixo",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 23,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 23,
     "featuredCoverUrl": "",
@@ -18594,12 +16777,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "24",
     "title": "Remorso De Comprador",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 24,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 24,
     "featuredCoverUrl": "",
@@ -18631,12 +16812,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "25",
     "title": "Ano Zero - Uma Noite Sombria Da Cidade",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 25,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 25,
     "featuredCoverUrl": "",
@@ -18668,12 +16847,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "26",
     "title": "Mexendo Alguns Pauzinhos",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 26,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 26,
     "featuredCoverUrl": "",
@@ -18705,12 +16882,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "27",
     "title": "Cada Vez Mais Estranho e Curioso",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 27,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 27,
     "featuredCoverUrl": "",
@@ -18742,12 +16917,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "28",
     "title": "Efeitos Borboleta",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 28,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 28,
     "featuredCoverUrl": "",
@@ -18779,12 +16952,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "29",
     "title": "Rede De Segurança",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 29,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 29,
     "featuredCoverUrl": "",
@@ -18824,12 +16995,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "30",
     "title": "O Caso Do Filho",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 30,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 30,
     "featuredCoverUrl": "",
@@ -18865,14 +17034,12 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "Anual 01",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Anuais e Especiais",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
     "sortOrder": 31,
     "volumeTitle": "Anuais e Especiais",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -18905,12 +17072,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-as-aventuras-do-superman-2013-novos-52",
     "sortOrder": 1,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -18941,12 +17106,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "2",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-as-aventuras-do-superman-2013-novos-52",
     "sortOrder": 2,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -18977,12 +17140,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "3",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-as-aventuras-do-superman-2013-novos-52",
     "sortOrder": 3,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -19013,12 +17174,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "4",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-as-aventuras-do-superman-2013-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -19049,12 +17208,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-as-aventuras-do-superman-2013-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -19086,14 +17243,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Deixe-nos caçar",
-    "clicks": 9,
     "format": "cbr",
     "volume": "",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 1,
     "volumeTitle": "",
-    "downloadCount": 0,
     "catalogAddedAt": "2000-01-01T00:00:00+00:00",
     "catalogEditedAt": "2026-09-19T07:52:40.565601+00:00",
     "seriesSortOrder": 0,
@@ -19130,7 +17285,6 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "title": "Problema na Cabeça",
     "author": "Duane Swierczynski / Jesús Saíz / Allen Passalaqua",
-    "clicks": 6,
     "format": "cbr",
     "volume": "",
     "coverUrl": "https://static.dc.com/dc/files/default_images/birdsofprey_v3_2_5b1882a8716822.97607538.jpg",
@@ -19139,7 +17293,6 @@ window.DEFAULT_LIBRARY = [
     "character": "Canário Negro / Pandora / Hera Venenosa / Batgirl / Aves de Rapina / Katana",
     "sortOrder": 2,
     "volumeTitle": "",
-    "downloadCount": 0,
     "originalTitle": "Birds of Prey",
     "catalogAddedAt": "2000-01-01T00:00:00+00:00",
     "catalogEditedAt": "2026-09-19T19:13:04.021418+00:00",
@@ -19172,12 +17325,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "3",
     "title": "Talvez você pense",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 3,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 2,
     "featuredCoverUrl": "",
@@ -19208,12 +17359,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "4",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 3,
     "featuredCoverUrl": "",
@@ -19245,12 +17394,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 4,
     "featuredCoverUrl": "",
@@ -19282,12 +17429,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 6,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 5,
     "featuredCoverUrl": "",
@@ -19319,12 +17464,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "7",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 7,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 6,
     "featuredCoverUrl": "",
@@ -19356,12 +17499,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 7,
     "featuredCoverUrl": "",
@@ -19399,12 +17540,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "9",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 8,
     "featuredCoverUrl": "",
@@ -19442,12 +17581,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "10",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 9,
     "featuredCoverUrl": "",
@@ -19487,12 +17624,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "11",
     "title": "Conflito Interno",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 10,
     "featuredCoverUrl": "",
@@ -19524,12 +17659,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "12",
     "title": "Decepção com Plantas",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 12,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 11,
     "featuredCoverUrl": "",
@@ -19561,12 +17694,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "13",
     "title": "Juro Pelos Meus Olhos",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 13,
     "featuredCoverUrl": "",
@@ -19597,12 +17728,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "14",
     "title": "Três Horas Para o Condor",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 14,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 14,
     "featuredCoverUrl": "",
@@ -19635,12 +17764,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "15",
     "title": "Sayonara, Katana",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 15,
     "featuredCoverUrl": "",
@@ -19672,12 +17799,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "16",
     "title": "Sem Luzes",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 16,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 16,
     "featuredCoverUrl": "",
@@ -19709,12 +17834,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "17",
     "title": "Bloqueadores!",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 17,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 17,
     "featuredCoverUrl": "",
@@ -19746,12 +17869,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "18",
     "title": "Frio Ardente",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 18,
     "featuredCoverUrl": "",
@@ -19783,12 +17904,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "19",
     "title": "Um Dia Frio No Inferno",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 19,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 19,
     "featuredCoverUrl": "",
@@ -19820,12 +17939,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "20",
     "title": "O Golpe Mais Cruel",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 20,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 20,
     "featuredCoverUrl": "",
@@ -19862,12 +17979,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "21",
     "title": "Garra Vs. Garra",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 21,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 21,
     "featuredCoverUrl": "",
@@ -19899,12 +18014,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "22",
     "title": "Operação Kaisen",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 22,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 22,
     "featuredCoverUrl": "",
@@ -19935,12 +18048,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "23",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 23,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 23,
     "featuredCoverUrl": "",
@@ -19972,12 +18083,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "24",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 24,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 24,
     "featuredCoverUrl": "",
@@ -20010,12 +18119,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "25",
     "title": "Amanhecer",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 25,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 25,
     "featuredCoverUrl": "",
@@ -20049,12 +18156,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "26",
     "title": "Arrasada",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 26,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 26,
     "featuredCoverUrl": "",
@@ -20086,12 +18191,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "27",
     "title": "Pontas Soltas",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 27,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 27,
     "featuredCoverUrl": "",
@@ -20123,12 +18226,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "28",
     "title": "Asas da Verdade!",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
     "sortOrder": 28,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 28,
     "featuredCoverUrl": "",
@@ -20159,12 +18260,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 1,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 0,
     "featuredCoverUrl": "",
@@ -20198,12 +18297,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "2",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 2,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 1,
     "featuredCoverUrl": "",
@@ -20235,13 +18332,11 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "3",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 3,
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 2,
     "featuredCoverUrl": "",
@@ -20273,12 +18368,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "4",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 3,
     "featuredCoverUrl": "",
@@ -20310,12 +18403,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 4,
     "featuredCoverUrl": "",
@@ -20347,13 +18438,11 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 6,
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 5,
     "featuredCoverUrl": "",
@@ -20385,12 +18474,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "7",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 7,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 6,
     "featuredCoverUrl": "",
@@ -20423,12 +18510,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "8",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 8,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 7,
     "featuredCoverUrl": "",
@@ -20459,12 +18544,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "9",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 9,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 8,
     "featuredCoverUrl": "",
@@ -20501,12 +18584,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "10",
-    "clicks": 0,
     "format": "auto",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 10,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 9,
     "featuredCoverUrl": "",
@@ -20542,12 +18623,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "11",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 11,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 10,
     "featuredCoverUrl": "",
@@ -20579,12 +18658,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "12",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 12,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 11,
     "featuredCoverUrl": "",
@@ -20616,12 +18693,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "13",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 13,
     "featuredCoverUrl": "",
@@ -20654,12 +18729,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "14",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 14,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 14,
     "featuredCoverUrl": "",
@@ -20691,12 +18764,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "15",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 15,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 15,
     "featuredCoverUrl": "",
@@ -20728,12 +18799,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "16",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 16,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 16,
     "featuredCoverUrl": "",
@@ -20769,12 +18838,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "17",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 17,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 17,
     "featuredCoverUrl": "",
@@ -20812,12 +18879,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "18",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 18,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 18,
     "featuredCoverUrl": "",
@@ -20849,12 +18914,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "19",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 19,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 19,
     "featuredCoverUrl": "",
@@ -20888,12 +18951,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "20",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 20,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 20,
     "featuredCoverUrl": "",
@@ -20928,12 +18989,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "0",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-furia-do-nuclear-2011-novos-52",
     "sortOrder": 21,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "seriesSortOrder": 12,
     "featuredCoverUrl": "",
@@ -20963,12 +19022,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "0",
-    "clicks": 4,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 13,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -20999,12 +19056,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "27",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 28,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21035,12 +19090,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "28",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 29,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21071,12 +19124,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "29",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 30,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21107,12 +19158,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "30",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 31,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21143,12 +19192,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "31",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 32,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21181,10 +19228,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "32",
     "sortOrder": 33,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
@@ -21216,12 +19261,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "33",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 34,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21252,12 +19295,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "34",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-western-2011-novos-52",
     "sortOrder": 35,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21291,12 +19332,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "0",
     "title": "O Primeiro Vôo",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-10T18:40:26.270Z",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "seriesSortOrder": 12,
     "featuredCoverUrl": "",
@@ -21328,12 +19367,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "29",
     "title": "Vésperas da Batalha",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-10T20:09:43.147Z",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -21364,12 +19401,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "30",
     "title": "Crises da Alma",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-11T21:30:50.313Z",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -21405,12 +19440,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "31",
     "title": "Salto Mortal!",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-11T21:35:45.854Z",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -21444,7 +19477,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "32",
-    "clicks": 0,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
@@ -21459,7 +19491,6 @@ window.DEFAULT_LIBRARY = [
       "Tubarão rei",
       "Pistoleiro"
     ],
-    "downloadCount": 0,
     "title": "Esperanças",
     "addedAt": "2026-09-11T21:44:19.490Z",
     "catalogAddedAt": "2026-09-11T21:44:19.49+00:00",
@@ -21489,12 +19520,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "33",
     "title": "Belas Mentiras e Feias Verdades",
-    "clicks": 0,
     "format": "pdf",
     "addedAt": "2026-09-12T07:49:01.874Z",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -21532,12 +19561,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "34",
     "title": "Tudo Vem Abaixo",
-    "clicks": 0,
     "format": "pdf",
     "addedAt": "2026-09-12T08:19:23.721Z",
     "featured": true,
     "seriesId": "series-aves-de-rapina-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -21575,7 +19602,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "0",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-12T11:50:21.766Z",
     "featured": true,
@@ -21584,7 +19610,6 @@ window.DEFAULT_LIBRARY = [
     "seriesSortOrder": 12,
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
-    "downloadCount": 0,
     "catalogAddedAt": "2026-09-12T11:48:43.039+00:00",
     "title": "Aquaman",
     "author": "Geoff Johns / Ivan Reis / Joe Prado",
@@ -21612,12 +19637,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "0",
-    "clicks": 0,
     "format": "pdf",
     "addedAt": "2026-09-12T13:32:22.649Z",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -21666,7 +19689,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "20",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-14T17:09:20.291Z",
     "featured": true,
@@ -21692,7 +19714,6 @@ window.DEFAULT_LIBRARY = [
       "Pistoleiro",
       "Flash"
     ],
-    "downloadCount": 1,
     "catalogAddedAt": "2026-09-14T17:02:50.459+00:00",
     "title": "Arlequina",
     "status": "Cancelada/Terminada",
@@ -21720,7 +19741,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "21",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-14T17:18:58.996Z",
     "featured": true,
@@ -21728,7 +19748,6 @@ window.DEFAULT_LIBRARY = [
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
-    "downloadCount": 1,
     "catalogAddedAt": "2026-09-14T17:17:04.461+00:00",
     "title": "Arlequina",
     "status": "Cancelada/Terminada",
@@ -21756,7 +19775,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "22",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-15T06:36:58.083Z",
     "featured": true,
@@ -21764,7 +19782,6 @@ window.DEFAULT_LIBRARY = [
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
-    "downloadCount": 1,
     "catalogAddedAt": "2026-09-15T06:34:05.9+00:00",
     "title": "Arlequina",
     "status": "Cancelada/Terminada",
@@ -21792,7 +19809,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "23",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-15T06:40:45.985Z",
     "featured": true,
@@ -21800,7 +19816,6 @@ window.DEFAULT_LIBRARY = [
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
-    "downloadCount": 1,
     "catalogAddedAt": "2026-09-15T06:39:22.957+00:00",
     "title": "Arlequina",
     "status": "Cancelada/Terminada",
@@ -21828,7 +19843,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "24",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-15T07:03:34.281Z",
     "featured": true,
@@ -21846,7 +19860,6 @@ window.DEFAULT_LIBRARY = [
       "Sr. Frio",
       "Charada"
     ],
-    "downloadCount": 1,
     "catalogAddedAt": "2026-09-15T06:59:15.279+00:00",
     "title": "Arlequina",
     "status": "Cancelada/Terminada",
@@ -21874,14 +19887,12 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "Anual 1",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Anual",
     "addedAt": "2026-09-15T07:11:42.023Z",
     "featured": true,
     "seriesId": "series-arlequina-2013-novos-52",
     "volumeTitle": "Anual",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [
@@ -21924,7 +19935,6 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "Especial 1",
     "title": "Invade a Comic-Con Internacional: San Diego",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Especiais",
     "addedAt": "2026-09-15T07:20:36.722Z",
@@ -21934,7 +19944,6 @@ window.DEFAULT_LIBRARY = [
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
-    "downloadCount": 1,
     "catalogAddedAt": "2026-09-15T07:16:43.73+00:00",
     "author": "Amanda Conner / Jimmy Palmiotti",
     "status": "Cancelada/Terminada",
@@ -21963,7 +19972,6 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "Especial 2",
     "title": "Dia dos Namorados",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-15T07:31:14.598Z",
     "featured": true,
@@ -21971,7 +19979,6 @@ window.DEFAULT_LIBRARY = [
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
-    "downloadCount": 1,
     "volume": "Especiais",
     "volumeTitle": "Especiais",
     "catalogAddedAt": "2026-09-15T07:27:29.925+00:00",
@@ -22001,11 +20008,9 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "3",
-    "clicks": 7,
     "format": "cbz",
     "featured": true,
     "seriesId": "series-icone-milestone-1993",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "catalogAddedAt": "2000-01-01T00:00:00+00:00",
@@ -22038,12 +20043,10 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "0",
     "title": "Movimento Perpétuo",
-    "clicks": 0,
     "format": "pdf",
     "addedAt": "2026-09-18T07:48:13.899Z",
     "featured": true,
     "seriesId": "series-asa-noturna-2011-novos-52",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:05:40.657584+00:00",
     "seriesSortOrder": 12,
     "featuredCoverUrl": "",
@@ -22079,7 +20082,6 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "0",
-    "clicks": 0,
     "format": "cbr",
     "addedAt": "2026-09-18T20:04:30.522Z",
     "featured": true,
@@ -22090,7 +20092,6 @@ window.DEFAULT_LIBRARY = [
       "Arsenal"
     ],
     "catalogAddedAt": "2026-09-18T20:04:31.340196+00:00",
-    "downloadCount": 0,
     "seriesSortOrder": 12,
     "title": "Arqueiro Verde",
     "status": "Cancelada/Terminada",
@@ -22117,10 +20118,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "Sneak Peek",
     "sortOrder": 0,
     "format": "pdf",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "cover": "",
     "featuredCoverUrl": "",
@@ -22152,12 +20151,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "1",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "sortOrder": 1,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22188,12 +20185,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "2",
-    "clicks": 0,
     "format": "pdf",
     "featured": true,
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "sortOrder": 2,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22224,12 +20219,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "3",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "sortOrder": 3,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22260,12 +20253,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "4",
-    "clicks": 2,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "sortOrder": 4,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22296,12 +20287,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "5",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "sortOrder": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22332,12 +20321,10 @@ window.DEFAULT_LIBRARY = [
     ],
     "cover": "",
     "issue": "6",
-    "clicks": 1,
     "format": "cbr",
     "featured": true,
     "seriesId": "series-all-star-secao-oito-2015-novos-52",
     "sortOrder": 6,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22371,14 +20358,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Antes de Watchmen: Comediante",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Comediante (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 1,
     "volumeTitle": "Comediante (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22409,14 +20394,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "2",
     "title": "Antes de Watchmen: Comediante",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Comediante (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 2,
     "volumeTitle": "Comediante (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22448,10 +20431,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "3",
     "sortOrder": 3,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Comediante (2012)",
     "volumeTitle": "Comediante (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -22487,10 +20468,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "4",
     "sortOrder": 4,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Comediante (2012)",
     "volumeTitle": "Comediante (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -22526,10 +20505,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "5",
     "sortOrder": 5,
     "format": "cbz",
-    "clicks": 3,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "title": "Antes de Watchmen: Comediante",
     "volume": "Comediante (2012)",
@@ -22565,10 +20542,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "6",
     "sortOrder": 6,
     "format": "cbz",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "cover": "",
     "title": "Antes de Watchmen: Comediante",
     "volume": "Comediante (2012)",
@@ -22604,10 +20579,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "1",
     "sortOrder": 7,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Rorschach (2012)",
     "volumeTitle": "Rorschach (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -22642,14 +20615,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "2",
     "title": "Antes de Watchmen: Rorschach",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Rorschach (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 8,
     "volumeTitle": "Rorschach (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22680,14 +20651,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "3",
     "title": "Antes de Watchmen: Rorschach",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Rorschach (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 9,
     "volumeTitle": "Rorschach (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22718,14 +20687,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "4",
     "title": "Antes de Watchmen: Rorschach",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Rorschach (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 10,
     "volumeTitle": "Rorschach (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22756,14 +20723,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Antes de Watchmen: Espectral",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Espectral (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 11,
     "volumeTitle": "Espectral (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22795,10 +20760,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "sortOrder": 12,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Espectral (2012)",
     "volumeTitle": "Espectral (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -22834,10 +20797,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "3",
     "sortOrder": 13,
     "format": "cbr",
-    "clicks": 1,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Espectral (2012)",
     "volumeTitle": "Espectral (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -22873,10 +20834,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "4",
     "sortOrder": 14,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Espectral (2012)",
     "volumeTitle": "Espectral (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -22911,14 +20870,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Antes de Watchmen: Coruja",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Coruja (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 15,
     "volumeTitle": "Coruja (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22949,14 +20906,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "2",
     "title": "Antes de Watchmen: Coruja",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Coruja (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 16,
     "volumeTitle": "Coruja (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -22987,14 +20942,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "3",
     "title": "Antes de Watchmen: Coruja",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Coruja (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 17,
     "volumeTitle": "Coruja (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23026,10 +20979,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "4",
     "sortOrder": 18,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Coruja (2012)",
     "volumeTitle": "Coruja (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -23065,10 +21016,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "1",
     "sortOrder": 19,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Ozymandias (2012)",
     "volumeTitle": "Ozymandias (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -23104,10 +21053,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "sortOrder": 20,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Ozymandias (2012)",
     "volumeTitle": "Ozymandias (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -23142,14 +21089,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "3",
     "title": "Antes de Watchmen: Ozymandias",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Ozymandias (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 21,
     "volumeTitle": "Ozymandias (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23180,14 +21125,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "4",
     "title": "Antes de Watchmen: Ozymandias",
-    "clicks": 0,
     "format": "cbz",
     "volume": "Ozymandias (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 22,
     "volumeTitle": "Ozymandias (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23218,14 +21161,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "5",
     "title": "Antes de Watchmen: Ozymandias",
-    "clicks": 0,
     "format": "cbz",
     "volume": "Ozymandias (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 23,
     "volumeTitle": "Ozymandias (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23256,14 +21197,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "6",
     "title": "Antes de Watchmen: Ozymandias",
-    "clicks": 0,
     "format": "cbz",
     "volume": "Ozymandias (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 24,
     "volumeTitle": "Ozymandias (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23294,14 +21233,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Antes de Watchmen: Minutemen",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Minutemen (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 25,
     "volumeTitle": "Minutemen (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23332,14 +21269,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "2",
     "title": "Antes de Watchmen: Minutemen",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Minutemen (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 26,
     "volumeTitle": "Minutemen (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23370,14 +21305,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "3",
     "title": "Antes de Watchmen: Minutemen",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Minutemen (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 27,
     "volumeTitle": "Minutemen (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23408,14 +21341,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "4",
     "title": "Antes de Watchmen: Minutemen",
-    "clicks": 0,
     "format": "cbz",
     "volume": "Minutemen (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 28,
     "volumeTitle": "Minutemen (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23446,14 +21377,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "5",
     "title": "Antes de Watchmen: Minutemen",
-    "clicks": 0,
     "format": "cbz",
     "volume": "Minutemen (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 29,
     "volumeTitle": "Minutemen (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23484,14 +21413,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "6",
     "title": "Antes de Watchmen: Minutemen",
-    "clicks": 0,
     "format": "cbz",
     "volume": "Minutemen (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 30,
     "volumeTitle": "Minutemen (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23522,14 +21449,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Antes de Watchmen: Moloch",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Moloch (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 31,
     "volumeTitle": "Moloch (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23561,10 +21486,8 @@ window.DEFAULT_LIBRARY = [
     "issue": "2",
     "sortOrder": 32,
     "format": "cbr",
-    "clicks": 0,
     "featured": true,
     "randomWeight": 5,
-    "downloadCount": 0,
     "volume": "Moloch (2012)",
     "volumeTitle": "Moloch (2012)",
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
@@ -23599,14 +21522,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "1",
     "title": "Antes de Watchmen: Dr. Manhattan",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Dr. Manhattan (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 33,
     "volumeTitle": "Dr. Manhattan (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23637,14 +21558,12 @@ window.DEFAULT_LIBRARY = [
     "cover": "",
     "issue": "2",
     "title": "Antes de Watchmen: Dr. Manhattan",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Dr. Manhattan (2012)",
     "featured": true,
     "seriesId": "series-antes-de-watchmen-2012-novos-52",
     "sortOrder": 34,
     "volumeTitle": "Dr. Manhattan (2012)",
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "featuredCoverUrl": "",
     "secondaryCharacters": [],
@@ -23673,7 +21592,6 @@ window.DEFAULT_LIBRARY = [
       "Novos 52"
     ],
     "issue": "3",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Dr. Manhattan (2012)",
     "featured": true,
@@ -23681,7 +21599,6 @@ window.DEFAULT_LIBRARY = [
     "sortOrder": 35,
     "volumeTitle": "Dr. Manhattan (2012)",
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "title": "Antes de Watchmen: Dr. Manhattan",
     "cover": "",
@@ -23712,7 +21629,6 @@ window.DEFAULT_LIBRARY = [
       "Novos 52"
     ],
     "issue": "4",
-    "clicks": 0,
     "format": "cbr",
     "volume": "Dr. Manhattan (2012)",
     "featured": true,
@@ -23720,7 +21636,6 @@ window.DEFAULT_LIBRARY = [
     "sortOrder": 36,
     "volumeTitle": "Dr. Manhattan (2012)",
     "randomWeight": 5,
-    "downloadCount": 0,
     "catalogEditedAt": "2026-09-18T09:06:01.153489+00:00",
     "title": "Antes de Watchmen: Dr. Manhattan",
     "cover": "",
@@ -23747,10 +21662,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "1",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-002",
@@ -23764,10 +21677,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "2",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-004",
@@ -23781,10 +21692,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "4",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-005",
@@ -23798,10 +21707,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "5",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-006",
@@ -23815,10 +21722,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "6",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-007",
@@ -23832,10 +21737,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "7",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-008",
@@ -23849,10 +21752,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "8",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-009",
@@ -23866,10 +21767,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "9",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-010",
@@ -23883,10 +21782,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "10",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-011",
@@ -23900,10 +21797,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "11",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-012",
@@ -23917,10 +21812,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "12",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-013",
@@ -23934,10 +21827,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "13",
     "format": "cbz",
-    "clicks": 11,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-014",
@@ -23951,10 +21842,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "14",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-015",
@@ -23968,10 +21857,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "15",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-016",
@@ -23985,10 +21872,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "16",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-018",
@@ -24002,10 +21887,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "18",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-019",
@@ -24019,10 +21902,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "19",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-020",
@@ -24036,10 +21917,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "20",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-021",
@@ -24053,10 +21932,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "21",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-022",
@@ -24070,10 +21947,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "22",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-023",
@@ -24087,10 +21962,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "23",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-024",
@@ -24104,10 +21977,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "24",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-025",
@@ -24121,10 +21992,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "25",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-026",
@@ -24138,10 +22007,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "26",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-027",
@@ -24155,10 +22022,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "27",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-028",
@@ -24172,10 +22037,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "28",
     "format": "cbz",
-    "clicks": 0,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   },
   {
     "id": "series-icone-milestone-1993-029",
@@ -24189,10 +22052,8 @@ window.DEFAULT_LIBRARY = [
     "seriesId": "series-icone-milestone-1993",
     "issue": "29",
     "format": "cbz",
-    "clicks": 3,
     "featured": true,
-    "randomWeight": 5,
-    "downloadCount": 0
+    "randomWeight": 5
   }
 ];
 window.DEFAULT_COLLECTIONS = [];
