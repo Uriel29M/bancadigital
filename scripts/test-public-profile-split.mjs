@@ -5,7 +5,7 @@ const app = readFileSync('js/app.js', 'utf8');
 const feature = readFileSync('js/public-profile-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 
-assert.match(app, /import\(appAssetUrl\("js\/public-profile-feature\.js\?v=[^"]+"\)\)/, 'perfil público deve carregar sob demanda');
+assert.ok(app.includes('import(appAssetUrl("js/public-profile-feature.js"))'), 'perfil público deve carregar sob demanda');
 assert.ok(app.includes('async function loadPublicProfile(...args)'), 'wrapper de carregamento deve continuar no app');
 assert.ok(app.includes('function renderPublicProfilePage(...args)'), 'wrapper de renderização deve continuar no app');
 assert.ok(app.includes('async function toggleProfileFollow(...args)'), 'wrapper de seguir deve continuar no app');

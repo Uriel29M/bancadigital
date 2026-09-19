@@ -6,7 +6,7 @@ const feature = readFileSync('js/sticker-actions-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/sticker-actions-feature.js?v=1-sticker-actions-split"))'));
+assert.ok(app.includes('import(appAssetUrl("js/sticker-actions-feature.js"))'));
 assert.ok(app.includes('async function maybeAwardReadSticker(...args)'));
 assert.ok(app.includes('async function maybeAwardCompletedStickers(...args)'));
 assert.ok(app.includes('async function requestSticker(...args)'));
@@ -17,7 +17,7 @@ assert.ok(!app.includes('function chooseAdminStickerRarity()'));
 assert.ok(!app.includes('function chooseStickerCoverCandidate(group, candidates = [])'));
 assert.ok(!app.includes('function askStickerDiscardConfirmation()'));
 assert.ok(!app.includes('async function requestSticker(characterId, ownerId, type)'));
-assert.equal((app.match(/function stickerRequestsMarkup\\s*\\(/g) || []).length, 1);
+assert.equal((app.match(/function stickerRequestsMarkup\s*\(/g) || []).length, 1);
 
 assert.ok(feature.includes('export function createStickerActionsFeature(deps)'));
 assert.ok(feature.includes('async function maybeAwardReadSticker(item)'));
@@ -28,8 +28,8 @@ assert.ok(feature.includes('function chooseStickerCoverCandidate(group, candidat
 assert.ok(feature.includes('function askStickerDiscardConfirmation()'));
 assert.ok(feature.includes('async function requestSticker(characterId, ownerId, type)'));
 
-assert.match(index, /js\\/app\\.js\\?v=2\\.2\\.10\\.514-sticker-actions-split/);
-assert.match(index, /sw\\.js\\?v=279-sticker-actions-split/);
+assert.ok(index.includes('js/app.js?v='), 'index deve usar BUILD_ID no app');
+assert.ok(index.includes('sw.js?v='), 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('sticker-actions-feature.js'));
 
 console.log('PASS sticker actions split');

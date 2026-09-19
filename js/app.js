@@ -2357,7 +2357,7 @@
   function loadFactionEditorsFeature() {
     if (factionEditorsFeature) return Promise.resolve(factionEditorsFeature);
     if (!factionEditorsFeaturePromise) {
-      factionEditorsFeaturePromise = import(appAssetUrl("js/faction-editors-feature.js?v=1-faction-editors-split"))
+      factionEditorsFeaturePromise = import(appAssetUrl("js/faction-editors-feature.js"))
         .then(module => {
           factionEditorsFeature = module.createFactionEditorsFeature({
             $,
@@ -2554,7 +2554,7 @@
   let profileFeaturePromise = null;
   function loadProfileFeature() {
     if (!profileFeaturePromise) {
-      profileFeaturePromise = import(appAssetUrl("js/profile-feature.js?v=1-profile-split"))
+      profileFeaturePromise = import(appAssetUrl("js/profile-feature.js"))
         .then(module => module.createProfileFeature({
           $,
           $$,
@@ -2635,7 +2635,11 @@
   }
 
   function appAssetUrl(path) {
-    return new URL(String(path).replace(/^\/+/, ""), document.baseURI).href;
+    const url = new URL(String(path).replace(/^\/+/, ""), document.baseURI);
+    if (url.origin === window.location.origin && window.BANCA_BUILD_VERSION) {
+      url.searchParams.set("v", window.BANCA_BUILD_VERSION);
+    }
+    return url.href;
   }
 
   async function ensureReaderDependency(format) {
@@ -2647,7 +2651,7 @@
   let readerFormatRenderersPromise = null;
   function loadReaderFormatRenderers() {
     if (!readerFormatRenderersPromise) {
-      readerFormatRenderersPromise = import(appAssetUrl("js/reader-formats.js?v=1-reader-split"))
+      readerFormatRenderersPromise = import(appAssetUrl("js/reader-formats.js"))
         .then(module => module.createReaderFormats({
           $,
           READER_END_PAGE_URL,
@@ -3181,7 +3185,7 @@
   function loadPublicProfileFeature() {
     if (publicProfileFeature) return Promise.resolve(publicProfileFeature);
     if (!publicProfileFeaturePromise) {
-      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=3-protected-staff-blocking"))
+      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js"))
         .then(module => {
           publicProfileFeature = module.createPublicProfileFeature({
             $,
@@ -4004,7 +4008,7 @@
   function loadStickerActionsFeature() {
     if (stickerActionsFeature) return Promise.resolve(stickerActionsFeature);
     if (!stickerActionsFeaturePromise) {
-      stickerActionsFeaturePromise = import(appAssetUrl("js/sticker-actions-feature.js?v=1-sticker-actions-split"))
+      stickerActionsFeaturePromise = import(appAssetUrl("js/sticker-actions-feature.js"))
         .then(module => {
           stickerActionsFeature = module.createStickerActionsFeature({
             $,
@@ -9155,7 +9159,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=8-faction-bubble-body-command"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js"))
         .then(module => module.createChatFeature({
           $,
           $$,
@@ -11333,7 +11337,7 @@
   function loadFactionPageFeature() {
     if (factionPageFeature) return Promise.resolve(factionPageFeature);
     if (!factionPageFeaturePromise) {
-      factionPageFeaturePromise = import(appAssetUrl("js/faction-page-feature.js?v=1-faction-page-split"))
+      factionPageFeaturePromise = import(appAssetUrl("js/faction-page-feature.js"))
         .then(module => {
           factionPageFeature = module.createFactionPageFeature({
             $,
@@ -11391,7 +11395,7 @@
   function loadFactionRenderFeature() {
     if (factionRenderFeature) return Promise.resolve(factionRenderFeature);
     if (!factionRenderFeaturePromise) {
-      factionRenderFeaturePromise = import(appAssetUrl("js/faction-render-feature.js?v=1-faction-render-split"))
+      factionRenderFeaturePromise = import(appAssetUrl("js/faction-render-feature.js"))
         .then(module => {
           factionRenderFeature = module.createFactionRenderFeature({
             CHAT_ROOMS,
@@ -14783,7 +14787,7 @@
   let readerAdsFeaturePromise = null;
   function loadReaderAdsFeature() {
     if (!readerAdsFeaturePromise) {
-      readerAdsFeaturePromise = import(appAssetUrl("js/reader-ads-feature.js?v=1-reader-ads"))
+      readerAdsFeaturePromise = import(appAssetUrl("js/reader-ads-feature.js"))
         .then(module => module.createReaderAdsFeature({ $, $, sb, state, escapeHTML, toast, isAdminProfile }))
         .catch(error => { readerAdsFeaturePromise = null; throw error; });
     }
@@ -14800,7 +14804,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=6-reader-edit-item-resolution"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,

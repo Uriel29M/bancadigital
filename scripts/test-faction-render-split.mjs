@@ -6,7 +6,7 @@ const feature = readFileSync('js/faction-render-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/faction-render-feature.js?v=1-faction-render-split"))');
+assert.ok(app.includes('import(appAssetUrl("js/faction-render-feature.js"))'));
 assert.ok(app.includes('function renderFactionPage(...args)'));
 assert.ok(app.includes('function renderFactionMembersPage(...args)'));
 assert.ok(app.includes('function factionMembersResultsMarkup(...args)'));
@@ -28,8 +28,8 @@ assert.ok(feature.includes('function factionPinnedCollectionsMarkup(faction)'));
 assert.ok(feature.includes('function factionExtraAbafacsMarkup(faction, stats)'));
 assert.ok(feature.includes('function renderFactionPage()'));
 
-assert.match(index, /js\/app\.js\?v=2\.2\.10\.517-faction-render-split/);
-assert.match(index, /sw\.js\?v=282-faction-render-split/);
+assert.ok(index.includes('js/app.js?v='), 'index deve usar BUILD_ID no app');
+assert.ok(index.includes('sw.js?v='), 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('faction-render-feature.js'));
 
 console.log('PASS faction render split');

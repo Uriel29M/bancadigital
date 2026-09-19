@@ -5,7 +5,7 @@ const app = readFileSync('js/app.js', 'utf8');
 const chat = readFileSync('js/chat-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/chat-feature.js?v=2-mobile-chat-page"))'), 'chat deve carregar sob demanda');
+assert.ok(app.includes('import(appAssetUrl("js/chat-feature.js"))'), 'chat deve carregar sob demanda');
 assert.ok(app.includes('async function openChat(...args)'), 'wrapper openChat deve continuar no app');
 assert.ok(app.includes('async function openChatRoom(...args)'), 'wrapper openChatRoom deve continuar no app');
 assert.ok(!app.includes('function setupChatModerationUI('), 'moderação do chat deve sair fisicamente do app');

@@ -1,19 +1,19 @@
-const CACHE_VERSION = "banca-digital-shell-v688-faction-chat-black";
+const CACHE_VERSION = "banca-digital-shell-432b5667";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.264-faction-chat-black",
-  "./js/app.js?v=2.2.10.537-faction-chat-body-command", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
-  "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
-  "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
-  "./js/data/dc-comics/recentes.js?v=2.2.7.54",
-  "./js/data/dc-comics/black-label.js?v=1.0.14",
-  "./js/data/dc-comics/milestone.js?v=1.1.1",
-  "./js/data/dc-comics/novos-52.js?v=1.0.26",
-  "./js/data/loading-tips.js?v=1.0.0", "./js/supabase.js",
-  "./assets/bucho/ocultas.png",
-  "./assets/barracavermelhaicon.png?v=2",
-  "./assets/barracabrancaicon.png?v=1", "./assets/semfoto.jpg?v=1",
-  "./assets/papercomicsbackground.jpg", "./assets/papercomicsbackgroung.jpg"
+  "./", "./index.html", "./css/style.css?v=432b5667",
+  "./js/app.js?v=432b5667", "./js/reader-deps.js?v=432b5667", "./js/catalog-sync.js?v=432b5667",
+  "./js/catalog-identity.js?v=432b5667", "./js/telegram-auto.js?v=432b5667",
+  "./js/telegram-covers.js?v=432b5667", "./js/data.js?v=432b5667",
+  "./js/data/dc-comics/recentes.js?v=432b5667",
+  "./js/data/dc-comics/black-label.js?v=432b5667",
+  "./js/data/dc-comics/milestone.js?v=432b5667",
+  "./js/data/dc-comics/novos-52.js?v=432b5667",
+  "./js/data/loading-tips.js?v=432b5667", "./js/supabase.js?v=432b5667",
+  "./assets/bucho/ocultas.png?v=432b5667",
+  "./assets/barracavermelhaicon.png?v=432b5667",
+  "./assets/barracabrancaicon.png?v=432b5667", "./assets/semfoto.jpg?v=432b5667",
+  "./assets/papercomicsbackground.jpg?v=432b5667", "./assets/papercomicsbackgroung.jpg?v=432b5667"
 ];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(SHELL_CACHE)

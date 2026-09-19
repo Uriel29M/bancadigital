@@ -6,7 +6,7 @@ const feature = readFileSync('js/faction-editors-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/faction-editors-feature.js?v=1-faction-editors-split"))'));
+assert.ok(app.includes('import(appAssetUrl("js/faction-editors-feature.js"))'));
 assert.ok(app.includes('async function openFactionIdentityEditorV2(...args)'));
 assert.ok(app.includes('async function openFactionAbafacAddEditor(...args)'));
 assert.ok(app.includes('async function openFactionCatalogEditor(...args)'));
@@ -29,8 +29,8 @@ assert.ok(feature.includes('function openFactionManifestEditor(faction)'));
 assert.ok(feature.includes('function openFactionMuralEditor(faction)'));
 assert.ok(feature.includes('function openFactionChoice()'));
 
-assert.match(index, /js\/app\.js\?v=2\.2\.10\.516-faction-editors-split/);
-assert.match(index, /sw\.js\?v=281-faction-editors-split/);
+assert.ok(index.includes('js/app.js?v='), 'index deve usar BUILD_ID no app');
+assert.ok(index.includes('sw.js?v='), 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('faction-editors-feature.js'));
 
 console.log('PASS faction editors split');
