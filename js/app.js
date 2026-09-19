@@ -2004,7 +2004,7 @@
         clearInterval(state.presenceInterval);
         state.presenceInterval = null;
       }
-    }, 60000);
+    }, 120000);
   }
 
   async function loadRankingData(silent = false) {
