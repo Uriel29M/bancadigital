@@ -748,6 +748,23 @@ export function createChatFeature(deps) {
         privateChatList.innerHTML = '<div class="chat-room-list-title">Conversas recentes</div><div class="empty">Não foi possível carregar suas conversas recentes.</div>';
         return;
       }
+      const unreadPrivateResult = await sb.from("notifications")
+        .select("actor_id")
+        .eq("user_id", state.session.user.id)
+        .eq("type", "message")
+        .is("read_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .limit(500);
+      const privateUnreadCounts = unreadPrivateResult.error
+        ? { ...(state.chatPrivateUnreadCounts || {}) }
+        : (unreadPrivateResult.data || []).reduce((counts, notification) => {
+            if (!notification.actor_id) return counts;
+            const contactId = String(notification.actor_id);
+            counts[contactId] = (counts[contactId] || 0) + 1;
+            return counts;
+          }, {});
+      if (!unreadPrivateResult.error) state.chatPrivateUnreadCounts = privateUnreadCounts;
+
       const conversations = new Map();
       (privateMessages.data || []).forEach(message => {
         const incoming = String(message.recipient_id) === String(state.session.user.id);
@@ -772,7 +789,7 @@ export function createChatFeature(deps) {
           const profile = profiles.get(String(contactId));
           const conversation = conversations.get(contactId);
           if (!profile || !conversation) return "";
-          const unread = state.chatPrivateUnreadCounts?.[String(contactId)] || 0;
+          const unread = privateUnreadCounts[String(contactId)] || 0;
           const unreadBadge = unread ? `<span class="message-badge" aria-label="${unread} mensagem(ns) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : "";
           return `<button type="button" class="chat-private-card${unread ? " has-unread" : ""}" data-private-chat-user="${escapeHTML(profile.id)}">${avatarMarkup(profile, "chat-private-card-avatar")}<span class="chat-private-card-copy"><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b><small>${escapeHTML(conversation.latest.body.slice(0, 100))}</small></span>${unreadBadge}<time>${escapeHTML(formatCommentDate(conversation.latest.created_at))}</time></button>`;
         }).join("");
