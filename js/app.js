@@ -9070,7 +9070,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=5-private-unread-badges"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=6-persistent-private-unread"))
         .then(module => module.createChatFeature({
           $,
           $$,
