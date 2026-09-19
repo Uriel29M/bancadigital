@@ -2096,10 +2096,6 @@
     state.factionCatalogLikeCounts = new Map(catalogIds.map(id => [String(id), 0]));
     (catalogLikes.data || []).forEach(row => state.factionCatalogLikeCounts.set(String(row.catalog_id), (state.factionCatalogLikeCounts.get(String(row.catalog_id)) || 0) + 1));
     state.factionCatalogSaveIds = new Set((catalogSaves.data || []).map(row => String(row.catalog_id)));
-    if (state.session?.user?.id && state.factions.length) {
-      const factionsToRepair = ["moderator", "banca", "admin"].includes(state.profile?.plan) ? state.factions : state.factions.filter(faction => faction.id === state.profile?.faction_id);
-      await Promise.all(factionsToRepair.map(faction => sb.rpc("ensure_faction_leadership", { p_faction_id: faction.id })));
-    }
     state.factionElections = new Map();
     const electionFactionId = state.factionPageId || state.profile?.faction_id;
     if (state.session?.user?.id && electionFactionId) {
@@ -2138,15 +2134,17 @@
     });
     state.factionMembers = state.factionMembers.map(member => ({ ...member, faction_xp: factionXpByUser.get(member.user_id) || 0, faction_activity: factionActivityByUser.get(member.user_id) || {} }));
     state.factionStats = stats;
-    const achievementResults = await Promise.all(state.factions.map(faction => sb.rpc("get_faction_achievements", { p_faction_id: faction.id })));
-    state.factionAchievements = new Map(state.factions.map((faction, index) => [faction.id, achievementResults[index]?.error ? [] : (achievementResults[index]?.data || [])]));
-    const mandatoryCandidates = (state.db.library || []).filter(item => item?.type === "comic" && item?.id).map(item => ({ id: String(item.id), title: item.title || "Edição", cover_url: item.coverUrl || item.cover || item.cover_url || null }));
-    const mandatoryResults = await Promise.all(state.factions.map(async faction => {
-      if (state.profile?.plan === "admin" && mandatoryCandidates.length) await sb.rpc("ensure_faction_mandatory_reads", { p_faction_id: faction.id, p_candidates: mandatoryCandidates });
-      const result = await sb.rpc("get_faction_mandatory_reads", { p_faction_id: faction.id });
-      return [faction.id, result.error ? [] : (result.data || [])];
-    }));
-    state.factionMandatoryReads = new Map(mandatoryResults);
+    const detailsFactionId = state.section === "factions" ? (state.factionPageId || state.profile?.faction_id || null) : null;
+    if (detailsFactionId) {
+      const achievement = await sb.rpc("get_faction_achievements", { p_faction_id: detailsFactionId });
+      state.factionAchievements.set(detailsFactionId, achievement.error ? [] : (achievement.data || []));
+      const mandatoryCandidates = (state.db.library || []).filter(item => item?.type === "comic" && item?.id).map(item => ({ id: String(item.id), title: item.title || "Edição", cover_url: item.coverUrl || item.cover || item.cover_url || null }));
+      if (state.profile?.plan === "admin" && mandatoryCandidates.length) {
+        await sb.rpc("ensure_faction_mandatory_reads", { p_faction_id: detailsFactionId, p_candidates: mandatoryCandidates });
+      }
+      const mandatory = await sb.rpc("get_faction_mandatory_reads", { p_faction_id: detailsFactionId });
+      state.factionMandatoryReads.set(detailsFactionId, mandatory.error ? [] : (mandatory.data || []));
+    }
   }
 
   async function joinFaction(factionId) {
@@ -3021,10 +3019,8 @@
         state.profile = { ...state.profile, xp: result.total_xp, level: result.current_level, daily_streak: result.streak };
         if (result.awarded_xp > 0) toast(`Check-in diário: +${result.awarded_xp} XP · sequência de ${result.streak} dia(s).`);
       }
-      await sb.rpc("touch_profile");
       await startPresence();
     }
-    if (!session?.user) await loadFactions();
     await loadNotifications();
     await loadCommunityActivity();
     await loadStaffActivities();
