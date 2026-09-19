@@ -79,6 +79,12 @@ export function createChatFeature(deps) {
     const username = cleanUsername(profile.username || "usuário");
     const isGuria = username.toLowerCase() === "guria";
     const title = isGuria ? "" : String(profile.title || "").trim();
+    const factionCommand = /^\/fac(?:\s+|$)/i.test(String(message.body || ""));
+    const displayedBody = factionCommand ? String(message.body || "").replace(/^\/fac(?:\s+|$)/i, "").trimStart() : message.body;
+    const faction = factionCommand
+      ? state.factions.find(item => String(item.id) === String(profile.faction_id || state.factionByUser.get(profile.id)))
+      : null;
+    const factionBubbleColor = /^#[0-9a-f]{6}$/i.test(String(faction?.color || "")) ? String(faction.color) : "";
     const reply = message.metadata?.reply_to;
     const replyMarkup = reply?.body ? `<div class="chat-message-reply"><b>Respondendo a @${escapeHTML(cleanUsername(reply.username || "usuario"))}</b><span>${escapeHTML(String(reply.body).slice(0, 180))}</span></div>` : "";
     const canModerateChat = options.canModerate ?? ["moderator", "banca", "admin"].includes(state.profile?.plan);
@@ -88,12 +94,9 @@ export function createChatFeature(deps) {
     const expandButton = `<button type="button" class="chat-expand-message-action" data-chat-message-expand aria-expanded="false" hidden>Expandir</button>`;
     const replyButton = `<button type="button" class="chat-reply-action" data-chat-reply="${escapeHTML(message.id || "")}" aria-label="Responder esta mensagem" title="Responder">↩</button>`;
     const pinButton = canModerateChat && options.allowPin ? `<button type="button" class="chat-pin-action" data-chat-pin="${escapeHTML(message.id || "")}" aria-label="Fixar mensagem" title="Fixar mensagem">📌</button>` : "";
-    const factionBubbleColor = message.metadata?.bubble_style === "faction" && /^#[0-9a-f]{6}$/i.test(String(message.metadata?.faction_color || ""))
-      ? String(message.metadata.faction_color)
-      : "";
     const factionBubbleClass = factionBubbleColor ? " is-faction-bubble" : "";
     const factionBubbleStyle = factionBubbleColor ? ` style="--chat-faction-bubble:${escapeHTML(factionBubbleColor)}"` : "";
-    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}${factionBubbleClass}"${factionBubbleStyle} data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)} ${officialAiBadge(profile)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${staffTitleMarkup(profile)}${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(message.body, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
+    return `<div class="chat-message ${message.sender_id === state.session.user.id ? "is-mine" : ""}${canModerateChat ? " has-chat-moderation" : ""}${factionBubbleClass}"${factionBubbleStyle} data-chat-message-id="${escapeHTML(message.id || "")}">${moderationButton}<a class="chat-message-author" href="${escapeHTML(publicProfileHref(username))}" target="_blank" rel="noopener">${messageAvatar}<span><b>${factionDot(profile)}@${escapeHTML(username)} ${officialAiBadge(profile)}</b>${title ? `<em style="--title-bg:${safeTitleColor(profile.title_color)}">${escapeHTML(title)}</em>` : ""}</span></a>${staffTitleMarkup(profile)}${replyMarkup}<div class="chat-message-body">${chatBodyMarkup(displayedBody, message.metadata, senderVisual)}</div><div class="chat-message-footer"><small>${escapeHTML(formatCommentDate(message.created_at))}</small><div class="chat-message-actions">${expandButton}${pinButton}${replyButton}</div></div></div>`;
   }
 
   function updateChatMessageExpansionUI(messagesRoot) {
@@ -847,10 +850,12 @@ export function createChatFeature(deps) {
       if (!submitButton || submitButton.disabled) return;
       submitButton.disabled = true;
       const optimisticId = `chat-pending-${Date.now()}`;
-      const optimisticFactionColor = prepared.metadata?.bubble_style === "faction" && /^#[0-9a-f]{6}$/i.test(String(prepared.metadata?.faction_color || ""))
-        ? String(prepared.metadata.faction_color)
-        : "";
-      messagesRoot.insertAdjacentHTML("beforeend", `<div class="chat-message is-mine chat-message-pending${optimisticFactionColor ? " is-faction-bubble" : ""}"${optimisticFactionColor ? ` style="--chat-faction-bubble:${escapeHTML(optimisticFactionColor)}"` : ""} data-chat-pending="${optimisticId}"><div>${escapeHTML(body)}</div><small>Enviando…</small></div>`);
+      const optimisticFaction = /^\/fac(?:\s+|$)/i.test(body)
+        ? state.factions.find(item => String(item.id) === String(state.profile?.faction_id))
+        : null;
+      const optimisticFactionColor = /^#[0-9a-f]{6}$/i.test(String(optimisticFaction?.color || "")) ? String(optimisticFaction.color) : "";
+      const optimisticBody = optimisticFactionColor ? body.replace(/^\/fac(?:\s+|$)/i, "").trimStart() : body;
+      messagesRoot.insertAdjacentHTML("beforeend", `<div class="chat-message is-mine chat-message-pending${optimisticFactionColor ? " is-faction-bubble" : ""}"${optimisticFactionColor ? ` style="--chat-faction-bubble:${escapeHTML(optimisticFactionColor)}"` : ""} data-chat-pending="${optimisticId}"><div>${escapeHTML(optimisticBody)}</div><small>Enviando…</small></div>`);
       event.currentTarget.reset();
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
       // Use the database expiry default so device clock skew cannot violate RLS.
