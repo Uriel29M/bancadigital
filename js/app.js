@@ -6029,7 +6029,7 @@
     $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
     $("[data-reader-edit]", overlay)?.addEventListener("click", event => {
       event.stopPropagation();
-      openEditForm(item);
+      openEditForm(item.id);
     });
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
@@ -14732,7 +14732,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=5-reader-ads-admin"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=6-reader-edit-item-resolution"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
