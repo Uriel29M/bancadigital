@@ -17,7 +17,7 @@ assert.ok(!app.includes('function chooseAdminStickerRarity()'));
 assert.ok(!app.includes('function chooseStickerCoverCandidate(group, candidates = [])'));
 assert.ok(!app.includes('function askStickerDiscardConfirmation()'));
 assert.ok(!app.includes('async function requestSticker(characterId, ownerId, type)'));
-assert.equal((app.match(/function stickerRequestsMarkup\\s*\\(/g) || []).length, 1);
+assert.equal((app.match(/function stickerRequestsMarkup\s*\(/g) || []).length, 1);
 
 assert.ok(feature.includes('export function createStickerActionsFeature(deps)'));
 assert.ok(feature.includes('async function maybeAwardReadSticker(item)'));
@@ -28,8 +28,8 @@ assert.ok(feature.includes('function chooseStickerCoverCandidate(group, candidat
 assert.ok(feature.includes('function askStickerDiscardConfirmation()'));
 assert.ok(feature.includes('async function requestSticker(characterId, ownerId, type)'));
 
-assert.match(index, /js\\/app\\.js\\?v=2\\.2\\.10\\.514-sticker-actions-split/);
-assert.match(index, /sw\\.js\\?v=279-sticker-actions-split/);
+assert.match(index, /js\\/app\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no app');
+assert.match(index, /sw\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('sticker-actions-feature.js'));
 
 console.log('PASS sticker actions split');
