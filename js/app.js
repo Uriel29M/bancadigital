@@ -5862,31 +5862,37 @@
     const showModeSelector = supportedFormatsForModes.includes(format);
     overlay.innerHTML = `
       <div class="reader-top">
-        <button class="small-btn" data-close-reader>← Voltar</button>
-        <button class="small-btn" data-reader-home>Início</button>
-        <div class="reader-title">${escapeHTML(itemDisplayTitle(item))}</div>
-        ${showModeSelector ? `
-          <select class="small-btn" id="reading-mode-select" disabled>
-            <option value="single-page" ${state.readingMode === 'single-page' ? 'selected' : ''}>Página por página</option>
-            <option value="double-page" ${state.readingMode === 'double-page' ? 'selected' : ''}>
-              Duas páginas
-            </option>
-            <option value="continuous-scroll" ${state.readingMode === 'continuous-scroll' ? 'selected' : ''}>Rolagem contínua</option>
-          </select>
-        ` : ''}
-        <button class="small-btn" id="reading-direction-btn" style="display: ${showModeSelector && state.readingMode === 'double-page' ? 'inline-block' : 'none'};">
-          ${state.readingDirection === 'eastern' ? '↔ Oriental' : '↔ Ocidental'}
-        </button>
-        ${showModeSelector ? `<button class="small-btn" data-toggle-cover>${skipCover ? 'Incluir capa' : 'Ignorar capa'}</button>` : ''}
-        <button class="small-btn" data-toggle-grayscale>${readerGrayscale ? 'Cor normal' : 'Preto e branco'}</button>
-        <button class="small-btn" data-reader-zoom>Zoom</button>
-        ${state.session && !item.local ? `<button class="small-btn" data-toggle-read>${savedProgress?.completed ? 'Desmarcar como lida' : 'Marcar como lida'}</button>` : ''}
-        ${!state.session?.offline && characterNames(item)[0] ? `<button class="small-btn" data-browse-character="${escapeHTML(characterNames(item)[0])}">Ver personagem</button>` : ''}
-        ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
-        ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
-        ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
-        ${item.seriesId ? `<button class="small-btn" data-view-series="${escapeHTML(item.seriesId)}">Série</button>` : ""}
-        ${state.profile?.plan === "admin" && !state.session?.offline ? `<button class="small-btn" data-open-external>Ver arquivo</button>` : ''}
+        <div class="reader-top-primary">
+          <button class="small-btn" data-close-reader>← Voltar</button>
+          <div class="reader-title">${escapeHTML(itemDisplayTitle(item))}</div>
+          <button class="small-btn" data-reader-home>Início</button>
+        </div>
+        <div class="reader-top-reading">
+          ${showModeSelector ? `
+            <select class="small-btn" id="reading-mode-select" disabled>
+              <option value="single-page" ${state.readingMode === 'single-page' ? 'selected' : ''}>Página por página</option>
+              <option value="double-page" ${state.readingMode === 'double-page' ? 'selected' : ''}>
+                Duas páginas
+              </option>
+              <option value="continuous-scroll" ${state.readingMode === 'continuous-scroll' ? 'selected' : ''}>Rolagem contínua</option>
+            </select>
+          ` : ''}
+          <button class="small-btn" id="reading-direction-btn" style="display: ${showModeSelector && state.readingMode === 'double-page' ? 'inline-block' : 'none'};">
+            ${state.readingDirection === 'eastern' ? '↔ Oriental' : '↔ Ocidental'}
+          </button>
+          ${showModeSelector ? `<button class="small-btn" data-toggle-cover>${skipCover ? 'Incluir capa' : 'Ignorar capa'}</button>` : ''}
+          <button class="small-btn" data-toggle-grayscale>${readerGrayscale ? 'Cor normal' : 'Preto e branco'}</button>
+          <button class="small-btn" data-reader-zoom>Zoom</button>
+          ${state.session && !item.local ? `<button class="small-btn" data-toggle-read>${savedProgress?.completed ? 'Desmarcar como lida' : 'Marcar como lida'}</button>` : ''}
+        </div>
+        <div class="reader-top-actions">
+          ${!state.session?.offline && characterNames(item)[0] ? `<button class="small-btn" data-browse-character="${escapeHTML(characterNames(item)[0])}">Ver personagem</button>` : ''}
+          ${!state.session?.offline && item.publisher ? `<button class="small-btn" data-browse-publisher>Ver editora</button>` : ''}
+          ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
+          ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
+          ${item.seriesId ? `<button class="small-btn" data-view-series="${escapeHTML(item.seriesId)}">Série</button>` : ""}
+          ${state.profile?.plan === "admin" && !state.session?.offline ? `<button class="small-btn" data-open-external>Ver arquivo</button>` : ''}
+        </div>
       </div>
       <div class="reader-body" id="reader-body"></div>
       <div class="reader-bottom-controls">
