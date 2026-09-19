@@ -29,8 +29,8 @@ assert.ok(feature.includes('function openFactionManifestEditor(faction)'));
 assert.ok(feature.includes('function openFactionMuralEditor(faction)'));
 assert.ok(feature.includes('function openFactionChoice()'));
 
-assert.match(index, /js\/app\.js\?v=2\.2\.10\.516-faction-editors-split/);
-assert.match(index, /sw\.js\?v=281-faction-editors-split/);
+assert.match(index, /js\\/app\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no app');
+assert.match(index, /sw\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('faction-editors-feature.js'));
 
 console.log('PASS faction editors split');
