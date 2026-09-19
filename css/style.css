@@ -3047,9 +3047,20 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   .collection-filter { align-items: stretch; flex-direction: column; }
   .collection-filter select, .collection-filter input, .collection-filter button { width: 100%; }
   .content { padding: 25px 15px 50px; }
-  :root { --media-card-width: min(41vw, 210px); }
-  .rail-viewport { --media-card-width: min(41vw, 210px); width: min(100%, calc(2 * var(--media-card-width) + 32px)); }
-  .rail { grid-auto-columns: var(--media-card-width); }
+  :root { --media-card-width: min(40vw, 210px); }
+  .rail-viewport {
+    --media-card-width: min(40vw, 210px);
+    width: calc(100% + 15px);
+    max-width: calc(100vw - 15px);
+    padding-right: 0;
+    padding-left: 0;
+  }
+  .rail {
+    grid-auto-columns: var(--media-card-width);
+    padding-right: 26px;
+    scroll-padding-right: 26px;
+    overscroll-behavior-x: contain;
+  }
   .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; width: calc(100% - 8px); margin-left: 8px; margin-right: 0; transform: translateX(10px); }
   .public-collections-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; gap: 14px; width: calc(100% - 8px); margin-left: 8px; margin-right: 0; transform: translateX(10px); }
   .feature-grid > .feature-card,

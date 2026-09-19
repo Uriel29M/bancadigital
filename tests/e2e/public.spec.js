@@ -43,6 +43,20 @@ test.describe('Banca Digital — público', () => {
     const heroContentBox = await heroContent.boundingBox();
     expect(heroContentBox?.width).toBeGreaterThanOrEqual(320);
 
+    const railViewport = page.locator('.rail-viewport').first();
+    await expect(railViewport).toBeVisible();
+    const carouselPeek = await railViewport.evaluate(viewport => {
+      const rail = viewport.querySelector('.rail');
+      const cards = rail ? Array.from(rail.children).filter(element => element.getBoundingClientRect().width > 0) : [];
+      if (cards.length < 3) return null;
+      const viewportBox = viewport.getBoundingClientRect();
+      const thirdBox = cards[2].getBoundingClientRect();
+      return Math.max(0, Math.min(viewportBox.right, thirdBox.right) - Math.max(viewportBox.left, thirdBox.left));
+    });
+    expect(carouselPeek).not.toBeNull();
+    expect(carouselPeek).toBeGreaterThanOrEqual(20);
+    expect(carouselPeek).toBeLessThanOrEqual(34);
+
     const bottomNav = page.locator('.mobile-bottom-nav');
     await expect(bottomNav).toBeVisible();
     await expect(bottomNav.locator('[data-mobile-action="downloads"]')).toBeVisible();

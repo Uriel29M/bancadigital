@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v666-mobile-hero";
+const CACHE_VERSION = "banca-digital-shell-v667-mobile-carousel-peek";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.251-mobile-hero",
+  "./", "./index.html", "./css/style.css?v=2.2.10.252-mobile-carousel-peek",
   "./js/app.js?v=2.2.10.513-admin-split", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=4",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
