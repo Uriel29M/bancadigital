@@ -148,15 +148,18 @@ Deno.serve(async (request) => {
     const repeatedUserQuestion = history.some((row: any) => row.sender_id === user.id && String(row.body || '').trim().toLowerCase() === String(message.body || '').trim().toLowerCase());
     const siteIntent = /\b(?:onde fica|onde encontro|como acesso|abrir|acessar|link|ir para|mostrar)\b.*\b(?:perfil|estante|leituras?|quadrinhos?|mang[aá]s?|catalogo|catálogo|pesquisa|buscar|mensagens?)\b|\b(?:meu perfil|minha estante|minhas leituras|meus quadrinhos|abrir catalogo|abrir catálogo|pesquisar quadrinhos)\b|^\s*(?:estante|perfil|leituras?|quadrinhos?|mang[aá]s?|catalogo|catálogo|pesquisa)\s*[?!.]*\s*$/i.test(message.body);
     const { data: currentProfile } = siteIntent ? await admin.from('profiles').select('username').eq('id', user.id).maybeSingle() : { data: null };
-    const searchTerm = String(message.body || '')
+    const searchTermRaw = String(message.body || '')
       .replace(/\b(?:quero|queria|pode|poderia|vou|onde|como|me ajuda a|me ajude a|abrir|acessar|ler|buscar|pesquisar|encontrar)\b/gi, '')
       .replace(/\b(?:no|na|o|a|os|as|meu|minha|meus|minhas)\b/gi, '')
       .replace(/\b(?:catalogo|catálogo|site|banca|quadrinhos?)\b/gi, '')
       .replace(/\s+/g, ' ').trim();
+    // Pontuação solta não é termo de busca. "quadrinhos?" deve abrir o catálogo,
+    // e não pesquisar literalmente por "?".
+    const searchTerm = /[\p{L}\p{N}]/u.test(searchTermRaw) ? searchTermRaw : '';
     const siteReply = siteIntent && /\b(?:perfil|estante|leituras?|cole[cç][aã]o)\b/i.test(message.body) && currentProfile?.username
       ? `Aqui está seu espaço na Banca: [abrir meu perfil e estante](?perfil=${encodeURIComponent(currentProfile.username)}).`
       : siteIntent && /\b(?:pesquisa|buscar|encontrar|ler|quadrinhos?|mang[aá]s?|catalogo|catálogo)\b/i.test(message.body)
-        ? `${searchTerm ? `Vou deixar a busca por “${searchTerm}” pronta` : 'O catálogo está logo ali'}, [abrir quadrinhos e pesquisa](?pagina=${searchTerm ? `pesquisar&q=${encodeURIComponent(searchTerm)}` : 'quadrinhos'}).`
+        ? `${searchTerm ? `Vou deixar a busca por “${searchTerm}” pronta` : 'A página de quadrinhos está aqui'}, [abrir quadrinhos](?pagina=${searchTerm ? `pesquisar&q=${encodeURIComponent(searchTerm)}` : 'quadrinhos'}).`
         : null;
     const navigationReply = /\b(?:o que eu posso fazer|o que posso fazer|o que você pode fazer|o que vc pode fazer|o que voce pode fazer|como eu uso|como usar|como você pode ajudar|como vc pode ajudar)\b/i.test(message.body)
       ? `Posso te guiar pela Banca, procurar quadrinhos, explicar as funções e indicar sua estante. Também posso falar sobre heróis, vilões e histórias, desde que você não me peça para organizar uma pilha de gibis, porque aí já é exploração trabalhista. [Abrir o catálogo](?pagina=quadrinhos)${currentProfile?.username ? ` · [Abrir seu perfil](?perfil=${encodeURIComponent(currentProfile.username)})` : ''}`
@@ -200,6 +203,7 @@ Deno.serve(async (request) => {
     // apontam para a raiz do domínio e removem /bancadigital/.
     reply = (reply || FALLBACK)
       .replace(/\]\(\/\?/g, '](?')
+      .replace(/\\\(\?/g, '(?')
       .replace(/[—–]/g, ',')
       .slice(0, 4000);
     const replyParts = splitReply(reply);
