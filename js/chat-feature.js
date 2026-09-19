@@ -522,7 +522,7 @@ export function createChatFeature(deps) {
     await markChatMentionsRead(room?.id);
     await loadNotifications();
     if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
-    $('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
+    $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     if (mobilePage) prepareMobileChatPage();
     const roomHeaderActions = mobilePage
       ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>'
@@ -733,7 +733,7 @@ export function createChatFeature(deps) {
       };
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
       $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => { const unread = state.chatRoomUnreadCounts?.[room.id] || 0; return `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span>${unread ? `<span class="message-badge" aria-label="${unread} marcação(ões) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : ""}<small>${chatRoomLabel(room)}</small></button>`; }).join("")}</div>`);
-      $('[data-chat-room]', overlay).forEach(button => button.onclick = () => { teardown(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
+      $$('[data-chat-room]', overlay).forEach(button => button.onclick = () => { teardown(); openChatRoom(CHAT_ROOMS.find(room => room.id === button.dataset.chatRoom)); });
       const privateChatList = $("[data-private-chat-list]", overlay);
       const privateMessages = await sb.from("chat_messages")
         .select("id, sender_id, recipient_id, body, created_at")
