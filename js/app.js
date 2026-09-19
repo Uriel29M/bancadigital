@@ -3718,14 +3718,8 @@
 
   function prepareChatMessage(rawBody) {
     const source = String(rawBody || "").trim();
-    const factionCommand = /^\/fac(?:\s+|$)/i.test(source);
-    const messageSource = factionCommand ? source.replace(/^\/fac(?:\s+|$)/i, "").trimStart() : source;
-    const faction = factionCommand && state.profile?.faction_id
-      ? state.factions.find(item => String(item.id) === String(state.profile.faction_id))
-      : null;
-    const factionColor = /^#[0-9a-f]{6}$/i.test(String(faction?.color || "")) ? String(faction.color) : "";
     const previews = [];
-    const body = messageSource.replace(/https?:\/\/[^\s<]+/gi, rawUrl => {
+    const body = source.replace(/https?:\/\/[^\s<]+/gi, rawUrl => {
       const enrichedUrl = comicLinkWithSenderAppearance(rawUrl);
       let parsed;
       try { parsed = new URL(enrichedUrl, window.location.href); } catch { return enrichedUrl; }
@@ -3741,13 +3735,7 @@
       });
       return enrichedUrl;
     });
-    const metadata = previews.length ? { comic_previews: previews } : {};
-    if (factionCommand && factionColor) {
-      metadata.bubble_style = "faction";
-      metadata.faction_color = factionColor;
-      metadata.faction_id = String(faction.id);
-    }
-    return { body, metadata };
+    return { body, metadata: previews.length ? { comic_previews: previews } : {} };
   }
 
   async function shareComic(itemId) {
@@ -9167,7 +9155,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=7-faction-bubble-command"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=8-faction-bubble-body-command"))
         .then(module => module.createChatFeature({
           $,
           $$,
