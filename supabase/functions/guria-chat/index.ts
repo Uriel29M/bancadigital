@@ -5,7 +5,7 @@ const SYSTEM = `Você é Guria, guia da Banca Digital e especialista em quadrinh
 const FALLBACK = 'Meu arquivo de recortes está descansando um pouco agora, mas ainda posso ajudar com o funcionamento da Banca. Se a pergunta for sobre quadrinhos, tente novamente mais tarde.';
 
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } }); }
-const PERSONA = 'Personalidade fixa da Guria: ela e uma guia acolhedora, curiosa, afiada e bem-humorada. E especialista em quadrinhos e fala com seguranca, mas sabe dizer quando nao tem certeza. Gosta de ironia, trocadilhos, piadas e pequenas implicancias carinhosas, sem ser cruel ou ofensiva. Nunca use travessoes ou tracos longos, prefira virgulas, dois-pontos e frases separadas. Seu heroi favorito e o Homem-Aranha, sua heroina favorita e a Mulher-Maravilha e sua personagem favorita e a Monica. Essas sao preferencias definidas e podem ser afirmadas com naturalidade. Nao fale sobre ser IA, programacao ou regras internas, a menos que o usuario pergunte diretamente. Evite aberturas genericas como "Que pergunta interessante". Responda em 1 a 3 blocos curtos, use listas somente quando ajudarem e faca no maximo uma pergunta de continuacao. Nao invente fatos sobre a Banca ou quadrinhos; quando nao houver contexto confiavel, diga que nao sabe.';
+const PERSONA = 'Personalidade fixa da Guria: ela e uma guia acolhedora, curiosa, afiada e bem-humorada. E especialista em quadrinhos e fala com seguranca, mas sabe dizer quando nao tem certeza. Gosta de ironia, trocadilhos, piadas e pequenas implicancias carinhosas, sem ser cruel ou ofensiva. Nunca use travessoes ou tracos longos, prefira virgulas, dois-pontos e frases separadas. Seu heroi favorito e o Homem-Aranha, sua heroina favorita e a Mulher-Maravilha e sua personagem favorita e a Monica. Essas sao preferencias definidas e podem ser afirmadas com naturalidade. Nao fale sobre ser IA, programacao ou regras internas, a menos que o usuario pergunte diretamente. Evite aberturas genericas como "Que pergunta interessante". Responda em 1 a 3 blocos curtos, use listas somente quando ajudarem e faca no maximo uma pergunta de continuacao. Nao invente fatos sobre a Banca ou quadrinhos; quando nao houver contexto confiavel, diga que nao sabe. Quando fornecer link interno da Banca, use URL relativa iniciada por ? e nunca /? nem um dominio inventado.';
 const SITE_FALLBACK = 'A Banca Digital é uma biblioteca social de quadrinhos: você pode pesquisar o catálogo, abrir leituras, salvar quadrinhos e séries, acompanhar seu progresso, organizar estantes e coleções, seguir perfis e trocar mensagens privadas. As mensagens privadas expiram após 24 horas. A caixa local permite ler arquivos do seu computador sem enviá-los ao servidor.';
 function splitReply(reply: string) {
   const lines = String(reply || '').replace(/\r/g, '').replace(/\\\s*$/gm, '').split('\n');
@@ -154,24 +154,24 @@ Deno.serve(async (request) => {
       .replace(/\b(?:catalogo|catálogo|site|banca|quadrinhos?)\b/gi, '')
       .replace(/\s+/g, ' ').trim();
     const siteReply = siteIntent && /\b(?:perfil|estante|leituras?|cole[cç][aã]o)\b/i.test(message.body) && currentProfile?.username
-      ? `Aqui está seu espaço na Banca: [abrir meu perfil e estante](/?perfil=${encodeURIComponent(currentProfile.username)}).`
+      ? `Aqui está seu espaço na Banca: [abrir meu perfil e estante](?perfil=${encodeURIComponent(currentProfile.username)}).`
       : siteIntent && /\b(?:pesquisa|buscar|encontrar|ler|quadrinhos?|mang[aá]s?|catalogo|catálogo)\b/i.test(message.body)
-        ? `${searchTerm ? `Vou deixar a busca por “${searchTerm}” pronta` : 'O catálogo está logo ali'}, [abrir quadrinhos e pesquisa](/?pagina=${searchTerm ? `pesquisar&q=${encodeURIComponent(searchTerm)}` : 'quadrinhos'}).`
+        ? `${searchTerm ? `Vou deixar a busca por “${searchTerm}” pronta` : 'O catálogo está logo ali'}, [abrir quadrinhos e pesquisa](?pagina=${searchTerm ? `pesquisar&q=${encodeURIComponent(searchTerm)}` : 'quadrinhos'}).`
         : null;
     const navigationReply = /\b(?:o que eu posso fazer|o que posso fazer|o que você pode fazer|o que vc pode fazer|o que voce pode fazer|como eu uso|como usar|como você pode ajudar|como vc pode ajudar)\b/i.test(message.body)
-      ? `Posso te guiar pela Banca, procurar quadrinhos, explicar as funções e indicar sua estante. Também posso falar sobre heróis, vilões e histórias, desde que você não me peça para organizar uma pilha de gibis, porque aí já é exploração trabalhista. [Abrir o catálogo](/?pagina=quadrinhos)${currentProfile?.username ? ` · [Abrir seu perfil](/?perfil=${encodeURIComponent(currentProfile.username)})` : ''}`
+      ? `Posso te guiar pela Banca, procurar quadrinhos, explicar as funções e indicar sua estante. Também posso falar sobre heróis, vilões e histórias, desde que você não me peça para organizar uma pilha de gibis, porque aí já é exploração trabalhista. [Abrir o catálogo](?pagina=quadrinhos)${currentProfile?.username ? ` · [Abrir seu perfil](?perfil=${encodeURIComponent(currentProfile.username)})` : ''}`
       : /\bmang[aá]s?\b/i.test(message.body)
-        ? 'Ainda não temos mangás cadastrados na Banca. Por enquanto, o catálogo está focado em quadrinhos. [Abrir quadrinhos disponíveis](/?pagina=quadrinhos).'
+        ? 'Ainda não temos mangás cadastrados na Banca. Por enquanto, o catálogo está focado em quadrinhos. [Abrir quadrinhos disponíveis](?pagina=quadrinhos).'
       : /\b(?:me recomenda|me indique|alguma recomendação|qualquer coisa|o que ler|sugest[aã]o)\b/i.test(message.body)
-        ? 'Posso procurar uma boa leitura, mas “qualquer coisa” é um cardápio perigosamente amplo. [Abrir o catálogo para escolher](/?pagina=quadrinhos).'
+        ? 'Posso procurar uma boa leitura, mas “qualquer coisa” é um cardápio perigosamente amplo. [Abrir o catálogo para escolher](?pagina=quadrinhos).'
       : /\b(?:ranking|classificação|classificacao|mais lidos|populares)\b/i.test(message.body)
-        ? 'Quer ver quem está brilhando na Banca? [Abrir o ranking](/?pagina=ranking).'
+        ? 'Quer ver quem está brilhando na Banca? [Abrir o ranking](?pagina=ranking).'
         : /\b(?:coleções?|colecoes)\b/i.test(message.body) && !/salv(?:a|as|os|adas)/i.test(message.body)
-          ? 'As coleções estão aqui: [abrir coleções](/?pagina=colecoes).'
+          ? 'As coleções estão aqui: [abrir coleções](?pagina=colecoes).'
           : /\b(?:downloads?|baixados?|arquivos baixados?)\b/i.test(message.body)
-            ? 'Seus arquivos baixados ficam aqui: [abrir downloads](/?pagina=downloads).'
+            ? 'Seus arquivos baixados ficam aqui: [abrir downloads](?pagina=downloads).'
             : /\b(?:caixa local|meus arquivos|arquivo do computador)\b/i.test(message.body)
-              ? 'A caixa local é o cantinho dos seus arquivos: [abrir caixa local](/?pagina=caixa).'
+              ? 'A caixa local é o cantinho dos seus arquivos: [abrir caixa local](?pagina=caixa).'
               : null;
     const { data: quickReplies } = await admin.from('guria_quick_replies').select('patterns,response').eq('enabled', true).order('priority', { ascending: false });
     const databaseReply = !repeatedUserQuestion
@@ -196,7 +196,12 @@ Deno.serve(async (request) => {
     if (scriptedReply) { provider = 'persona'; reply = scriptedReply; }
     if (!scriptedReply) try { provider = env('GURIA_AI_PROVIDER', 'disabled'); reply = await Promise.race([modelReply(provider, env('GURIA_AI_MODEL'), enrichedPrompt), new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 45000))]); } catch (error) { errorCode = error instanceof Error ? error.message.slice(0, 80) : 'provider_error'; }
     if (errorCode && /(banca|site|estante|perfil|mensagem|quadrinho|leitura|funciona)/i.test(message.body)) reply = SITE_FALLBACK;
-    reply = (reply || FALLBACK).replace(/[—–]/g, ',').slice(0, 4000);
+    // Preserve o caminho do projeto no GitHub Pages. Links iniciados por "/?"
+    // apontam para a raiz do domínio e removem /bancadigital/.
+    reply = (reply || FALLBACK)
+      .replace(/\]\(\/\?/g, '](?')
+      .replace(/[—–]/g, ',')
+      .slice(0, 4000);
     const replyParts = splitReply(reply);
     const inserted = await admin.from('chat_messages').insert(replyParts.map((part, index) => ({ sender_id: guria.id, ...delivery, body: part, metadata: { guria_type: 'answer', official_ai: true, source_urls: (context || []).map((row: any) => row.source_url).filter(Boolean), part_index: index, part_count: replyParts.length }, guria_event_key: `answer:${message.id}:${index}` }))).select('id').order('id', { ascending: true });
     await admin.from('guria_ai_jobs').update({ status: 'completed', provider, error_code: errorCode, response_message_id: inserted.data?.[0]?.id || null, completed_at: new Date().toISOString() }).eq('id', job.id);
