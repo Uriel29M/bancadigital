@@ -21,6 +21,10 @@ assert.ok(chat.includes('className = mobilePage ? "chat-page-shell" : "modal-bac
 assert.ok(chat.includes('state.section = "messages"'), 'página mobile deve usar a seção messages');
 assert.ok(app.includes('else if (state.section === "messages")'), 'app deve preservar a página de mensagens durante renders');
 assert.ok(app.includes('state.section === "messages" && action === "messages"'), 'barra inferior deve marcar Mensagens como ativa');
+assert.ok(app.includes('document.querySelectorAll(".nav-link").forEach'), 'navegação superior deve iterar uma coleção real');
+assert.ok(app.includes('document.querySelectorAll(".mobile-bottom-item").forEach'), 'barra inferior deve iterar uma coleção real');
+assert.ok(!app.includes('$(".nav-link").forEach'), 'syncActiveNav não pode usar seletor singular com forEach');
+assert.ok(!app.includes('$(".mobile-bottom-item").forEach'), 'syncActiveNav não pode usar seletor singular com forEach');
 
 assert.match(index, /js\/app\.js\?v=[^\"']+/, 'index deve manter cache-busting do app');
 

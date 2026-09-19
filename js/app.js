@@ -12706,8 +12706,8 @@
 
   function syncActiveNav() {
     const navSection = { comic: "comics", collection: "collections" }[state.section] || state.section;
-    $(".nav-link").forEach(button => button.classList.toggle("active", button.dataset.section === navSection));
-    $(".mobile-bottom-item").forEach(button => {
+    document.querySelectorAll(".nav-link").forEach(button => button.classList.toggle("active", button.dataset.section === navSection));
+    document.querySelectorAll(".mobile-bottom-item").forEach(button => {
       const section = button.dataset.mobileSection || "";
       const action = button.dataset.mobileAction || "";
       button.classList.toggle("active", section === navSection || (state.section === "messages" && action === "messages"));
