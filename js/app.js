@@ -554,6 +554,8 @@
     ,stickerCollapsedPublishers: new Set()
   };
  const DOWNLOADS_KEY = "bancaDigitalDownloads:";
+  const DOWNLOAD_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+  const DOWNLOAD_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
   function factionMandatoryReadsMarkup(factionId) {
     const reads = state.factionMandatoryReads.get(factionId) || [];
     if (!reads.length) return '<div class="empty">As leituras obrigatórias deste mês ainda estão sendo sorteadas.</div>';
@@ -870,16 +872,68 @@
       const rows = Array.isArray(primaryRows) && primaryRows.length
         ? primaryRows
         : (manifest[userId] || readOfflineAccount()?.downloads || []);
+      let migratedRetentionDates = false;
       const recoveredRows = Array.isArray(rows) ? rows.map(row => {
         if (row?.preparing) return { ...row, status: "paused", preparing: false, pausedAt: new Date().toISOString() };
         if (row?.status === "downloading" && Number(row.progress) >= 100) return { ...row, status: "completed", completedAt: row.completedAt || new Date().toISOString(), progress: 100 };
+        if (row?.status === "completed" && !row.completedAt) {
+          migratedRetentionDates = true;
+          const startedAt = Date.parse(row.startedAt || "");
+          return { ...row, completedAt: Number.isFinite(startedAt) ? new Date(startedAt).toISOString() : new Date().toISOString() };
+        }
         if (row?.status !== "downloading") return row;
         return { ...row, status: "paused", pausedAt: new Date().toISOString() };
       }) : [];
       state.downloads = new Map(recoveredRows.map(row => [String(row.id), row]));
-      if (recoveredRows.some((row, index) => row?.status === "paused" && rows[index]?.status === "downloading")) persistDownloads();
-      validateDownloadedFiles();
+      if (migratedRetentionDates || recoveredRows.some((row, index) => row?.status === "paused" && rows[index]?.status === "downloading")) persistDownloads();
+      void cleanupExpiredDownloads().then(() => validateDownloadedFiles());
+      scheduleDownloadCleanup();
     } catch { state.downloads = new Map(); }
+  }
+
+  let downloadCleanupTimer = null;
+  function downloadExpired(entry, now = Date.now()) {
+    if (entry?.status !== "completed") return false;
+    const completedAt = Date.parse(entry.completedAt || "");
+    return Number.isFinite(completedAt) && now - completedAt >= DOWNLOAD_RETENTION_MS;
+  }
+
+  async function cleanupExpiredDownloads() {
+    if (!state.downloads?.size) return 0;
+    const expired = [...state.downloads.values()].filter(entry => downloadExpired(entry));
+    if (!expired.length) return 0;
+    for (const entry of expired) state.downloads.delete(String(entry.id));
+    if (window.caches) {
+      try {
+        const [fileCache, coverCache] = await Promise.all([
+          caches.open(READER_FILE_CACHE),
+          caches.open(OFFLINE_COVER_CACHE)
+        ]);
+        await Promise.all(expired.flatMap(entry => {
+          const operations = [];
+          if (entry.url) operations.push(fileCache.delete(downloadCacheKey(entry.url)));
+          if (entry.id) operations.push(coverCache.delete(offlineCoverCacheKey(entry.id)));
+          return operations;
+        }));
+      } catch (error) {
+        console.warn("Não foi possível limpar todos os arquivos offline expirados:", error);
+      }
+    }
+    expired.forEach(entry => state.offlineCoverData?.delete?.(String(entry.id)));
+    persistDownloads();
+    expired.forEach(entry => updateDownloadButtons(entry.id));
+    if (state.section === "downloads") render();
+    return expired.length;
+  }
+
+  function scheduleDownloadCleanup() {
+    if (downloadCleanupTimer) return;
+    const run = async () => {
+      downloadCleanupTimer = null;
+      await cleanupExpiredDownloads();
+      if (state.session?.user?.id) downloadCleanupTimer = window.setTimeout(run, DOWNLOAD_CLEANUP_INTERVAL_MS);
+    };
+    downloadCleanupTimer = window.setTimeout(run, DOWNLOAD_CLEANUP_INTERVAL_MS);
   }
   async function validateDownloadedFiles() {
     if (!window.caches || !state.downloads.size) return;
