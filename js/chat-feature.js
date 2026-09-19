@@ -670,7 +670,7 @@ export function createChatFeature(deps) {
     const chatHeaderActions = mobilePage
       ? (contact ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>' : '<button class="small-btn" type="button" data-close>Voltar</button>')
       : `${contact ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>' : ""}<button class="small-btn" data-close>Fechar</button>`;
-    const overlay = mountChatSurface(`<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}${mobilePage ? " chat-page" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${chatHeaderActions}</div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)} ${officialAiBadge(contact)}</b>${contact.is_bot ? '<small>Mensagens para a IA podem passar por moderação automatizada.</small>' : ''}</div>` : `<form id="chat-contact-form"><input name="username" required placeholder="Nome de usuário"><button type="submit" class="small-btn">Abrir conversa</button></form>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`, mobilePage);
+    const overlay = mountChatSurface(`<div class="modal chat-modal${contact ? " chat-conversation-modal" : ""}${mobilePage ? " chat-page" : ""}"><div class="section-head"><div><h2>Mensagens</h2><div class="section-subtitle">As mensagens desaparecem após 24 horas.</div></div><div class="chat-modal-actions">${chatHeaderActions}</div></div><div class="chat-contact-picker">${contact ? `<div class="chat-contact-selected">Conversando com <b>@${escapeHTML(contact.username)} ${officialAiBadge(contact)}</b>${contact.is_bot ? '<small>Mensagens para a IA podem passar por moderação automatizada.</small>' : ''}</div>` : `<div id="chat-contact-form" role="search"><input name="username" placeholder="Nome de usuário" autocomplete="off"><button type="button" class="small-btn" data-chat-contact-submit>Abrir conversa</button></div>`}</div>${contact ? `<div class="chat-messages" data-chat-messages><div class="empty">Carregando mensagens...</div></div><form class="chat-compose" id="chat-compose"><textarea name="body" maxlength="2000" rows="2" required placeholder="Escreva uma mensagem"></textarea><button type="submit" class="btn btn-danger">Enviar</button></form>` : `<div class="notice">Abra o perfil de um usuário e clique em “Enviar mensagem”, ou pesquise o nome de usuário acima.</div><div class="chat-private-list" data-private-chat-list hidden></div>`}</div>`, mobilePage);
     let channel = null;
     let closed = false;
     const teardown = () => {
@@ -704,24 +704,32 @@ export function createChatFeature(deps) {
       if (selectedContact) selectedContact.hidden = true;
     }
     if (!contact) {
-      // O formulário fica visível antes do carregamento das conversas recentes.
-      // Vincule o submit imediatamente para impedir que Enter faça o envio HTML
-      // padrão e recarregue a Banca enquanto as consultas abaixo ainda aguardam.
-      const contactForm = $("#chat-contact-form", overlay);
-      if (contactForm) contactForm.onsubmit = async event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const username = String(new FormData(event.currentTarget).get("username") || "").trim();
-        if (!username) return;
-        const submitButton = $("button[type=submit]", event.currentTarget);
-        if (submitButton?.disabled) return;
-        if (submitButton) submitButton.disabled = true;
+      // Esta busca não usa <form>: Enter nunca pode disparar navegação nativa
+      // para ?username=... e tirar o usuário da página de Mensagens.
+      const contactSearch = $("#chat-contact-form", overlay);
+      const contactInput = $('input[name="username"]', contactSearch);
+      const contactSubmit = $("[data-chat-contact-submit]", contactSearch);
+      const runContactSearch = async () => {
+        const username = String(contactInput?.value || "").trim();
+        if (!username || contactSubmit?.disabled) return;
+        if (contactSubmit) contactSubmit.disabled = true;
         const result = await sb.from("profiles_public").select("id, username, avatar_url, title, allow_messages, is_bot, is_official, bot_type").ilike("username", username).maybeSingle();
-        if (submitButton) submitButton.disabled = false;
+        if (contactSubmit) contactSubmit.disabled = false;
         if (result.error || !result.data) return toast("Usuário não encontrado.");
         if (result.data.allow_messages === false) return toast("Este usuário não está recebendo mensagens privadas.");
         teardown();
         openChat(result.data);
+      };
+      if (contactSubmit) contactSubmit.onclick = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        runContactSearch();
+      };
+      if (contactInput) contactInput.onkeydown = event => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation();
+        runContactSearch();
       };
       const availableRooms = CHAT_ROOMS.filter(canOpenChatRoom);
       $(".chat-contact-picker", overlay).insertAdjacentHTML("afterbegin", `<div class="chat-room-list"><div class="chat-room-list-title">Salas de conversa</div>${availableRooms.map(room => { const unread = state.chatRoomUnreadCounts?.[room.id] || 0; return `<button type="button" class="chat-room-option" data-chat-room="${escapeHTML(room.id)}"><span>${escapeHTML(room.name)}</span>${unread ? `<span class="message-badge" aria-label="${unread} marcação(ões) não lida(s)">${unread > 99 ? "99+" : unread}</span>` : ""}<small>${chatRoomLabel(room)}</small></button>`; }).join("")}</div>`);
