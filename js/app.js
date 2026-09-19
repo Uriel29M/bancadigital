@@ -15766,6 +15766,10 @@
     return (await loadAdminFeature()).openEditForm(...args);
   }
 
+  async function openSubmission(...args) {
+    return (await loadAdminFeature()).openSubmission(...args);
+  }
+
   function renderCatalogLegacyAdmin2(type = null) {
     const items = visibleCatalogItems(type ? state.db.library.filter(x => x.type === type) : state.db.library);
     const series = sortCatalogCards(uniqueCatalogItems(items.filter(x => x.seriesId)));

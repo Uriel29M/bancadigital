@@ -10,6 +10,7 @@ assert.ok(app.includes('import(appAssetUrl("js/admin-feature.js?v=1-admin-split"
 assert.ok(app.includes('async function openAdmin(...args)'), 'wrapper openAdmin deve continuar no app');
 assert.ok(app.includes('async function openEditForm(...args)'), 'wrapper openEditForm deve continuar no app');
 assert.ok(app.includes('async function bindEditionEditButtons(...args)'), 'wrapper dos botões de edição deve continuar no app');
+assert.ok(app.includes('async function openSubmission(...args)'), 'wrapper de envio deve continuar no app');
 assert.ok(!app.includes('function openAdmin(editId = null)'), 'implementação do painel admin deve sair fisicamente do app');
 assert.ok(!app.includes('function bindAdminLinkChecker(overlay)'), 'configuração do verificador de links deve sair fisicamente do app');
 assert.ok(!app.includes('function bindAdminAccountRetention(overlay)'), 'retenção de contas deve sair fisicamente do app');
@@ -22,6 +23,7 @@ assert.ok(admin.includes('function bindAdminLinkChecker(overlay)'), 'módulo adm
 assert.ok(admin.includes('function bindAdminAccountRetention(overlay)'), 'módulo admin deve conter retenção');
 assert.ok(admin.includes('function bindAdminNoveltyBadge(overlay)'), 'módulo admin deve conter configuração da etiqueta novidade');
 assert.ok(admin.includes('function openEditForm(id = null, initial = null)'), 'módulo admin deve conter formulário de edição');
+assert.ok(admin.includes('function openSubmission()'), 'módulo admin deve conter envio de quadrinhos');
 
 assert.match(index, /js\/app\.js\?v=2\.2\.10\.513-admin-split/, 'index deve apontar para a versão modular do app');
 assert.match(index, /sw\.js\?v=278-admin-split/, 'index deve invalidar o service worker');

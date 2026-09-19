@@ -723,6 +723,7 @@ export function createAdminFeature(deps) {
   return {
     openAdmin,
     bindEditionEditButtons,
-    openEditForm
+    openEditForm,
+    openSubmission
   };
 }
