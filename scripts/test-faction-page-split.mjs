@@ -6,7 +6,7 @@ const feature = readFileSync('js/faction-page-feature.js', 'utf8');
 const index = readFileSync('index.html', 'utf8');
 const sw = readFileSync('sw.js', 'utf8');
 
-assert.ok(app.includes('import(appAssetUrl("js/faction-page-feature.js?v=1-faction-page-split"))');
+assert.ok(app.includes('import(appAssetUrl("js/faction-page-feature.js"))'));
 assert.ok(app.includes('async function applyFactionAbafacOrder(...args)'));
 assert.ok(!app.includes('function applyFactionAbafacOrder(factionId)'));
 
