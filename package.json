@@ -12,7 +12,7 @@
   },
   "scripts": {
     "test": "npm run test:unit && npm run test:reader && npm run test:e2e",
-    "test:unit": "node --test scripts/test-catalog-identity.mjs scripts/test-catalog-sync.mjs scripts/test-issue-labels.mjs scripts/test-mediafire-proxy.mjs scripts/test-telegram-download.mjs scripts/test-watchmen-reader.mjs scripts/test-reader-lazy-loading.mjs scripts/test-chat-split.mjs scripts/test-profile-split.mjs scripts/test-public-profile-split.mjs scripts/test-legacy-profile-cleanup.mjs",
+    "test:unit": "node --test scripts/test-catalog-identity.mjs scripts/test-catalog-sync.mjs scripts/test-issue-labels.mjs scripts/test-mediafire-proxy.mjs scripts/test-telegram-download.mjs scripts/test-watchmen-reader.mjs scripts/test-reader-lazy-loading.mjs scripts/test-chat-split.mjs scripts/test-profile-split.mjs scripts/test-public-profile-split.mjs scripts/test-legacy-profile-cleanup.mjs scripts/test-admin-split.mjs",
     "test:reader": "node scripts/test-reader-loading-browser.mjs",
     "test:e2e": "playwright test --grep-invert @external",
     "test:e2e:external": "playwright test --grep @external",
