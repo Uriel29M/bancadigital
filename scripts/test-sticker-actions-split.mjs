@@ -28,8 +28,8 @@ assert.ok(feature.includes('function chooseStickerCoverCandidate(group, candidat
 assert.ok(feature.includes('function askStickerDiscardConfirmation()'));
 assert.ok(feature.includes('async function requestSticker(characterId, ownerId, type)'));
 
-assert.match(index, /js\\/app\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no app');
-assert.match(index, /sw\\.js\\?v=[^"']+/, 'index deve usar BUILD_ID no service worker');
+assert.ok(index.includes('js/app.js?v='), 'index deve usar BUILD_ID no app');
+assert.ok(index.includes('sw.js?v='), 'index deve usar BUILD_ID no service worker');
 assert.ok(!sw.includes('sticker-actions-feature.js'));
 
 console.log('PASS sticker actions split');
