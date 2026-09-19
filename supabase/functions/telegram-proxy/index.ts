@@ -1,88 +1,87 @@
+import { GatewayError, redirectToGateway } from "../_shared/media-gateway.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, range",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition, Content-Range, Accept-Ranges",
+  "Access-Control-Expose-Headers": "Location, Retry-After",
 };
 
-// The hosted Telegram Bot API currently permits downloads up to 20 MB.
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
-
-function errorResponse(message: string, status: number) {
-  return new Response(JSON.stringify({ error: message }), {
+function fail(message: string, status: number, code = "telegram_error") {
+  return new Response(JSON.stringify({ error: message, code }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
 }
-
-function botToken() {
-  const token = Deno.env.get("TELEGRAM_BOT_TOKEN")?.trim();
-  if (!token) throw new Error("Configure o secret TELEGRAM_BOT_TOKEN.");
-  return token;
+function required(name: string) {
+  const value = Deno.env.get(name)?.trim();
+  if (!value) throw new GatewayError(`Configure ${name}.`, 503, "telegram_not_configured");
+  return value;
 }
-
-function validFileId(value: string) {
-  // Telegram file_ids are opaque; reject control characters and query-string
-  // injection while allowing future file_id formats.
-  return value.length >= 8 && value.length <= 1024 && /^[A-Za-z0-9_-]+$/.test(value);
-}
-
-async function telegramFile(token: string, fileId: string) {
-  const response = await fetch(`https://api.telegram.org/bot${token}/getFile`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ file_id: fileId }),
+async function rest(path: string) {
+  const key = required("SUPABASE_SERVICE_ROLE_KEY");
+  const response = await fetch(`${required("SUPABASE_URL")}/rest/v1/${path}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(10000)
   });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || !payload?.ok || !payload?.result?.file_path) {
-    throw new Error(payload?.description || "O Telegram não encontrou este arquivo.");
+  if (!response.ok) throw new GatewayError("Não foi possível validar o catálogo.", 502, `catalog_http_${response.status}`);
+  return await response.json();
+}
+function normalizePost(value: unknown) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:" || !["t.me","telegram.me","www.t.me","www.telegram.me"].includes(url.hostname) || url.username || url.password || url.port) return "";
+    const p = url.pathname.split("/").filter(Boolean);
+    if (p[0] === "c" && p.length === 3 && /^\d+$/.test(p[1]) && /^\d+$/.test(p[2])) return `https://t.me/c/${p[1]}/${p[2]}`;
+    if (p.length === 2 && /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(p[0]) && /^\d+$/.test(p[1])) return `https://t.me/${p[0].toLowerCase()}/${p[1]}`;
+  } catch {}
+  return "";
+}
+async function lookup(itemId: string) {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(itemId)) throw new GatewayError("Identificador inválido.", 400, "invalid_item_id");
+  const rows = await rest(`catalog_edition_overrides?item_id=eq.${encodeURIComponent(itemId)}&select=edition&limit=1`);
+  const edition = rows[0]?.edition;
+  if (!edition || String(edition.id) !== itemId) return null;
+  const telegramUrl = normalizePost(edition.telegramUrl);
+  const size = Number(edition.telegramFileSize);
+  const format = String(edition.format || "").toLowerCase();
+  if (!telegramUrl || !Number.isSafeInteger(size) || size < 1 || !["pdf","cbz","cbr"].includes(format)) {
+    throw new GatewayError("Metadados Telegram incompletos.", 422, "telegram_metadata_invalid");
   }
-  const path = String(payload.result.file_path);
-  if (!/^[A-Za-z0-9_./-]+$/.test(path) || path.includes("..")) {
-    throw new Error("O Telegram retornou um caminho de arquivo inválido.");
+  const hidden = await rest(`catalog_item_visibility?item_id=eq.${encodeURIComponent(itemId)}&is_hidden=eq.true&select=item_id&limit=1`);
+  if (hidden.length) return null;
+  if (edition.seriesId) {
+    const hiddenSeries = await rest(`catalog_series_visibility?series_id=eq.${encodeURIComponent(String(edition.seriesId))}&is_hidden=eq.true&select=series_id&limit=1`);
+    if (hiddenSeries.length) return null;
   }
-  return { path, size: Number(payload.result.file_size || 0) };
+  return { telegramUrl, size, format };
 }
 
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
-  if (request.method !== "GET" && request.method !== "HEAD") return errorResponse("Método não permitido.", 405);
-
+  if (!["GET", "HEAD"].includes(request.method)) return fail("Método não permitido.", 405, "method_not_allowed");
   try {
-    const fileId = new URL(request.url).searchParams.get("file_id")?.trim() || "";
-    if (!validFileId(fileId)) return errorResponse("Informe um file_id do Telegram válido.", 400);
+    const itemId = new URL(request.url).searchParams.get("item_id")?.trim() || "";
+    if (!itemId) return fail("Informe item_id.", 400, "missing_item_id");
+    const item = await lookup(itemId);
+    if (!item) return fail("Edição indisponível.", 404, "edition_unavailable");
 
-    const token = botToken();
-    const file = await telegramFile(token, fileId);
-    if (file.size > MAX_FILE_BYTES) return errorResponse("O arquivo excede o limite de 20 MB da Bot API do Telegram.", 413);
-
-    const range = request.headers.get("range");
-    const upstream = await fetch(`https://api.telegram.org/file/bot${token}/${file.path}`, {
-      method: request.method,
-      headers: { Accept: "application/octet-stream,*/*", ...(range ? { Range: range } : {}) },
-    });
-    if (!upstream.ok) {
-      const status = upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502;
-      return errorResponse(`Download indisponível (HTTP ${upstream.status}).`, status);
-    }
-    const contentLength = Number(upstream.headers.get("content-length") || 0);
-    const contentRange = upstream.headers.get("content-range") || "";
-    const total = Number(contentRange.match(/\/(\d+)$/)?.[1] || 0) || contentLength || file.size;
-    if (total > MAX_FILE_BYTES) return errorResponse("O arquivo excede o limite de 20 MB da Bot API do Telegram.", 413);
-    if (request.method === "GET" && !upstream.body) return errorResponse("O Telegram não retornou conteúdo.", 502);
-
-    const headers = new Headers(corsHeaders);
-    headers.set("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
-    headers.set("Content-Disposition", upstream.headers.get("content-disposition") || "attachment");
-    if (contentLength) headers.set("Content-Length", String(contentLength));
-    if (contentRange) headers.set("Content-Range", contentRange);
-    headers.set("Accept-Ranges", "bytes");
-    headers.set("Vary", "Range");
-    headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
-    headers.set("Cross-Origin-Resource-Policy", "cross-origin");
-    return new Response(request.method === "HEAD" ? null : upstream.body, { status: upstream.status, headers });
+    return await redirectToGateway({
+      kind: "telegram",
+      itemId,
+      telegramUrl: item.telegramUrl,
+      size: item.size,
+      format: item.format,
+      telegramApiId: required("TELEGRAM_API_ID"),
+      telegramApiHash: required("TELEGRAM_API_HASH"),
+      telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
+      telegramAllowedChatIds: Deno.env.get("TELEGRAM_ALLOWED_CHAT_IDS") || "-1004424843914"
+    }, corsHeaders);
   } catch (error) {
-    console.error("telegram-proxy", error);
-    return errorResponse(error instanceof Error ? error.message : "Falha ao acessar o Telegram.", 502);
+    return fail(
+      error instanceof Error ? error.message : "Falha ao preparar Telegram.",
+      error instanceof GatewayError ? error.status : 502,
+      error instanceof GatewayError ? error.code : "telegram_error"
+    );
   }
 });
