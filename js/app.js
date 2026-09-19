@@ -8211,7 +8211,7 @@
     return `<label class="shelf-sort-control"><span>Ordenar</span><select data-shelf-sort="${escapeHTML(key)}"${disabled}>${SHELF_SORT_OPTIONS.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
   }
 
-  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "teams", "collections", "heroes", "villains", "antiheroes", "support"];
+  const COMIC_SECTION_ORDER = ["legendary", "imprints", "series", "oneshots", "publishers", "characters", "teams", "collections", "heroes", "villains", "antiheroes", "support", "uncategorized-characters"];
 
   const FIXED_SHELF_SECTION_ORDER = ["saved", "series-saved", "read", "completed", "liked"];
 
@@ -8381,6 +8381,7 @@
       if (title === "oneshots") return "oneshots";
       if (title === "editoras") return "publishers";
       if (title === "equipes") return "teams";
+      if (title === "personagens sem categoria") return "uncategorized-characters";
       if (title.includes("personagens")) return "characters";
       if (title === "herois") return "heroes";
       if (title === "viloes") return "villains";
