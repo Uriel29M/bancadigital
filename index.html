@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.263-faction-chat-bubble">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.264-faction-chat-black">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=298-faction-chat-body-command", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=299-faction-chat-black", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
