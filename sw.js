@@ -5,7 +5,7 @@ const APP_SHELL = [
   "./js/app.js?v=432b5667", "./js/reader-deps.js?v=432b5667", "./js/catalog-sync.js?v=432b5667",
   "./js/catalog-identity.js?v=432b5667", "./js/telegram-auto.js?v=432b5667",
   "./js/telegram-covers.js?v=432b5667", "./js/data.js?v=432b5667",
-  "./js/data/dc-comics/recentes.js?v=432b5667",
+  "./js/data/dc-comics/catalog-index.js?v=432b5667",
   "./js/data/dc-comics/black-label.js?v=432b5667",
   "./js/data/dc-comics/milestone.js?v=432b5667",
   "./js/data/dc-comics/novos-52.js?v=432b5667",
