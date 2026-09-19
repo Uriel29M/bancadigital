@@ -38,7 +38,7 @@
   // O snapshot publicado tem prioridade sobre duplicatas e mutações dos selos.
   window.DEFAULT_SERIES = [...new Map([...(window.DEFAULT_SERIES || []), ...(window.PUBLISHED_CATALOG?.series || [])].map(series => [series.id, series])).values()];
   window.DEFAULT_LIBRARY = [...new Map([...(window.DEFAULT_LIBRARY || []), ...(window.PUBLISHED_CATALOG?.library || [])].map(item => [item.id, item])).values()];
-  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "backupUrls", "format"];
+  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "backupUrls", "customLinks", "format"];
   function mergeCatalogEdition(item, published) {
     if (!published) return item;
     // Não descarte a edição do ADM enquanto o deploy ainda entrega a versão anterior.
@@ -5736,6 +5736,27 @@
     $("#achievement-form", overlay).onsubmit = async event => { event.preventDefault(); const fd = new FormData(event.currentTarget); const username = cleanUsername(fd.get("username")); const title = String(fd.get("title") || "").trim(); const title_color = safeTitleColor(fd.get("titleColor")); const update = await sb.rpc("moderate_user", { p_username: username, p_action: "title", p_title: title || null, p_title_color: title_color }); if (update.error) return toast(update.error.message); if (state.profile?.username === username) state.profile = { ...state.profile, title, title_color }; overlay.remove(); render(); toast("Título atualizado."); };
   }
 
+  function editionCustomLinks(item) {
+    return (Array.isArray(item?.customLinks) ? item.customLinks : []).map(link => {
+      const label = String(link?.label || "").trim();
+      const rawUrl = String(link?.url || "").trim();
+      if (!label || !rawUrl) return null;
+      try {
+        const parsed = new URL(rawUrl, document.baseURI);
+        if (!["http:", "https:"].includes(parsed.protocol)) return null;
+        return { label, url: parsed.href };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+  }
+
+  function readerCustomLinksMarkup(item) {
+    return editionCustomLinks(item)
+      .map(link => `<button type="button" class="small-btn" data-reader-custom-link="${escapeHTML(link.url)}">${escapeHTML(link.label)}</button>`)
+      .join("");
+  }
+
   function readerSourceCandidates(item) {
     const primary = downloadSource(item);
     const backups = Array.isArray(item?.backupUrls) ? item.backupUrls : (item?.backupUrl ? [item.backupUrl] : []);
@@ -5891,6 +5912,7 @@
           ${!item.local ? `<button class="small-btn reader-like-button ${state.comicLikeIds.has(item.id) ? "is-liked" : ""}" data-like-item="${escapeHTML(item.id)}">${state.comicLikeIds.has(item.id) ? "♥" : "♡"} ${state.comicLikeCounts.get(item.id) || 0}</button><button class="small-btn" data-share-item="${escapeHTML(item.id)}">Compartilhar</button>` : ""}
           ${!item.local ? `<button class="small-btn" data-comment-item="${escapeHTML(item.id)}">Comentários</button>` : ""}
           ${item.seriesId ? `<button class="small-btn" data-view-series="${escapeHTML(item.seriesId)}">Série</button>` : ""}
+          ${!state.session?.offline ? readerCustomLinksMarkup(item) : ""}
           ${state.profile?.plan === "admin" && !state.session?.offline ? `<button class="small-btn" data-open-external>Ver arquivo</button>` : ''}
         </div>
       </div>
@@ -5961,6 +5983,7 @@
       setSection("home");
       openSeriesSelection(item, editions, false, false, item);
     });
+    $("[data-reader-custom-link]", overlay).forEach(button => button.addEventListener("click", () => window.open(button.dataset.readerCustomLink, "_blank", "noopener")));
     $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
@@ -14638,7 +14661,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=2-admin-edition-editor"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=3-edition-custom-links"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,

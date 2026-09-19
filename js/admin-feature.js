@@ -532,6 +532,29 @@ export function createAdminFeature(deps) {
     });
   }
 
+  function parseEditionCustomLinks(value) {
+    const links = [];
+    const lines = String(value || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const separator = line.indexOf("|");
+      if (separator <= 0 || separator >= line.length - 1) {
+        return { links: [], error: `Link extra na linha ${index + 1}: use Nome | URL.` };
+      }
+      const label = line.slice(0, separator).trim();
+      const url = line.slice(separator + 1).trim();
+      if (!label || !url) return { links: [], error: `Link extra na linha ${index + 1}: informe nome e URL.` };
+      try {
+        const parsed = new URL(url, document.baseURI);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocolo inválido");
+      } catch {
+        return { links: [], error: `Link extra na linha ${index + 1}: URL inválida.` };
+      }
+      links.push({ label, url });
+    }
+    return { links, error: "" };
+  }
+
   function openEditForm(id = null, initial = null) {
     const old = id ? state.db.library.find(x => x.id === id) : null;
     const x = old || { id: "item-" + Date.now(), title: "", seriesTitle: "", issue: "", type: "comic", author: "", publisher: "", imprint: "", character: "", year: new Date().getFullYear(), description: "", fileUrl: "", telegramUrl: "", telegramFileId: "", featuredCoverUrl: "", format: "auto", clicks: 0, featured: false, tags: [], collectionIds: [], ...(initial || {}) };
@@ -540,6 +563,10 @@ export function createAdminFeature(deps) {
       : Array.isArray(x.characters)
         ? x.characters.map(value => typeof value === "object" ? (value.name || value.character || "") : value).filter(value => String(value).trim() && String(value).trim() !== String(x.character || "").trim())
         : [];
+    const customLinksText = (Array.isArray(x.customLinks) ? x.customLinks : [])
+      .map(link => `${String(link?.label || "").trim()} | ${String(link?.url || "").trim()}`)
+      .filter(line => !/^\s*\|\s*$/.test(line))
+      .join("\n");
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `
       <div class="modal"><div class="section-head"><div><h2>${id ? "Editar edição" : "Nova edição"}</h2><div class="section-subtitle">A capa será extraída da primeira página</div></div><button class="small-btn" data-close>Fechar</button></div>
@@ -555,6 +582,7 @@ export function createAdminFeature(deps) {
           <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
           <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
+          ${isAdminProfile() ? `<div class="field full"><label>Links extras desta edição</label><textarea name="customLinks" rows="4" placeholder="Página oficial | https://...\nEntrevista | https://...">${escapeHTML(customLinksText)}</textarea><small class="format-hint">Somente administradores podem editar. Um por linha no formato <b>Nome | URL</b>. Os links aparecem como botões apenas no leitor desta edição.</small></div>` : ""}
           <div class="field full"><label>Link da capa (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(x.coverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa.jpg"><small class="format-hint">Aceita imagem direta ou postagem de foto/imagem do Telegram. Se preenchido, substitui a primeira página do arquivo.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="coverUrl">Identificar imagem</button><span data-telegram-cover-status="coverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa-do-destaque.jpg"><small class="format-hint">Aceita imagem direta ou postagem do Telegram. Use uma imagem horizontal ou em alta resolução para o destaque.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="featuredCoverUrl">Identificar imagem</button><span data-telegram-cover-status="featuredCoverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Descrição</label><textarea name="description">${escapeHTML(x.description || "")}</textarea></div><div class="field full"><label>Tags</label><input name="tags" value="${escapeHTML((x.tags || []).join(", "))}"></div><div class="field full"><label><input name="featured" type="checkbox" ${x.featured ? "checked" : ""}> Mostrar como destaque</label></div>
@@ -596,6 +624,12 @@ export function createAdminFeature(deps) {
       const volumeNumber = fd.get("oneShot") === "on" ? "" : String(fd.get("volume") || "").trim();
       const character = String(fd.get("character") || "").trim();
       const secondaryCharacters = [...new Set(String(fd.get("secondaryCharacters") || "").split(/\r?\n|,/).map(value => value.trim()).filter(value => value && value !== character))];
+      let customLinks = Array.isArray(x.customLinks) ? x.customLinks : [];
+      if (isAdminProfile()) {
+        const parsedCustomLinks = parseEditionCustomLinks(fd.get("customLinks"));
+        if (parsedCustomLinks.error) return toast(parsedCustomLinks.error);
+        customLinks = parsedCustomLinks.links;
+      }
       const item = {
         ...x,
         addedAt: old ? (x.addedAt || (catalogAddedTimestamp(x) ? new Date(catalogAddedTimestamp(x)).toISOString() : undefined)) : new Date().toISOString(),
@@ -613,6 +647,7 @@ export function createAdminFeature(deps) {
         format: String(fd.get("format") || "auto").toLowerCase() === "auto" ? detectFormat(sourceUrl) : String(fd.get("format")).toLowerCase(),
         fileUrl: isTelegram ? "" : sourceUrl,
         backupUrls,
+        customLinks,
         telegramUrl: isTelegram ? sourceUrl : "",
         telegramFileId: isTelegram ? telegramFileId : "",
         catalogEditedAt: new Date().toISOString(),
