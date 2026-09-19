@@ -288,7 +288,6 @@ export function createFactionEditorsFeature(deps) {
       if (result.error) return toast(result.error.message || "Não foi possível escolher sua facção.");
       const selected = result.data?.[0];
       state.profile = { ...state.profile, faction_id: selected?.faction_id, faction_joined_at: selected?.changed_at || state.profile.faction_joined_at, faction_changed_at: selected?.changed_at || state.profile.faction_changed_at };
-      if (selected?.faction_id) await sb.rpc("ensure_faction_leadership", { p_faction_id: selected.faction_id });
       // Recarrega cargos e membros antes de renderizar a página da facção.
       // Sem isso, a tela continuava usando a lista anterior ao ingresso.
       await loadFactions();
