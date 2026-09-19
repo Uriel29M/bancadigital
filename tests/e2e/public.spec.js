@@ -57,6 +57,35 @@ test.describe('Banca Digital — público', () => {
     expect(carouselPeek).toBeGreaterThanOrEqual(20);
     expect(carouselPeek).toBeLessThanOrEqual(34);
 
+    const publicCollectionsAlignment = await page.evaluate(() => {
+      const content = document.querySelector('.content');
+      if (!content) return null;
+      const probe = document.createElement('section');
+      probe.className = 'section';
+      probe.innerHTML = '<div class="public-collections-grid"><article class="public-shelf-collection-card"></article><article class="public-shelf-collection-card"></article></div>';
+      content.appendChild(probe);
+      const grid = probe.querySelector('.public-collections-grid');
+      const card = probe.querySelector('.public-shelf-collection-card');
+      const contentBox = content.getBoundingClientRect();
+      const gridBox = grid.getBoundingClientRect();
+      const cardBox = card.getBoundingClientRect();
+      const paddingLeft = parseFloat(getComputedStyle(content).paddingLeft) || 0;
+      const result = {
+        expectedLeft: contentBox.left + paddingLeft,
+        gridLeft: gridBox.left,
+        cardLeft: cardBox.left,
+        gridTransform: getComputedStyle(grid).transform,
+        gridMarginLeft: getComputedStyle(grid).marginLeft
+      };
+      probe.remove();
+      return result;
+    });
+    expect(publicCollectionsAlignment).not.toBeNull();
+    expect(Math.abs(publicCollectionsAlignment.gridLeft - publicCollectionsAlignment.expectedLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(publicCollectionsAlignment.cardLeft - publicCollectionsAlignment.expectedLeft)).toBeLessThanOrEqual(1);
+    expect(publicCollectionsAlignment.gridTransform).toBe('none');
+    expect(publicCollectionsAlignment.gridMarginLeft).toBe('0px');
+
     const bottomNav = page.locator('.mobile-bottom-nav');
     await expect(bottomNav).toBeVisible();
     await expect(bottomNav.locator('[data-mobile-action="downloads"]')).toBeVisible();
