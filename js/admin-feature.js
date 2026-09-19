@@ -212,50 +212,8 @@ export function createAdminFeature(deps) {
   }
 
   function openSubmission() {
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop";
-    overlay.innerHTML = `
-      <div class="modal">
-        <h2>Enviar quadrinho</h2>
-        <p style="color:#aaa">Envie os dados da obra e um link para o arquivo. O arquivo não é copiado para esta hospedagem.</p>
-        <form id="submission-form">
-          <div class="form-grid">
-            <div class="field"><label>Seu nome</label><input name="author" required></div>
-            <div class="field"><label>Título</label><input name="title" required></div>
-            <div class="field"><label>Tipo</label><select name="type"><option value="comic">Quadrinho</option><option value="manga">Mangá</option></select></div>
-            <div class="field"><label>Edição/capítulo</label><input name="issue"></div>
-            <div class="field full"><label>Link da fonte</label><input name="sourceUrl" required placeholder="https://t.me/... ou https://..."></div>
-            <div class="field full"><label>Mensagem</label><textarea name="message" placeholder="Conte um pouco sobre a obra."></textarea></div>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="small-btn" data-close>Cancelar</button>
-            <button class="btn btn-danger">Enviar</button>
-          </div>
-        </form>
-      </div>`;
-    $("#modal-root").appendChild(overlay);
-    $("[data-close]", overlay).onclick = () => overlay.remove();
-    $("#submission-form", overlay).onsubmit = e => {
-      e.preventDefault();
-      const fd = new FormData(e.currentTarget);
-      const data = Object.fromEntries(fd.entries());
-
-      const sourceUrl = (data.sourceUrl || "").trim();
-      let telegramUrl = "";
-      let fileUrl = "";
-      if (/^https?:\/\/(www\.)?t(elegram)?\.me\//.test(sourceUrl)) {
-        telegramUrl = sourceUrl;
-      } else {
-        fileUrl = sourceUrl;
-      }
-      delete data.sourceUrl;
-
-      state.db.submissions.push({
-        ...data,
-        fileUrl, telegramUrl,
-        createdAt:new Date().toISOString(), id:"sub-"+Date.now()});
-      save(); overlay.remove(); toast("Envio registrado. No modo local, ele fica salvo neste navegador.");
-    };
+    if (!isAdminProfile()) return toast("Apenas administradores podem adicionar edições.");
+    openEditForm();
   }
 
   function exportDB() {
