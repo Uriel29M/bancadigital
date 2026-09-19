@@ -34,6 +34,15 @@ test.describe('Banca Digital — público', () => {
     expect(searchBox?.width).toBeGreaterThanOrEqual(44);
     expect(searchBox?.height).toBeGreaterThanOrEqual(44);
 
+    const hero = page.locator('.hero');
+    await expect(hero).toBeVisible();
+    const heroBox = await hero.boundingBox();
+    expect(heroBox?.height).toBeLessThanOrEqual(360);
+
+    const heroContent = page.locator('.hero-content');
+    const heroContentBox = await heroContent.boundingBox();
+    expect(heroContentBox?.width).toBeGreaterThanOrEqual(320);
+
     const bottomNav = page.locator('.mobile-bottom-nav');
     await expect(bottomNav).toBeVisible();
     await expect(bottomNav.locator('[data-mobile-action="downloads"]')).toBeVisible();
