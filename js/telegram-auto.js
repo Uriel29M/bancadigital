@@ -70,7 +70,7 @@ window.BancaTelegram = (() => {
   function proxyUrl(item) {
     const post = normalized(item?.telegramUrl);
     if (!post || !window.BANCA_SUPABASE_URL) return '';
-    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-mtproto`);
+    const proxy = new URL(`${window.BANCA_SUPABASE_URL}/functions/v1/telegram-proxy`);
     if (!item?.id) return '';
     proxy.searchParams.set('item_id', String(item.id));
     return proxy.toString();

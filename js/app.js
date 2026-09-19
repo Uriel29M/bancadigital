@@ -6360,7 +6360,7 @@
           }
         }
         if (selectedIndex < 0) {
-          body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px"><h3>Arquivo indisponível</h3><p>O MediaFire não encontrou esse arquivo ou o link expirou. Verifique a URL permanente da edição ou relate o problema aos moderadores.</p><button class="btn btn-primary" data-report-file>Relatar arquivo</button></div>`;
+          body.innerHTML = `<div class="empty" style="margin:auto;max-width:650px"><h3>Arquivo indisponível</h3><p>A fonte não entregou o arquivo ao leitor. Verifique o link da edição ou relate o problema aos moderadores.</p><button class="btn btn-primary" data-report-file>Relatar arquivo</button></div>`;
           controls.innerHTML = `<span class="reader-page">${escapeHTML(format.toUpperCase())}</span>`;
           $(`[data-report-file]`, body).onclick = () => reportFileFailure(item, "O arquivo não foi encontrado na fonte cadastrada.");
           return;
