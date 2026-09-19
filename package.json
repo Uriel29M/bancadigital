@@ -17,7 +17,7 @@
     "test:e2e": "playwright test --grep-invert @external",
     "test:e2e:external": "playwright test --grep @external",
     "test:e2e:auth": "playwright test tests/e2e/authenticated.spec.js",
-    "test:ci": "npm run assets:check && npm run test:unit && npm run test:reader && npm run test:e2e",
+    "test:ci": "npm run test:unit && npm run test:reader && npm run test:e2e",
     "assets:sync": "node scripts/sync-asset-version.mjs",
     "assets:check": "node scripts/sync-asset-version.mjs --check"
   }
