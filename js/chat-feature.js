@@ -737,10 +737,17 @@ export function createChatFeature(deps) {
       const privateChatList = $("[data-private-chat-list]", overlay);
       const privateMessages = await sb.from("chat_messages")
         .select("id, sender_id, recipient_id, body, created_at")
+        .is("room_id", null)
         .or(`sender_id.eq.${state.session.user.id},recipient_id.eq.${state.session.user.id}`)
         .gt("expires_at", new Date().toISOString())
         .order("created_at", { ascending: false })
         .limit(500);
+      if (privateMessages.error) {
+        console.error("[chat] não foi possível carregar conversas recentes", privateMessages.error);
+        privateChatList.hidden = false;
+        privateChatList.innerHTML = '<div class="chat-room-list-title">Conversas recentes</div><div class="empty">Não foi possível carregar suas conversas recentes.</div>';
+        return;
+      }
       const conversations = new Map();
       (privateMessages.data || []).forEach(message => {
         const incoming = String(message.recipient_id) === String(state.session.user.id);
@@ -754,9 +761,15 @@ export function createChatFeature(deps) {
       const contactIds = [...conversations.keys()];
       if (contactIds.length) {
         const profilesResult = await sb.from("profiles_public").select("id, username, avatar_url, title, title_color, allow_messages, is_bot, is_official, bot_type").in("id", contactIds);
-        const profiles = new Map((profilesResult.data || []).map(profile => [profile.id, profile]));
+        if (profilesResult.error) {
+          console.error("[chat] não foi possível carregar perfis das conversas recentes", profilesResult.error);
+          privateChatList.hidden = false;
+          privateChatList.innerHTML = '<div class="chat-room-list-title">Conversas recentes</div><div class="empty">Não foi possível carregar suas conversas recentes.</div>';
+          return;
+        }
+        const profiles = new Map((profilesResult.data || []).map(profile => [String(profile.id), profile]));
         const cards = contactIds.map(contactId => {
-          const profile = profiles.get(contactId);
+          const profile = profiles.get(String(contactId));
           const conversation = conversations.get(contactId);
           if (!profile || !conversation) return "";
           return `<button type="button" class="chat-private-card" data-private-chat-user="${escapeHTML(profile.id)}">${avatarMarkup(profile, "chat-private-card-avatar")}<span class="chat-private-card-copy"><b>${factionDot(profile)}@${escapeHTML(profile.username)}</b><small>${escapeHTML(conversation.latest.body.slice(0, 100))}</small></span><time>${escapeHTML(formatCommentDate(conversation.latest.created_at))}</time></button>`;
@@ -765,7 +778,7 @@ export function createChatFeature(deps) {
           privateChatList.hidden = false;
           privateChatList.innerHTML = `<div class="chat-room-list-title">Conversas recentes</div><div class="chat-private-card-list">${cards}</div>`;
           $$('[data-private-chat-user]', privateChatList).forEach(button => button.onclick = () => {
-            const contact = profiles.get(button.dataset.privateChatUser);
+            const contact = profiles.get(String(button.dataset.privateChatUser));
             if (!contact) return;
             teardown();
             openChat(contact);
