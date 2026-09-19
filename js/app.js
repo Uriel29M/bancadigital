@@ -5986,7 +5986,7 @@
       setSection("home");
       openSeriesSelection(item, editions, false, false, item);
     });
-    $('[data-reader-custom-link]', overlay).forEach(button => button.addEventListener("click", () => window.open(button.dataset.readerCustomLink, "_blank", "noopener")));
+    $$('[data-reader-custom-link]', overlay).forEach(button => button.addEventListener("click", () => window.open(button.dataset.readerCustomLink, "_blank", "noopener")));
     $("[data-open-external]", overlay)?.addEventListener("click", () => window.open(resolvedUrl, "_blank", "noopener"));
     $("[data-toggle-cover]", overlay)?.addEventListener("click", () => {
       const nextSkipCover = !skipCover;
