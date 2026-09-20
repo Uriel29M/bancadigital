@@ -2832,6 +2832,12 @@
     // online/anônimo para não prender o usuário na área Downloads.
     const session = browserOffline ? offlineFallback : remoteSession;
     state.session = session?.user ? session : null;
+    // A sessão já foi resolvida pelo Supabase. Libere o primeiro render agora,
+    // antes das consultas secundárias, para que a página não monte uma versão
+    // visitante enquanto o perfil e o restante da conta ainda carregam.
+    state.authReady = true;
+    syncTopAvatar();
+    render();
     // O ranking é público e não deve depender da conclusão do carregamento da
     // conta/estante. Inicie-o logo para visitantes sem sessão também.
     if (state.section === "ranking") loadRankingData();
@@ -15113,7 +15119,7 @@
     .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de leitura indisponíveis:", error));
   loadComicDownloadCounts()
-    .then(() => { if (state.section !== "reader") render(); })
+    .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de download indisponíveis:", error));
   loadComicMonthlyReadCounts()
     .then(() => { if (state.section !== "reader") render(); })
@@ -15177,7 +15183,7 @@
     if (state.authReady && state.section !== "reader" && !readerIsOpen) render();
   })?.catch(error => console.warn("Capas padrão compartilhadas indisponíveis:", error));
   if (sb) sb.channel("banca-series-visibility").on("postgres_changes", { event: "*", schema: "public", table: "catalog_series_visibility" }, () => {
-    loadCatalogVisibility().then(() => { if (!readerIsOpen) render(); }).catch(error => console.warn("Visibilidade das séries indisponível:", error));
+    loadCatalogVisibility().then(() => { if (state.authReady && !readerIsOpen) render(); }).catch(error => console.warn("Visibilidade das séries indisponível:", error));
   }).subscribe();
   BancaCatalogSync.start(sb, refreshSharedCatalog);
   refreshSharedCatalog()
