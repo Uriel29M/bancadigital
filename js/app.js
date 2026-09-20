@@ -12666,7 +12666,7 @@
       .maybeSingle();
     if ((!remote.data || remote.error) && window.BANCA_SUPABASE_URL && window.BANCA_SUPABASE_KEY) {
       try {
-        const accessToken = state.session?.access_token || window.BANCA_SUPABASE_KEY;
+        const accessToken = window.BANCA_SUPABASE_KEY;
         const response = await fetch(`${window.BANCA_SUPABASE_URL}/rest/v1/publisher_settings?select=publisher_key%2Cpublisher_name%2Ccover_url%2Cis_pinned&publisher_key=eq.${encodeURIComponent(key)}&limit=1`, {
           headers: { apikey: window.BANCA_SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
           cache: "no-store"
@@ -12741,7 +12741,7 @@
       .maybeSingle();
     if ((!remote.data || remote.error) && window.BANCA_SUPABASE_URL && window.BANCA_SUPABASE_KEY) {
       try {
-        const accessToken = state.session?.access_token || window.BANCA_SUPABASE_KEY;
+        const accessToken = window.BANCA_SUPABASE_KEY;
         const response = await fetch(`${window.BANCA_SUPABASE_URL}/rest/v1/imprint_settings?select=imprint_key%2Cimprint_name%2Ccover_url%2Cwikipedia_url%2Cis_pinned&imprint_key=eq.${encodeURIComponent(key)}&limit=1`, {
           headers: { apikey: window.BANCA_SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
           cache: "no-store"
@@ -12816,7 +12816,7 @@
       .maybeSingle();
     if ((!remote.data || remote.error) && window.BANCA_SUPABASE_URL && window.BANCA_SUPABASE_KEY) {
       try {
-        const accessToken = state.session?.access_token || window.BANCA_SUPABASE_KEY;
+        const accessToken = window.BANCA_SUPABASE_KEY;
         const response = await fetch(
           `${window.BANCA_SUPABASE_URL}/rest/v1/character_settings?select=character_key%2Ccharacter_name%2Ccharacter_type%2Ccharacter_alignment%2Credirect_character_key%2Cassigned_character_keys%2Ccover_url%2Cwikipedia_url%2Cauthored_text%2Cis_pinned%2Cis_hidden%2Cdeviantart_fanarts_enabled%2Cdeviantart_gallery_url%2Cdeviantart_fanart_image_urls&character_key=eq.${encodeURIComponent(key)}&limit=1`,
           { headers: { apikey: window.BANCA_SUPABASE_KEY, Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
