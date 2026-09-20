@@ -498,10 +498,17 @@
     });
 
     select.onchange=()=>{
-      page=select.value;
-      previewVersion=version;previewPage=page;previewDraft=draft;
-      refreshPreview();
-      renderList();
+      const nextPage=select.value;
+      if(nextPage===page)return;
+      // O seletor de Página precisa abrir a página real. Antes, ele apenas
+      // trocava a lista de blocos do cadastro enquanto a página exibida
+      // continuava sendo a anterior, dando a impressão de que a alteração
+      // não funcionava.
+      const target=new URL(location.href);
+      target.searchParams.set("pagina",nextPage);
+      if(nextPage!=="entity")target.searchParams.delete("tipo");
+      target.searchParams.delete("ler");
+      location.href=target.toString();
     };
 
     ov.querySelector("[data-refresh]").onclick=()=>{
