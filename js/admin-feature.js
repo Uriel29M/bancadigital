@@ -435,7 +435,7 @@ export function createAdminFeature(deps) {
         <div class="section-head"><div><h2>Administração</h2><div class="section-subtitle">Catálogo de obras, edições e coleções</div></div><button class="small-btn" data-close>Fechar</button></div>
         <div class="notice"><b>Oneshots e séries</b><br>Deixe o campo Série vazio para abrir uma edição diretamente. Use o mesmo nome de série em várias edições para criar a seleção de volumes.</div>
         <div class="admin-actions" style="margin-bottom:15px">
-          <button class="btn btn-danger" data-new>+ Nova edição</button><button class="small-btn" data-new-collection>+ Criar coleção</button><button class="small-btn" data-achievements>Títulos</button><button class="small-btn" data-account-plan>Tipo de conta</button><button class="small-btn" data-reader-ads>Propagandas</button>
+          <button class="btn btn-danger" data-new>+ Nova edição</button><button class="small-btn" data-new-collection>+ Criar coleção</button><button class="small-btn" data-achievements>Títulos</button><button class="small-btn" data-account-plan>Tipo de conta</button><button class="small-btn" data-reader-ads>Propagandas</button><button class="small-btn" data-site-layout>Layout do site</button>
           <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
         </div>
         <table class="admin-table"><thead><tr><th>Série / edição</th><th>Editora</th><th>Selo</th><th>Personagem</th><th>Ano</th><th>Ações</th></tr></thead><tbody>
