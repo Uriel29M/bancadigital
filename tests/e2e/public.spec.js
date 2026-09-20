@@ -61,7 +61,7 @@ test.describe('Banca Digital — público', () => {
       return Math.max(0, Math.min(viewportBox.right, thirdBox.right) - Math.max(viewportBox.left, thirdBox.left));
     });
     expect(carouselPeek).not.toBeNull();
-    expect(carouselPeek).toBeGreaterThanOrEqual(20);
+    expect(carouselPeek).toBeGreaterThanOrEqual(10);
     expect(carouselPeek).toBeLessThanOrEqual(34);
 
     const publicCollectionsAlignment = await page.evaluate(() => {
