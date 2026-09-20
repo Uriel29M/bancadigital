@@ -4311,11 +4311,6 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   border-color: transparent;
   padding: 0;
 }
-#main[data-layout-page="home"] .most-read-cover-section,
-#main[data-layout-page="home"] .most-read-covers,
-#main[data-layout-page="home"] .most-read-cover-grid {
-  display: none !important;
-}
 #main[data-layout-page="home"] .hero h1 {
   white-space: normal;
   overflow: hidden;
