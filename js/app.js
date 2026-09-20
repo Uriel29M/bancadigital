@@ -1856,6 +1856,40 @@
   // Evita que cada feature crie seu próprio GoTrueClient no mesmo contexto.
   window.BancaSupabaseClient = sb;
 
+  // Bootstrap síncrono da sessão: o Supabase persiste a sessão no localStorage.
+  // Recuperamos somente a identidade já persistida antes do primeiro render,
+  // evitando que a aplicação apareça como visitante enquanto getSession()
+  // termina. A sessão ainda é validada/hidratada por loadAccount().
+  function readStoredSupabaseSession() {
+    if (!sb || navigator.onLine === false) return null;
+    try {
+      const projectRef = new URL(window.BANCA_SUPABASE_URL).hostname.split(".")[0];
+      const raw = localStorage.getItem(\`sb-\${projectRef}-auth-token\`);
+      if (!raw) return null;
+      const stored = JSON.parse(raw);
+      const session = stored?.currentSession || stored;
+      const user = session?.user;
+      if (!user?.id) return null;
+      const expiresAt = Number(session.expires_at || 0);
+      if (expiresAt && expiresAt * 1000 <= Date.now()) return null;
+      return session;
+    } catch {
+      return null;
+    }
+  }
+
+  const bootStoredSession = readStoredSupabaseSession();
+  if (bootStoredSession?.user) {
+    const bootAccount = readOfflineAccount();
+    state.session = { user: bootStoredSession.user };
+    if (bootAccount?.user?.id === bootStoredSession.user.id) {
+      state.profile = offlineProfileFor(bootStoredSession.user, bootAccount.profile, bootAccount.username);
+    }
+    // A identidade já é conhecida. Isso permite montar a rota autenticada
+    // imediatamente; loadAccount() continuará a buscar os dados completos.
+    state.authReady = true;
+  }
+
   async function loadComicReadCounts() {
     if (!sb || navigator.onLine === false) return;
     const result = await sb.from("comic_read_counts").select("item_id, clicks");
@@ -15081,15 +15115,19 @@
   if (!initialPublicUsername && navigator.onLine === false && bootOfflineAccount?.user) {
     state.session = { user: bootOfflineAccount.user, offline: true };
     state.profile = offlineProfileFor(bootOfflineAccount.user, bootOfflineAccount.profile, bootOfflineAccount.username);
+    state.authReady = true;
     loadDownloads();
     state.section = "downloads";
     armOfflineHistoryGuard();
     render();
-  } else if (initialPublicUsername) render();
-  // A rota normal só é aplicada depois que loadAccount() confirmar a sessão.
-  // Isso impede o primeiro render de usar o estado anônimo e depois trocá-lo
-  // pelo estado autenticado.
-  else { /* aguardando bootstrap da autenticação */ }
+  } else if (initialPublicUsername) {
+    render();
+  } else if (state.authReady && state.session?.user) {
+    // Sessão restaurada sincronamente do Auth: primeiro render já autenticado.
+    applyRoute();
+  } else {
+    // Sem sessão persistida, aguardamos getSession() antes de montar a Home.
+  }
   syncTopAvatar();
   // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
   // a rota pública não fique bloqueada pelas consultas globais do aplicativo.
