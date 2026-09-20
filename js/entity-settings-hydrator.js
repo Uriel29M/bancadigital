@@ -8,15 +8,9 @@
     .toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-  const getAccessToken = async () => {
-    try {
-      const client = window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_KEY);
-      const session = await client?.auth?.getSession?.();
-      return session?.data?.session?.access_token || SUPABASE_KEY;
-    } catch {
-      return SUPABASE_KEY;
-    }
-  };
+  // Essas tabelas têm leitura pública via RLS. Não dependa da sessão do usuário:
+  // um access token expirado não pode impedir a hidratação das configurações salvas.
+  const getAccessToken = async () => SUPABASE_KEY;
 
   const request = async (table, select = "*") => {
     try {
