@@ -306,13 +306,59 @@
       || {};
   }
 
+  let homeStateLock=null;
+  function lockHomeStateToLayout(){
+    const state=window.BancaDigital?.state;
+    if(!state)return false;
+    if(homeStateLock)return true;
+    const orderDescriptor=Object.getOwnPropertyDescriptor(state,"homeSectionOrder");
+    const hiddenDescriptor=Object.getOwnPropertyDescriptor(state,"homeHiddenSectionKeys");
+    let orderValue=state.homeSectionOrder;
+    let hiddenValue=state.homeHiddenSectionKeys;
+    let internalWrite=false;
+    homeStateLock={setOrder(value){
+      internalWrite=true;
+      orderValue=normalizeHomeSectionOrder(value);
+      internalWrite=false;
+    },setHidden(value){
+      internalWrite=true;
+      hiddenValue=value instanceof Set?new Set(value):new Set(Array.isArray(value)?value:[]);
+      internalWrite=false;
+    }};
+    try{
+      Object.defineProperty(state,"homeSectionOrder",{
+        configurable:true,
+        enumerable:orderDescriptor?.enumerable!==false,
+        get:()=>orderValue,
+        set:value=>{if(internalWrite)orderValue=normalizeHomeSectionOrder(value);}
+      });
+      Object.defineProperty(state,"homeHiddenSectionKeys",{
+        configurable:true,
+        enumerable:hiddenDescriptor?.enumerable!==false,
+        get:()=>hiddenValue,
+        set:value=>{if(internalWrite)hiddenValue=value instanceof Set?new Set(value):new Set(Array.isArray(value)?value:[]);}
+      });
+    }catch(error){
+      homeStateLock=null;
+      console.warn("Não foi possível fixar a ordem da Home ao layout:",error);
+      return false;
+    }
+    return true;
+  }
+
   function syncAppHomeLayout(source,version,rerender=true){
     if(!window.BancaDigital?.state)return false;
     const state=window.BancaDigital.state;
     const entry=layoutEntry(source,version);
     if(!Array.isArray(entry.__order))return false;
-    state.homeSectionOrder=normalizeHomeSectionOrder(entry.__order);
-    state.homeHiddenSectionKeys=new Set(Array.isArray(entry.__hidden)?entry.__hidden:[]);
+    lockHomeStateToLayout();
+    if(homeStateLock){
+      homeStateLock.setOrder(entry.__order);
+      homeStateLock.setHidden(Array.isArray(entry.__hidden)?entry.__hidden:[]);
+    }else{
+      state.homeSectionOrder=normalizeHomeSectionOrder(entry.__order);
+      state.homeHiddenSectionKeys=new Set(Array.isArray(entry.__hidden)?entry.__hidden:[]);
+    }
     if(rerender && state.section==="home" && typeof window.BancaDigital.render==="function"){
       window.BancaDigital.render();
     }
@@ -660,26 +706,9 @@
       },{onConflict:"id"});
       if(saveResult.error)return alert(saveResult.error.message);
 
-      const homeDraft=ensureHomeDraft(draft,version,homeManagerSnapshot());
-      const homeOrder=normalizeHomeSectionOrder(homeDraft.__order);
-      const homeHidden=[...new Set(homeDraft.__hidden||[])];
-
-      // A configuração completa já foi salva em site_layout_settings.
-      // Os RPCs legados da Home são opcionais; falhas neles não devem
-      // interromper o salvamento nem exibir confirmações de erro ao usuário.
-      try{
-        await c.rpc("update_homepage_section_order",{p_order:homeOrder});
-        const homeKeys=normalizeHomeSectionOrder(homeOrder);
-        for(const key of homeKeys){
-          await c.rpc("update_homepage_section_visibility",{
-            p_section_key:key,
-            p_hidden:homeHidden.includes(key)
-          });
-        }
-      }catch(_error){
-        // Ignora falhas dos RPCs legados.
-      }
-
+      // site_layout_settings é a única fonte de verdade.
+      // Não atualizamos homepage_settings aqui: essa tabela é legado global
+      // e só comporta uma ordem, portanto faria as três versões colidirem.
       settings={...settings,active_version:version,overrides:draft};
       window.location.reload();
     };
@@ -692,6 +721,7 @@
   async function init(){
     await load();
     const active=settings?.active_version||"principal";
+    lockHomeStateToLayout();
     syncAppHomeLayout(settings,active,false);
     apply();
     if(window.BancaDigital?.state?.section==="home") window.BancaDigital.render?.();
