@@ -1663,6 +1663,7 @@
   const sectionRoutes = {
     home: "",
     comic: "quadrinhos",
+    manga: "mangas",
     ranking: "ranking",
     factions: "faccoes",
     collections: "colecoes",
@@ -1673,7 +1674,10 @@
     login: "entrar",
     signup: "cadastro",
     series: "serie",
-    entity: "entidade"
+    entity: "entidade",
+    messages: "mensagens",
+    "public-profile": "perfil",
+    "password-reset": "redefinir-senha"
   };
 
   function currentFactionId(profile = state.profile) {
