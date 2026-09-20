@@ -2907,14 +2907,11 @@
     await loadCoverStyles(session?.user?.id);
     await loadSeriesCoverChoices(session?.user?.id);
     const publisherSettings = await sb.from("publisher_settings").select("publisher_key, publisher_name, cover_url, is_pinned");
-    if (!publisherSettings.error) state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
-    else console.warn("Não foi possível carregar publisher_settings:", publisherSettings.error.message);
+    state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
     const imprintSettings = await sb.from("imprint_settings").select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned");
-    if (!imprintSettings.error) state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
-    else console.warn("Não foi possível carregar imprint_settings:", imprintSettings.error.message);
+    state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
     const characterSettings = await sb.from("character_settings").select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls");
-    if (!characterSettings.error) state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
-    else console.warn("Não foi possível carregar character_settings:", characterSettings.error.message);
+    state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
     homepageExploreEntityImageCache.clear();
     characterSettingsReady = true;
     wikiCharacterImageCache.clear();
@@ -12660,23 +12657,11 @@
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
     let setting = state.publisherSettings.get(key) || {};
-    let remote = await sb.from("publisher_settings")
+    const remote = await sb.from("publisher_settings")
       .select("publisher_key, publisher_name, cover_url, is_pinned")
       .eq("publisher_key", key)
       .maybeSingle();
-    if ((!remote.data || remote.error) && window.BANCA_SUPABASE_URL && window.BANCA_SUPABASE_KEY) {
-      try {
-        const accessToken = window.BANCA_SUPABASE_KEY;
-        const response = await fetch(`${window.BANCA_SUPABASE_URL}/rest/v1/publisher_settings?select=publisher_key%2Cpublisher_name%2Ccover_url%2Cis_pinned&publisher_key=eq.${encodeURIComponent(key)}&limit=1`, {
-          headers: { apikey: window.BANCA_SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
-          cache: "no-store"
-        });
-        const rows = response.ok ? await response.json() : [];
-        if (rows[0]) remote = { data: rows[0], error: null };
-      } catch {}
-    }
-    if (remote.error) return toast(remote.error.message || "Não foi possível carregar a configuração da editora.");
-    if (remote.data) {
+    if (!remote.error && remote.data) {
       setting = remote.data;
       state.publisherSettings.set(key, remote.data);
     }
@@ -12691,7 +12676,6 @@
       const form = new FormData(event.currentTarget);
       let coverUrl = String(form.get("coverUrl") || "").trim() || null;
       const coverFile = form.get("coverFile");
-      if (!coverUrl && !coverFile?.size && setting.cover_url) coverUrl = setting.cover_url;
       if (coverFile?.size) {
         const extension = String(coverFile.name || "jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
         const path = `${state.session.user.id}/${key}-${Date.now()}.${extension}`;
@@ -12735,23 +12719,11 @@
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
     let setting = state.imprintSettings.get(key) || {};
-    let remote = await sb.from("imprint_settings")
+    const remote = await sb.from("imprint_settings")
       .select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned")
       .eq("imprint_key", key)
       .maybeSingle();
-    if ((!remote.data || remote.error) && window.BANCA_SUPABASE_URL && window.BANCA_SUPABASE_KEY) {
-      try {
-        const accessToken = window.BANCA_SUPABASE_KEY;
-        const response = await fetch(`${window.BANCA_SUPABASE_URL}/rest/v1/imprint_settings?select=imprint_key%2Cimprint_name%2Ccover_url%2Cwikipedia_url%2Cis_pinned&imprint_key=eq.${encodeURIComponent(key)}&limit=1`, {
-          headers: { apikey: window.BANCA_SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
-          cache: "no-store"
-        });
-        const rows = response.ok ? await response.json() : [];
-        if (rows[0]) remote = { data: rows[0], error: null };
-      } catch {}
-    }
-    if (remote.error) return toast(remote.error.message || "Não foi possível carregar a configuração do selo.");
-    if (remote.data) {
+    if (!remote.error && remote.data) {
       setting = remote.data;
       state.imprintSettings.set(key, remote.data);
     }
@@ -12771,11 +12743,10 @@
     $("#imprint-settings-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
-      const enteredCoverUrl = String(form.get("coverUrl") || "").trim();
-      const coverUrl = enteredCoverUrl || setting.cover_url || null;
+      const coverUrl = String(form.get("coverUrl") || "").trim() || null;
       const enteredWikipediaUrl = String(form.get("wikipediaUrl") || "").trim();
       if (isAdmin && enteredWikipediaUrl && !isWikiReferenceUrl(enteredWikipediaUrl)) return toast("Informe um link direto válido da Wikipédia ou do Fandom.");
-      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || setting.wikipedia_url || null) : (setting.wikipedia_url || null);
+      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || null) : (setting.wikipedia_url || null);
       const next = { imprint_key: key, imprint_name: name, cover_url: coverUrl, wikipedia_url: wikipediaUrl, is_pinned: form.get("isPinned") === "on" };
       const result = await sb.from("imprint_settings").upsert(next, { onConflict: "imprint_key" });
       if (result.error) return toast(result.error.message || "Não foi possível salvar a configuração do selo. Execute a migração do Supabase.");
@@ -12810,23 +12781,11 @@
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
     let setting = state.characterSettings.get(key) || {};
-    let remote = await sb.from("character_settings")
+    const remote = await sb.from("character_settings")
       .select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls")
       .eq("character_key", key)
       .maybeSingle();
-    if ((!remote.data || remote.error) && window.BANCA_SUPABASE_URL && window.BANCA_SUPABASE_KEY) {
-      try {
-        const accessToken = window.BANCA_SUPABASE_KEY;
-        const response = await fetch(
-          `${window.BANCA_SUPABASE_URL}/rest/v1/character_settings?select=character_key%2Ccharacter_name%2Ccharacter_type%2Ccharacter_alignment%2Credirect_character_key%2Cassigned_character_keys%2Ccover_url%2Cwikipedia_url%2Cauthored_text%2Cis_pinned%2Cis_hidden%2Cdeviantart_fanarts_enabled%2Cdeviantart_gallery_url%2Cdeviantart_fanart_image_urls&character_key=eq.${encodeURIComponent(key)}&limit=1`,
-          { headers: { apikey: window.BANCA_SUPABASE_KEY, Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
-        );
-        const rows = response.ok ? await response.json() : [];
-        if (rows[0]) remote = { data: rows[0], error: null };
-      } catch {}
-    }
-    if (remote.error) return toast(remote.error.message || "Não foi possível carregar a configuração do personagem.");
-    if (remote.data) {
+    if (!remote.error && remote.data) {
       setting = remote.data;
       state.characterSettings.set(key, remote.data);
     }
@@ -12883,12 +12842,10 @@
       event.preventDefault();
       const form = new FormData(event.currentTarget);
       let coverUrl = String(form.get("coverUrl") || "").trim() || null;
-      if (!coverUrl && setting.cover_url) coverUrl = setting.cover_url;
-      const enteredAuthoredText = String(form.get("authoredText") || "").trim();
-      const authoredText = enteredAuthoredText || setting.authored_text || null;
+      const authoredText = String(form.get("authoredText") || "").trim() || null;
       const enteredWikipediaUrl = String(form.get("wikipediaUrl") || "").trim();
       if (isAdmin && enteredWikipediaUrl && !isWikiReferenceUrl(enteredWikipediaUrl)) return toast("Informe um link direto válido da Wikipédia ou do Fandom.");
-      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || setting.wikipedia_url || null) : (setting.wikipedia_url || null);
+      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || null) : (setting.wikipedia_url || null);
       const coverFile = form.get("coverFile");
       if (coverFile?.size) {
         const extension = String(coverFile.name || "jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
