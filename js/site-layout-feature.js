@@ -300,6 +300,18 @@
     return current;
   }
 
+  function syncAppHomeLayout(source,version,rerender=true){
+    if(!window.BancaDigital?.state)return;
+    const state=window.BancaDigital.state;
+    const entry=source?.overrides?.[version]?.home||{};
+    if(!Array.isArray(entry.__order))return;
+    state.homeSectionOrder=normalizeHomeSectionOrder(entry.__order);
+    state.homeHiddenSectionKeys=new Set(Array.isArray(entry.__hidden)?entry.__hidden:[]);
+    if(rerender && state.section==="home" && typeof window.BancaDigital.render==="function"){
+      window.BancaDigital.render();
+    }
+  }
+
   function applyHomeDraft(source,version){
     const r=root();if(!r)return;
     const base=homeManagerSnapshot();
@@ -480,6 +492,7 @@
             const next=[...visible];
             [next[pos],next[target]]=[next[target],next[pos]];
             h.__order=next;
+            syncAppHomeLayout(draft,version,true);
             refreshPreview();
             renderList();
             return;
@@ -511,6 +524,7 @@
             const hidden=new Set(h.__hidden||[]);
             if(check.checked)hidden.add(key);else hidden.delete(key);
             h.__hidden=[...hidden];
+            syncAppHomeLayout(draft,version,true);
             refreshPreview();renderList();return;
           }
           const x=(draft[version][page][key]||(draft[version][page][key]={}));
@@ -526,6 +540,7 @@
       ensureHomeDraft(draft,version,baseHome);
       previewVersion=version;previewPage=page;previewDraft=draft;
       ov.querySelectorAll("[data-version]").forEach(x=>x.classList.toggle("is-active",x.dataset.version===version));
+      if(page==="home") syncAppHomeLayout(draft,version,true);
       refreshPreview();
       renderList();
     });
@@ -601,6 +616,7 @@
         h.__order=[...baseHome.order];
         h.__hidden=[...baseHome.hidden];
         delete h.__hiddenDefaultApplied;
+        syncAppHomeLayout(draft,version,true);
         refreshPreview();renderList();return;
       }
       if(draft[version])delete draft[version][page];
@@ -653,7 +669,11 @@
   }
 
   async function init(){
-    await load();apply();
+    await load();
+    const active=settings?.active_version||"principal";
+    syncAppHomeLayout(settings,active,false);
+    apply();
+    if(window.BancaDigital?.state?.section==="home") window.BancaDigital.render?.();
     const r=root();if(r){observer?.disconnect();observer=new MutationObserver(()=>requestAnimationFrame(apply));observer.observe(r,{childList:true});}
     window.BancaSiteLayout={openManager:manager,reload:async()=>{await load();apply();}};
     if(isAdmin()){
