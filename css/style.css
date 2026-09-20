@@ -4291,3 +4291,5 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   .site-layout-manager .layout-manager-row > label{grid-column:2;grid-row:3}
   .site-layout-manager .layout-manager-list{max-height:none}
 }
+
+.continue-reading-section { padding-top: 32px; }
