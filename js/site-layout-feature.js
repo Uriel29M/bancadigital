@@ -12,9 +12,27 @@
   const norm=v=>String(v||"").trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,80)||"bloco";
   const params=()=>new URLSearchParams(location.search);
   const pageKey=()=>{
-    const p=params(), page=p.get("pagina")||(p.get("ler")?"leitor":"home");
-    if(page==="entidade") return "entidade-"+norm(p.get("tipo")||"geral");
-    if(page==="faccoes") return "faccoes";
+    const p=params(), raw=p.get("pagina")||(p.get("ler")?"leitor":"home");
+    const routeToPage={
+      "":"home",
+      quadrinhos:"comic",
+      mangas:"manga",
+      pesquisar:"search",
+      serie:"series",
+      entidade:"entity",
+      ranking:"ranking",
+      faccoes:"factions",
+      colecoes:"collections",
+      downloads:"downloads",
+      caixa:"local-box",
+      album:"album",
+      mensagens:"messages",
+      perfil:"public-profile",
+      "redefinir-senha":"password-reset",
+      home:"home"
+    };
+    const page=routeToPage[String(raw)]||String(raw);
+    if(page==="entity") return "entity";
     return norm(page);
   };
   const root=()=>document.querySelector("#main");
