@@ -4294,3 +4294,43 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 
 .continue-reading-section { margin-top: 0; }
 .continue-reading-section .section-head { padding-top: 28px; }
+
+
+/* Home principal — redução visual e hierarquia de descoberta */
+#main[data-layout-page="home"] .section-subtitle {
+  display: none;
+}
+#main[data-layout-page="home"] .section-head {
+  margin-bottom: 12px;
+}
+#main[data-layout-page="home"] .section {
+  margin-bottom: 34px;
+}
+#main[data-layout-page="home"] .rail-viewport {
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
+}
+#main[data-layout-page="home"] .most-read-cover-section,
+#main[data-layout-page="home"] .most-read-covers,
+#main[data-layout-page="home"] .most-read-cover-grid {
+  display: none !important;
+}
+#main[data-layout-page="home"] .hero h1 {
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+#main[data-layout-page="home"] .hero {
+  margin-bottom: 40px;
+}
+@media (max-width: 760px) {
+  #main[data-layout-page="home"] .section {
+    margin-bottom: 28px;
+  }
+  #main[data-layout-page="home"] .hero {
+    margin-bottom: 30px;
+  }
+}
