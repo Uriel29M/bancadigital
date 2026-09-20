@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const calls=[];
+const context={URL,Map,Set,Date,AbortController,setTimeout,clearTimeout,window:{BANCA_SUPABASE_URL:'https://example.supabase.co'},fetch:async url=>{calls.push(String(url));return new Response(JSON.stringify({format:'pdf',name:'example.pdf'}),{headers:{'content-type':'application/json'}});},Response};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync('js/reader-4shared-v2.js','utf8'),context);
+const adapter=context.window.BancaFourshared;
+assert.equal(adapter.isSource('https://www.4shared.com/office/id/file.html'),true);
+assert.equal(adapter.isSource('https://4shared.com.evil.example/file.pdf'),false);
+assert.equal(adapter.isSource('http://www.4shared.com/file.pdf'),false);
+assert.match(adapter.proxyUrl('https://www.4shared.com/file.pdf'),/fourshared-proxy/);
+assert.equal(await adapter.detectFormat('https://www.4shared.com/file.pdf'),'pdf');
+assert.equal(calls.length,1);
+assert.match(calls[0],/meta=1/);
+console.log('PASS: provider detection, host validation, proxy routing and format metadata.');
