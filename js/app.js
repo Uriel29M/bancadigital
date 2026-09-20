@@ -1781,6 +1781,9 @@
   }
 
   function applyRoute() {
+    // A primeira rota só pode ser montada depois que o Auth resolver a sessão.
+    // Assim uma conta autenticada não vê a versão visitante por um instante.
+    if (!state.authReady) return;
     cancelCoverLoads();
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const params = new URLSearchParams(window.location.search);
@@ -15107,7 +15110,7 @@
   // Dependências pesadas do leitor são carregadas apenas quando PDF/CBZ/CBR
   // ou ferramentas relacionadas realmente precisam delas.
   loadComicReadCounts()
-    .then(() => { if (state.section !== "reader") render(); })
+    .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de leitura indisponíveis:", error));
   loadComicDownloadCounts()
     .then(() => { if (state.section !== "reader") render(); })
@@ -15116,10 +15119,10 @@
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Leituras mensais indisponíveis:", error));
   loadHomepageSettings()
-    .then(() => { if (state.section === "home" || state.section === "comics") render(); })
+    .then(() => { if (state.authReady && (state.section === "home" || state.section === "comics")) render(); })
     .catch(error => console.warn("Ordem da página inicial indisponível:", error));
   loadHomepageBanners()
-    .then(() => { if (state.section === "home") render(); })
+    .then(() => { if (state.authReady && state.section === "home") render(); })
     .catch(error => console.warn("Banners da home indisponíveis:", error));
   sb?.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") {
