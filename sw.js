@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v691-home-banner-spacing";
+const CACHE_VERSION = "banca-digital-shell-v692-home-banner-black-gap";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.268-home-banner-spacing",
+  "./", "./index.html", "./css/style.css?v=2.2.10.269-home-banner-black-gap",
   "./js/app.js?v=2.2.10.545-auth-gated", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
