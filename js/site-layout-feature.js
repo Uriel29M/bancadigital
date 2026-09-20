@@ -6,7 +6,7 @@
     atual:"Experiência atual preservada para comparação e retorno seguro.",
     minimalista:"Minimalismo extremo: somente o essencial."
   };
-  let settings=null, observer=null, busy=false;
+  let settings=null, observer=null, busy=false, previewVersion=null;
 
   const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const norm=v=>String(v||"").trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,80)||"bloco";
@@ -42,7 +42,12 @@
 
   function blockLabel(el){
     const h=el.querySelector(":scope > h1,:scope > h2,:scope > h3,:scope > .section-title,:scope > .section-head strong");
-    return String(h?.textContent||el.getAttribute("aria-label")||el.dataset.section||"Seção").replace(/\\s+/g," ").trim()||"Seção";
+    const raw=h?.textContent||el.getAttribute("aria-label")||el.getAttribute("title")||el.dataset.section||el.id||"";
+    const cleaned=String(raw).replace(/\s+/g," ").trim();
+    if(cleaned && !/^secao(?:[-_/]\w+)?$/i.test(cleaned))return cleaned;
+    const cls=[...el.classList].find(x=>/section|shelf|profile|reader|hero|search|result|filter|comment|activity|collection|entity|series|comic|manga/i.test(x));
+    const inferred=String(cls||"").replace(/[-_]+/g," ").replace(/\b\w/g,m=>m.toUpperCase()).trim();
+    return inferred||"Seção";
   }
 
   function blocks(){
@@ -66,8 +71,8 @@
   }
 
   const rules=(version,page)=>(settings?.overrides?.[version]?.[page]||{});
-  function minimalHidden(b,i,total){
-    if((settings?.active_version||"principal")!=="minimalista")return false;
+  function minimalHidden(version,b,i,total){
+    if(version!=="minimalista")return false;
     const s=(b.label+" "+b.key).toLocaleLowerCase("pt-BR");
     return /dica|curiosidade|aleatori|atividade|estatíst|relacionad|fanart|notíci|wiki rápida|informações extras|detalhes/.test(s)
       || (total>7&&i>=5);
@@ -75,21 +80,23 @@
 
   function apply(){
     if(busy)return; const r=root(); if(!r)return; busy=true;
-    const version=settings?.active_version||"principal", page=pageKey(), rs=rules(version,page), bs=blocks();
+    const version=previewVersion||settings?.active_version||"principal", page=pageKey(), rs=rules(version,page), bs=blocks();
     const principalOrder=/^(hero|destaque|continue|novidade|resultado|serie|série|ediç|estante|salvo|coleç|personagem|autor|editora|selo|mural|lista|álbum|figurinha|coment|atividade|notíci|relacionad|wiki|filtro)/i;
     document.documentElement.dataset.siteLayoutVersion=version; r.dataset.layoutPage=page;
     bs.forEach((b,i)=>{
-      const x=rs[b.key]||{}, hidden=x.hidden===true||minimalHidden(b,i,bs.length);
+      const x=rs[b.key]||{}, hidden=x.hidden===true||minimalHidden(version,b,i,bs.length);
       b.el.hidden=hidden; b.el.dataset.layoutHidden=hidden?"true":"false";
       const h=b.el.querySelector("h1,h2,h3,.section-title");
       if(h&&x.label)h.textContent=x.label;
       const autoOrder=version==="principal"?(principalOrder.test(b.label)?b.label.toLocaleLowerCase("pt-BR").includes("hero")||b.label.toLocaleLowerCase("pt-BR").includes("destaque")?5:20:80):i;
       b.el.style.order=Number.isFinite(Number(x.order))?String(x.order):String(autoOrder);
     });
-    bs.slice().sort((a,b)=>{
+    const groups=new Map();
+    bs.forEach(b=>{const parent=b.parent||r;if(!groups.has(parent))groups.set(parent,[]);groups.get(parent).push(b);});
+    groups.forEach(items=>items.slice().sort((a,b)=>{
       const ao=Number(rs[a.key]?.order),bo=Number(rs[b.key]?.order);
       return(Number.isFinite(ao)?ao:a.index)-(Number.isFinite(bo)?bo:b.index);
-    }).forEach(b=>r.appendChild(b.el));
+    }).forEach(b=>b.parent.appendChild(b.el)));
     r.classList.toggle("site-layout-minimal",version==="minimalista");
     r.classList.toggle("site-layout-principal",version==="principal");
     r.classList.toggle("site-layout-atual",version==="atual");
@@ -100,7 +107,7 @@
     const ov=document.createElement("div");ov.className="modal-backdrop";
     ov.innerHTML='<div class="modal site-layout-manager"><div class="section-head"><div><div class="eyebrow">Arquitetura visual</div><h2>Gerenciar versões do site</h2><div class="section-subtitle">Escolha a versão ativa e configure cada página bloco por bloco.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="layout-version-grid">'+Object.keys(labels).map(v=>'<button type="button" class="layout-version-card" data-version="'+v+'"><strong>'+labels[v]+'</strong><span>'+desc[v]+'</span></button>').join("")+'</div><div class="layout-manager-toolbar"><label class="field"><span>Página</span><select data-page></select></label><button type="button" class="small-btn" data-refresh>Atualizar</button><button type="button" class="small-btn" data-reset>Restaurar página</button></div><div class="layout-manager-list" data-list></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-save>Salvar</button></div></div>';
     document.querySelector("#modal-root")?.appendChild(ov);
-    let version=settings?.active_version||"principal", page=pageKey(), draft=structuredClone(settings?.overrides||{});
+    let version=settings?.active_version||"principal", page=pageKey(), draft=structuredClone(settings?.overrides||{}); previewVersion=version;
     const select=ov.querySelector("[data-page]"),list=ov.querySelector("[data-list]");
     const PAGE_LABELS={home:"Início",comic:"Quadrinhos",manga:"Mangás",search:"Pesquisa",series:"Série",entity:"Entidades",ranking:"Ranking",factions:"Facções",collections:"Coleções",collection:"Coleção",downloads:"Downloads","local-box":"Minha caixa",album:"Álbum","public-profile":"Perfil público",messages:"Mensagens",notifications:"Notificações","community-activity":"Atividade",login:"Login",signup:"Cadastro",leitor:"Leitor","password-reset":"Redefinir senha"};
     const pages=()=>[...new Set([...Object.keys(PAGE_LABELS),pageKey(),...Object.values(draft).flatMap(x=>Object.keys(x||{}))])].sort((a,b)=>(PAGE_LABELS[a]||a).localeCompare(PAGE_LABELS[b]||b,"pt-BR"));
@@ -121,18 +128,22 @@
         });
       });
     };
-    ov.querySelectorAll("[data-version]").forEach(b=>b.onclick=()=>{version=b.dataset.version;ov.querySelectorAll("[data-version]").forEach(x=>x.classList.toggle("is-active",x.dataset.version===version));renderList();});
-    select.onchange=()=>{page=select.value;renderList();};
+    ov.querySelectorAll("[data-version]").forEach(b=>b.onclick=()=>{
+      version=b.dataset.version; previewVersion=version;
+      ov.querySelectorAll("[data-version]").forEach(x=>x.classList.toggle("is-active",x.dataset.version===version));
+      apply(); renderList();
+    });
+    select.onchange=()=>{page=select.value;previewVersion=version;apply();renderList();};
     ov.querySelector("[data-refresh]").onclick=renderList;
     ov.querySelector("[data-reset]").onclick=()=>{if(draft[version])delete draft[version][page];renderList();};
-    ov.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>ov.remove());
+    ov.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{previewVersion=null;apply();ov.remove();});
     ov.querySelector("[data-save]").onclick=async()=>{
       const c=await sb();if(!c)return alert("Supabase não está disponível.");
       const r=await c.from("site_layout_settings").update({active_version:version,overrides:draft,updated_at:new Date().toISOString()}).eq("id",true);
       if(r.error)return alert(r.error.message);
-      settings={...settings,active_version:version,overrides:draft};apply();ov.remove();window.dispatchEvent(new CustomEvent("banca-layout-updated"));
+      settings={...settings,active_version:version,overrides:draft};previewVersion=null;apply();ov.remove();window.dispatchEvent(new CustomEvent("banca-layout-updated"));
     };
-    ov.addEventListener("click",e=>{if(e.target===ov)ov.remove()});
+    ov.addEventListener("click",e=>{if(e.target===ov){previewVersion=null;apply();ov.remove()}});
     renderList();
   }
 
