@@ -83,7 +83,11 @@
       if(!el||seen.has(el)||el.matches(".layout-admin-panel,.site-layout-manager"))return;
       seen.add(el);
       const label=blockLabel(el), base=norm(label);
-      const key=el.dataset.layoutKey||(parentKey?parentKey+"/"+base:base)+(result.some(x=>x.key===(parentKey?parentKey+"/"+base:base))?"-"+index:"");
+      const catalog=PAGE_BLOCKS[pageKey()]||[];
+      const exact=catalog.find(([k,l])=>norm(l)===base);
+      const classMatch=catalog.find(([k])=>el.classList?.contains(k));
+      const stable=el.dataset.layoutKey||exact?.[0]||classMatch?.[0]||(parentKey?parentKey+"/"+base:base);
+      const key=result.some(x=>x.key===stable)?stable+"-"+index:stable;
       el.dataset.layoutKey=key; el.dataset.layoutLabel=label;
       result.push({el,parent,key,label,index,parentKey});
     };
