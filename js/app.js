@@ -15122,11 +15122,11 @@
     render();
   } else if (initialPublicUsername) {
     render();
-  } else if (state.authReady && state.session?.user) {
-    // Sessão restaurada sincronamente do Auth: primeiro render já autenticado.
-    applyRoute();
   } else {
-    // Sem sessão persistida, aguardamos getSession() antes de montar a Home.
+    // A rota principal NÃO é renderizada aqui. Mesmo que exista uma sessão
+    // persistida, ela ainda precisa passar pelo getSession()/loadAccount()
+    // para que este seja o único primeiro render da aplicação online.
+    // Assim nunca existe uma Home de visitante antes da Home autenticada.
   }
   syncTopAvatar();
   // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
