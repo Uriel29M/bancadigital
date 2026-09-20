@@ -1890,16 +1890,25 @@
   }
 
   const HOME_SECTION_ORDER = [
-    "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
-    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "bucho-hidden", "editorial-banner"
+    "recommendations", "continue", "recent", "monthly", "pinned-publishers", "random", "featured-collections",
+    "character-banner", "new-series", "best-series", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "editorial-banner", "bucho-hidden"
+  ];
+
+  const DEFAULT_HIDDEN_HOME_SECTIONS = [
+    "character-banner", "new-series", "best-series", "tips", "artist",
+    "random-publisher", "downloads", "most-read-covers", "editorial-banner", "bucho-hidden"
+  ];
+
+  const LEGACY_MANAGED_HOME_ORDER = [
+    "continue", "recent", "character-banner", "pinned-publishers", "new-series", "monthly", "best-series",
+    "tips", "random", "artist", "recommendations", "featured-collections", "random-publisher", "downloads",
+    "editorial-banner", "most-read-covers", "bucho-hidden"
   ];
 
   function normalizeHomeSectionOrder(value) {
     const saved = Array.isArray(value) ? value.filter(key => HOME_SECTION_ORDER.includes(key)) : [];
     const unique = [...new Set(saved)];
-    if (!unique.includes("bucho-hidden") && unique.includes("most-read-covers")) {
-      unique.splice(unique.indexOf("most-read-covers") + 1, 0, "bucho-hidden");
-    }
+    if (JSON.stringify(unique) === JSON.stringify(LEGACY_MANAGED_HOME_ORDER)) return [...HOME_SECTION_ORDER];
     return [...unique, ...HOME_SECTION_ORDER.filter(key => !unique.includes(key))];
   }
 
@@ -1911,9 +1920,10 @@
       return;
     }
     state.homeSectionOrder = normalizeHomeSectionOrder(result.data?.section_order);
-    state.homeHiddenSectionKeys = new Set(Array.isArray(result.data?.hidden_sections)
+    const configuredHiddenSections = Array.isArray(result.data?.hidden_sections)
       ? result.data.hidden_sections.filter(key => HOME_SECTION_ORDER.includes(key))
-      : []);
+      : null;
+    state.homeHiddenSectionKeys = new Set(configuredHiddenSections || DEFAULT_HIDDEN_HOME_SECTIONS);
     state.legendarySundayEnabled = result.data?.legendary_sunday_enabled !== false;
     state.legendaryManualDate = result.data?.legendary_manual_date || null;
     const noveltyHours = Number(result.data?.novelty_badge_hours);
@@ -7912,22 +7922,28 @@
     // A home nunca usa edições ocultas como destaque/recomendação, nem para ADM.
     // Itens ocultos continuam disponíveis nas áreas específicas de administração/Bucho.
     const lib = visibleCatalogItems(state.db.library, false);
+    const staffCanSeeHiddenHome = canViewHiddenHomepageSections();
+    const shouldBuildHomeSection = key => staffCanSeeHiddenHome || !state.homeHiddenSectionKeys.has(key);
+
     let heroItem = lib.find(item => item.id === state.homeHeroId);
     if (!heroItem) {
       heroItem = weightedRandom(lib.filter(x => x.featured)) || lib[0];
       state.homeHeroId = heroItem?.id || null;
     }
+
     const monthlyReadCount = item => state.comicMonthlyReadCounts.get(String(item.id)) || 0;
     const mostClicked = uniqueCatalogItems([...lib].sort((a, b) => {
       const aCount = state.comicMonthlyReadCountsLoaded ? monthlyReadCount(a) : Number(a.clicks) || 0;
       const bCount = state.comicMonthlyReadCountsLoaded ? monthlyReadCount(b) : Number(b.clicks) || 0;
       return bCount - aCount || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR");
     }).slice(0, 10));
+
     const recentlyAdded = lib
       .map((item, index) => ({ item, index, addedAt: catalogAddedTimestamp(item) }))
       .sort((a, b) => b.addedAt - a.addedAt || a.index - b.index)
       .slice(0, 20)
       .map(entry => entry.item);
+
     const recentlyAddedSeries = lib
       .map((item, index) => ({ item, index, addedAt: catalogAddedTimestamp(item) }))
       .filter(entry => entry.item.seriesId)
@@ -7935,28 +7951,47 @@
       .filter((entry, index, entries) => entries.findIndex(candidate => candidate.item.seriesId === entry.item.seriesId) === index)
       .slice(0, 20)
       .map(entry => entry.item);
-    const recentlyAddedSeriesRail = recentlyAddedSeries.length ? `<section class="section recently-added-series"><div class="section-head"><div><h2 class="section-title">Séries novas</h2><div class="section-subtitle">As séries adicionadas mais recentemente ao catálogo.</div></div></div><div class="rail-viewport"><div class="rail">${recentlyAddedSeries.map(item => seriesCard(item)).join("")}</div></div></section>` : "";
+
+    const recentlyAddedSeriesRail = shouldBuildHomeSection("new-series") && recentlyAddedSeries.length
+      ? `<section class="section recently-added-series"><div class="section-head"><div><h2 class="section-title">Séries novas</h2><div class="section-subtitle">As séries adicionadas mais recentemente ao catálogo.</div></div></div><div class="rail-viewport"><div class="rail">${recentlyAddedSeries.map(item => seriesCard(item)).join("")}</div></div></section>`
+      : "";
+
     const progressRecentIds = [...state.readingProgress.entries()]
       .filter(([, progress]) => progress?.updated_at)
       .sort(([, a], [, b]) => new Date(b.updated_at) - new Date(a.updated_at))
       .map(([itemId]) => String(itemId));
+
     const recentIds = state.session
       ? [...new Set([...state.recentlyOpenedIds, ...progressRecentIds])]
         .filter(itemId => !state.readingProgress.get(itemId)?.completed)
         .slice(0, 6)
       : [];
     const recentlyOpened = recentIds.map(itemId => lib.find(item => String(item.id) === itemId)).filter(Boolean);
+
     const heroTitle = heroItem ? itemDisplayTitle(heroItem) : "Sua banca digital";
-    const heroMeta = heroItem ? [heroItem.issue, heroItem.type ? formatType(heroItem.type) : "", heroItem.year].map(value => String(value || "").trim()).filter(Boolean).join(" · ") : "";
+    const heroMeta = heroItem
+      ? [heroItem.issue, heroItem.type ? formatType(heroItem.type) : "", heroItem.year].map(value => String(value || "").trim()).filter(Boolean).join(" · ")
+      : "";
+
     let randoms = state.homeRandomIds.map(id => lib.find(item => item.id === id)).filter(Boolean).slice(0, 6);
     if (randoms.length < 6) {
       randoms = uniqueCatalogItems([...lib].sort(() => Math.random() - .5).slice(0, 6));
       state.homeRandomIds = randoms.map(item => item.id);
     }
+
     const personalized = personalizedRecommendations(lib);
-    const personalizedRail = state.session && personalized.length ? `<section class="section personalized-recommendations"><div class="section-head"><div><h2 class="section-title">Dicas para você</h2><div class="section-subtitle">Sugestões baseadas nos quadrinhos que você salvou e curtiu.</div></div></div><div class="rail-viewport"><div class="rail">${personalized.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div></section>` : "";
-    const readArtistRecommendation = readArtistSeriesRecommendation(lib);
-    const readArtistRail = readArtistRecommendation ? `<section class="section read-artist-recommendations"><div class="section-head"><div><h2 class="section-title">Do mesmo artista de ${escapeHTML(itemDisplayTitle(readArtistRecommendation.readItem))}</h2><div class="section-subtitle">Outras séries do mesmo artista para você conhecer.</div></div></div><div class="rail-viewport"><div class="rail">${readArtistRecommendation.seriesItems.map(item => seriesCard(item)).join("")}</div></div></section>` : "";
+    const personalizedRail = state.session && personalized.length
+      ? `<section class="section personalized-recommendations"><div class="section-head"><div><h2 class="section-title">Dicas para você</h2></div></div><div class="rail-viewport"><div class="rail">${personalized.map(item => card(item, state.readingProgress, state.favoriteIds, true)).join("")}</div></div></section>`
+      : "";
+    const discoverySection = personalized.length && state.session
+      ? personalizedRail
+      : globalRecommendationsSection(lib);
+
+    const readArtistRecommendation = shouldBuildHomeSection("artist") ? readArtistSeriesRecommendation(lib) : null;
+    const readArtistRail = readArtistRecommendation
+      ? `<section class="section read-artist-recommendations"><div class="section-head"><div><h2 class="section-title">Do mesmo artista de ${escapeHTML(itemDisplayTitle(readArtistRecommendation.readItem))}</h2></div></div><div class="rail-viewport"><div class="rail">${readArtistRecommendation.seriesItems.map(item => seriesCard(item)).join("")}</div></div></section>`
+      : "";
+
     const publisherGroups = new Map();
     lib.filter(item => String(item.publisher || "").trim()).forEach(item => {
       const publisher = String(item.publisher).trim();
@@ -7966,16 +8001,28 @@
     const publisherChoices = [...publisherGroups.keys()];
     if (!publisherGroups.has(state.homeRandomPublisher)) state.homeRandomPublisher = weightedRandom(publisherChoices) || null;
     const randomPublisherItems = state.homeRandomPublisher ? publisherGroups.get(state.homeRandomPublisher) || [] : [];
-    const randomPublisherRail = randomPublisherItems.length ? rail(state.homeRandomPublisher, randomPublisherItems, "Uma editora escolhida aleatoriamente.", "", true, true, "best-series-section") : "";
-    const mostDownloaded = uniqueCatalogItems([...lib]
-      .filter(item => Number(item.downloadCount) > 0)
-      .sort((a, b) => Number(b.downloadCount) - Number(a.downloadCount) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
-      .slice(0, 20));
-    const mostDownloadedRail = mostDownloaded.length ? rail("Mais baixados", mostDownloaded, "As edições mais baixadas neste catálogo.", "", true) : "";
-    const mostReadCoverItems = [...lib]
-      .sort((a, b) => Number(b.clicks) - Number(a.clicks) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
-      .slice(0, 10);
-    const mostReadCoverGrid = mostReadCoverItems.length ? `<section class="section most-read-cover-section">${state.profile?.plan === "admin" ? '<div class="section-head"><h2 class="section-title">Mais lidos</h2></div>' : ""}<div class="most-read-cover-grid">${mostReadCoverItems.map(item => `<button type="button" class="most-read-cover" data-open="${escapeHTML(item.id)}" data-open-direct="true" aria-label="Abrir ${escapeHTML(itemDisplayTitle(item))}" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></button>`).join("")}</div></section>` : "";
+    const randomPublisherRail = shouldBuildHomeSection("random-publisher") && randomPublisherItems.length
+      ? rail(state.homeRandomPublisher, randomPublisherItems, "Uma editora escolhida aleatoriamente.", "", true, true, "best-series-section")
+      : "";
+
+    const mostDownloaded = shouldBuildHomeSection("downloads")
+      ? uniqueCatalogItems([...lib]
+        .filter(item => Number(item.downloadCount) > 0)
+        .sort((a, b) => Number(b.downloadCount) - Number(a.downloadCount) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
+        .slice(0, 20))
+      : [];
+    const mostDownloadedRail = mostDownloaded.length ? rail("Mais baixados", mostDownloaded, "", "", true) : "";
+
+    const mostReadCoverGrid = shouldBuildHomeSection("most-read-covers")
+      ? (() => {
+          const items = [...lib]
+            .sort((a, b) => Number(b.clicks) - Number(a.clicks) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
+            .slice(0, 10);
+          return items.length
+            ? `<section class="section most-read-cover-section"><div class="most-read-cover-grid">${items.map(item => `<button type="button" class="most-read-cover" data-open="${escapeHTML(item.id)}" data-open-direct="true" aria-label="Abrir ${escapeHTML(itemDisplayTitle(item))}" style="background-image:url('${escapeHTML(coverFor(item, "card"))}')"></button>`).join("")}</div></section>`
+            : "";
+        })()
+      : "";
 
     const seriesEntries = new Map();
     lib.filter(item => item.seriesId).forEach(item => {
@@ -7989,7 +8036,9 @@
       }))
       .sort((a, b) => b.likes - a.likes || String(a.item.seriesTitle || a.item.title).localeCompare(String(b.item.seriesTitle || b.item.title), "pt-BR"))
       .slice(0, 6);
-    const bestSeriesRail = bestSeries.length ? `<section class="section best-series-section"><div class="section-head"><div><h2 class="section-title">Melhores séries</h2><div class="section-subtitle">As séries mais curtidas, pela soma das curtidas de suas edições.</div></div></div><div class="results-grid">${bestSeries.map(entry => seriesCard(entry.item)).join("")}</div></section>` : "";
+    const bestSeriesRail = shouldBuildHomeSection("best-series") && bestSeries.length
+      ? `<section class="section best-series-section"><div class="section-head"><div><h2 class="section-title">Melhores séries</h2><div class="section-subtitle">As séries mais curtidas, pela soma das curtidas de suas edições.</div></div></div><div class="results-grid">${bestSeries.map(entry => seriesCard(entry.item)).join("")}</div></section>`
+      : "";
 
     const publisherEntries = new Map();
     lib.filter(item => item.type === "comic" && String(item.publisher || "").trim()).forEach(item => {
@@ -7998,9 +8047,17 @@
       publisherEntries.get(name).push(item);
     });
     const pinnedPublishers = [...publisherEntries.entries()].filter(([name]) => state.publisherSettings.get(publisherKey(name))?.is_pinned);
-    const publisherPinnedRail = pinnedPublishers.length ? `<section class="section publisher-pinned-section"><div class="section-head"><div><h2 class="section-title">Editoras fixadas</h2><div class="section-subtitle">Acesso rápido às editoras em destaque.</div></div></div><div class="publisher-carousel">${pinnedPublishers.map(([name, publisherItems]) => { const setting = state.publisherSettings.get(publisherKey(name)); const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0]; const cover = setting?.cover_url || coverFor(representative); return `<button class="publisher-card is-pinned" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`; }).join("")}</div></section>` : "";
+    const pinnedPublisherCards = pinnedPublishers.map(([name, publisherItems]) => {
+      const setting = state.publisherSettings.get(publisherKey(name));
+      const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0];
+      const cover = setting?.cover_url || coverFor(representative);
+      return `<button class="publisher-card is-pinned" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
+    }).join("");
 
-    const featuredCollectionsRail = state.featuredComicCollections?.length ? `<section class="section featured-collections-rail"><div class="section-head"><div><h2 class="section-title">Coleções de quadrinhos em destaque</h2><div class="section-subtitle">Coleções públicas escolhidas pela equipe.</div></div></div><div class="public-collections-grid">${state.featuredComicCollections.map(collection => publicCollectionCard(collection)).join("")}</div></section>` : "";
+    const featuredCollectionsRail = state.featuredComicCollections?.length
+      ? `<section class="section featured-collections-rail"><div class="section-head"><div><h2 class="section-title">Coleções em destaque</h2></div></div><div class="public-collections-grid">${state.featuredComicCollections.map(collection => publicCollectionCard(collection)).join("")}</div></section>`
+      : "";
+
     const imprintEntries = new Map();
     lib.filter(item => item.type === "comic" && String(item.imprint || "").trim()).forEach(item => {
       const name = String(item.imprint).trim();
@@ -8008,7 +8065,13 @@
       imprintEntries.get(name).push(item);
     });
     const pinnedImprints = [...imprintEntries.entries()].filter(([name]) => state.imprintSettings.get(publisherKey(name))?.is_pinned);
-    const imprintPinnedRail = pinnedImprints.length ? `<section class="section imprint-pinned-section"><div class="section-head"><div><h2 class="section-title">Selos fixados</h2><div class="section-subtitle">Acesso rápido aos selos em destaque.</div></div></div><div class="publisher-carousel">${pinnedImprints.map(([name, imprintItems]) => { const setting = state.imprintSettings.get(publisherKey(name)); const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0]; const cover = setting?.cover_url || coverFor(representative); const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · "); return `<button class="publisher-card imprint-card is-pinned" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`; }).join("")}</div></section>` : "";
+    const pinnedImprintCards = pinnedImprints.map(([name, imprintItems]) => {
+      const setting = state.imprintSettings.get(publisherKey(name));
+      const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
+      const cover = setting?.cover_url || coverFor(representative);
+      const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
+      return `<button class="publisher-card imprint-card is-pinned" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
+    }).join("");
 
     const characterEntries = new Map();
     lib.filter(item => item.type === "comic").forEach(item => characterNames(item).forEach(value => {
@@ -8024,38 +8087,74 @@
       if (characterEntries.has(key)) characterEntries.get(key).items.push(item);
     }));
     const pinnedCharacters = [...characterEntries.values()].filter(entry => state.characterSettings.get(publisherKey(entry.name))?.is_pinned);
-    const characterPinnedRail = pinnedCharacters.length ? `<section class="section character-pinned-section"><div class="section-head"><div><h2 class="section-title">Personagens em destaque</h2><div class="section-subtitle">Acesso rápido aos personagens em destaque.</div></div></div><div class="publisher-carousel">${pinnedCharacters.map(({ name, items }) => { const setting = state.characterSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative); return `<button class="publisher-card character-card is-pinned" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`; }).join("")}</div></section>` : "";
-    const pinnedEntityRails = `${publisherPinnedRail}${imprintPinnedRail}${characterPinnedRail}`;
+    const pinnedCharacterCards = pinnedCharacters.map(({ name, items }) => {
+      const setting = state.characterSettings.get(publisherKey(name));
+      const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0];
+      const cover = setting?.cover_url || coverFor(representative);
+      return `<button class="publisher-card character-card is-pinned" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`;
+    }).join("");
+
+    const exploreTabs = [
+      ["characters", "Personagens", pinnedCharacters.length],
+      ["imprints", "Selos", pinnedImprints.length],
+      ["publishers", "Editoras", pinnedPublishers.length]
+    ];
+    const firstExploreTab = pinnedCharacters.length ? "characters" : pinnedImprints.length ? "imprints" : "publishers";
+    const exploreSection = (pinnedCharacters.length || pinnedImprints.length || pinnedPublishers.length)
+      ? `<section class="section home-explore-section">
+          <div class="section-head">
+            <div><h2 class="section-title">Explore a Banca</h2></div>
+          </div>
+          <div class="home-explore-tabs" role="tablist" aria-label="Explore a Banca">
+            ${exploreTabs.map(([key, label, count]) => `<button type="button" role="tab" class="home-explore-tab${firstExploreTab === key ? " is-active" : ""}" data-home-explore-tab="${key}" aria-selected="${firstExploreTab === key ? "true" : "false"}" tabindex="${firstExploreTab === key ? "0" : "-1"}">${label}<span>${count}</span></button>`).join("")}
+          </div>
+          <div class="home-explore-panels">
+            <div class="home-explore-panel" data-home-explore-panel="characters" role="tabpanel" ${firstExploreTab !== "characters" ? "hidden" : ""}>
+              <div class="publisher-carousel">${pinnedCharacterCards || '<div class="home-explore-empty">Nenhum personagem fixado.</div>'}</div>
+            </div>
+            <div class="home-explore-panel" data-home-explore-panel="imprints" role="tabpanel" ${firstExploreTab !== "imprints" ? "hidden" : ""}>
+              <div class="publisher-carousel">${pinnedImprintCards || '<div class="home-explore-empty">Nenhum selo fixado.</div>'}</div>
+            </div>
+            <div class="home-explore-panel" data-home-explore-panel="publishers" role="tabpanel" ${firstExploreTab !== "publishers" ? "hidden" : ""}>
+              <div class="publisher-carousel">${pinnedPublisherCards || '<div class="home-explore-empty">Nenhuma editora fixada.</div>'}</div>
+            </div>
+          </div>
+          <div data-home-section-controls-slot></div>
+        </section>`
+      : "";
 
     const homeSections = {
-      recommendations: globalRecommendationsSection(lib),
-      "character-banner": characterBannerSection(lib),
-      continue: rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false),
-      recent: rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false),
-      "new-series": recentlyAddedSeriesRail,
-      monthly: rail("Mais lidos do mês", mostClicked, "As edições que mais receberam cliques neste mês.", "Ver catálogo", true),
-      "pinned-publishers": pinnedEntityRails,
-      "best-series": bestSeriesRail,
-      "featured-collections": featuredCollectionsRail,
+      recommendations: discoverySection,
+      continue: rail("Continue de onde parou", recentlyOpened, "", "", true, false),
+      recent: rail("Adicionados recentemente", recentlyAdded, "", "", true, false),
+      monthly: rail("Mais lidos do mês", mostClicked, "", "Ver catálogo", true),
+      "pinned-publishers": exploreSection,
       random: rail("Escolha aleatória", randoms, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true, true, "random-choice-section"),
-      tips: personalizedRail,
+      "featured-collections": featuredCollectionsRail,
+      "character-banner": shouldBuildHomeSection("character-banner") ? characterBannerSection(lib) : "",
+      "new-series": recentlyAddedSeriesRail,
+      "best-series": bestSeriesRail,
+      tips: shouldBuildHomeSection("tips") ? personalizedRail : "",
       artist: readArtistRail,
       "random-publisher": randomPublisherRail,
       downloads: mostDownloadedRail,
       "most-read-covers": mostReadCoverGrid,
-      "bucho-hidden": buchoHiddenEditionsSection(),
-      "editorial-banner": homepageBannerSection(lib)
+      "editorial-banner": shouldBuildHomeSection("editorial-banner") ? homepageBannerSection(lib) : "",
+      "bucho-hidden": shouldBuildHomeSection("bucho-hidden") ? buchoHiddenEditionsSection() : ""
     };
+
     const visibleHomeKeys = normalizeHomeSectionOrder(state.homeSectionOrder)
       .filter(key => homeSections[key] && (canViewHiddenHomepageSections() || !state.homeHiddenSectionKeys.has(key)));
     state.homeVisibleSectionKeys = visibleHomeKeys;
     const orderedSections = visibleHomeKeys
       .map((key, index, visible) => decorateHomepageSection(key, homeSections[key], index, visible.length))
       .join("");
+
     const heroCoverMarkup = coverMaxWidthForViewport() > 640
       ? `<div class="hero-cover" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" data-open="${escapeHTML(heroItem?.id || "")}" data-open-direct="true" aria-label="Abrir quadrinho em destaque"></div>`
       : "";
-   return `
+
+    return `
       <section class="hero">
         <img class="hero-bg hero-bg-image" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" src="${escapeHTML(coverFor(heroItem, "hero-background"))}" alt="" aria-hidden="true" fetchpriority="high" loading="eager" decoding="async">
         ${heroCoverMarkup}
@@ -8070,6 +8169,28 @@
       <div class="content">
         ${orderedSections}
       </div>`;
+  }
+
+  function bindHomepageExploreTabs(root = document) {
+    $$("[data-home-explore-tab]", root).forEach(tab => {
+      if (tab.dataset.homeExploreBound) return;
+      tab.dataset.homeExploreBound = "true";
+      tab.addEventListener("click", event => {
+        event.preventDefault();
+        const section = tab.closest(".home-explore-section");
+        if (!section) return;
+        const target = tab.dataset.homeExploreTab;
+        $$("[data-home-explore-tab]", section).forEach(other => {
+          const active = other === tab;
+          other.classList.toggle("is-active", active);
+          other.setAttribute("aria-selected", active ? "true" : "false");
+          other.tabIndex = active ? 0 : -1;
+        });
+        $$("[data-home-explore-panel]", section).forEach(panel => {
+          panel.hidden = panel.dataset.homeExplorePanel !== target;
+        });
+      });
+    });
   }
 
   function decorateHomepageSection(key, markup, index, total) {
@@ -12326,7 +12447,8 @@
     }));
     bind();
     bindFixedShelfSectionControls();
-    $$('[data-home-section-move]', main).forEach(button => button.addEventListener("click", () => moveHomepageSection(button.dataset.homeSectionKey, button.dataset.homeSectionMove === "up" ? -1 : 1)));
+    bindHomepageExploreTabs(main);
+    $('[data-home-section-move]', main).forEach(button => button.addEventListener("click", () => moveHomepageSection(button.dataset.homeSectionKey, button.dataset.homeSectionMove === "up" ? -1 : 1)));
     $$('[data-home-section-visibility]', main).forEach(button => button.addEventListener("click", () => toggleHomepageSectionVisibility(button.dataset.homeSectionKey, button.dataset.homeSectionVisibility === "hide")));
     bindComicSectionControls();
     hydrateHomeCovers();
