@@ -177,6 +177,173 @@
     </script>
     <script src="js/app.js?v=2.2.10.551-home-image-fix"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
+  <style>
+    .character-settings-image-preview {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+      margin: 0 0 16px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 10px;
+      background: rgba(255,255,255,.025);
+    }
+    .character-settings-image-preview-media {
+      width: 110px;
+      aspect-ratio: 1 / 1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #16161a;
+      display: grid;
+      place-items: center;
+    }
+    .character-settings-image-preview-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .character-settings-image-preview-empty {
+      color: #888;
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.35;
+      padding: 10px;
+    }
+    .character-settings-image-preview-copy strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .character-settings-image-preview-copy small {
+      color: #999;
+      line-height: 1.4;
+    }
+    @media (max-width: 560px) {
+      .character-settings-image-preview {
+        grid-template-columns: 84px minmax(0, 1fr);
+      }
+      .character-settings-image-preview-media {
+        width: 84px;
+      }
+    }
+  </style>
+  <script>
+    (() => {
+      const wikiImageCache = new Map();
+      const pendingWikiImage = new Map();
+
+      const getCharacterName = form => {
+        const modal = form.closest('.modal, .modal-backdrop, [role="dialog"]') || form.parentElement;
+        return String(modal?.querySelector('.section-subtitle')?.textContent || '').trim();
+      };
+
+      const getPreviewImage = form => {
+        const field = form.querySelector('[name="coverUrl"]');
+        const value = String(field?.value || '').trim();
+        if (value) return value;
+        const file = form.querySelector('[name="coverFile"]')?.files?.[0];
+        return file ? URL.createObjectURL(file) : '';
+      };
+
+      const loadWikiImage = async name => {
+        const key = String(name || '').trim().toLowerCase();
+        if (!key) return '';
+        if (wikiImageCache.has(key)) return wikiImageCache.get(key);
+        if (pendingWikiImage.has(key)) return pendingWikiImage.get(key);
+
+        const request = (async () => {
+          for (const lang of ['pt', 'en']) {
+            try {
+              const url = 'https://' + lang + '.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&pithumbsize=600&piprop=thumbnail|original&redirects=1&origin=*&titles=' + encodeURIComponent(name);
+              const response = await fetch(url, { cache: 'no-store' });
+              if (!response.ok) continue;
+              const data = await response.json();
+              const pages = data?.query?.pages || {};
+              const page = Object.values(pages)[0];
+              const image = String(page?.thumbnail?.source || page?.original?.source || '').trim();
+              if (image) {
+                wikiImageCache.set(key, image);
+                return image;
+              }
+            } catch {}
+          }
+          wikiImageCache.set(key, '');
+          return '';
+        })();
+
+        pendingWikiImage.set(key, request);
+        try {
+          return await request;
+        } finally {
+          pendingWikiImage.delete(key);
+        }
+      };
+
+      const ensurePreview = async form => {
+        if (!(form instanceof HTMLFormElement) || form.id !== 'character-settings-form') return;
+        let preview = form.querySelector('[data-character-settings-image-preview]');
+        if (!preview) {
+          preview = document.createElement('div');
+          preview.dataset.characterSettingsImagePreview = '1';
+          preview.className = 'character-settings-image-preview';
+          preview.innerHTML = '<div class="character-settings-image-preview-media"><span class="character-settings-image-preview-empty">Carregando imagem…</span></div><div class="character-settings-image-preview-copy"><strong>Imagem atual</strong><small>Mostra a imagem definida na configuração. Quando não houver uma imagem personalizada salva, a prévia usa a Wikipédia sem alterar o campo de URL.</small></div>';
+          form.prepend(preview);
+        }
+
+        const media = preview.querySelector('.character-settings-image-preview-media');
+        const urlField = form.querySelector('[name="coverUrl"]');
+        const fileField = form.querySelector('[name="coverFile"]');
+        const directImage = getPreviewImage(form);
+        if (directImage) {
+          media.innerHTML = '<img alt="Prévia da imagem do personagem">';
+          const img = media.querySelector('img');
+          img.src = directImage;
+          img.onerror = () => {
+            media.innerHTML = '<span class="character-settings-image-preview-empty">Não foi possível carregar esta imagem.</span>';
+          };
+          return;
+        }
+
+        const name = getCharacterName(form);
+        const wikiImage = await loadWikiImage(name);
+        if (wikiImage && form.isConnected && !getPreviewImage(form)) {
+          media.innerHTML = '<img alt="Prévia automática do personagem">';
+          const img = media.querySelector('img');
+          img.src = wikiImage;
+          img.onerror = () => {
+            media.innerHTML = '<span class="character-settings-image-preview-empty">Imagem automática indisponível.</span>';
+          };
+          return;
+        }
+
+        if (form.isConnected && !getPreviewImage(form)) {
+          media.innerHTML = '<span class="character-settings-image-preview-empty">Nenhuma imagem configurada.</span>';
+        }
+      };
+
+      const observeForm = form => {
+        if (!(form instanceof HTMLFormElement) || form.dataset.characterImagePreviewObserved === '1') return;
+        form.dataset.characterImagePreviewObserved = '1';
+        void ensurePreview(form);
+        form.querySelector('[name="coverUrl"]')?.addEventListener('input', () => void ensurePreview(form));
+        form.querySelector('[name="coverFile"]')?.addEventListener('change', () => void ensurePreview(form));
+      };
+
+      const observer = new MutationObserver(mutations => {
+        for (const mutation of mutations) {
+          for (const node of mutation.addedNodes) {
+            if (!(node instanceof Element)) continue;
+            if (node.matches?.('#character-settings-form')) observeForm(node);
+            node.querySelectorAll?.('#character-settings-form').forEach(observeForm);
+          }
+        }
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+      document.querySelectorAll('#character-settings-form').forEach(observeForm);
+    })();
+  </script>
   <script>
     (() => {
       const mobileNav = document.querySelector('.mobile-bottom-nav');
