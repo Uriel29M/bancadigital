@@ -2912,6 +2912,7 @@
     state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
     const characterSettings = await sb.from("character_settings").select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls");
     state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
+    homepageExploreEntityImageCache.clear();
     characterSettingsReady = true;
     wikiCharacterImageCache.clear();
     const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
@@ -4891,7 +4892,7 @@
 
   function homepageExploreEntityFallbackImage(kind, name) {
     const label = String(name || "").trim().slice(0, 2).toLocaleUpperCase("pt-BR") || "?";
-    const entityLabel = kind === "publisher" ? "EDITORA" : "SELO";
+    const entityLabel = kind === "publisher" ? "EDITORA" : kind === "character" ? "PERSONAGEM" : "SELO";
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
       <rect width="512" height="512" rx="64" fill="#18181c"/>
       <circle cx="256" cy="220" r="118" fill="#25252b"/>
@@ -4910,8 +4911,10 @@
     const cacheKey = [kind, normalizedKey, publisherKey(contextPublisher)].join(":");
     if (homepageExploreEntityImageCache.has(cacheKey)) return homepageExploreEntityImageCache.get(cacheKey);
 
-    const settings = kind === "imprint" ? state.imprintSettings : state.publisherSettings;
-    const setting = settings.get(normalizedKey);
+    const settings = kind === "character" ? state.characterSettings : kind === "imprint" ? state.imprintSettings : state.publisherSettings;
+    const setting = kind === "character"
+      ? characterSettingForName(normalizedName)
+      : settings.get(normalizedKey);
     const configuredImage = String(setting?.cover_url || "").trim();
     // A imagem definida em Configurar é a fonte prioritária da entidade.
     // Ela pode estar hospedada externamente e não deve ser descartada.
@@ -4962,9 +4965,12 @@
       probe.decoding = "async";
       probe.onload = () => {
         if (!node.isConnected) return;
+        delete node.dataset.lazyBackground;
         node.style.backgroundImage = `url("${safeImageUrl}")`;
         node.classList.add("has-image");
         node.dataset.homeExploreImageLoaded = "true";
+        lazyCoverObserver?.unobserve(node);
+        node.classList.remove("is-lazy-cover");
       };
       probe.onerror = () => {
         if (node.isConnected) node.dataset.homeExploreImageLoaded = "fallback";
@@ -8191,9 +8197,10 @@
       const name = Array.isArray(entry) ? entry[0] : entry.name;
       const items = Array.isArray(entry) ? entry[1] : entry.items;
       const setting = state.characterSettings.get(publisherKey(name));
+      const configuredImage = String(setting?.cover_url || "").trim();
       const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0];
-      const cover = setting?.cover_url || coverFor(representative);
-      return `<button class="publisher-card character-card${pinnedCharacters.some(item => item.name === name) ? " is-pinned" : ""}" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`;
+      const cover = configuredImage || coverFor(representative) || homepageExploreEntityFallbackImage("character", name);
+      return `<button class="publisher-card character-card${pinnedCharacters.some(item => item.name === name) ? " is-pinned" : ""}" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="character" data-home-explore-entity-image-name="${escapeHTML(name)}" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`;
     }).join("");
     const exploreImprintCards = exploreImprints.map(([name, imprintItems]) => {
       const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
