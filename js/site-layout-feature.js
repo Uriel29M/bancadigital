@@ -457,6 +457,7 @@
     const select=ov.querySelector("[data-page]");
     const list=ov.querySelector("[data-list]");
     const status=ov.querySelector("[data-status]");
+    let dragKey=null;
     const PAGE_LABELS=window.BancaSiteLayoutPageLabels||{
       home:"Início",comic:"Quadrinhos",manga:"Mangás",search:"Pesquisa",series:"Série",entity:"Entidades",
       ranking:"Ranking",factions:"Facções",collections:"Coleções",collection:"Coleção",downloads:"Downloads",
@@ -524,8 +525,8 @@
           const fixed=Boolean(b.fixed);
           const position=i+1;
           const groupSize=home?b.blocks.length:1;
-          return '<article class="layout-manager-row'+(fixed?" layout-row-fixed":"")+'" data-key="'+esc(key)+'">'+
-            '<div class="layout-row-position"><strong>'+position+'</strong><span>'+(fixed?"Fixo":("Bloco"+(groupSize>1?" · "+groupSize:"")) )+'</span></div>'+
+          return '<article class="layout-manager-row'+(fixed?" layout-row-fixed":"")+'" data-key="'+esc(key)+'" draggable="'+(!fixed)+'">'+
+            '<div class="layout-row-position"><span class="layout-drag-handle" title="Arraste para reorganizar" aria-label="Arrastar bloco">⠿</span><strong>'+position+'</strong><span>'+(fixed?"Fixo":("Bloco"+(groupSize>1?" · "+groupSize:"")) )+'</span></div>'+
             '<div class="layout-row-main"><strong>'+esc(home?b.label:b.label)+'</strong><small><code>'+esc(key)+'</code></small></div>'+
             '<input type="text" maxlength="80" value="'+esc(labelValue)+'" placeholder="'+(home?"Nome opcional":"Nome opcional")+'"'+(fixed?" disabled":"")+ '>'+
             '<label><input type="checkbox" '+(hidden?"checked":"")+(fixed?" disabled":"")+'> Ocultar</label>'+
@@ -537,6 +538,66 @@
 
       list.querySelectorAll("[data-key]").forEach(row=>{
         const key=row.dataset.key;
+        if(row.draggable){
+          row.addEventListener("dragstart",e=>{
+            dragKey=key;
+            row.classList.add("is-dragging");
+            e.dataTransfer?.setData("text/plain",key);
+            if(e.dataTransfer)e.dataTransfer.effectAllowed="move";
+          });
+          row.addEventListener("dragend",()=>{
+            dragKey=null;
+            row.classList.remove("is-dragging");
+            list.querySelectorAll("[data-key]").forEach(x=>x.classList.remove("is-drop-target"));
+          });
+          row.addEventListener("dragover",e=>{
+            if(!dragKey||dragKey===key||row.classList.contains("layout-row-fixed"))return;
+            e.preventDefault();
+            if(e.dataTransfer)e.dataTransfer.dropEffect="move";
+            list.querySelectorAll("[data-key]").forEach(x=>x.classList.remove("is-drop-target"));
+            row.classList.add("is-drop-target");
+          });
+          row.addEventListener("dragleave",e=>{
+            if(!row.contains(e.relatedTarget))row.classList.remove("is-drop-target");
+          });
+          row.addEventListener("drop",e=>{
+            e.preventDefault();
+            row.classList.remove("is-drop-target");
+            const fromKey=e.dataTransfer?.getData("text/plain")||dragKey;
+            if(!fromKey||fromKey===key)return;
+            const fromIndex=bs.findIndex(b=>b.key===fromKey);
+            const toIndex=bs.findIndex(b=>b.key===key);
+            if(fromIndex<0||toIndex<0)return;
+            if(home){
+              const h=ensureHomeDraft(draft,version,baseHome);
+              const currentOrder=normalizeHomeSectionOrder(h.__order);
+              const visible=bs.filter(b=>!b.fixed).map(b=>b.key);
+              const next=visible.filter(k=>currentOrder.includes(k));
+              visible.forEach(k=>{if(!next.includes(k))next.push(k);});
+              const from=next.indexOf(fromKey),to=next.indexOf(key);
+              if(from<0||to<0)return;
+              const [moved]=next.splice(from,1);
+              next.splice(to,0,moved);
+              h.__order=next;
+              syncAppHomeLayout(draft,version,true);
+              refreshPreview();
+              renderList();
+              return;
+            }
+            const current=draft[version]?.[page]||(draft[version][page]={});
+            const currentOrder=bs.map(b=>b.key);
+            const next=[...currentOrder];
+            const [moved]=next.splice(fromIndex,1);
+            next.splice(toIndex,0,moved);
+            next.forEach((k,index)=>{
+              const x=current[k]||(current[k]={});
+              x.order=index;
+            });
+            previewDraft=draft;previewVersion=version;previewPage=page;
+            if(page===pageKey())apply(draft,version,page);
+            renderList();
+          });
+        }
         const input=row.querySelector('input[type="text"]');
         const check=row.querySelector('input[type="checkbox"]');
         row.querySelectorAll("[data-move]").forEach(btn=>btn.onclick=()=>{
