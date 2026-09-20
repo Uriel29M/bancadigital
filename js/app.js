@@ -4902,7 +4902,7 @@
   }
 
   const HOMEPAGE_ENTITY_IMAGE_OVERRIDES = new Map([
-    ["publisher:dc comics", "https://upload.wikimedia.org/wikipedia/commons/2/2e/DC_Comics_2024.svg"],
+    ["publisher:dc comics", "https://commons.wikimedia.org/wiki/Special:Redirect/file/DC_Comics_2024.svg"],
     ["imprint:black label", "https://static.dc.com/dc/files/default_images/DC_Black_Label_on_White_Bkgrd_5aa087067dc263.76571276.jpg"]
   ]);
 
