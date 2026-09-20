@@ -76,13 +76,15 @@
   function apply(){
     if(busy)return; const r=root(); if(!r)return; busy=true;
     const version=settings?.active_version||"principal", page=pageKey(), rs=rules(version,page), bs=blocks();
+    const principalOrder=/^(hero|destaque|continue|novidade|resultado|serie|série|ediç|estante|salvo|coleç|personagem|autor|editora|selo|mural|lista|álbum|figurinha|coment|atividade|notíci|relacionad|wiki|filtro)/i;
     document.documentElement.dataset.siteLayoutVersion=version; r.dataset.layoutPage=page;
     bs.forEach((b,i)=>{
       const x=rs[b.key]||{}, hidden=x.hidden===true||minimalHidden(b,i,bs.length);
       b.el.hidden=hidden; b.el.dataset.layoutHidden=hidden?"true":"false";
       const h=b.el.querySelector("h1,h2,h3,.section-title");
       if(h&&x.label)h.textContent=x.label;
-      b.el.style.order=Number.isFinite(Number(x.order))?String(x.order):String(i);
+      const autoOrder=version==="principal"?(principalOrder.test(b.label)?b.label.toLocaleLowerCase("pt-BR").includes("hero")||b.label.toLocaleLowerCase("pt-BR").includes("destaque")?5:20:80):i;
+      b.el.style.order=Number.isFinite(Number(x.order))?String(x.order):String(autoOrder);
     });
     bs.slice().sort((a,b)=>{
       const ao=Number(rs[a.key]?.order),bo=Number(rs[b.key]?.order);
@@ -101,11 +103,12 @@
     document.querySelector("#modal-root")?.appendChild(ov);
     let version=settings?.active_version||"principal", page=pageKey(), draft=structuredClone(settings?.overrides||{});
     const select=ov.querySelector("[data-page]"),list=ov.querySelector("[data-list]");
-    const pages=()=>[...new Set([pageKey(),...Object.values(draft).flatMap(x=>Object.keys(x||{}))])].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+    const PAGE_LABELS={home:"Início",comic:"Quadrinhos",manga:"Mangás",search:"Pesquisa",series:"Série",entity:"Entidades",ranking:"Ranking",factions:"Facções",collections:"Coleções",collection:"Coleção",downloads:"Downloads","local-box":"Minha caixa",album:"Álbum","public-profile":"Perfil público",messages:"Mensagens",notifications:"Notificações","community-activity":"Atividade",login:"Login",signup:"Cadastro",leitor:"Leitor","password-reset":"Redefinir senha"};
+    const pages=()=>[...new Set([...Object.keys(PAGE_LABELS),pageKey(),...Object.values(draft).flatMap(x=>Object.keys(x||{}))])].sort((a,b)=>(PAGE_LABELS[a]||a).localeCompare(PAGE_LABELS[b]||b,"pt-BR"));
     const renderList=()=>{
       select.innerHTML=pages().map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join("");select.value=page;
       const rs=draft?.[version]?.[page]||{},bs=blocks();
-      if(page!==pageKey()){list.innerHTML='<div class="empty">Abra esta página no site para descobrir os blocos dela.</div>';return;}
+      if(page!==pageKey()){list.innerHTML='<div class="empty">Abra esta página no site para descobrir e editar os blocos reais dela. A configuração desta página pode ser salva quando ela estiver aberta.</div>';return;}
       list.innerHTML=bs.map(b=>{const x=rs[b.key]||{};return '<article class="layout-manager-row" data-key="'+esc(b.key)+'"><div><strong>'+esc(b.label)+'</strong><small>'+esc(b.key)+'</small></div><input type="text" maxlength="80" value="'+esc(x.label||"")+'" placeholder="Nome opcional"><label><input type="checkbox" '+(x.hidden?"checked":"")+'> Ocultar</label><div class="layout-order"><button type="button" data-move="-1">↑</button><button type="button" data-move="1">↓</button></div></article>';}).join("")||'<div class="empty">Nenhum bloco encontrado.</div>';
       const pageRules=draft[version]||(draft[version]={});const current=pageRules[page]||(pageRules[page]={});
       list.querySelectorAll("[data-key]").forEach(row=>{
