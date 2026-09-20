@@ -4940,7 +4940,8 @@
       const image = await resolveHomepageExploreEntityImage(kind, name, contextPublisher);
       if (!node.isConnected) return;
       if (image) {
-        node.style.backgroundImage = `url("${escapeHTML(proxiedImageUrl(image))}")`;
+        const safeImageUrl = String(proxiedImageUrl(image)).replace(/"/g, "\\\"");
+        node.style.backgroundImage = `url("${safeImageUrl}")`;
         node.classList.add("has-image");
       }
       node.dataset.homeExploreImageLoaded = "true";
