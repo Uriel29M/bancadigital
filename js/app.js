@@ -3824,7 +3824,9 @@
   }
 
   function updateCompletionCards(item, completed) {
-    $('[data-open]').filter(element => element.dataset.open === item?.id).forEach(cardElement => {
+    Array.from(document.querySelectorAll('[data-open]'))
+      .filter(element => element.dataset.open === item?.id)
+      .forEach(cardElement => {
       const existing = $(".card-completed", cardElement);
       const labelStack = $(".cover-labels", cardElement);
       const existingCoverBadge = $(".cover-completed-badge", labelStack);
