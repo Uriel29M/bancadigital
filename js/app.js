@@ -2907,11 +2907,14 @@
     await loadCoverStyles(session?.user?.id);
     await loadSeriesCoverChoices(session?.user?.id);
     const publisherSettings = await sb.from("publisher_settings").select("publisher_key, publisher_name, cover_url, is_pinned");
-    state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
+    if (!publisherSettings.error) state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
+    else console.warn("Não foi possível carregar publisher_settings:", publisherSettings.error.message);
     const imprintSettings = await sb.from("imprint_settings").select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned");
-    state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
+    if (!imprintSettings.error) state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
+    else console.warn("Não foi possível carregar imprint_settings:", imprintSettings.error.message);
     const characterSettings = await sb.from("character_settings").select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls");
-    state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
+    if (!characterSettings.error) state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
+    else console.warn("Não foi possível carregar character_settings:", characterSettings.error.message);
     homepageExploreEntityImageCache.clear();
     characterSettingsReady = true;
     wikiCharacterImageCache.clear();
@@ -12661,7 +12664,8 @@
       .select("publisher_key, publisher_name, cover_url, is_pinned")
       .eq("publisher_key", key)
       .maybeSingle();
-    if (!remote.error && remote.data) {
+    if (remote.error) return toast(remote.error.message || "Não foi possível carregar a configuração da editora.");
+    if (remote.data) {
       setting = remote.data;
       state.publisherSettings.set(key, remote.data);
     }
@@ -12723,7 +12727,8 @@
       .select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned")
       .eq("imprint_key", key)
       .maybeSingle();
-    if (!remote.error && remote.data) {
+    if (remote.error) return toast(remote.error.message || "Não foi possível carregar a configuração do selo.");
+    if (remote.data) {
       setting = remote.data;
       state.imprintSettings.set(key, remote.data);
     }
@@ -12785,7 +12790,8 @@
       .select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls")
       .eq("character_key", key)
       .maybeSingle();
-    if (!remote.error && remote.data) {
+    if (remote.error) return toast(remote.error.message || "Não foi possível carregar a configuração do personagem.");
+    if (remote.data) {
       setting = remote.data;
       state.characterSettings.set(key, remote.data);
     }
