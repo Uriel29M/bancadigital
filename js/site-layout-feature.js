@@ -518,10 +518,55 @@
     select.onchange=()=>{
       const nextPage=select.value;
       if(nextPage===page)return;
-      page=nextPage;
-      previewPage=page;
-      renderList();
-      refreshPreview();
+
+      const routes={
+        home:"",
+        comic:"quadrinhos",
+        manga:"mangas",
+        search:"pesquisar",
+        series:"serie",
+        entity:"entidade",
+        ranking:"ranking",
+        factions:"faccoes",
+        collections:"colecoes",
+        collection:"colecao",
+        downloads:"downloads",
+        "local-box":"caixa",
+        album:"album",
+        messages:"mensagens",
+        "public-profile":"perfil",
+        login:"entrar",
+        signup:"cadastro",
+        "password-reset":"redefinir-senha"
+      };
+
+      // O leitor depende de ?ler=<id>. Sem uma edição aberta não existe
+      // uma rota de leitor independente para navegar.
+      if(nextPage==="leitor" && !params().get("ler")){
+        return toast("Abra uma edição no leitor antes de selecionar "Leitor".");
+      }
+
+      const target=new URL(location.href);
+      target.search="";
+      target.hash="";
+      const route=routes[nextPage];
+      if(route)target.searchParams.set("pagina",route);
+
+      // Preserva ?ler somente quando a página escolhida é o leitor.
+      if(nextPage==="leitor"){
+        target.searchParams.set("ler",params().get("ler"));
+      }else{
+        target.searchParams.delete("ler");
+      }
+
+      // Parâmetros específicos da entidade só fazem sentido nessa página.
+      if(nextPage!=="entity"){
+        target.searchParams.delete("tipo");
+        target.searchParams.delete("valor");
+      }
+
+      sessionStorage.setItem("bancaLayoutManagerReopen","1");
+      location.href=target.toString();
     };
 
     ov.querySelector("[data-refresh]").onclick=()=>{
@@ -596,7 +641,13 @@
     await load();apply();
     const r=root();if(r){observer?.disconnect();observer=new MutationObserver(()=>requestAnimationFrame(apply));observer.observe(r,{childList:true});}
     window.BancaSiteLayout={openManager:manager,reload:async()=>{await load();apply();}};
-    if(isAdmin())document.querySelectorAll('[data-action="open-admin"]').forEach(b=>{if(b.dataset.layoutBound)return;b.dataset.layoutBound="true";b.addEventListener("dblclick",manager);});
+    if(isAdmin()){
+      document.querySelectorAll('[data-action="open-admin"]').forEach(b=>{if(b.dataset.layoutBound)return;b.dataset.layoutBound="true";b.addEventListener("dblclick",manager);});
+      if(sessionStorage.getItem("bancaLayoutManagerReopen")==="1"){
+        sessionStorage.removeItem("bancaLayoutManagerReopen");
+        setTimeout(()=>window.BancaSiteLayout?.openManager(),0);
+      }
+    }
   }
   setTimeout(init,0);
 })();
