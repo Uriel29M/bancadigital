@@ -1893,9 +1893,13 @@
     state.comicMonthlyReadCountsLoaded = true;
   }
 
+  // Ordem canônica da Home. Cada chave corresponde a uma seção real e independente
+  // gerada por homeSections abaixo. O gerenciador visual usa exatamente estas mesmas
+  // chaves, portanto não existe mais uma ordem "virtual" diferente da página renderizada.
   const HOME_SECTION_ORDER = [
-    "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
-    "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "bucho-hidden", "editorial-banner"
+    "hero", "recommendations", "character-banner", "continue", "recent", "new-series", "monthly",
+    "pinned-publishers", "pinned-imprints", "pinned-characters", "best-series", "featured-collections",
+    "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "bucho-hidden", "editorial-banner"
   ];
 
   function normalizeHomeSectionOrder(value) {
@@ -8027,7 +8031,9 @@
       recent: rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false),
       "new-series": recentlyAddedSeriesRail,
       monthly: rail("Mais lidos do mês", mostClicked, "As edições que mais receberam cliques neste mês.", "Ver catálogo", true),
-      "pinned-publishers": pinnedEntityRails,
+      "pinned-publishers": publisherPinnedRail,
+      "pinned-imprints": imprintPinnedRail,
+      "pinned-characters": characterPinnedRail,
       "best-series": bestSeriesRail,
       "featured-collections": featuredCollectionsRail,
       random: rail("Escolha aleatória", randoms, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true, true, "random-choice-section"),
