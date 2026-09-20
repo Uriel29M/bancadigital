@@ -37,7 +37,7 @@
     return changed;
   };
 
-  const fetchRow = async (table, key, select) => {
+  const getAccessToken = async () => {\n    try {\n      const client = window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_KEY);\n      const session = await client?.auth?.getSession?.();\n      return session?.data?.session?.access_token || SUPABASE_KEY;\n    } catch {\n      return SUPABASE_KEY;\n    }\n  };\n\n  const fetchRow = async (table, key, select) => {
     const url = SUPABASE_URL + "/rest/v1/" + table +
       "?select=" + encodeURIComponent(select) +
       "&" + encodeURIComponent(table === "publisher_settings" ? "publisher_key" : table === "imprint_settings" ? "imprint_key" : "character_key") +
@@ -46,7 +46,7 @@
       const response = await fetch(url, {
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: "Bearer " + (window.__supabaseSessionAccessToken || SUPABASE_KEY)
+          Authorization: "Bearer " + (await getAccessToken())
         },
         cache: "no-store"
       });
