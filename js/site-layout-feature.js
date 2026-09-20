@@ -300,16 +300,23 @@
     return current;
   }
 
+  function layoutEntry(source,version){
+    return source?.overrides?.[version]?.home
+      || source?.[version]?.home
+      || {};
+  }
+
   function syncAppHomeLayout(source,version,rerender=true){
-    if(!window.BancaDigital?.state)return;
+    if(!window.BancaDigital?.state)return false;
     const state=window.BancaDigital.state;
-    const entry=source?.overrides?.[version]?.home||{};
-    if(!Array.isArray(entry.__order))return;
+    const entry=layoutEntry(source,version);
+    if(!Array.isArray(entry.__order))return false;
     state.homeSectionOrder=normalizeHomeSectionOrder(entry.__order);
     state.homeHiddenSectionKeys=new Set(Array.isArray(entry.__hidden)?entry.__hidden:[]);
     if(rerender && state.section==="home" && typeof window.BancaDigital.render==="function"){
       window.BancaDigital.render();
     }
+    return true;
   }
 
   function applyHomeDraft(source,version){
@@ -675,7 +682,20 @@
     apply();
     if(window.BancaDigital?.state?.section==="home") window.BancaDigital.render?.();
     const r=root();if(r){observer?.disconnect();observer=new MutationObserver(()=>requestAnimationFrame(apply));observer.observe(r,{childList:true});}
-    window.BancaSiteLayout={openManager:manager,reload:async()=>{await load();apply();}};
+    window.BancaSiteLayout={
+      openManager:manager,
+      syncHome:()=>{
+        const active=settings?.active_version||"principal";
+        return syncAppHomeLayout(settings,active,true);
+      },
+      reload:async()=>{
+        await load();
+        const active=settings?.active_version||"principal";
+        syncAppHomeLayout(settings,active,false);
+        apply();
+        if(window.BancaDigital?.state?.section==="home") window.BancaDigital.render?.();
+      }
+    };
     if(isAdmin()){
       document.querySelectorAll('[data-action="open-admin"]').forEach(b=>{if(b.dataset.layoutBound)return;b.dataset.layoutBound="true";b.addEventListener("dblclick",manager);});
       if(sessionStorage.getItem("bancaLayoutManagerReopen")==="1"){
