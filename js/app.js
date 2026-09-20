@@ -4898,7 +4898,24 @@
     if (homepageExploreEntityImageCache.has(cacheKey)) return homepageExploreEntityImageCache.get(cacheKey);
     const settings = kind === "imprint" ? state.imprintSettings : state.publisherSettings;
     const setting = settings.get(publisherKey(normalizedName));
-    const customImage = String(setting?.cover_url || "").trim();
+    const configuredImage = String(setting?.cover_url || "").trim();
+    const catalogCoverUrls = new Set(
+      (state.db?.library || []).flatMap(item => [item?.coverUrl, item?.cover, item?.featuredCoverUrl])
+        .map(value => String(value || "").trim())
+        .filter(Boolean)
+    );
+    // Nunca reutilize uma capa de edição como "imagem da entidade".
+    const customImage = configuredImage && !catalogCoverUrls.has(configuredImage) ? configuredImage : "";
+    const entityImageFallback = () => {
+      const label = normalizedName.slice(0, 2).toLocaleUpperCase("pt-BR") || "?";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+        <rect width="512" height="512" rx="64" fill="#18181c"/>
+        <circle cx="256" cy="220" r="118" fill="#25252b"/>
+        <text x="256" y="250" text-anchor="middle" fill="#f5f5f5" font-family="Arial,sans-serif" font-size="88" font-weight="700">${label}</text>
+        <text x="256" y="390" text-anchor="middle" fill="#a4a4ad" font-family="Arial,sans-serif" font-size="34">${kind === "publisher" ? "EDITORA" : "SELO"}</text>
+      </svg>`;
+      return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    };
     const search = [normalizedName, contextPublisher].filter(Boolean).join(" ").trim();
     try {
       const result = await fetchWithTimeout(wikiApiUrl({
@@ -4925,8 +4942,9 @@
     } catch (error) {
       console.warn(`Imagem da entidade indisponível: ${kind} ${normalizedName}`, error);
     }
-    homepageExploreEntityImageCache.set(cacheKey, customImage);
-    return customImage;
+    const fallback = customImage || entityImageFallback();
+    homepageExploreEntityImageCache.set(cacheKey, fallback);
+    return fallback;
   }
 
   async function hydrateHomepageExploreEntityImages(root = document) {
