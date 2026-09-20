@@ -21,6 +21,7 @@
   const isAdmin=()=>["admin","banca"].includes(String(window.__BANCA_PROFILE__?.plan||"").toLowerCase());
 
   async function sb(){
+    if(window.BancaSupabaseClient)return window.BancaSupabaseClient;
     if(!window.supabase?.createClient||!window.BANCA_SUPABASE_URL||!window.BANCA_SUPABASE_KEY)return null;
     if(!sb.instance)sb.instance=window.supabase.createClient(window.BANCA_SUPABASE_URL,window.BANCA_SUPABASE_KEY);
     return sb.instance;
