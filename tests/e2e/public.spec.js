@@ -8,6 +8,13 @@ test.describe('Banca Digital — público', () => {
     await expect(page).toHaveTitle(/Banca Digital/i);
     await expect(page.locator('.brand')).toBeVisible();
     await expect(page.locator('[data-section="comics"]')).toBeVisible();
+    await expect(page.locator('.hero')).toBeVisible();
+    const homeSectionTitles = await page.locator('#main .section-title').allTextContents();
+    expect(homeSectionTitles.slice(0, 6)).toEqual(expect.arrayContaining(['Mais lidos do mês', 'Explore a Banca', 'Escolha aleatória']));
+    await expect(page.locator('.most-read-cover-section')).toHaveCount(0);
+    await expect(page.locator('.recently-added-series')).toHaveCount(0);
+    await expect(page.locator('.home-explore-section')).toHaveCount(1);
+    await expect(page.locator('.home-search-trigger')).toBeVisible();
     expect(errors.filter(message => !/ResizeObserver/i.test(message))).toEqual([]);
   });
 
