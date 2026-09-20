@@ -31,23 +31,48 @@
     const r=await c.from("site_layout_settings").select("id,active_version,presets,overrides,updated_at").eq("id",true).maybeSingle();
     if(!r.error&&r.data)settings=r.data;
   }
+  const PAGE_LABELS = {
+    home:"Início", comic:"Quadrinhos", manga:"Mangás", search:"Pesquisa", series:"Série",
+    entity:"Entidade", ranking:"Ranking", factions:"Facções", collections:"Coleções",
+    collection:"Coleção", downloads:"Downloads", "local-box":"Minha caixa", album:"Álbum",
+    "public-profile":"Perfil público", messages:"Mensagens", notifications:"Notificações",
+    "community-activity":"Atividade", login:"Login", signup:"Cadastro", leitor:"Leitor",
+    "password-reset":"Redefinir senha"
+  };
+
+  function blockLabel(el){
+    const h=el.querySelector(":scope > h1,:scope > h2,:scope > h3,:scope > .section-title,:scope > .section-head strong");
+    return String(h?.textContent||el.getAttribute("aria-label")||el.dataset.section||"Seção").replace(/\\s+/g," ").trim()||"Seção";
+  }
+
   function blocks(){
     const r=root(); if(!r)return[];
-    const used=new Map();
-    return [...r.children].filter(e=>!e.matches(".layout-admin-panel")).map((el,i)=>{
-      const h=el.querySelector("h1,h2,h3,.section-title");
-      const label=(h?.textContent||el.getAttribute("aria-label")||el.dataset.section||el.className.split(/\s+/)[0]||"Bloco").trim();
-      const base=norm(label), n=(used.get(base)||0)+1; used.set(base,n);
-      const key=el.dataset.layoutKey||(n===1?base:base+"-"+n);
+    const result=[], seen=new Set();
+    const add=(el,parent,index,parentKey="")=>{
+      if(!el||seen.has(el)||el.matches(".layout-admin-panel,.site-layout-manager"))return;
+      seen.add(el);
+      const label=blockLabel(el), base=norm(label);
+      const key=el.dataset.layoutKey||(parentKey?parentKey+"/"+base:base)+(result.some(x=>x.key===(parentKey?parentKey+"/"+base:base))?"-"+index:"");
       el.dataset.layoutKey=key; el.dataset.layoutLabel=label;
-      return{el,key,label,index:i};
+      result.push({el,parent,key,label,index,parentKey});
+    };
+    [...r.children].forEach((child,index)=>{
+      if(child.matches(".layout-admin-panel,.site-layout-manager"))return;
+      const nested=[...child.children].filter(el=>el.matches(".section,section,.profile-section,.shelf-section,.reader-section,[data-layout-section]"));
+      if(nested.length>=2) nested.forEach((el,i)=>add(el,child,i,child.dataset.layoutKey||norm(blockLabel(child))));
+      else add(child,r,index);
     });
+    return result;
   }
+
   const rules=(version,page)=>(settings?.overrides?.[version]?.[page]||{});
   function minimalHidden(b,i,total){
     if((settings?.active_version||"principal")!=="minimalista")return false;
-    return /dica|curiosidade|aleatori|artista|recomend|fanart|notici|relacionad|atividade|estatistic/.test((b.label+" "+b.key).toLocaleLowerCase("pt-BR"))||(total>8&&i>4);
+    const s=(b.label+" "+b.key).toLocaleLowerCase("pt-BR");
+    return /dica|curiosidade|aleatori|atividade|estatíst|relacionad|fanart|notíci|wiki rápida|informações extras|detalhes/.test(s)
+      || (total>7&&i>=5);
   }
+
   function apply(){
     if(busy)return; const r=root(); if(!r)return; busy=true;
     const version=settings?.active_version||"principal", page=pageKey(), rs=rules(version,page), bs=blocks();
