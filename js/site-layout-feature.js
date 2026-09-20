@@ -339,12 +339,26 @@
       group.forEach(b=>{
         b.el.hidden=isHidden;
         b.el.dataset.layoutHidden=isHidden?"true":"false";
+        // Blocos fixos não participam da ordenação visual da Home.
+        b.el.style.removeProperty("order");
       });
     });
-    // Reordena somente dentro do mesmo pai. Isso evita mover o hero para
-    // dentro de .content ou quebrar wrappers estruturais da home.
+
+    // O hero é um bloco estrutural fixo: ele fica fora de .content para
+    // preservar o banner em largura total. Nunca deixe a ordenação salva
+    // empurrá-lo para depois das seções da Home.
+    groups.forEach(group=>group.forEach(b=>{
+      if(!b.fixed || !b.el.classList.contains("hero"))return;
+      const content=r.querySelector(":scope > .content");
+      if(content)r.insertBefore(b.el,content);
+    }));
+
+    // Reordena somente blocos móveis dentro do mesmo pai.
+    // Assim a ordem das seções da Home continua sendo controlada pelo
+    // gerenciador sem mover wrappers estruturais.
     const byParent=new Map();
     groups.forEach(group=>group.forEach(b=>{
+      if(b.fixed)return;
       const parent=b.el.parentElement;
       if(!parent)return;
       if(!byParent.has(parent))byParent.set(parent,[]);
@@ -490,8 +504,8 @@
           const dir=Number(btn.dataset.move);
           if(home){
             const h=ensureHomeDraft(draft,version,baseHome);
-            const visible=bs.map(b=>b.key);
-            const order=normalizeHomeSectionOrder(h.__order);
+            const visible=bs.filter(b=>!b.fixed).map(b=>b.key);
+            const order=normalizeHomeSectionOrder(h.__order).filter(k=>visible.includes(k));
             visible.forEach(k=>{if(!order.includes(k))order.push(k);});
             const pos=visible.indexOf(key);
             const target=pos+dir;
