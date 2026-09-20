@@ -7943,7 +7943,7 @@
     const publisherChoices = [...publisherGroups.keys()];
     if (!publisherGroups.has(state.homeRandomPublisher)) state.homeRandomPublisher = weightedRandom(publisherChoices) || null;
     const randomPublisherItems = state.homeRandomPublisher ? publisherGroups.get(state.homeRandomPublisher) || [] : [];
-    const randomPublisherRail = randomPublisherItems.length ? rail(state.homeRandomPublisher, randomPublisherItems, "Uma editora escolhida aleatoriamente.", "", true, true, "best-series-section") : "";
+    const randomPublisherRail = randomPublisherItems.length ? rail(state.homeRandomPublisher, randomPublisherItems, "Uma editora escolhida aleatoriamente.", "", true, true, "random-publisher-section") : "";
     const mostDownloaded = uniqueCatalogItems([...lib]
       .filter(item => Number(item.downloadCount) > 0)
       .sort((a, b) => Number(b.downloadCount) - Number(a.downloadCount) || itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), "pt-BR"))
@@ -8004,7 +8004,23 @@
     const characterPinnedRail = pinnedCharacters.length ? `<section class="section character-pinned-section"><div class="section-head"><div><h2 class="section-title">Personagens em destaque</h2><div class="section-subtitle">Acesso rápido aos personagens em destaque.</div></div></div><div class="publisher-carousel">${pinnedCharacters.map(({ name, items }) => { const setting = state.characterSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative); return `<button class="publisher-card character-card is-pinned" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`; }).join("")}</div></section>` : "";
     const pinnedEntityRails = `${publisherPinnedRail}${imprintPinnedRail}${characterPinnedRail}`;
 
+    const heroCoverMarkup = coverMaxWidthForViewport() > 640
+      ? `<div class="hero-cover" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" data-open="${escapeHTML(heroItem?.id || "")}" data-open-direct="true" aria-label="Abrir quadrinho em destaque"></div>`
+      : "";
+    const heroSection = `
+      <section class="hero">
+        <img class="hero-bg hero-bg-image" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" src="${escapeHTML(coverFor(heroItem, "hero-background"))}" alt="" aria-hidden="true" fetchpriority="high" loading="eager" decoding="async">
+        ${heroCoverMarkup}
+        <div class="hero-content">
+          <div class="eyebrow">Destaque da banca</div>
+          <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
+          ${heroMeta ? `<div class="hero-meta">${escapeHTML(heroMeta)}</div>` : ""}
+          <div class="hero-description-row"><p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p></div>
+          ${heroItem ? `<div class="hero-actions"><button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button><button class="btn btn-secondary" data-hero-about="${escapeHTML(heroItem.id)}">Ver mais</button></div>` : ""}
+        </div>
+      </section>`;
     const homeSections = {
+      hero: heroSection,
       recommendations: globalRecommendationsSection(lib),
       "character-banner": characterBannerSection(lib),
       continue: rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false),
@@ -8029,24 +8045,7 @@
     const orderedSections = visibleHomeKeys
       .map((key, index, visible) => decorateHomepageSection(key, homeSections[key], index, visible.length))
       .join("");
-    const heroCoverMarkup = coverMaxWidthForViewport() > 640
-      ? `<div class="hero-cover" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" data-open="${escapeHTML(heroItem?.id || "")}" data-open-direct="true" aria-label="Abrir quadrinho em destaque"></div>`
-      : "";
-   return `
-      <section class="hero">
-        <img class="hero-bg hero-bg-image" data-cover-id="${escapeHTML(heroItem?.id || "")}" data-cover-style="${escapeHTML(coverStyleFor(heroItem))}" data-cover-size="hero" src="${escapeHTML(coverFor(heroItem, "hero-background"))}" alt="" aria-hidden="true" fetchpriority="high" loading="eager" decoding="async">
-        ${heroCoverMarkup}
-        <div class="hero-content">
-          <div class="eyebrow">Destaque da banca</div>
-          <h1 title="${escapeHTML(heroTitle)}">${escapeHTML(heroTitle)}</h1>
-          ${heroMeta ? `<div class="hero-meta">${escapeHTML(heroMeta)}</div>` : ""}
-          <div class="hero-description-row"><p class="hero-description">${escapeHTML(heroItem?.description || "Publique e descubra quadrinhos sem precisar armazenar os arquivos no servidor.")}</p></div>
-          ${heroItem ? `<div class="hero-actions"><button class="btn btn-primary" data-open="${escapeHTML(heroItem.id)}" data-open-direct="true">▶ Ler agora</button><button class="btn btn-secondary" data-hero-about="${escapeHTML(heroItem.id)}">Ver mais</button></div>` : ""}
-        </div>
-      </section>
-      <div class="content">
-        ${orderedSections}
-      </div>`;
+    return `<div class="content">${orderedSections}</div>`;
   }
 
   function decorateHomepageSection(key, markup, index, total) {
