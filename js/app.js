@@ -1848,6 +1848,9 @@
   const sb = window.supabase?.createClient && window.BANCA_SUPABASE_URL
     ? window.supabase.createClient(window.BANCA_SUPABASE_URL, window.BANCA_SUPABASE_KEY)
     : null;
+  // Exposto apenas como ponte interna para módulos carregados sob demanda.
+  // Evita que cada feature crie seu próprio GoTrueClient no mesmo contexto.
+  window.BancaSupabaseClient = sb;
 
   async function loadComicReadCounts() {
     if (!sb || navigator.onLine === false) return;
@@ -14800,7 +14803,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=6-reader-edit-item-resolution"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=7-site-layout-syntax-fix"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
