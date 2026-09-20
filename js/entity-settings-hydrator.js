@@ -37,7 +37,17 @@
     return changed;
   };
 
-  const getAccessToken = async () => {\n    try {\n      const client = window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_KEY);\n      const session = await client?.auth?.getSession?.();\n      return session?.data?.session?.access_token || SUPABASE_KEY;\n    } catch {\n      return SUPABASE_KEY;\n    }\n  };\n\n  const fetchRow = async (table, key, select) => {
+  const getAccessToken = async () => {
+    try {
+      const client = window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_KEY);
+      const session = await client?.auth?.getSession?.();
+      return session?.data?.session?.access_token || SUPABASE_KEY;
+    } catch {
+      return SUPABASE_KEY;
+    }
+  };
+
+  const fetchRow = async (table, key, select) => {
     const url = SUPABASE_URL + "/rest/v1/" + table +
       "?select=" + encodeURIComponent(select) +
       "&" + encodeURIComponent(table === "publisher_settings" ? "publisher_key" : table === "imprint_settings" ? "imprint_key" : "character_key") +
