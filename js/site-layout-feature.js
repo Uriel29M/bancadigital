@@ -68,11 +68,11 @@
 
   // Normalização local: o gerenciador não pode depender de outra página/script
   // para existir. Mantém a ordem salva, remove duplicatas e ignora valores vazios.
-  const normalizeHomeSectionOrder=value=>{
+  function normalizeHomeSectionOrder(value){
     const list=Array.isArray(value)?value:[];
     const seen=new Set();
     return list.map(v=>String(v||"").trim()).filter(v=>v&&!seen.has(v)&&seen.add(v));
-  };
+  }
 
 
   const HOME_CLASS_KEYS={
