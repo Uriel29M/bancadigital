@@ -4901,11 +4901,6 @@
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   }
 
-  const HOMEPAGE_ENTITY_IMAGE_OVERRIDES = new Map([
-    ["publisher:dc comics", "https://commons.wikimedia.org/wiki/Special:Redirect/file/DC_Comics_2024.svg"],
-    ["imprint:black label", "https://static.dc.com/dc/files/default_images/DC_Black_Label_on_White_Bkgrd_5aa087067dc263.76571276.jpg"]
-  ]);
-
   const homepageExploreEntityImageCache = new Map();
 
   async function resolveHomepageExploreEntityImage(kind, name, contextPublisher = "") {
@@ -4929,9 +4924,7 @@
         .map(value => String(value || "").trim())
         .filter(Boolean)
     );
-    const customImage = configuredImage && !catalogCoverUrls.has(configuredImage) && !configuredImage.toLowerCase().includes("pinimg.com")
-      ? configuredImage
-      : "";
+    // A imagem definida em Configurar é a fonte prioritária da entidade.\n    // Ela pode estar hospedada no Pinterest ou em outro host externo e não deve ser descartada.\n    const customImage = configuredImage;
 
     const fallback = homepageExploreEntityFallbackImage(kind, normalizedName);
     const search = [normalizedName, contextPublisher].filter(Boolean).join(" ").trim();
@@ -8209,11 +8202,13 @@
     }).join("");
     const exploreImprintCards = exploreImprints.map(([name, imprintItems]) => {
       const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
-      const initialImage = homepageExploreEntityFallbackImage("imprint", name);
+      const configuredImage = String(state.imprintSettings.get(publisherKey(name))?.cover_url || "").trim();
+      const initialImage = configuredImage || homepageExploreEntityFallbackImage("imprint", name);
       return `<button class="publisher-card imprint-card${pinnedImprints.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="imprint" data-home-explore-entity-image-name="${escapeHTML(name)}" data-home-explore-entity-image-publisher="${escapeHTML(publishers)}" style="background-image:url('${escapeHTML(initialImage)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
     }).join("");
     const explorePublisherCards = explorePublishers.map(([name, publisherItems]) => {
-      const initialImage = homepageExploreEntityFallbackImage("publisher", name);
+      const configuredImage = String(state.publisherSettings.get(publisherKey(name))?.cover_url || "").trim();
+      const initialImage = configuredImage || homepageExploreEntityFallbackImage("publisher", name);
       return `<button class="publisher-card${pinnedPublishers.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="publisher" data-home-explore-entity-image-name="${escapeHTML(name)}" style="background-image:url('${escapeHTML(initialImage)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
     }).join("");
 
