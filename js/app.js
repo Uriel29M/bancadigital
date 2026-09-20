@@ -4889,44 +4889,56 @@
     }
   }
 
+  function homepageExploreEntityFallbackImage(kind, name) {
+    const label = String(name || "").trim().slice(0, 2).toLocaleUpperCase("pt-BR") || "?";
+    const entityLabel = kind === "publisher" ? "EDITORA" : "SELO";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="64" fill="#18181c"/>
+      <circle cx="256" cy="220" r="118" fill="#25252b"/>
+      <text x="256" y="250" text-anchor="middle" fill="#f5f5f5" font-family="Arial,sans-serif" font-size="88" font-weight="700">${escapeHTML(label)}</text>
+      <text x="256" y="390" text-anchor="middle" fill="#a4a4ad" font-family="Arial,sans-serif" font-size="34">${entityLabel}</text>
+    </svg>`;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  }
+
+  const HOMEPAGE_ENTITY_IMAGE_OVERRIDES = new Map([
+    ["publisher:dc comics", "https://upload.wikimedia.org/wikipedia/commons/2/2e/DC_Comics_2024.svg"],
+    ["imprint:black label", "https://static.dc.com/dc/files/default_images/DC_Black_Label_on_White_Bkgrd_5aa087067dc263.76571276.jpg"]
+  ]);
+
   const homepageExploreEntityImageCache = new Map();
 
   async function resolveHomepageExploreEntityImage(kind, name, contextPublisher = "") {
     const normalizedName = String(name || "").trim();
     if (!normalizedName) return "";
-    const cacheKey = [kind, publisherKey(normalizedName), publisherKey(contextPublisher)].join(":");
+    const normalizedKey = publisherKey(normalizedName);
+    const cacheKey = [kind, normalizedKey, publisherKey(contextPublisher)].join(":");
     if (homepageExploreEntityImageCache.has(cacheKey)) return homepageExploreEntityImageCache.get(cacheKey);
+
+    const forcedImage = HOMEPAGE_ENTITY_IMAGE_OVERRIDES.get(`${kind}:${normalizedKey}`);
+    if (forcedImage) {
+      homepageExploreEntityImageCache.set(cacheKey, forcedImage);
+      return forcedImage;
+    }
+
     const settings = kind === "imprint" ? state.imprintSettings : state.publisherSettings;
-    const setting = settings.get(publisherKey(normalizedName));
+    const setting = settings.get(normalizedKey);
     const configuredImage = String(setting?.cover_url || "").trim();
     const catalogCoverUrls = new Set(
       (state.db?.library || []).flatMap(item => [item?.coverUrl, item?.cover, item?.featuredCoverUrl])
         .map(value => String(value || "").trim())
         .filter(Boolean)
     );
-    // Nunca reutilize uma capa de edição como "imagem da entidade".
-    const customImage = configuredImage && !catalogCoverUrls.has(configuredImage) ? configuredImage : "";
-    const entityImageFallback = () => {
-      const label = normalizedName.slice(0, 2).toLocaleUpperCase("pt-BR") || "?";
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-        <rect width="512" height="512" rx="64" fill="#18181c"/>
-        <circle cx="256" cy="220" r="118" fill="#25252b"/>
-        <text x="256" y="250" text-anchor="middle" fill="#f5f5f5" font-family="Arial,sans-serif" font-size="88" font-weight="700">${label}</text>
-        <text x="256" y="390" text-anchor="middle" fill="#a4a4ad" font-family="Arial,sans-serif" font-size="34">${kind === "publisher" ? "EDITORA" : "SELO"}</text>
-      </svg>`;
-      return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-    };
+    const customImage = configuredImage && !catalogCoverUrls.has(configuredImage) && !configuredImage.toLowerCase().includes("pinimg.com")
+      ? configuredImage
+      : "";
+
+    const fallback = homepageExploreEntityFallbackImage(kind, normalizedName);
     const search = [normalizedName, contextPublisher].filter(Boolean).join(" ").trim();
     try {
       const result = await fetchWithTimeout(wikiApiUrl({
-        action: "query",
-        generator: "search",
-        gsrsearch: search || normalizedName,
-        gsrnamespace: "0",
-        gsrlimit: "10",
-        prop: "pageimages",
-        piprop: "thumbnail",
-        pithumbsize: "512"
+        action: "query", generator: "search", gsrsearch: search || normalizedName, gsrnamespace: "0",
+        gsrlimit: "10", prop: "pageimages", piprop: "thumbnail", pithumbsize: "512"
       }), { cache: "no-store" });
       if (result.ok) {
         const pages = Object.values((await result.json()).query?.pages || {});
@@ -4942,9 +4954,9 @@
     } catch (error) {
       console.warn(`Imagem da entidade indisponível: ${kind} ${normalizedName}`, error);
     }
-    const fallback = customImage || entityImageFallback();
-    homepageExploreEntityImageCache.set(cacheKey, fallback);
-    return fallback;
+    const image = customImage || fallback;
+    homepageExploreEntityImageCache.set(cacheKey, image);
+    return image;
   }
 
   async function hydrateHomepageExploreEntityImages(root = document) {
@@ -4956,16 +4968,22 @@
       const name = node.dataset.homeExploreEntityImageName;
       const contextPublisher = node.dataset.homeExploreEntityImagePublisher || "";
       const image = await resolveHomepageExploreEntityImage(kind, name, contextPublisher);
-      if (!node.isConnected) return;
-      if (image) {
-        const safeImageUrl = String(proxiedImageUrl(image)).replace(/"/g, "\\\"");
+      if (!node.isConnected || !image) return;
+      const safeImageUrl = String(proxiedImageUrl(image)).replace(/"/g, "\\\"");
+      const probe = new Image();
+      probe.decoding = "async";
+      probe.onload = () => {
+        if (!node.isConnected) return;
         node.style.backgroundImage = `url("${safeImageUrl}")`;
         node.classList.add("has-image");
-      }
-      node.dataset.homeExploreImageLoaded = "true";
+        node.dataset.homeExploreImageLoaded = "true";
+      };
+      probe.onerror = () => {
+        if (node.isConnected) node.dataset.homeExploreImageLoaded = "fallback";
+      };
+      probe.src = safeImageUrl;
     }));
   }
-
   function wikiQuickMarkup(value, kind = "character") {
     const character = value;
     let expanded = true;
@@ -8190,14 +8208,12 @@
       return `<button class="publisher-card character-card${pinnedCharacters.some(item => item.name === name) ? " is-pinned" : ""}" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`;
     }).join("");
     const exploreImprintCards = exploreImprints.map(([name, imprintItems]) => {
-      const setting = state.imprintSettings.get(publisherKey(name));
       const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
-      const initialImage = "";
+      const initialImage = homepageExploreEntityFallbackImage("imprint", name);
       return `<button class="publisher-card imprint-card${pinnedImprints.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="imprint" data-home-explore-entity-image-name="${escapeHTML(name)}" data-home-explore-entity-image-publisher="${escapeHTML(publishers)}" style="background-image:url('${escapeHTML(initialImage)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
     }).join("");
     const explorePublisherCards = explorePublishers.map(([name, publisherItems]) => {
-      const setting = state.publisherSettings.get(publisherKey(name));
-      const initialImage = "";
+      const initialImage = homepageExploreEntityFallbackImage("publisher", name);
       return `<button class="publisher-card${pinnedPublishers.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="publisher" data-home-explore-entity-image-name="${escapeHTML(name)}" style="background-image:url('${escapeHTML(initialImage)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
     }).join("");
 
