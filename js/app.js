@@ -15010,7 +15010,7 @@
     if (overlay && target === overlay && $("#submission-form", overlay)) overlay.remove();
   });
   window.addEventListener("popstate", handlePopState);
-  window.BancaDigital = { state, openReader, openAdmin };
+  window.BancaDigital = { state, openReader, openAdmin, render };
   const appRoot = document.getElementById("app");
   const modalRoot = document.getElementById("modal-root");
   let modalScrollLock = null;
