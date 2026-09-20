@@ -4889,6 +4889,64 @@
     }
   }
 
+  const homepageExploreEntityImageCache = new Map();
+
+  async function resolveHomepageExploreEntityImage(kind, name, contextPublisher = "") {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) return "";
+    const cacheKey = [kind, publisherKey(normalizedName), publisherKey(contextPublisher)].join(":");
+    if (homepageExploreEntityImageCache.has(cacheKey)) return homepageExploreEntityImageCache.get(cacheKey);
+    const settings = kind === "imprint" ? state.imprintSettings : state.publisherSettings;
+    const setting = settings.get(publisherKey(normalizedName));
+    const customImage = String(setting?.cover_url || "").trim();
+    const search = [normalizedName, contextPublisher].filter(Boolean).join(" ").trim();
+    try {
+      const result = await fetchWithTimeout(wikiApiUrl({
+        action: "query",
+        generator: "search",
+        gsrsearch: search || normalizedName,
+        gsrnamespace: "0",
+        gsrlimit: "10",
+        prop: "pageimages",
+        piprop: "thumbnail",
+        pithumbsize: "512"
+      }), { cache: "no-store" });
+      if (result.ok) {
+        const pages = Object.values((await result.json()).query?.pages || {});
+        const normalized = normalizedName.toLocaleLowerCase("pt-BR");
+        const page = pages.find(candidate => String(candidate.title || "").trim().toLocaleLowerCase("pt-BR") === normalized)
+          || pages.find(candidate => String(candidate.title || "").trim().toLocaleLowerCase("pt-BR").startsWith(`${normalized} (`));
+        const wikiImage = String(page?.thumbnail?.source || "").trim();
+        if (wikiImage) {
+          homepageExploreEntityImageCache.set(cacheKey, wikiImage);
+          return wikiImage;
+        }
+      }
+    } catch (error) {
+      console.warn(`Imagem da entidade indisponível: ${kind} ${normalizedName}`, error);
+    }
+    homepageExploreEntityImageCache.set(cacheKey, customImage);
+    return customImage;
+  }
+
+  async function hydrateHomepageExploreEntityImages(root = document) {
+    const nodes = [...(root?.querySelectorAll?.("[data-home-explore-entity-image]") || [])];
+    await Promise.all(nodes.map(async node => {
+      if (!node.isConnected || node.dataset.homeExploreImageLoading === "true") return;
+      node.dataset.homeExploreImageLoading = "true";
+      const kind = node.dataset.homeExploreEntityImageKind;
+      const name = node.dataset.homeExploreEntityImageName;
+      const contextPublisher = node.dataset.homeExploreEntityImagePublisher || "";
+      const image = await resolveHomepageExploreEntityImage(kind, name, contextPublisher);
+      if (!node.isConnected) return;
+      if (image) {
+        node.style.backgroundImage = `url("${escapeHTML(proxiedImageUrl(image))}")`;
+        node.classList.add("has-image");
+      }
+      node.dataset.homeExploreImageLoaded = "true";
+    }));
+  }
+
   function wikiQuickMarkup(value, kind = "character") {
     const character = value;
     let expanded = true;
@@ -8114,16 +8172,14 @@
     }).join("");
     const exploreImprintCards = exploreImprints.map(([name, imprintItems]) => {
       const setting = state.imprintSettings.get(publisherKey(name));
-      const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
-      const cover = setting?.cover_url || coverFor(representative);
       const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
-      return `<button class="publisher-card imprint-card${pinnedImprints.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
+      const initialImage = "";
+      return `<button class="publisher-card imprint-card${pinnedImprints.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="imprint" data-home-explore-entity-image-name="${escapeHTML(name)}" data-home-explore-entity-image-publisher="${escapeHTML(publishers)}" style="background-image:url('${escapeHTML(initialImage)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
     }).join("");
     const explorePublisherCards = explorePublishers.map(([name, publisherItems]) => {
       const setting = state.publisherSettings.get(publisherKey(name));
-      const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0];
-      const cover = setting?.cover_url || coverFor(representative);
-      return `<button class="publisher-card${pinnedPublishers.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
+      const initialImage = "";
+      return `<button class="publisher-card${pinnedPublishers.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover home-explore-entity-media" data-home-explore-entity-image data-home-explore-entity-image-kind="publisher" data-home-explore-entity-image-name="${escapeHTML(name)}" style="background-image:url('${escapeHTML(initialImage)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
     }).join("");
 
     const exploreTabs = [
@@ -12482,6 +12538,7 @@
     $$('[data-home-section-visibility]', main).forEach(button => button.addEventListener("click", () => toggleHomepageSectionVisibility(button.dataset.homeSectionKey, button.dataset.homeSectionVisibility === "hide")));
     bindComicSectionControls();
     hydrateHomeCovers();
+    hydrateHomepageExploreEntityImages(main);
     prepareLazyImages(main);
     decorateFactionNames(main);
     hydrateCommentLinkPreviews(main);
