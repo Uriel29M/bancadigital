@@ -4230,10 +4230,9 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   background-repeat: no-repeat;
   background-size: contain;
   padding: 12px;
+  border-radius: inherit;
 }
-.home-explore-section .home-explore-entity-media:not(.has-image) {
-  background-image: none !important;
-}
+
 .home-explore-empty {
   display: flex;
   align-items: center;
