@@ -12680,6 +12680,7 @@
       const form = new FormData(event.currentTarget);
       let coverUrl = String(form.get("coverUrl") || "").trim() || null;
       const coverFile = form.get("coverFile");
+      if (!coverUrl && !coverFile?.size && setting.cover_url) coverUrl = setting.cover_url;
       if (coverFile?.size) {
         const extension = String(coverFile.name || "jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
         const path = `${state.session.user.id}/${key}-${Date.now()}.${extension}`;
@@ -12748,10 +12749,11 @@
     $("#imprint-settings-form", overlay).onsubmit = async event => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
-      const coverUrl = String(form.get("coverUrl") || "").trim() || null;
+      const enteredCoverUrl = String(form.get("coverUrl") || "").trim();
+      const coverUrl = enteredCoverUrl || setting.cover_url || null;
       const enteredWikipediaUrl = String(form.get("wikipediaUrl") || "").trim();
       if (isAdmin && enteredWikipediaUrl && !isWikiReferenceUrl(enteredWikipediaUrl)) return toast("Informe um link direto válido da Wikipédia ou do Fandom.");
-      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || null) : (setting.wikipedia_url || null);
+      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || setting.wikipedia_url || null) : (setting.wikipedia_url || null);
       const next = { imprint_key: key, imprint_name: name, cover_url: coverUrl, wikipedia_url: wikipediaUrl, is_pinned: form.get("isPinned") === "on" };
       const result = await sb.from("imprint_settings").upsert(next, { onConflict: "imprint_key" });
       if (result.error) return toast(result.error.message || "Não foi possível salvar a configuração do selo. Execute a migração do Supabase.");
@@ -12848,10 +12850,11 @@
       event.preventDefault();
       const form = new FormData(event.currentTarget);
       let coverUrl = String(form.get("coverUrl") || "").trim() || null;
-      const authoredText = String(form.get("authoredText") || "").trim() || null;
+      const enteredAuthoredText = String(form.get("authoredText") || "").trim();
+      const authoredText = enteredAuthoredText || setting.authored_text || null;
       const enteredWikipediaUrl = String(form.get("wikipediaUrl") || "").trim();
       if (isAdmin && enteredWikipediaUrl && !isWikiReferenceUrl(enteredWikipediaUrl)) return toast("Informe um link direto válido da Wikipédia ou do Fandom.");
-      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || null) : (setting.wikipedia_url || null);
+      const wikipediaUrl = isAdmin ? (enteredWikipediaUrl || setting.wikipedia_url || null) : (setting.wikipedia_url || null);
       const coverFile = form.get("coverFile");
       if (coverFile?.size) {
         const extension = String(coverFile.name || "jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
