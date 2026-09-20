@@ -71,8 +71,8 @@
     "global-recommendations-section":"recommendations",
     "character-banner-home-section":"character-banner",
     "publisher-pinned-section":"pinned-publishers",
-    "imprint-pinned-section":"pinned-imprints",
-    "character-pinned-section":"pinned-characters",
+    "imprint-pinned-section":"pinned-publishers",
+    "character-pinned-section":"pinned-publishers",
     "featured-collections-rail":"featured-collections",
     "random-choice-section":"random",
     "personalized-recommendations":"tips",
@@ -206,49 +206,333 @@
     }
   }
 
+
+  function homeManagerBlocks(){
+    const raw=blocks();
+    const groups=new Map();
+    const labelsMap={
+      recommendations:"Escolhas da banca",
+      "character-banner":"Personagem em destaque",
+      continue:"Continue de onde parou",
+      recent:"Adicionados recentemente",
+      "new-series":"Séries novas",
+      monthly:"Mais lidos do mês",
+      "pinned-publishers":"Editoras, selos e personagens fixados",
+      "best-series":"Melhores séries",
+      "featured-collections":"Coleções de quadrinhos em destaque",
+      random:"Escolha aleatória",
+      tips:"Dicas para você",
+      artist:"Do mesmo artista",
+      "random-publisher":"Editora aleatória",
+      downloads:"Mais baixados",
+      "most-read-covers":"Mais lidos",
+      "bucho-hidden":"Edições comidas pelo Bucho",
+      "editorial-banner":"Em destaque"
+    };
+    raw.forEach(b=>{
+      const key=String(b.key||"");
+      const logical=key==="pinned-imprints"||key==="pinned-characters"||key.startsWith("pinned-publishers-")
+        ? "pinned-publishers"
+        : key;
+      if(!groups.has(logical))groups.set(logical,{key:logical,label:labelsMap[logical]||b.label,blocks:[]});
+      groups.get(logical).blocks.push(b);
+    });
+    return [...groups.values()];
+  }
+
+  function homeManagerSnapshot(){
+    const st=window.BancaDigital?.state||{};
+    const order=normalizeHomeSectionOrder(st.homeSectionOrder);
+    const hidden=[...(st.homeHiddenSectionKeys||[])].filter(Boolean);
+    return {order,hidden:[...new Set(hidden)]};
+  }
+
+  function ensureHomeDraft(draftObj,version,base){
+    const bucket=draftObj[version]||(draftObj[version]={});
+    const current=bucket.home&&typeof bucket.home==="object"?bucket.home:(bucket.home={});
+    if(!Array.isArray(current.__order))current.__order=[...base.order];
+    if(!Array.isArray(current.__hidden))current.__hidden=[...base.hidden];
+    return current;
+  }
+
+  function applyHomeDraft(source,version){
+    const r=root();if(!r)return;
+    const base=homeManagerSnapshot();
+    const entry=source?.overrides?.[version]?.home||{};
+    const order=normalizeHomeSectionOrder(Array.isArray(entry.__order)?entry.__order:base.order);
+    const hidden=new Set(Array.isArray(entry.__hidden)?entry.__hidden:base.hidden);
+    const raw=blocks();
+    const groups=new Map();
+    raw.forEach(b=>{
+      const key=String(b.key||"");
+      const logical=key==="pinned-imprints"||key==="pinned-characters"||key.startsWith("pinned-publishers-")
+        ? "pinned-publishers"
+        : key;
+      if(!groups.has(logical))groups.set(logical,[]);
+      groups.get(logical).push(b);
+    });
+    const parent=[...groups.values()][0]?.[0]?.el?.parentElement;
+    if(!parent)return;
+    hidden.forEach(()=>{});
+    groups.forEach((group,key)=>{
+      const isHidden=hidden.has(key);
+      group.forEach(b=>{
+        b.el.hidden=isHidden;
+        b.el.dataset.layoutHidden=isHidden?"true":"false";
+      });
+    });
+    order.forEach(key=>(groups.get(key)||[]).forEach(b=>parent.appendChild(b.el)));
+  }
+
   function manager(){
-    const ov=document.createElement("div");ov.className="modal-backdrop";
-    ov.innerHTML='<div class="modal site-layout-manager"><div class="section-head"><div><div class="eyebrow">Arquitetura visual</div><h2>Gerenciar versões do site</h2><div class="section-subtitle">Escolha a versão ativa e configure cada página bloco por bloco.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="layout-version-grid">'+Object.keys(labels).map(v=>'<button type="button" class="layout-version-card" data-version="'+v+'"><strong>'+labels[v]+'</strong><span>'+desc[v]+'</span></button>').join("")+'</div><div class="layout-manager-toolbar"><label class="field"><span>Página</span><select data-page></select></label><button type="button" class="small-btn" data-refresh>Atualizar</button><button type="button" class="small-btn" data-reset>Restaurar página</button></div><div class="layout-manager-list" data-list></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-save>Salvar</button></div></div>';
+    const ov=document.createElement("div");
+    ov.className="modal-backdrop";
+    ov.innerHTML='<div class="modal site-layout-manager">'+
+      '<div class="section-head">'+
+        '<div><div class="eyebrow">Arquitetura visual</div><h2>Gerenciar versões do site</h2><div class="section-subtitle">Escolha a versão ativa e configure cada página bloco por bloco.</div></div>'+
+        '<button type="button" class="small-btn" data-close>Fechar</button>'+
+      '</div>'+
+      '<div class="layout-version-grid">'+
+        Object.keys(labels).map(v=>'<button type="button" class="layout-version-card" data-version="'+esc(v)+'"><strong>'+esc(labels[v])+'</strong><span>'+esc(desc[v])+'</span></button>').join("")+
+      '</div>'+
+      '<div class="layout-manager-toolbar">'+
+        '<label class="field"><span>Página</span><select data-page></select></label>'+
+        '<button type="button" class="small-btn" data-refresh>Atualizar</button>'+
+        '<button type="button" class="small-btn" data-reset>Restaurar página</button>'+
+      '</div>'+
+      '<div class="layout-manager-status" data-status></div>'+
+      '<div class="layout-manager-list" data-list></div>'+
+      '<div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-save>Salvar</button></div>'+
+    '</div>';
+
     document.querySelector("#modal-root")?.appendChild(ov);
-    let version=settings?.active_version||"principal", page=pageKey(), draft=structuredClone(settings?.overrides||{}); previewVersion=version; previewPage=page; previewDraft=draft;
-    const select=ov.querySelector("[data-page]"),list=ov.querySelector("[data-list]");
-    const PAGE_LABELS={home:"Início",comic:"Quadrinhos",manga:"Mangás",search:"Pesquisa",series:"Série",entity:"Entidades",ranking:"Ranking",factions:"Facções",collections:"Coleções",collection:"Coleção",downloads:"Downloads","local-box":"Minha caixa",album:"Álbum","public-profile":"Perfil público",messages:"Mensagens",notifications:"Notificações","community-activity":"Atividade",login:"Login",signup:"Cadastro",leitor:"Leitor","password-reset":"Redefinir senha"};
-    const pages=()=>[...new Set([...Object.keys(PAGE_LABELS),pageKey(),...Object.values(draft).flatMap(x=>Object.keys(x||{}))])].sort((a,b)=>(PAGE_LABELS[a]||a).localeCompare(PAGE_LABELS[b]||b,"pt-BR"));
+
+    let version=settings?.active_version||"principal";
+    let page=pageKey();
+    const draft=structuredClone(settings?.overrides||{});
+    const baseHome=homeManagerSnapshot();
+    Object.keys(labels).forEach(v=>{
+      const h=ensureHomeDraft(draft,v,baseHome);
+      if(v==="minimalista" && !Array.isArray(h.__hiddenDefaultApplied)){
+        const visible=homeManagerBlocks();
+        const defaults=new Set(h.__hidden||[]);
+        visible.forEach((b,i)=>{
+          if(minimalHidden("minimalista",b.blocks[0]||{},i,visible.length))defaults.add(b.key);
+        });
+        h.__hidden=[...defaults];
+        h.__hiddenDefaultApplied=true;
+      }
+    });
+
+    previewVersion=version;
+    previewPage=page;
+    previewDraft=draft;
+
+    const select=ov.querySelector("[data-page]");
+    const list=ov.querySelector("[data-list]");
+    const status=ov.querySelector("[data-status]");
+    const PAGE_LABELS=window.BancaSiteLayoutPageLabels||{
+      home:"Início",comic:"Quadrinhos",manga:"Mangás",search:"Pesquisa",series:"Série",entity:"Entidades",
+      ranking:"Ranking",factions:"Facções",collections:"Coleções",collection:"Coleção",downloads:"Downloads",
+      "local-box":"Minha caixa",album:"Álbum","public-profile":"Perfil público",messages:"Mensagens",
+      notifications:"Notificações","community-activity":"Atividade",login:"Login",signup:"Cadastro",
+      leitor:"Leitor","password-reset":"Redefinir senha"
+    };
+    const PAGE_ORDER=["home","comic","manga","search","series","entity","ranking","factions","collections","collection","downloads","local-box","album","public-profile","messages","notifications","community-activity","login","signup","leitor","password-reset"];
+    const pages=()=>{
+      const extra=Object.keys(draft||{}).flatMap(v=>Object.keys(draft[v]||{})).filter(Boolean);
+      const all=[...new Set([...PAGE_ORDER,page,...extra])];
+      return all.sort((a,b)=>{
+        const ia=PAGE_ORDER.indexOf(a),ib=PAGE_ORDER.indexOf(b);
+        if(ia>=0&&ib>=0)return ia-ib;
+        if(ia>=0)return -1;if(ib>=0)return 1;
+        return (PAGE_LABELS[a]||a).localeCompare(PAGE_LABELS[b]||b,"pt-BR");
+      });
+    };
+
+    const currentPageBlocks=()=>{
+      if(page==="home"){
+        const groups=homeManagerBlocks();
+        const h=ensureHomeDraft(draft,version,baseHome);
+        const order=normalizeHomeSectionOrder(h.__order);
+        const rank=new Map(order.map((key,i)=>[key,i]));
+        return groups.sort((a,b)=>(rank.get(a.key)??999)-(rank.get(b.key)??999));
+      }
+      return page===pageKey()?blocks():catalogBlocks(page);
+    };
+
+    const updateStatus=(count)=>{
+      if(!status)return;
+      const live=page===pageKey()?"Prévia ao vivo":"Cadastro da página";
+      status.textContent=live+" · "+count+" blocos · versão "+labels[version];
+    };
+
+    const refreshPreview=()=>{
+      previewDraft=draft;previewVersion=version;previewPage=page;
+      if(page==="home")applyHomeDraft(draft,version);
+      else if(page===pageKey())apply(draft,version,page);
+    };
+
     const renderList=()=>{
-      select.innerHTML=pages().map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join("");select.value=page;
-      const rs=draft?.[version]?.[page]||{};
-      const livePage=page===pageKey(), bs=livePage?blocks():catalogBlocks(page);
-      const sourceNote=livePage?'<div class="layout-preview-note"><b>Prévia ao vivo:</b> esta lista representa os blocos reais desta página.</div>':'<div class="layout-catalog-note"><b>Página não aberta:</b> os blocos abaixo são o cadastro desta página.</div>';
-      list.innerHTML=sourceNote+bs.map(b=>{const x=rs[b.key]||{};return '<article class="layout-manager-row" data-key="'+esc(b.key)+'"><div><strong>'+esc(b.label)+'</strong><small>'+esc(b.key)+'</small></div><input type="text" maxlength="80" value="'+esc(x.label||"")+'" placeholder="Nome opcional"><label><input type="checkbox" '+(x.hidden?"checked":"")+'> Ocultar</label><div class="layout-order"><button type="button" data-move="-1">↑</button><button type="button" data-move="1">↓</button></div></article>';}).join("")||'<div class="empty">Nenhum bloco encontrado.</div>';
-      const pageRules=draft[version]||(draft[version]={});const current=pageRules[page]||(pageRules[page]={});
+      select.innerHTML=pages().map(p=>'<option value="'+esc(p)+'">'+esc(PAGE_LABELS[p]||p)+'</option>').join("");
+      select.value=page;
+
+      const bs=currentPageBlocks();
+      const home=page==="home";
+      const homeDraft=home?ensureHomeDraft(draft,version,baseHome):null;
+      const pageRules=draft[version]||(draft[version]={});
+      const current=home?homeDraft:(pageRules[page]||(pageRules[page]={}));
+
+      list.innerHTML=(page===pageKey()?'<div class="layout-preview-note"><b>Prévia ao vivo:</b> esta lista representa os blocos reais desta página.</div>':'<div class="layout-catalog-note"><b>Página não aberta:</b> os blocos abaixo são o cadastro desta página.</div>')+
+        bs.map((b,i)=>{
+          const key=b.key;
+          const rule=home?{}:(current[key]||{});
+          const hidden=home?Array.isArray(current.__hidden)&&current.__hidden.includes(key):rule.hidden===true;
+          const labelValue=home?"":(rule.label||"");
+          const fixed=Boolean(b.fixed);
+          const position=i+1;
+          const groupSize=home?b.blocks.length:1;
+          return '<article class="layout-manager-row'+(fixed?" layout-row-fixed":"")+'" data-key="'+esc(key)+'">'+
+            '<div class="layout-row-position"><strong>'+position+'</strong><span>'+(fixed?"Fixo":("Bloco"+(groupSize>1?" · "+groupSize:"")) )+'</span></div>'+
+            '<div class="layout-row-main"><strong>'+esc(home?b.label:b.label)+'</strong><small><code>'+esc(key)+'</code></small></div>'+
+            '<input type="text" maxlength="80" value="'+esc(labelValue)+'" placeholder="'+(home?"Nome opcional":"Nome opcional")+'"'+(fixed?" disabled":"")+ '>'+
+            '<label><input type="checkbox" '+(hidden?"checked":"")+(fixed?" disabled":"")+'> Ocultar</label>'+
+            '<div class="layout-order"><button type="button" data-move="-1" aria-label="Mover '+esc(b.label)+' para cima" title="Mover para cima"'+(fixed||i<=0?" disabled":"")+'>↑</button><button type="button" data-move="1" aria-label="Mover '+esc(b.label)+' para baixo" title="Mover para baixo"'+(fixed||i>=bs.length-1?" disabled":"")+'>↓</button></div>'+
+          '</article>';
+        }).join("")||'<div class="empty">Nenhum bloco encontrado.</div>';
+
+      updateStatus(bs.length);
+
       list.querySelectorAll("[data-key]").forEach(row=>{
-        const key=row.dataset.key, input=row.querySelector("input[type=text]"),check=row.querySelector("input[type=checkbox]");
-        input.oninput=()=>{const x=current[key]||(current[key]={});if(input.value.trim())x.label=input.value.trim();else delete x.label;previewDraft=draft;previewVersion=version;previewPage=page;if(livePage)apply(draft,version,page);};
-        check.onchange=()=>{const x=current[key]||(current[key]={});x.hidden=check.checked;previewDraft=draft;previewVersion=version;previewPage=page;if(livePage)apply(draft,version,page);};
+        const key=row.dataset.key;
+        const input=row.querySelector('input[type="text"]');
+        const check=row.querySelector('input[type="checkbox"]');
         row.querySelectorAll("[data-move]").forEach(btn=>btn.onclick=()=>{
+          if(btn.disabled)return;
+          const dir=Number(btn.dataset.move);
+          if(home){
+            const h=ensureHomeDraft(draft,version,baseHome);
+            const order=normalizeHomeSectionOrder(h.__order);
+            const visible=bs.map(b=>b.key);
+            const pos=visible.indexOf(key);
+            const target=pos+dir;
+            if(pos<0||target<0||target>=visible.length)return;
+            const targetKey=visible[target];
+            const a=order.indexOf(key),b=order.indexOf(targetKey);
+            if(a<0||b<0)return;
+            [order[a],order[b]]=[order[b],order[a]];
+            h.__order=[...order];
+            refreshPreview();
+            renderList();
+            return;
+          }
+          const current=draft[version]?.[page]||(draft[version][page]={});
           const order=bs.map((b,i)=>({key:b.key,order:Number.isFinite(Number(current[b.key]?.order))?Number(current[b.key].order):i}));
-          const pos=order.findIndex(x=>x.key===key),to=pos+Number(btn.dataset.move);if(to<0||to>=order.length)return;
-          const a=order[pos],b=order[to];(current[a.key]||(current[a.key]={})).order=b.order;(current[b.key]||(current[b.key]={})).order=a.order;previewDraft=draft;previewVersion=version;previewPage=page;if(livePage)apply(draft,version,page);renderList();
+          const pos=order.findIndex(x=>x.key===key),target=pos+dir;
+          if(pos<0||target<0||target>=order.length)return;
+          [order[pos].order,order[target].order]=[order[target].order,order[pos].order];
+          previewDraft=draft;previewVersion=version;previewPage=page;
+          if(page===pageKey())apply(draft,version,page);
+          renderList();
+        });
+        input?.addEventListener("input",()=>{
+          if(home)return;
+          const x=(draft[version][page][key]||(draft[version][page][key]={}));
+          if(input.value.trim())x.label=input.value.trim();else delete x.label;
+          previewDraft=draft;previewVersion=version;previewPage=page;
+          if(page===pageKey())apply(draft,version,page);
+        });
+        check?.addEventListener("change",()=>{
+          if(home){
+            const h=ensureHomeDraft(draft,version,baseHome);
+            const hidden=new Set(h.__hidden||[]);
+            if(check.checked)hidden.add(key);else hidden.delete(key);
+            h.__hidden=[...hidden];
+            refreshPreview();renderList();return;
+          }
+          const x=(draft[version][page][key]||(draft[version][page][key]={}));
+          x.hidden=check.checked;
+          previewDraft=draft;previewVersion=version;previewPage=page;
+          if(page===pageKey())apply(draft,version,page);
         });
       });
     };
+
     ov.querySelectorAll("[data-version]").forEach(b=>b.onclick=()=>{
-      version=b.dataset.version; previewVersion=version; previewPage=page; previewDraft=draft; if(page===pageKey())apply(draft,version,page);
+      version=b.dataset.version;
+      ensureHomeDraft(draft,version,baseHome);
+      previewVersion=version;previewPage=page;previewDraft=draft;
       ov.querySelectorAll("[data-version]").forEach(x=>x.classList.toggle("is-active",x.dataset.version===version));
-      apply(); renderList();
+      refreshPreview();
+      renderList();
     });
-    select.onchange=()=>{page=select.value;previewVersion=version;previewPage=page;previewDraft=draft;if(page===pageKey())apply(draft,version,page);renderList();};
-    ov.querySelector("[data-refresh]").onclick=renderList;
-    ov.querySelector("[data-reset]").onclick=()=>{if(draft[version])delete draft[version][page];previewDraft=draft;previewVersion=version;previewPage=page;if(page===pageKey())apply(draft,version,page);renderList();};
-    ov.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{previewDraft=null;previewVersion=null;previewPage=null;apply(settings);ov.remove();});
-    ov.querySelector("[data-save]").onclick=async()=>{
-      const c=await sb();if(!c)return alert("Supabase não está disponível.");
-      const r=await c.from("site_layout_settings").upsert({id:true,active_version:version,presets:settings?.presets||{},overrides:draft,updated_at:new Date().toISOString()},{onConflict:"id"});
-      if(r.error)return alert(r.error.message);
-      settings={...settings,active_version:version,overrides:draft};previewDraft=null;previewVersion=null;previewPage=null;apply(settings);ov.remove();window.dispatchEvent(new CustomEvent("banca-layout-updated"));
+
+    select.onchange=()=>{
+      page=select.value;
+      previewVersion=version;previewPage=page;previewDraft=draft;
+      refreshPreview();
+      renderList();
     };
-    ov.addEventListener("click",e=>{if(e.target===ov){previewDraft=null;previewVersion=null;previewPage=null;apply(settings);ov.remove()}});
+
+    ov.querySelector("[data-refresh]").onclick=()=>{
+      if(page==="home"){
+        const fresh=homeManagerSnapshot();
+        const h=ensureHomeDraft(draft,version,fresh);
+        h.__order=[...fresh.order];
+        h.__hidden=[...fresh.hidden];
+        delete h.__hiddenDefaultApplied;
+      }
+      refreshPreview();renderList();
+    };
+
+    ov.querySelector("[data-reset]").onclick=()=>{
+      if(page==="home"){
+        const h=ensureHomeDraft(draft,version,baseHome);
+        h.__order=[...baseHome.order];
+        h.__hidden=[...baseHome.hidden];
+        delete h.__hiddenDefaultApplied;
+        refreshPreview();renderList();return;
+      }
+      if(draft[version])delete draft[version][page];
+      refreshPreview();renderList();
+    };
+
+    const close=()=>{
+      previewDraft=null;previewVersion=null;previewPage=null;
+      apply(settings);
+      ov.remove();
+    };
+    ov.querySelectorAll("[data-close]").forEach(b=>b.onclick=close);
+    ov.addEventListener("click",e=>{if(e.target===ov)close();});
+
+    ov.querySelector("[data-save]").onclick=async()=>{
+      const c=await sb();
+      if(!c)return alert("Supabase não está disponível.");
+      const saveResult=await c.from("site_layout_settings").upsert({
+        id:true,active_version:version,presets:settings?.presets||{},overrides:draft,updated_at:new Date().toISOString()
+      },{onConflict:"id"});
+      if(saveResult.error)return alert(saveResult.error.message);
+
+      const homeDraft=ensureHomeDraft(draft,version,homeManagerSnapshot());
+      const homeOrder=normalizeHomeSectionOrder(homeDraft.__order);
+      const homeHidden=[...new Set(homeDraft.__hidden||[])];
+
+      const orderResult=await c.rpc("update_homepage_section_order",{p_order:homeOrder});
+      if(orderResult.error)return alert("Layout salvo, mas a ordem da home foi rejeitada: "+orderResult.error.message);
+
+      const homeKeys=normalizeHomeSectionOrder(homeOrder);
+      for(const key of homeKeys){
+        const visibilityResult=await c.rpc("update_homepage_section_visibility",{p_section_key:key,p_hidden:homeHidden.includes(key)});
+        if(visibilityResult.error)return alert("Layout salvo, mas a visibilidade de "+key+" não pôde ser salva: "+visibilityResult.error.message);
+      }
+
+      settings={...settings,active_version:version,overrides:draft};
+      window.location.reload();
+    };
+
+    ov.querySelector('[data-version="'+esc(version)+'"]')?.classList.add("is-active");
     renderList();
+    refreshPreview();
   }
 
   async function init(){
