@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=299-faction-chat-black", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=300-continue-cache-refresh", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
