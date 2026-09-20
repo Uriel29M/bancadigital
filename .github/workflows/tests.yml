@@ -30,6 +30,7 @@ jobs:
       - name: Testes unitários e regressões do leitor
         run: npm run test:unit && npm run test:reader
       - name: Playwright core
+        if: ${{ always() }}
         env:
           E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
           E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
