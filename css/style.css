@@ -4292,4 +4292,5 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   .site-layout-manager .layout-manager-list{max-height:none}
 }
 
-.continue-reading-section { margin-top: 32px; }
+.continue-reading-section { margin-top: 0; }
+.continue-reading-section .section-head { padding-top: 32px; }
