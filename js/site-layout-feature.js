@@ -217,15 +217,32 @@
         if(Number.isFinite(Number(x.order))&&!b.fixed)b.el.style.order=String(x.order);
         else b.el.style.removeProperty("order");
       });
-      const movable=bs.filter(b=>!b.fixed);
-      const ordered=movable.map((b,i)=>({b,i,o:Number(ruleFor(b).order)})).sort((a,b)=>{
-        const ao=Number.isFinite(a.o)?a.o:a.i,bo=Number.isFinite(b.o)?b.o:b.i;return ao-bo;
-      });
-      if(ordered.some(x=>Number.isFinite(x.o))){
-        const parent=ordered[0]?.b.el.parentElement;
-        if(parent)ordered.forEach(x=>parent.appendChild(x.b.el));
+      // A Home possui vários containers estruturais diferentes. Nunca podemos
+      // mover todos os blocos para o primeiro parent encontrado: isso era o que
+      // jogava o banner para baixo e criava um layout que não correspondia a
+      // nenhuma versão. A Home é ordenada exclusivamente por applyHomeDraft.
+      if(page==="home"){
+        applyHomeDraft(source,version);
+      }else{
+        const movable=bs.filter(b=>!b.fixed);
+        const byParent=new Map();
+        movable.forEach((b,i)=>{
+          const parent=b.el.parentElement;
+          if(!parent)return;
+          if(!byParent.has(parent))byParent.set(parent,[]);
+          const o=Number(ruleFor(b).order);
+          byParent.get(parent).push({b,i,o});
+        });
+        byParent.forEach(items=>{
+          if(!items.some(x=>Number.isFinite(x.o)))return;
+          items.sort((a,b)=>{
+            const ao=Number.isFinite(a.o)?a.o:a.i;
+            const bo=Number.isFinite(b.o)?b.o:b.i;
+            return ao-bo;
+          });
+          items.forEach(x=>x.b.el.parentElement?.appendChild(x.b.el));
+        });
       }
-      if(page==="home")applyHomeDraft(source,version);
     }finally{
       busy=false;
       const current=root();
@@ -293,9 +310,7 @@
     const groups=new Map();
     raw.forEach(b=>{
       const key=String(b.key||"");
-      const logical=key==="pinned-imprints"||key==="pinned-characters"||key.startsWith("pinned-publishers-")
-        ? "pinned-publishers"
-        : key;
+      const logical=key.startsWith("pinned-publishers-") ? "pinned-publishers" : key;
       if(!groups.has(logical))groups.set(logical,[]);
       groups.get(logical).push(b);
     });
