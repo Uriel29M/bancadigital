@@ -8094,34 +8094,64 @@
       return `<button class="publisher-card character-card is-pinned" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`;
     }).join("");
 
+    const exploreCharacters = pinnedCharacters.length
+      ? pinnedCharacters
+      : [...characterEntries.values()].sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name, "pt-BR")).slice(0, 6);
+    const exploreImprints = pinnedImprints.length
+      ? pinnedImprints
+      : [...imprintEntries.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR")).slice(0, 6);
+    const explorePublishers = pinnedPublishers.length
+      ? pinnedPublishers
+      : [...publisherEntries.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR")).slice(0, 6);
+
+    const exploreCharacterCards = exploreCharacters.map(entry => {
+      const name = Array.isArray(entry) ? entry[0] : entry.name;
+      const items = Array.isArray(entry) ? entry[1] : entry.items;
+      const setting = state.characterSettings.get(publisherKey(name));
+      const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0];
+      const cover = setting?.cover_url || coverFor(representative);
+      return `<button class="publisher-card character-card${pinnedCharacters.some(item => item.name === name) ? " is-pinned" : ""}" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`;
+    }).join("");
+    const exploreImprintCards = exploreImprints.map(([name, imprintItems]) => {
+      const setting = state.imprintSettings.get(publisherKey(name));
+      const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
+      const cover = setting?.cover_url || coverFor(representative);
+      const publishers = [...new Set(imprintItems.map(item => String(item.publisher || "").trim()).filter(Boolean))].join(" · ");
+      return `<button class="publisher-card imprint-card${pinnedImprints.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-imprint="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${escapeHTML(publishers || "Selo")} · ${imprintItems.length} edição(ões)</span></div></button>`;
+    }).join("");
+    const explorePublisherCards = explorePublishers.map(([name, publisherItems]) => {
+      const setting = state.publisherSettings.get(publisherKey(name));
+      const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0];
+      const cover = setting?.cover_url || coverFor(representative);
+      return `<button class="publisher-card${pinnedPublishers.some(([pinnedName]) => pinnedName === name) ? " is-pinned" : ""}" type="button" data-publisher="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${publisherItems.length} edição(ões)</span></div></button>`;
+    }).join("");
+
     const exploreTabs = [
-      ["characters", "Personagens", pinnedCharacters.length],
-      ["imprints", "Selos", pinnedImprints.length],
-      ["publishers", "Editoras", pinnedPublishers.length]
+      ["characters", "Personagens", exploreCharacters.length],
+      ["imprints", "Selos", exploreImprints.length],
+      ["publishers", "Editoras", explorePublishers.length]
     ];
-    const firstExploreTab = pinnedCharacters.length ? "characters" : pinnedImprints.length ? "imprints" : "publishers";
-    const exploreSection = (pinnedCharacters.length || pinnedImprints.length || pinnedPublishers.length)
-      ? `<section class="section home-explore-section">
-          <div class="section-head">
-            <div><h2 class="section-title">Explore a Banca</h2></div>
+    const firstExploreTab = exploreCharacters.length ? "characters" : exploreImprints.length ? "imprints" : "publishers";
+    const exploreSection = `<section class="section home-explore-section">
+        <div class="section-head">
+          <div><h2 class="section-title">Explore a Banca</h2></div>
+        </div>
+        <div class="home-explore-tabs" role="tablist" aria-label="Explore a Banca">
+          ${exploreTabs.map(([key, label, count]) => `<button type="button" role="tab" class="home-explore-tab${firstExploreTab === key ? " is-active" : ""}" data-home-explore-tab="${key}" aria-selected="${firstExploreTab === key ? "true" : "false"}" tabindex="${firstExploreTab === key ? "0" : "-1"}">${label}<span>${count}</span></button>`).join("")}
+        </div>
+        <div class="home-explore-panels">
+          <div class="home-explore-panel" data-home-explore-panel="characters" role="tabpanel" ${firstExploreTab !== "characters" ? "hidden" : ""}>
+            <div class="publisher-carousel">${exploreCharacterCards || '<div class="home-explore-empty">Nenhum personagem disponível.</div>'}</div>
           </div>
-          <div class="home-explore-tabs" role="tablist" aria-label="Explore a Banca">
-            ${exploreTabs.map(([key, label, count]) => `<button type="button" role="tab" class="home-explore-tab${firstExploreTab === key ? " is-active" : ""}" data-home-explore-tab="${key}" aria-selected="${firstExploreTab === key ? "true" : "false"}" tabindex="${firstExploreTab === key ? "0" : "-1"}">${label}<span>${count}</span></button>`).join("")}
+          <div class="home-explore-panel" data-home-explore-panel="imprints" role="tabpanel" ${firstExploreTab !== "imprints" ? "hidden" : ""}>
+            <div class="publisher-carousel">${exploreImprintCards || '<div class="home-explore-empty">Nenhum selo disponível.</div>'}</div>
           </div>
-          <div class="home-explore-panels">
-            <div class="home-explore-panel" data-home-explore-panel="characters" role="tabpanel" ${firstExploreTab !== "characters" ? "hidden" : ""}>
-              <div class="publisher-carousel">${pinnedCharacterCards || '<div class="home-explore-empty">Nenhum personagem fixado.</div>'}</div>
-            </div>
-            <div class="home-explore-panel" data-home-explore-panel="imprints" role="tabpanel" ${firstExploreTab !== "imprints" ? "hidden" : ""}>
-              <div class="publisher-carousel">${pinnedImprintCards || '<div class="home-explore-empty">Nenhum selo fixado.</div>'}</div>
-            </div>
-            <div class="home-explore-panel" data-home-explore-panel="publishers" role="tabpanel" ${firstExploreTab !== "publishers" ? "hidden" : ""}>
-              <div class="publisher-carousel">${pinnedPublisherCards || '<div class="home-explore-empty">Nenhuma editora fixada.</div>'}</div>
-            </div>
+          <div class="home-explore-panel" data-home-explore-panel="publishers" role="tabpanel" ${firstExploreTab !== "publishers" ? "hidden" : ""}>
+            <div class="publisher-carousel">${explorePublisherCards || '<div class="home-explore-empty">Nenhuma editora disponível.</div>'}</div>
           </div>
-          <div data-home-section-controls-slot></div>
-        </section>`
-      : "";
+        </div>
+        <div data-home-section-controls-slot></div>
+      </section>`;
 
     const homeSections = {
       recommendations: discoverySection,
