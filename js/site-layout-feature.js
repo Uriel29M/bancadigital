@@ -543,7 +543,7 @@
       // O leitor depende de ?ler=<id>. Sem uma edição aberta não existe
       // uma rota de leitor independente para navegar.
       if(nextPage==="leitor" && !params().get("ler")){
-        return toast("Abra uma edição no leitor antes de selecionar "Leitor".");
+        return toast('Abra uma edição no leitor antes de selecionar "Leitor".');
       }
 
       const target=new URL(location.href);
