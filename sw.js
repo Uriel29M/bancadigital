@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v699-banner-fixed-height";
+const CACHE_VERSION = "banca-digital-shell-v700-hero-title";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.277-banner-fixed-height",
+  "./", "./index.html", "./css/style.css?v=2.2.10.278-hero-title",
   "./js/app.js?v=2.2.10.545-auth-gated", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
