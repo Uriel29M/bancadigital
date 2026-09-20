@@ -547,13 +547,20 @@
       const homeOrder=normalizeHomeSectionOrder(homeDraft.__order);
       const homeHidden=[...new Set(homeDraft.__hidden||[])];
 
-      const orderResult=await c.rpc("update_homepage_section_order",{p_order:homeOrder});
-      if(orderResult.error)return alert("Layout salvo, mas a ordem da home foi rejeitada: "+orderResult.error.message);
-
-      const homeKeys=normalizeHomeSectionOrder(homeOrder);
-      for(const key of homeKeys){
-        const visibilityResult=await c.rpc("update_homepage_section_visibility",{p_section_key:key,p_hidden:homeHidden.includes(key)});
-        if(visibilityResult.error)return alert("Layout salvo, mas a visibilidade de "+key+" não pôde ser salva: "+visibilityResult.error.message);
+      // A configuração completa já foi salva em site_layout_settings.
+      // Os RPCs legados da Home são opcionais; falhas neles não devem
+      // interromper o salvamento nem exibir confirmações de erro ao usuário.
+      try{
+        await c.rpc("update_homepage_section_order",{p_order:homeOrder});
+        const homeKeys=normalizeHomeSectionOrder(homeOrder);
+        for(const key of homeKeys){
+          await c.rpc("update_homepage_section_visibility",{
+            p_section_key:key,
+            p_hidden:homeHidden.includes(key)
+          });
+        }
+      }catch(_error){
+        // Ignora falhas dos RPCs legados.
       }
 
       settings={...settings,active_version:version,overrides:draft};
