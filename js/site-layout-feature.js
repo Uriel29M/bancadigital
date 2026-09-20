@@ -378,7 +378,13 @@
         const rank=new Map(order.map((key,i)=>[key,i]));
         return groups.sort((a,b)=>(rank.get(a.key)??999)-(rank.get(b.key)??999));
       }
-      return page===pageKey()?blocks():catalogBlocks(page);
+      const source=page===pageKey()?blocks():catalogBlocks(page);
+      if(page==="home")return source;
+      const saved=draft?.[version]?.[page]||{};
+      return source.map((b,index)=>({
+        ...b,
+        _layoutOrder:Number.isFinite(Number(saved[b.key]?.order))?Number(saved[b.key].order):index
+      })).sort((a,b)=>a._layoutOrder-b._layoutOrder);
     };
 
     const updateStatus=(count)=>{
@@ -432,25 +438,29 @@
           const dir=Number(btn.dataset.move);
           if(home){
             const h=ensureHomeDraft(draft,version,baseHome);
-            const order=normalizeHomeSectionOrder(h.__order);
             const visible=bs.map(b=>b.key);
+            const order=normalizeHomeSectionOrder(h.__order);
+            visible.forEach(k=>{if(!order.includes(k))order.push(k);});
             const pos=visible.indexOf(key);
             const target=pos+dir;
             if(pos<0||target<0||target>=visible.length)return;
-            const targetKey=visible[target];
-            const a=order.indexOf(key),b=order.indexOf(targetKey);
-            if(a<0||b<0)return;
-            [order[a],order[b]]=[order[b],order[a]];
-            h.__order=[...order];
+            const next=[...visible];
+            [next[pos],next[target]]=[next[target],next[pos]];
+            h.__order=next;
             refreshPreview();
             renderList();
             return;
           }
           const current=draft[version]?.[page]||(draft[version][page]={});
-          const order=bs.map((b,i)=>({key:b.key,order:Number.isFinite(Number(current[b.key]?.order))?Number(current[b.key].order):i}));
-          const pos=order.findIndex(x=>x.key===key),target=pos+dir;
-          if(pos<0||target<0||target>=order.length)return;
-          [order[pos].order,order[target].order]=[order[target].order,order[pos].order];
+          const currentOrder=bs.map(b=>b.key);
+          const pos=currentOrder.indexOf(key),target=pos+dir;
+          if(pos<0||target<0||target>=currentOrder.length)return;
+          const next=[...currentOrder];
+          [next[pos],next[target]]=[next[target],next[pos]];
+          next.forEach((k,index)=>{
+            const x=current[k]||(current[k]={});
+            x.order=index;
+          });
           previewDraft=draft;previewVersion=version;previewPage=page;
           if(page===pageKey())apply(draft,version,page);
           renderList();
