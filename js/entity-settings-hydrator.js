@@ -88,7 +88,7 @@
   };
 
   const hydrate = async form => {
-    if (!(form instanceof HTMLFormElement) || form.dataset.entityHydrated === "1") return;
+    if (!(form instanceof HTMLFormElement)) return;
     const type = detectType(form);
     if (!type) return;
 
@@ -125,9 +125,44 @@
     forms.forEach(form => void hydrate(form));
   };
 
-  const root = document.getElementById("modal-root");
-  if (!root) return;
-  new MutationObserver(mutations => mutations.forEach(mutation => mutation.addedNodes.forEach(scan)))
-    .observe(root, { childList: true, subtree: true });
-  scan(root);
+  // Os modais são montados dinamicamente e podem preencher/resetar campos
+  // depois que o <form> já existe. Observar somente addedNodes do modal perde
+  // esse caso. Reidrata o formulário após a renderização e após resets tardios.
+  const scheduled = new WeakMap();
+  const schedule = form => {
+    if (!(form instanceof HTMLFormElement) || scheduled.has(form)) return;
+    const delays = [0, 60, 180, 400, 800, 1400];
+    delays.forEach(delay => setTimeout(() => {
+      void hydrate(form);
+      if (delay === delays[delays.length - 1]) scheduled.delete(form);
+    }, delay));
+    scheduled.set(form, true);
+  };
+
+  const scanAndSchedule = root => {
+    if (!(root instanceof Element)) return;
+    const forms = [];
+    if (root.matches("form")) forms.push(root);
+    forms.push(...root.querySelectorAll("form"));
+    const parentForm = root.closest("form");
+    if (parentForm) forms.push(parentForm);
+    [...new Set(forms)].forEach(schedule);
+  };
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      const targetForm = mutation.target instanceof Element
+        ? mutation.target.closest("form")
+        : null;
+      if (targetForm) schedule(targetForm);
+      mutation.addedNodes.forEach(scanAndSchedule);
+    });
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true
+  });
+  scanAndSchedule(document.getElementById("modal-root") || document.body);
 })();
