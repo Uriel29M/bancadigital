@@ -4224,6 +4224,16 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .home-explore-section .character-card {
   scroll-snap-align: start;
 }
+.home-explore-section .home-explore-entity-media {
+  background-color: #16161b;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  padding: 12px;
+}
+.home-explore-section .home-explore-entity-media:not(.has-image) {
+  background-image: none !important;
+}
 .home-explore-empty {
   display: flex;
   align-items: center;
