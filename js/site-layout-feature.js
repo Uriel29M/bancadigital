@@ -33,12 +33,38 @@
   }
   const PAGE_LABELS = {
     home:"Início", comic:"Quadrinhos", manga:"Mangás", search:"Pesquisa", series:"Série",
-    entity:"Entidade", ranking:"Ranking", factions:"Facções", collections:"Coleções",
+    entity:"Entidades", ranking:"Ranking", factions:"Facções", collections:"Coleções",
     collection:"Coleção", downloads:"Downloads", "local-box":"Minha caixa", album:"Álbum",
     "public-profile":"Perfil público", messages:"Mensagens", notifications:"Notificações",
     "community-activity":"Atividade", login:"Login", signup:"Cadastro", leitor:"Leitor",
     "password-reset":"Redefinir senha"
   };
+
+  const PAGE_BLOCKS = {
+    home:[["hero","Destaque principal"],["continue","Continuar lendo"],["recently-opened","Lidos recentemente"],["personalized-recommendations","Dicas para você"],["recently-added","Adicionados recentemente"],["recently-added-series","Séries novas"],["most-clicked","Mais lidos"],["featured-collections-rail","Coleções em destaque"],["imprints","Selos"],["publishers","Editoras"],["characters","Personagens"],["random","Descobrir algo novo"],["activity","Atividade da comunidade"],["news","Notícias e curiosidades"]],
+    comic:[["catalog-series","Séries"],["catalog-issues","Edições avulsas"],["imprints","Selos"],["publishers","Editoras"],["authors","Autores"],["characters","Personagens"]],
+    manga:[["catalog-series","Séries"],["catalog-issues","Edições avulsas"],["publishers","Editoras"],["authors","Autores"],["characters","Personagens"]],
+    search:[["search-controls","Busca e filtros"],["search-results","Resultados"],["search-users","Usuários"],["search-imprints","Selos"],["search-publishers","Editoras"]],
+    series:[["series-header","Identidade da série"],["series-editions","Edições"],["series-related","Relacionados"],["series-comments","Comentários"]],
+    entity:[["entity-header","Identidade"],["entity-catalog","Edições relacionadas"],["entity-wiki","Informações"],["entity-related","Relacionados"],["entity-news","Notícias e curiosidades"]],
+    ranking:[["ranking-header","Ranking"],["ranking-leaderboard","Classificação"],["ranking-benefits","Benefícios"],["ranking-factions","Facções"]],
+    factions:[["faction-header","Facção"],["faction-members","Membros"],["faction-ranking","Classificação"],["faction-activity","Atividade"]],
+    collections:[["collections-header","Coleções"],["collections-list","Lista de coleções"],["collections-featured","Coleções em destaque"]],
+    collection:[["collection-header","Identidade da coleção"],["collection-items","Edições da coleção"]],
+    downloads:[["downloads-pending","Baixando"],["downloads-completed","Disponíveis offline"]],
+    "local-box":[["local-box-header","Minha caixa"],["local-box-files","Arquivos locais"]],
+    album:[["album-header","Álbum"],["album-stickers","Figurinhas"],["album-progress","Progresso"]],
+    "public-profile":[["profile-header","Cabeçalho do perfil"],["profile-stats","Estatísticas"],["profile-shelf","Estante"],["profile-achievements","Conquistas"],["profile-album","Álbum"],["profile-activity","Atividade"],["profile-wall","Mural"]],
+    messages:[["messages-header","Mensagens"],["messages-list","Conversas"],["messages-compose","Nova mensagem"]],
+    notifications:[["notifications-header","Notificações"],["notifications-list","Notificações"]],
+    "community-activity":[["community-header","Atividade da comunidade"],["community-list","Atividades"]],
+    login:[["login-form","Entrar"],["login-help","Ajuda"]],
+    signup:[["signup-form","Criar conta"],["signup-faction","Facção"],["signup-help","Ajuda"]],
+    leitor:[["reader-header","Cabeçalho do leitor"],["reader-content","Leitura"],["reader-controls","Controles de leitura"],["reader-metadata","Informações da edição"],["reader-comments","Comentários"],["reader-navigation","Navegação"]],
+    "password-reset":[["password-reset-form","Redefinir senha"],["password-reset-help","Ajuda"]]
+  };
+
+  const catalogBlocks=page=>(PAGE_BLOCKS[page]||[]).map(([key,label],index)=>({key,label,index,catalog:true}));
 
   function blockLabel(el){
     const h=el.querySelector(":scope > h1,:scope > h2,:scope > h3,:scope > .section-title,:scope > .section-head strong");
@@ -81,10 +107,17 @@
   function apply(){
     if(busy)return; const r=root(); if(!r)return; busy=true;
     const version=previewVersion||settings?.active_version||"principal", page=pageKey(), rs=rules(version,page), bs=blocks();
+    const catalogOrder=new Map((PAGE_BLOCKS[page]||[]).map(([key],i)=>[key,i]));
+    const ruleFor=b=>rs[b.key]||rs[norm(b.label)]||{};
+    const presetRule=(b,i)=>{
+      if(version==="atual")return {};
+      if(version==="minimalista")return {hidden: !/^(hero|continue|catalog|search-controls|search-results|series-header|entity-header|ranking-header|faction-header|collection-header|downloads-completed|local-box-files|album-stickers|profile-header|profile-shelf|messages-header|notifications-header|community-header|login-form|signup-form|reader-content|reader-controls|password-reset-form)/i.test(b.key)};
+      return {order:catalogOrder.has(b.key)?catalogOrder.get(b.key):i};
+    };
     const principalOrder=/^(hero|destaque|continue|novidade|resultado|serie|série|ediç|estante|salvo|coleç|personagem|autor|editora|selo|mural|lista|álbum|figurinha|coment|atividade|notíci|relacionad|wiki|filtro)/i;
     document.documentElement.dataset.siteLayoutVersion=version; r.dataset.layoutPage=page;
     bs.forEach((b,i)=>{
-      const x=rs[b.key]||{}, hidden=x.hidden===true||minimalHidden(version,b,i,bs.length);
+      const x={...presetRule(b,i),...ruleFor(b)}, hidden=x.hidden===true||minimalHidden(version,b,i,bs.length);
       b.el.hidden=hidden; b.el.dataset.layoutHidden=hidden?"true":"false";
       const h=b.el.querySelector("h1,h2,h3,.section-title");
       if(h&&x.label)h.textContent=x.label;
@@ -113,9 +146,10 @@
     const pages=()=>[...new Set([...Object.keys(PAGE_LABELS),pageKey(),...Object.values(draft).flatMap(x=>Object.keys(x||{}))])].sort((a,b)=>(PAGE_LABELS[a]||a).localeCompare(PAGE_LABELS[b]||b,"pt-BR"));
     const renderList=()=>{
       select.innerHTML=pages().map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join("");select.value=page;
-      const rs=draft?.[version]?.[page]||{},bs=blocks();
-      if(page!==pageKey()){list.innerHTML='<div class="empty">Abra esta página no site para descobrir e editar os blocos reais dela. A configuração desta página pode ser salva quando ela estiver aberta.</div>';return;}
-      list.innerHTML=bs.map(b=>{const x=rs[b.key]||{};return '<article class="layout-manager-row" data-key="'+esc(b.key)+'"><div><strong>'+esc(b.label)+'</strong><small>'+esc(b.key)+'</small></div><input type="text" maxlength="80" value="'+esc(x.label||"")+'" placeholder="Nome opcional"><label><input type="checkbox" '+(x.hidden?"checked":"")+'> Ocultar</label><div class="layout-order"><button type="button" data-move="-1">↑</button><button type="button" data-move="1">↓</button></div></article>';}).join("")||'<div class="empty">Nenhum bloco encontrado.</div>';
+      const rs=draft?.[version]?.[page]||{};
+      const livePage=page===pageKey(), bs=livePage?blocks():catalogBlocks(page);
+      const sourceNote=livePage?"":'<div class="layout-catalog-note">Estrutura cadastrada para esta página. Ao abrir a página, os blocos reais serão associados automaticamente.</div>';
+      list.innerHTML=sourceNote+bs.map(b=>{const x=rs[b.key]||{};return '<article class="layout-manager-row" data-key="'+esc(b.key)+'"><div><strong>'+esc(b.label)+'</strong><small>'+esc(b.key)+'</small></div><input type="text" maxlength="80" value="'+esc(x.label||"")+'" placeholder="Nome opcional"><label><input type="checkbox" '+(x.hidden?"checked":"")+'> Ocultar</label><div class="layout-order"><button type="button" data-move="-1">↑</button><button type="button" data-move="1">↓</button></div></article>';}).join("")||'<div class="empty">Nenhum bloco encontrado.</div>';
       const pageRules=draft[version]||(draft[version]={});const current=pageRules[page]||(pageRules[page]={});
       list.querySelectorAll("[data-key]").forEach(row=>{
         const key=row.dataset.key, input=row.querySelector("input[type=text]"),check=row.querySelector("input[type=checkbox]");
