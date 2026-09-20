@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v712-app-selector-runtime-fix";
+const CACHE_VERSION = "banca-digital-shell-v700-home-images";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.269-home-explore-entity-safe",
-  "./js/app.js?v=2.2.10.556-render-selector-fix", "./js/entity-settings-hydrator.js?v=6", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./js/app.js?v=2.2.10.551-home-image-fix", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
@@ -66,27 +66,7 @@ self.addEventListener("fetch", event => {
   if (isAppJavascript || url.pathname.endsWith("/css/style.css") || isCatalogData) {
     event.respondWith((async () => {
       try {
-        let response = await fetch(request, { cache: "no-store" });
-        if (response.ok && url.pathname.endsWith("/js/app.js")) {
-          // app.js é grande demais para a API de atualização de arquivo do
-          // conector. Corrige em trânsito as quatro chamadas que usavam
-          // querySelector ($) como se retornasse uma coleção ($).
-          const source = await response.text();
-          const patched = source
-            .replaceAll("$('[data-chat-room]').forEach", "$('[data-chat-room]').forEach")
-            .replaceAll("$('[data-private-chat-user]').forEach", "$('[data-private-chat-user]').forEach")
-            .replaceAll("$('[data-open]').filter", "$('[data-open]').filter")
-            .replaceAll("$('[data-home-section-move]', main).forEach", "$('[data-home-section-move]', main).forEach");
-          if (patched !== source) {
-            const headers = new Headers(response.headers);
-            headers.set("Content-Type", "application/javascript; charset=utf-8");
-            response = new Response(patched, {
-              status: response.status,
-              statusText: response.statusText,
-              headers
-            });
-          }
-        }
+        const response = await fetch(request, { cache: "no-store" });
         if (response.ok) {
           const copy = response.clone();
           caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
