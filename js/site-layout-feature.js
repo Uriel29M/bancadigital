@@ -1,9 +1,9 @@
 (() => {
   "use strict";
-  const labels={principal:"Principal",atual:"Atual",minimalista:"Minimalista"};
+  const labels={principal:"Principal",atual:"Padrão",minimalista:"Minimalista"};
   const desc={
     principal:"Melhor equilíbrio entre descoberta, leitura, identidade e densidade.",
-    atual:"Experiência atual preservada para comparação e retorno seguro.",
+    atual:"Experiência padrão preservada para comparação e retorno seguro.",
     minimalista:"Minimalismo extremo: somente o essencial."
   };
   let settings=null, observer=null, busy=false, previewVersion=null, previewPage=null, previewDraft=null;
