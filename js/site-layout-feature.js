@@ -97,7 +97,6 @@
   }
 
   function manager(){
-    if(!isAdmin())return;
     const ov=document.createElement("div");ov.className="modal-backdrop";
     ov.innerHTML='<div class="modal site-layout-manager"><div class="section-head"><div><div class="eyebrow">Arquitetura visual</div><h2>Gerenciar versões do site</h2><div class="section-subtitle">Escolha a versão ativa e configure cada página bloco por bloco.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="layout-version-grid">'+Object.keys(labels).map(v=>'<button type="button" class="layout-version-card" data-version="'+v+'"><strong>'+labels[v]+'</strong><span>'+desc[v]+'</span></button>').join("")+'</div><div class="layout-manager-toolbar"><label class="field"><span>Página</span><select data-page></select></label><button type="button" class="small-btn" data-refresh>Atualizar</button><button type="button" class="small-btn" data-reset>Restaurar página</button></div><div class="layout-manager-list" data-list></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-save>Salvar</button></div></div>';
     document.querySelector("#modal-root")?.appendChild(ov);
