@@ -2832,20 +2832,40 @@
     // online/anônimo para não prender o usuário na área Downloads.
     const session = browserOffline ? offlineFallback : remoteSession;
     state.session = session?.user ? session : null;
-    // A sessão já foi resolvida pelo Supabase. Libere o primeiro render agora,
-    // antes das consultas secundárias, para que a página não monte uma versão
-    // visitante enquanto o perfil e o restante da conta ainda carregam.
+
+    // A sessão já foi resolvida, mas uma sessão sem perfil ainda não é um
+    // estado visual válido do aplicativo: o cabeçalho e várias páginas usam
+    // state.profile para decidir se o usuário está autenticado, seu nome e
+    // suas permissões. Carregue esse perfil mínimo antes do primeiro render.
+    // As consultas secundárias continuam depois, em segundo plano lógico,
+    // sem permitir que uma tela de visitante seja montada no meio do bootstrap.
+    if (state.session?.user && !state.session.offline) {
+      const profileResult = await sb.rpc("get_my_profile");
+      if (profileResult.error) {
+        console.warn("Não foi possível carregar o perfil da sessão:", profileResult.error.message);
+      }
+      const fallbackProfile = {
+        id: state.session.user.id,
+        username: cleanUsername(
+          state.session.user.user_metadata?.username ||
+          state.session.user.email?.split("@")[0] ||
+          "usuario"
+        )
+      };
+      state.profile = effectiveSundayProfile(profileResult.data || fallbackProfile);
+      saveOfflineAccount(state.profile);
+    }
+
+    // Só agora o primeiro paint da SPA é liberado. Para visitante, session é
+    // nula; para conta autenticada, session e profile já pertencem à mesma
+    // identidade. Não há estado intermediário visitante/logado.
     state.authReady = true;
     syncTopAvatar();
     render();
+
     // O ranking é público e não deve depender da conclusão do carregamento da
     // conta/estante. Inicie-o logo para visitantes sem sessão também.
     if (state.section === "ranking") loadRankingData();
-    if (remoteSession?.user) {
-      // Persiste a identidade assim que a sessão é reconhecida. A senha e os
-      // tokens continuam sob responsabilidade do Supabase Auth.
-      saveOfflineAccount(null);
-    }
     if (state.session?.offline) {
       state.profile = offlineProfileFor(state.session.user, offlineAccount?.profile, offlineAccount?.username);
       loadDownloads();
@@ -2923,9 +2943,10 @@
     state.comicLikeCounts = (comicLikes.data || []).reduce((counts, row) => counts.set(row.item_id, (counts.get(row.item_id) || 0) + 1), new Map());
     if (!session?.user) await loadFactions();
     if (session?.user) {
-      const profile = await sb.rpc("get_my_profile");
-      saveOfflineAccount(profile.data);
-      state.profile = effectiveSundayProfile(profile.data);
+      // O perfil já foi carregado antes do primeiro render. Reutilize a
+      // mesma identidade durante o restante do bootstrap para evitar que uma
+      // segunda consulta substitua temporariamente state.profile.
+      const profile = { data: state.profile };
       const top10LoadRevision = state.top10Revision;
       const loadedTop10Lists = await loadTop10Lists(session.user.id);
       if (!state.top10PendingOperations && top10LoadRevision === state.top10Revision) state.top10Lists = loadedTop10Lists;
@@ -15122,7 +15143,7 @@
     .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de download indisponíveis:", error));
   loadComicMonthlyReadCounts()
-    .then(() => { if (state.section !== "reader") render(); })
+    .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Leituras mensais indisponíveis:", error));
   loadHomepageSettings()
     .then(() => { if (state.authReady && (state.section === "home" || state.section === "comics")) render(); })
