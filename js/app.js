@@ -15123,7 +15123,13 @@
     .then(() => { if (state.section !== "reader") render(); })
     .catch(error => console.warn("Leituras mensais indisponíveis:", error));
   loadHomepageSettings()
-    .then(() => { if (state.section === "home" || state.section === "comics") render(); })
+    .then(() => {
+      // site_layout_settings é a fonte de verdade da ordem da Home.
+      // homepage_settings pode terminar depois do gerenciador e sobrescrever o estado;
+      // reaplicamos o layout ativo antes do render final.
+      if (state.section === "home") window.BancaSiteLayout?.syncHome?.();
+      if (state.section === "home" || state.section === "comics") render();
+    })
     .catch(error => console.warn("Ordem da página inicial indisponível:", error));
   loadHomepageBanners()
     .then(() => { if (state.section === "home") render(); })
