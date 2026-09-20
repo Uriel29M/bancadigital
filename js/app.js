@@ -4914,6 +4914,10 @@
     const setting = settings.get(normalizedKey);
     const configuredImage = String(setting?.cover_url || "").trim();
     // A imagem definida em Configurar é a fonte prioritária da entidade.\n    // Ela pode estar hospedada no Pinterest ou em outro host externo e não deve ser descartada.\n    const customImage = configuredImage;
+    if (customImage) {
+      homepageExploreEntityImageCache.set(cacheKey, customImage);
+      return customImage;
+    }
 
     const fallback = homepageExploreEntityFallbackImage(kind, normalizedName);
     const search = [normalizedName, contextPublisher].filter(Boolean).join(" ").trim();
@@ -12640,10 +12644,18 @@
     if (section === "ranking" && state.authReady) loadRankingData();
   }
 
-  function openPublisherSettings(name) {
+  async function openPublisherSettings(name) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
-    const setting = state.publisherSettings.get(key) || {};
+    let setting = state.publisherSettings.get(key) || {};
+    const remote = await sb.from("publisher_settings")
+      .select("publisher_key, publisher_name, cover_url, is_pinned")
+      .eq("publisher_key", key)
+      .maybeSingle();
+    if (!remote.error && remote.data) {
+      setting = remote.data;
+      state.publisherSettings.set(key, remote.data);
+    }
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
     overlay.innerHTML = `<div class="modal publisher-settings-modal"><div class="section-head"><div><h2>Configurar editora</h2><div class="section-subtitle">${escapeHTML(name)}</div></div><button class="small-btn" data-close>Fechar</button></div><form id="publisher-settings-form"><div class="field"><label>Enviar imagem do card</label><input name="coverFile" type="file" accept="image/png,image/jpeg,image/webp"><small class="format-hint">A imagem será armazenada no Supabase e usada no card.</small></div><div class="field"><label>Ou use uma URL de imagem</label><input name="coverUrl" type="url" value="${escapeHTML(setting.cover_url || "")}" placeholder="https://.../imagem.jpg"></div><label class="checkbox-inline"><input name="isPinned" type="checkbox" ${setting.is_pinned ? "checked" : ""}> Fixar no carrossel de destaque</label><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar configuração</button></div></form></div>`;
@@ -12694,10 +12706,18 @@
     });
   }
 
-  function openImprintSettings(name) {
+  async function openImprintSettings(name) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
-    const setting = state.imprintSettings.get(key) || {};
+    let setting = state.imprintSettings.get(key) || {};
+    const remote = await sb.from("imprint_settings")
+      .select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned")
+      .eq("imprint_key", key)
+      .maybeSingle();
+    if (!remote.error && remote.data) {
+      setting = remote.data;
+      state.imprintSettings.set(key, remote.data);
+    }
     const isAdmin = state.profile?.plan === "admin";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
@@ -12748,10 +12768,18 @@
     toast(hidden ? "Personagem ocultado para os usuários." : "Personagem visível novamente para todos.");
   }
 
-  function openCharacterSettings(name) {
+  async function openCharacterSettings(name) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const key = publisherKey(name);
-    const setting = state.characterSettings.get(key) || {};
+    let setting = state.characterSettings.get(key) || {};
+    const remote = await sb.from("character_settings")
+      .select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls")
+      .eq("character_key", key)
+      .maybeSingle();
+    if (!remote.error && remote.data) {
+      setting = remote.data;
+      state.characterSettings.set(key, remote.data);
+    }
     const isAdmin = state.profile?.plan === "admin";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
