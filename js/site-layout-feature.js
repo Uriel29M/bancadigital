@@ -66,13 +66,21 @@
 
   const catalogBlocks=page=>(PAGE_BLOCKS[page]||[]).map(([key,label],index)=>({key,label,index,catalog:true}));
 
+  // Normalização local: o gerenciador não pode depender de outra página/script
+  // para existir. Mantém a ordem salva, remove duplicatas e ignora valores vazios.
+  const normalizeHomeSectionOrder=value=>{
+    const list=Array.isArray(value)?value:[];
+    const seen=new Set();
+    return list.map(v=>String(v||"").trim()).filter(v=>v&&!seen.has(v)&&seen.add(v));
+  };
+
 
   const HOME_CLASS_KEYS={
     "global-recommendations-section":"recommendations",
     "character-banner-home-section":"character-banner",
     "publisher-pinned-section":"pinned-publishers",
-    "imprint-pinned-section":"pinned-publishers",
-    "character-pinned-section":"pinned-publishers",
+    "imprint-pinned-section":"pinned-imprints",
+    "character-pinned-section":"pinned-characters",
     "featured-collections-rail":"featured-collections",
     "random-choice-section":"random",
     "personalized-recommendations":"tips",
@@ -199,6 +207,7 @@
         const parent=ordered[0]?.b.el.parentElement;
         if(parent)ordered.forEach(x=>parent.appendChild(x.b.el));
       }
+      if(page==="home")applyHomeDraft(source,version);
     }finally{
       busy=false;
       const current=root();
@@ -217,7 +226,9 @@
       recent:"Adicionados recentemente",
       "new-series":"Séries novas",
       monthly:"Mais lidos do mês",
-      "pinned-publishers":"Editoras, selos e personagens fixados",
+      "pinned-publishers":"Editoras fixadas",
+      "pinned-imprints":"Selos fixados",
+      "pinned-characters":"Personagens em destaque",
       "best-series":"Melhores séries",
       "featured-collections":"Coleções de quadrinhos em destaque",
       random:"Escolha aleatória",
@@ -231,8 +242,7 @@
     };
     raw.forEach(b=>{
       const key=String(b.key||"");
-      const logical=key==="pinned-imprints"||key==="pinned-characters"||key.startsWith("pinned-publishers-")
-        ? "pinned-publishers"
+      const logical=key.startsWith("pinned-publishers-") ? "pinned-publishers"
         : key;
       if(!groups.has(logical))groups.set(logical,{key:logical,label:labelsMap[logical]||b.label,blocks:[]});
       groups.get(logical).blocks.push(b);
@@ -271,9 +281,7 @@
       if(!groups.has(logical))groups.set(logical,[]);
       groups.get(logical).push(b);
     });
-    const parent=[...groups.values()][0]?.[0]?.el?.parentElement;
-    if(!parent)return;
-    hidden.forEach(()=>{});
+    const rank=new Map(order.map((key,index)=>[key,index]));
     groups.forEach((group,key)=>{
       const isHidden=hidden.has(key);
       group.forEach(b=>{
@@ -281,7 +289,19 @@
         b.el.dataset.layoutHidden=isHidden?"true":"false";
       });
     });
-    order.forEach(key=>(groups.get(key)||[]).forEach(b=>parent.appendChild(b.el)));
+    // Reordena somente dentro do mesmo pai. Isso evita mover o hero para
+    // dentro de .content ou quebrar wrappers estruturais da home.
+    const byParent=new Map();
+    groups.forEach(group=>group.forEach(b=>{
+      const parent=b.el.parentElement;
+      if(!parent)return;
+      if(!byParent.has(parent))byParent.set(parent,[]);
+      byParent.get(parent).push({b,rank:rank.has(b.key)?rank.get(b.key):9999});
+    }));
+    byParent.forEach(items=>{
+      items.sort((a,b)=>a.rank-b.rank);
+      items.forEach(({b})=>b.el.parentElement?.appendChild(b.el));
+    });
   }
 
   function manager(){
