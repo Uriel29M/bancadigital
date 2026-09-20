@@ -8061,7 +8061,7 @@
       hero: heroSection,
       recommendations: globalRecommendationsSection(lib),
       "character-banner": characterBannerSection(lib),
-      continue: rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false, "continue-reading-section"),
+      continue: rail("Continue de onde parou", recentlyOpened, "Edições abertas recentemente.", "", true, false),
       recent: rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false),
       "new-series": recentlyAddedSeriesRail,
       monthly: rail("Mais lidos do mês", mostClicked, "As edições que mais receberam cliques neste mês.", "Ver catálogo", true),
