@@ -4910,20 +4910,9 @@
     const cacheKey = [kind, normalizedKey, publisherKey(contextPublisher)].join(":");
     if (homepageExploreEntityImageCache.has(cacheKey)) return homepageExploreEntityImageCache.get(cacheKey);
 
-    const forcedImage = HOMEPAGE_ENTITY_IMAGE_OVERRIDES.get(`${kind}:${normalizedKey}`);
-    if (forcedImage) {
-      homepageExploreEntityImageCache.set(cacheKey, forcedImage);
-      return forcedImage;
-    }
-
     const settings = kind === "imprint" ? state.imprintSettings : state.publisherSettings;
     const setting = settings.get(normalizedKey);
     const configuredImage = String(setting?.cover_url || "").trim();
-    const catalogCoverUrls = new Set(
-      (state.db?.library || []).flatMap(item => [item?.coverUrl, item?.cover, item?.featuredCoverUrl])
-        .map(value => String(value || "").trim())
-        .filter(Boolean)
-    );
     // A imagem definida em Configurar é a fonte prioritária da entidade.\n    // Ela pode estar hospedada no Pinterest ou em outro host externo e não deve ser descartada.\n    const customImage = configuredImage;
 
     const fallback = homepageExploreEntityFallbackImage(kind, normalizedName);
