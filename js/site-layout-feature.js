@@ -6,7 +6,7 @@
     atual:"Experiência atual preservada para comparação e retorno seguro.",
     minimalista:"Minimalismo extremo: somente o essencial."
   };
-  let settings=null, observer=null, busy=false, previewVersion=null;
+  let settings=null, observer=null, busy=false, previewVersion=null, previewPage=null, previewDraft=null;
 
   const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const norm=v=>String(v||"").trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,80)||"bloco";
@@ -66,36 +66,95 @@
 
   const catalogBlocks=page=>(PAGE_BLOCKS[page]||[]).map(([key,label],index)=>({key,label,index,catalog:true}));
 
+
+  const HOME_CLASS_KEYS={
+    "global-recommendations-section":"recommendations",
+    "character-banner-home-section":"character-banner",
+    "publisher-pinned-section":"pinned-publishers",
+    "imprint-pinned-section":"pinned-imprints",
+    "character-pinned-section":"pinned-characters",
+    "featured-collections-rail":"featured-collections",
+    "random-choice-section":"random",
+    "personalized-recommendations":"tips",
+    "read-artist-recommendations":"artist",
+    "best-series-section":"best-series",
+    "most-read-cover-section":"most-read-covers",
+    "bucho-hidden-section":"bucho-hidden",
+    "homepage-banner-section":"editorial-banner",
+    "recently-added-series":"new-series"
+  };
+
+  const HOME_TITLE_KEYS={
+    "escolhas da banca":"recommendations",
+    "personagem em destaque":"character-banner",
+    "continue de onde parou":"continue",
+    "adicionados recentemente":"recent",
+    "séries novas":"new-series",
+    "mais lidos do mês":"monthly",
+    "editoras fixadas":"pinned-publishers",
+    "selos fixados":"pinned-imprints",
+    "personagens em destaque":"pinned-characters",
+    "melhores séries":"best-series",
+    "coleções de quadrinhos em destaque":"featured-collections",
+    "escolha aleatória":"random",
+    "dicas para você":"tips",
+    "mais baixados":"downloads",
+    "mais lidos":"most-read-covers",
+    "edições comidas pelo bucho":"bucho-hidden",
+    "em destaque":"editorial-banner"
+  };
+
   function blockLabel(el){
-    const h=el.querySelector(":scope > h1,:scope > h2,:scope > h3,:scope > .section-title,:scope > .section-head strong");
-    const raw=h?.textContent||el.getAttribute("aria-label")||el.getAttribute("title")||el.dataset.section||el.id||"";
+    if(el?.classList?.contains("hero"))return "Destaque da banca";
+    const h=el?.querySelector("h1,h2,h3,.section-title");
+    const raw=h?.textContent||el?.getAttribute("aria-label")||el?.getAttribute("title")||el?.dataset.section||el?.id||"";
     const cleaned=String(raw).replace(/\s+/g," ").trim();
-    if(cleaned && !/^secao(?:[-_/]\w+)?$/i.test(cleaned))return cleaned;
-    const cls=[...el.classList].find(x=>/section|shelf|profile|reader|hero|search|result|filter|comment|activity|collection|entity|series|comic|manga/i.test(x));
-    const inferred=String(cls||"").replace(/[-_]+/g," ").replace(/\b\w/g,m=>m.toUpperCase()).trim();
-    return inferred||"Seção";
+    if(cleaned&&!/^secao(?:[-\/_]\w+)?$/i.test(cleaned))return cleaned;
+    return [...(el?.classList||[])].find(x=>x!=="section"&&x!=="content")||"Seção";
+  }
+
+  function stableBlockKey(el,label,page,parentKey){
+    const d=String(el?.dataset?.layoutKey||"").trim();
+    if(d&&!/^secao(?:[-\/_]\w+)?$/i.test(d)&&d!=="section")return d;
+    if(el?.classList?.contains("hero"))return "hero";
+    if(page==="home"){
+      for(const cls of el.classList)if(HOME_CLASS_KEYS[cls])return HOME_CLASS_KEYS[cls];
+      const t=String(label||"").toLocaleLowerCase("pt-BR").trim();
+      if(HOME_TITLE_KEYS[t])return HOME_TITLE_KEYS[t];
+    }
+    const catalog=PAGE_BLOCKS[page]||[];
+    for(const cls of el.classList){
+      const m=catalog.find(x=>x[0]===cls);
+      if(m)return m[0];
+    }
+    const t=String(label||"").toLocaleLowerCase("pt-BR").trim();
+    const m=catalog.find(x=>x[1].toLocaleLowerCase("pt-BR")===t);
+    if(m)return m[0];
+    const id=String(el?.id||"").trim();
+    if(id&&!/^secao(?:[-\/_]\w+)?$/i.test(id))return norm(id);
+    const useful=[...(el?.classList||[])].find(x=>x.length>2&&x!=="section"&&x!=="content");
+    return useful?norm(useful):norm(label);
   }
 
   function blocks(){
-    const r=root(); if(!r)return[];
-    const result=[], seen=new Set();
-    const add=(el,parent,index,parentKey="")=>{
-      if(!el||seen.has(el)||el.matches(".layout-admin-panel,.site-layout-manager"))return;
-      seen.add(el);
-      const label=blockLabel(el), base=norm(label);
-      const catalog=PAGE_BLOCKS[pageKey()]||[];
-      const exact=catalog.find(([k,l])=>norm(l)===base);
-      const classMatch=catalog.find(([k])=>el.classList?.contains(k));
-      const stable=el.dataset.layoutKey||exact?.[0]||classMatch?.[0]||(parentKey?parentKey+"/"+base:base);
-      const key=result.some(x=>x.key===stable)?stable+"-"+index:stable;
-      el.dataset.layoutKey=key; el.dataset.layoutLabel=label;
-      result.push({el,parent,key,label,index,parentKey});
-    };
-    [...r.children].forEach((child,index)=>{
+    const r=root();if(!r)return[];
+    const result=[],seen=new Set(),counts=new Map(),page=pageKey(),candidates=[];
+    [...r.children].forEach(child=>{
       if(child.matches(".layout-admin-panel,.site-layout-manager"))return;
-      const nested=[...child.children].filter(el=>el.matches(".section,section,.profile-section,.shelf-section,.reader-section,[data-layout-section]"));
-      if(nested.length>=2) nested.forEach((el,i)=>add(el,child,i,child.dataset.layoutKey||norm(blockLabel(child))));
-      else add(child,r,index);
+      if(child.matches(".hero"))candidates.push({el:child,fixed:true});
+      else if(child.classList.contains("content"))[...child.children].forEach(el=>{
+        if(el.matches(".section,section,[data-layout-section]"))candidates.push({el,fixed:false});
+      });
+      else if(child.matches(".section,section,[data-layout-section]"))candidates.push({el:child,fixed:false});
+    });
+    candidates.forEach((item)=>{
+      if(seen.has(item.el))return;
+      seen.add(item.el);
+      const label=blockLabel(item.el),raw=stableBlockKey(item.el,label,page,"");
+      const n=(counts.get(raw)||0)+1;counts.set(raw,n);
+      const key=n===1?raw:raw+"-"+n;
+      item.el.dataset.layoutKey=key;item.el.dataset.layoutLabel=label;
+      result.push({el:item.el,key,label,fixed:item.fixed,index:result.length});
     });
     return result;
   }
@@ -108,36 +167,43 @@
       || (total>7&&i>=5);
   }
 
-  function apply(){
-    if(busy)return; const r=root(); if(!r)return; busy=true;
-    const version=previewVersion||settings?.active_version||"principal", page=pageKey(), rs=rules(version,page), bs=blocks();
-    const catalogOrder=new Map((PAGE_BLOCKS[page]||[]).map(([key],i)=>[key,i]));
-    const ruleFor=b=>rs[b.key]||rs[norm(b.label)]||{};
-    const presetRule=(b,i)=>{
-      if(version==="atual")return {};
-      if(version==="minimalista")return {hidden: !/^(hero|continue|catalog|search-controls|search-results|series-header|entity-header|ranking-header|faction-header|collection-header|downloads-completed|local-box-files|album-stickers|profile-header|profile-shelf|messages-header|notifications-header|community-header|login-form|signup-form|reader-content|reader-controls|password-reset-form)/i.test(b.key)};
-      return {order:catalogOrder.has(b.key)?catalogOrder.get(b.key):i};
-    };
-    const principalOrder=/^(hero|destaque|continue|novidade|resultado|serie|série|ediç|estante|salvo|coleç|personagem|autor|editora|selo|mural|lista|álbum|figurinha|coment|atividade|notíci|relacionad|wiki|filtro)/i;
-    document.documentElement.dataset.siteLayoutVersion=version; r.dataset.layoutPage=page;
-    bs.forEach((b,i)=>{
-      const x={...presetRule(b,i),...ruleFor(b)}, hidden=x.hidden===true||minimalHidden(version,b,i,bs.length);
-      b.el.hidden=hidden; b.el.dataset.layoutHidden=hidden?"true":"false";
-      const h=b.el.querySelector("h1,h2,h3,.section-title");
-      if(h&&x.label)h.textContent=x.label;
-      const autoOrder=version==="principal"?(principalOrder.test(b.label)?b.label.toLocaleLowerCase("pt-BR").includes("hero")||b.label.toLocaleLowerCase("pt-BR").includes("destaque")?5:20:80):i;
-      b.el.style.order=Number.isFinite(Number(x.order))?String(x.order):String(autoOrder);
-    });
-    const groups=new Map();
-    bs.forEach(b=>{const parent=b.parent||r;if(!groups.has(parent))groups.set(parent,[]);groups.get(parent).push(b);});
-    groups.forEach(items=>items.slice().sort((a,b)=>{
-      const ao=Number(rs[a.key]?.order),bo=Number(rs[b.key]?.order);
-      return(Number.isFinite(ao)?ao:a.index)-(Number.isFinite(bo)?bo:b.index);
-    }).forEach(b=>b.parent.appendChild(b.el)));
-    r.classList.toggle("site-layout-minimal",version==="minimalista");
-    r.classList.toggle("site-layout-principal",version==="principal");
-    r.classList.toggle("site-layout-atual",version==="atual");
-    busy=false;
+  function apply(sourceSettings=settings,forcedVersion=null,forcedPage=null){
+    if(busy)return;
+    const r=root();if(!r)return;
+    busy=true;
+    observer?.disconnect();
+    try{
+      const source=sourceSettings||{};
+      const version=forcedVersion||previewVersion||source.active_version||"principal";
+      const page=forcedPage||pageKey();
+      const rs=source?.overrides?.[version]?.[page]||{};
+      const bs=blocks();
+      document.documentElement.dataset.siteLayoutVersion=version;
+      r.dataset.layoutPage=page;
+      const ruleFor=b=>rs[b.key]||rs[norm(b.label)]||{};
+      bs.forEach((b,i)=>{
+        const x=ruleFor(b);
+        const hidden=x.hidden===true||minimalHidden(version,b,i,bs.length);
+        b.el.hidden=hidden;
+        b.el.dataset.layoutHidden=hidden?"true":"false";
+        const h=b.el.querySelector("h1,h2,h3,.section-title");
+        if(h&&x.label)h.textContent=x.label;
+        if(Number.isFinite(Number(x.order))&&!b.fixed)b.el.style.order=String(x.order);
+        else b.el.style.removeProperty("order");
+      });
+      const movable=bs.filter(b=>!b.fixed);
+      const ordered=movable.map((b,i)=>({b,i,o:Number(ruleFor(b).order)})).sort((a,b)=>{
+        const ao=Number.isFinite(a.o)?a.o:a.i,bo=Number.isFinite(b.o)?b.o:b.i;return ao-bo;
+      });
+      if(ordered.some(x=>Number.isFinite(x.o))){
+        const parent=ordered[0]?.b.el.parentElement;
+        if(parent)ordered.forEach(x=>parent.appendChild(x.b.el));
+      }
+    }finally{
+      busy=false;
+      const current=root();
+      if(current&&observer)observer.observe(current,{childList:true});
+    }
   }
 
   function manager(){
