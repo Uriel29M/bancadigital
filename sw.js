@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v711-render-selector-fix";
+const CACHE_VERSION = "banca-digital-shell-v712-app-selector-runtime-fix";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.269-home-explore-entity-safe",
@@ -66,7 +66,27 @@ self.addEventListener("fetch", event => {
   if (isAppJavascript || url.pathname.endsWith("/css/style.css") || isCatalogData) {
     event.respondWith((async () => {
       try {
-        const response = await fetch(request, { cache: "no-store" });
+        let response = await fetch(request, { cache: "no-store" });
+        if (response.ok && url.pathname.endsWith("/js/app.js")) {
+          // app.js é grande demais para a API de atualização de arquivo do
+          // conector. Corrige em trânsito as quatro chamadas que usavam
+          // querySelector ($) como se retornasse uma coleção ($).
+          const source = await response.text();
+          const patched = source
+            .replaceAll("$('[data-chat-room]').forEach", "$('[data-chat-room]').forEach")
+            .replaceAll("$('[data-private-chat-user]').forEach", "$('[data-private-chat-user]').forEach")
+            .replaceAll("$('[data-open]').filter", "$('[data-open]').filter")
+            .replaceAll("$('[data-home-section-move]', main).forEach", "$('[data-home-section-move]', main).forEach");
+          if (patched !== source) {
+            const headers = new Headers(response.headers);
+            headers.set("Content-Type", "application/javascript; charset=utf-8");
+            response = new Response(patched, {
+              status: response.status,
+              statusText: response.statusText,
+              headers
+            });
+          }
+        }
         if (response.ok) {
           const copy = response.clone();
           caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
