@@ -210,7 +210,7 @@
     const ov=document.createElement("div");ov.className="modal-backdrop";
     ov.innerHTML='<div class="modal site-layout-manager"><div class="section-head"><div><div class="eyebrow">Arquitetura visual</div><h2>Gerenciar versões do site</h2><div class="section-subtitle">Escolha a versão ativa e configure cada página bloco por bloco.</div></div><button class="small-btn" data-close>Fechar</button></div><div class="layout-version-grid">'+Object.keys(labels).map(v=>'<button type="button" class="layout-version-card" data-version="'+v+'"><strong>'+labels[v]+'</strong><span>'+desc[v]+'</span></button>').join("")+'</div><div class="layout-manager-toolbar"><label class="field"><span>Página</span><select data-page></select></label><button type="button" class="small-btn" data-refresh>Atualizar</button><button type="button" class="small-btn" data-reset>Restaurar página</button></div><div class="layout-manager-list" data-list></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button type="button" class="btn btn-danger" data-save>Salvar</button></div></div>';
     document.querySelector("#modal-root")?.appendChild(ov);
-    let version=settings?.active_version||"principal", page=pageKey(), draft=structuredClone(settings?.overrides||{}); previewVersion=version;
+    let version=settings?.active_version||"principal", page=pageKey(), draft=structuredClone(settings?.overrides||{}); previewVersion=version; previewPage=page; previewDraft=draft;
     const select=ov.querySelector("[data-page]"),list=ov.querySelector("[data-list]");
     const PAGE_LABELS={home:"Início",comic:"Quadrinhos",manga:"Mangás",search:"Pesquisa",series:"Série",entity:"Entidades",ranking:"Ranking",factions:"Facções",collections:"Coleções",collection:"Coleção",downloads:"Downloads","local-box":"Minha caixa",album:"Álbum","public-profile":"Perfil público",messages:"Mensagens",notifications:"Notificações","community-activity":"Atividade",login:"Login",signup:"Cadastro",leitor:"Leitor","password-reset":"Redefinir senha"};
     const pages=()=>[...new Set([...Object.keys(PAGE_LABELS),pageKey(),...Object.values(draft).flatMap(x=>Object.keys(x||{}))])].sort((a,b)=>(PAGE_LABELS[a]||a).localeCompare(PAGE_LABELS[b]||b,"pt-BR"));
@@ -218,36 +218,36 @@
       select.innerHTML=pages().map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join("");select.value=page;
       const rs=draft?.[version]?.[page]||{};
       const livePage=page===pageKey(), bs=livePage?blocks():catalogBlocks(page);
-      const sourceNote=livePage?"":'<div class="layout-catalog-note">Estrutura cadastrada para esta página. Ao abrir a página, os blocos reais serão associados automaticamente.</div>';
+      const sourceNote=livePage?'<div class="layout-preview-note"><b>Prévia ao vivo:</b> esta lista representa os blocos reais desta página.</div>':'<div class="layout-catalog-note"><b>Página não aberta:</b> os blocos abaixo são o cadastro desta página.</div>';
       list.innerHTML=sourceNote+bs.map(b=>{const x=rs[b.key]||{};return '<article class="layout-manager-row" data-key="'+esc(b.key)+'"><div><strong>'+esc(b.label)+'</strong><small>'+esc(b.key)+'</small></div><input type="text" maxlength="80" value="'+esc(x.label||"")+'" placeholder="Nome opcional"><label><input type="checkbox" '+(x.hidden?"checked":"")+'> Ocultar</label><div class="layout-order"><button type="button" data-move="-1">↑</button><button type="button" data-move="1">↓</button></div></article>';}).join("")||'<div class="empty">Nenhum bloco encontrado.</div>';
       const pageRules=draft[version]||(draft[version]={});const current=pageRules[page]||(pageRules[page]={});
       list.querySelectorAll("[data-key]").forEach(row=>{
         const key=row.dataset.key, input=row.querySelector("input[type=text]"),check=row.querySelector("input[type=checkbox]");
-        input.oninput=()=>{const x=current[key]||(current[key]={});if(input.value.trim())x.label=input.value.trim();else delete x.label;};
-        check.onchange=()=>{const x=current[key]||(current[key]={});x.hidden=check.checked;};
+        input.oninput=()=>{const x=current[key]||(current[key]={});if(input.value.trim())x.label=input.value.trim();else delete x.label;previewDraft=draft;previewVersion=version;previewPage=page;if(livePage)apply(draft,version,page);};
+        check.onchange=()=>{const x=current[key]||(current[key]={});x.hidden=check.checked;previewDraft=draft;previewVersion=version;previewPage=page;if(livePage)apply(draft,version,page);};
         row.querySelectorAll("[data-move]").forEach(btn=>btn.onclick=()=>{
           const order=bs.map((b,i)=>({key:b.key,order:Number.isFinite(Number(current[b.key]?.order))?Number(current[b.key].order):i}));
           const pos=order.findIndex(x=>x.key===key),to=pos+Number(btn.dataset.move);if(to<0||to>=order.length)return;
-          const a=order[pos],b=order[to];(current[a.key]||(current[a.key]={})).order=b.order;(current[b.key]||(current[b.key]={})).order=a.order;renderList();
+          const a=order[pos],b=order[to];(current[a.key]||(current[a.key]={})).order=b.order;(current[b.key]||(current[b.key]={})).order=a.order;previewDraft=draft;previewVersion=version;previewPage=page;if(livePage)apply(draft,version,page);renderList();
         });
       });
     };
     ov.querySelectorAll("[data-version]").forEach(b=>b.onclick=()=>{
-      version=b.dataset.version; previewVersion=version;
+      version=b.dataset.version; previewVersion=version; previewPage=page; previewDraft=draft; if(page===pageKey())apply(draft,version,page);
       ov.querySelectorAll("[data-version]").forEach(x=>x.classList.toggle("is-active",x.dataset.version===version));
       apply(); renderList();
     });
-    select.onchange=()=>{page=select.value;previewVersion=version;apply();renderList();};
+    select.onchange=()=>{page=select.value;previewVersion=version;previewPage=page;previewDraft=draft;if(page===pageKey())apply(draft,version,page);renderList();};
     ov.querySelector("[data-refresh]").onclick=renderList;
-    ov.querySelector("[data-reset]").onclick=()=>{if(draft[version])delete draft[version][page];renderList();};
-    ov.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{previewVersion=null;apply();ov.remove();});
+    ov.querySelector("[data-reset]").onclick=()=>{if(draft[version])delete draft[version][page];previewDraft=draft;previewVersion=version;previewPage=page;if(page===pageKey())apply(draft,version,page);renderList();};
+    ov.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>{previewDraft=null;previewVersion=null;previewPage=null;apply(settings);ov.remove();});
     ov.querySelector("[data-save]").onclick=async()=>{
       const c=await sb();if(!c)return alert("Supabase não está disponível.");
-      const r=await c.from("site_layout_settings").update({active_version:version,overrides:draft,updated_at:new Date().toISOString()}).eq("id",true);
+      const r=await c.from("site_layout_settings").upsert({id:true,active_version:version,presets:settings?.presets||{},overrides:draft,updated_at:new Date().toISOString()},{onConflict:"id"});
       if(r.error)return alert(r.error.message);
-      settings={...settings,active_version:version,overrides:draft};previewVersion=null;apply();ov.remove();window.dispatchEvent(new CustomEvent("banca-layout-updated"));
+      settings={...settings,active_version:version,overrides:draft};previewDraft=null;previewVersion=null;previewPage=null;apply(settings);ov.remove();window.dispatchEvent(new CustomEvent("banca-layout-updated"));
     };
-    ov.addEventListener("click",e=>{if(e.target===ov){previewVersion=null;apply();ov.remove()}});
+    ov.addEventListener("click",e=>{if(e.target===ov){previewDraft=null;previewVersion=null;previewPage=null;apply(settings);ov.remove()}});
     renderList();
   }
 
