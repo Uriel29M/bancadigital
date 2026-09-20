@@ -492,7 +492,8 @@ export function createAdminFeature(deps) {
     notificationButton.textContent = "Enviar notificação";
     $(".admin-actions", overlay)?.appendChild(notificationButton);
     notificationButton.onclick = () => { overlay.remove(); openAdminNotificationForm(); };
-    $("[data-site-layout]", overlay).onclick = () => { overlay.remove(); window.BancaSiteLayout?.openManager(); };\n    $("[data-close]", overlay).onclick = closeAdmin;
+    $("[data-site-layout]", overlay).onclick = () => { overlay.remove(); window.BancaSiteLayout?.openManager(); };
+    $("[data-close]", overlay).onclick = closeAdmin;
     $("[data-new]", overlay).onclick = () => { overlay.remove(); openEditForm(); };
     $("[data-new-collection]", overlay).onclick = () => { overlay.remove(); openCollectionForm(); };
     $("[data-achievements]", overlay).onclick = () => { overlay.remove(); openAchievementAdmin(); };
