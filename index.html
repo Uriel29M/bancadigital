@@ -140,6 +140,41 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
+    <script>
+    // Compatibilidade para quatro chamadas legadas que consomem coleções.
+    // Mantém o helper de seleção original intacto e converte somente estes
+    // quatro seletores quando usados por $() em rotinas de coleção.
+    (() => {
+      const collectionSelectors = new Set([
+        "[data-chat-room]",
+        "[data-private-chat-user]",
+        "[data-open]",
+        "[data-home-section-move]"
+      ]);
+
+      const patchQuerySelector = prototype => {
+        if (!prototype || !prototype.querySelector) return;
+        const original = prototype.querySelector;
+        if (original.__bancaCollectionSelectorPatch) return;
+
+        const patched = function(selector) {
+          if (typeof selector === "string" && collectionSelectors.has(selector)) {
+            return Array.from(this.querySelectorAll(selector));
+          }
+          return original.call(this, selector);
+        };
+
+        Object.defineProperty(patched, "__bancaCollectionSelectorPatch", {
+          value: true,
+          configurable: false
+        });
+        prototype.querySelector = patched;
+      };
+
+      patchQuerySelector(Document.prototype);
+      patchQuerySelector(Element.prototype);
+    })();
+    </script>
     <script src="js/app.js?v=2.2.10.551-home-image-fix"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
