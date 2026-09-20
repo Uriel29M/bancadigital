@@ -1864,7 +1864,7 @@
     if (!sb || navigator.onLine === false) return null;
     try {
       const projectRef = new URL(window.BANCA_SUPABASE_URL).hostname.split(".")[0];
-      const raw = localStorage.getItem(\`sb-\${projectRef}-auth-token\`);
+      const raw = localStorage.getItem(`sb-${projectRef}-auth-token`);
       if (!raw) return null;
       const stored = JSON.parse(raw);
       const session = stored?.currentSession || stored;
