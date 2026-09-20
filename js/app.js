@@ -15086,7 +15086,10 @@
     armOfflineHistoryGuard();
     render();
   } else if (initialPublicUsername) render();
-  else applyRoute();
+  // A rota normal só é aplicada depois que loadAccount() confirmar a sessão.
+  // Isso impede o primeiro render de usar o estado anônimo e depois trocá-lo
+  // pelo estado autenticado.
+  else { /* aguardando bootstrap da autenticação */ }
   syncTopAvatar();
   // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
   // a rota pública não fique bloqueada pelas consultas globais do aplicativo.
@@ -15097,16 +15100,17 @@
   // Dependências pesadas do leitor são carregadas apenas quando PDF/CBZ/CBR
   // ou ferramentas relacionadas realmente precisam delas.
   loadComicReadCounts()
-    .then(() => { if (state.section !== "reader") render(); })
+    .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de leitura indisponíveis:", error));
   loadComicDownloadCounts()
-    .then(() => { if (state.section !== "reader") render(); })
+    .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Contadores de download indisponíveis:", error));
   loadComicMonthlyReadCounts()
-    .then(() => { if (state.section !== "reader") render(); })
+    .then(() => { if (state.authReady && state.section !== "reader") render(); })
     .catch(error => console.warn("Leituras mensais indisponíveis:", error));
   loadHomepageSettings()
     .then(() => {
+      if (!state.authReady) return;
       // site_layout_settings é a fonte de verdade da ordem da Home.
       // homepage_settings pode terminar depois do gerenciador e sobrescrever o estado;
       // reaplicamos o layout ativo antes do render final.
@@ -15115,7 +15119,7 @@
     })
     .catch(error => console.warn("Ordem da página inicial indisponível:", error));
   loadHomepageBanners()
-    .then(() => { if (state.section === "home") render(); })
+    .then(() => { if (state.authReady && state.section === "home") render(); })
     .catch(error => console.warn("Banners da home indisponíveis:", error));
   sb?.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") {
@@ -15183,6 +15187,9 @@
     : loadAccount();
   accountBootstrap
     .then(async () => {
+      // Só agora a rota normal pode ser aplicada. loadAccount() já resolveu
+      // a sessão, então o primeiro conteúdo visível usa a identidade correta.
+      if (!initialPublicUsername) applyRoute();
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
