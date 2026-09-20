@@ -4117,3 +4117,171 @@ input:disabled { opacity: .45; cursor: not-allowed; }
     padding: 0;
   }
 }
+
+
+/* Homepage cleanup: keep catalog rails visually light while preserving special editorial blocks. */
+.hero + .content .rail-viewport {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+.hero + .content .rail {
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+.hero + .content .section {
+  margin-bottom: 36px;
+}
+
+/* Explore replaces the three consecutive pinned-entity sections with tabs. */
+.home-explore-section .home-explore-tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 13px;
+  overflow-x: auto;
+  padding: 2px 0 3px;
+  scrollbar-width: none;
+}
+.home-explore-section .home-explore-tabs::-webkit-scrollbar { display: none; }
+.home-explore-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: #bdbdc5;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.home-explore-tab span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #202026;
+  color: #9999a2;
+  font-size: 10px;
+}
+.home-explore-tab:hover,
+.home-explore-tab:focus-visible {
+  border-color: #3e3e48;
+  color: #fff;
+  outline: none;
+}
+.home-explore-tab.is-active {
+  border-color: rgba(229,9,20,.7);
+  background: rgba(229,9,20,.12);
+  color: #fff;
+}
+.home-explore-tab.is-active span {
+  background: var(--accent);
+  color: #fff;
+}
+.home-explore-panel[hidden] { display: none !important; }
+.home-explore-section .publisher-carousel {
+  min-height: 0;
+  padding: 2px 0 8px;
+  scrollbar-width: none;
+}
+.home-explore-section .publisher-carousel::-webkit-scrollbar { display: none; }
+.home-explore-section .character-card {
+  width: var(--media-card-width);
+  height: var(--media-card-width);
+  aspect-ratio: 1;
+  min-height: 0;
+  border-radius: 50%;
+}
+.home-explore-section .character-card .publisher-card-info {
+  right: 10px;
+  bottom: 18px;
+  left: 10px;
+  justify-items: center;
+  text-align: center;
+}
+.home-explore-section .publisher-card,
+.home-explore-section .character-card {
+  scroll-snap-align: start;
+}
+.home-explore-empty {
+  display: flex;
+  align-items: center;
+  min-height: 82px;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Search is a first-class desktop action; mobile keeps the existing icon target. */
+@media (min-width: 761px) {
+  .home-search-trigger {
+    box-sizing: border-box;
+    width: clamp(220px, 20vw, 300px);
+    min-width: 220px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 999px;
+    background: #17171b;
+    text-align: left;
+    overflow: hidden;
+  }
+  .home-search-trigger:hover,
+  .home-search-trigger:focus-visible {
+    border-color: #34343c;
+    background: #1d1d22;
+    outline: none;
+  }
+  .home-search-label {
+    min-width: 0;
+    overflow: hidden;
+    color: #aaaab2;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .home-search-label { display: none; }
+}
+
+/* Long titles must wrap to two lines instead of being clipped in the hero. */
+@media (min-width: 761px) {
+  .hero:not(.is-expanded) h1 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    height: 92px;
+    min-height: 92px;
+    padding-bottom: 8px;
+    overflow: hidden;
+    white-space: normal;
+    text-overflow: clip;
+  }
+}
+@media (max-width: 760px) {
+  .hero:not(.is-expanded) h1 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    text-overflow: clip;
+    overflow: hidden;
+  }
+}
