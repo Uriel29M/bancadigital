@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v697-home-explore-configured-images";
+const CACHE_VERSION = "banca-digital-shell-v698-settings-restore";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.269-home-explore-entity-safe",
-  "./js/app.js?v=2.2.10.548-home-explore-configured-images", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
+  "./js/app.js?v=2.2.10.549-settings-restore", "./js/reader-deps.js?v=3-reader-split", "./js/catalog-sync.js?v=5-catalog-created-at",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
