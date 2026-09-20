@@ -15200,7 +15200,10 @@
       }
     })
     .finally(() => {
-      if (appRoot) appRoot.style.visibility = "";
+      if (appRoot) {
+        appRoot.style.visibility = "";
+        appRoot.classList.remove("banca-auth-booting");
+      }
       // Retoma os atalhos do cabeçalho da página 404 após carregar a conta.
       const params = new URLSearchParams(window.location.search);
       const headerAction = params.get("acao");
