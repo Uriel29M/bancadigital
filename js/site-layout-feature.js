@@ -167,7 +167,7 @@
     const result=[],seen=new Set(),counts=new Map(),page=pageKey(),candidates=[];
     [...r.children].forEach(child=>{
       if(child.matches(".layout-admin-panel,.site-layout-manager"))return;
-      if(child.matches(".hero"))candidates.push({el:child,fixed:true});
+      if(child.matches(".hero"))candidates.push({el:child,fixed:false});
       else if(child.classList.contains("content"))[...child.children].forEach(el=>{
         if(el.matches(".section,section,[data-layout-section]"))candidates.push({el,fixed:false});
       });
@@ -390,14 +390,8 @@
       });
     });
 
-    // O hero é um bloco estrutural fixo: ele fica fora de .content para
-    // preservar o banner em largura total. Nunca deixe a ordenação salva
-    // empurrá-lo para depois das seções da Home.
-    groups.forEach(group=>group.forEach(b=>{
-      if(!b.fixed || !b.el.classList.contains("hero"))return;
-      const content=r.querySelector(":scope > .content");
-      if(content)r.insertBefore(b.el,content);
-    }));
+    // O hero agora é uma seção normal da Home. Ele participa da mesma ordem
+    // salva das demais seções e não pode ficar preso no topo por regra estrutural.
 
     // Reordena somente blocos móveis dentro do mesmo pai.
     // Assim a ordem das seções da Home continua sendo controlada pelo
