@@ -4913,7 +4913,9 @@
     const settings = kind === "imprint" ? state.imprintSettings : state.publisherSettings;
     const setting = settings.get(normalizedKey);
     const configuredImage = String(setting?.cover_url || "").trim();
-    // A imagem definida em Configurar é a fonte prioritária da entidade.\n    // Ela pode estar hospedada no Pinterest ou em outro host externo e não deve ser descartada.\n    const customImage = configuredImage;
+    // A imagem definida em Configurar é a fonte prioritária da entidade.
+    // Ela pode estar hospedada externamente e não deve ser descartada.
+    const customImage = configuredImage;
     if (customImage) {
       homepageExploreEntityImageCache.set(cacheKey, customImage);
       return customImage;
