@@ -197,8 +197,32 @@ async function telegramResponse(data,request) {
   headers.set("Content-Length",String(r.end-r.start+1)); headers.set("Accept-Ranges","bytes");
   if(r.partial) headers.set("Content-Range",`bytes ${r.start}-${r.end}/${size}`);
   if(request.method==="HEAD") return new Response(null,{status:r.partial?206:200,headers});
+  const readWithRetry=async(offset,length,signal)=>{
+    let lastError;
+    for(let attempt=0;attempt<4;attempt+=1){
+      try{
+        return await readAligned(read,offset,length,size,signal);
+      }catch(error){
+        lastError=error;
+        if(signal?.aborted||attempt===3) throw error;
+        await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));
+      }
+    }
+    throw lastError||new Error("Falha ao ler o Telegram.");
+  };
   let offset=r.start;
-  const stream=new ReadableStream({async pull(controller){if(offset>r.end){controller.close();return;}try{const length=Math.min(262144,r.end-offset+1);const bytes=await readAligned(read,offset,length,size,request.signal);offset+=bytes.byteLength;controller.enqueue(bytes);}catch(error){controller.error(error);}}},{highWaterMark:1});
+  const stream=new ReadableStream({async pull(controller){
+    if(offset>r.end){controller.close();return;}
+    try{
+      const length=Math.min(262144,r.end-offset+1);
+      const bytes=await readWithRetry(offset,length,request.signal);
+      offset+=bytes.byteLength;
+      controller.enqueue(bytes);
+    }catch(error){
+      console.error("telegram_stream_error",{offset,end:r.end,message:error?.message||String(error)});
+      controller.error(error);
+    }
+  }},{highWaterMark:1});
   return new Response(stream,{status:r.partial?206:200,headers});
 }
 
