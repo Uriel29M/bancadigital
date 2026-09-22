@@ -6830,6 +6830,17 @@
     return proxy.toString();
   }
 
+  function isBancaMediaGatewayUrl(url) {
+    try {
+      const parsed = new URL(String(url || ""));
+      return parsed.protocol === "https:" &&
+        parsed.hostname === "media-gateway-production-0bb9.up.railway.app" &&
+        parsed.pathname === "/media";
+    } catch {
+      return false;
+    }
+  }
+
   const READER_FILE_CACHE = "banca-reader-files-v2";
   const OFFLINE_COVER_CACHE = "banca-reader-covers-v1";
   // Os downloads precisam continuar disponíveis mesmo quando o usuário baixa
@@ -7089,7 +7100,7 @@
     const cached = forceFresh ? null : await readReaderFileCache(cacheKey, onProgress);
     if (cached) { onComplete(); return cached; }
 
-    if (!isMega) {
+    if (!isMega && !isBancaMediaGatewayUrl(source)) {
       // Tenta uma única transferência; usa faixas apenas se o servidor falhar.
       try {
         const response = await fetch(requestUrl, {
