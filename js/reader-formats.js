@@ -145,49 +145,72 @@ export function createReaderFormats(deps) {
         const firstPage = skipCover && pdf.numPages > 1 ? 2 : 1;
         const totalPages = pdf.numPages + 1;
         let page = Math.max(firstPage, Math.min(resumePage, totalPages));
+        let drawInProgress = false;
         const canvas = document.createElement("canvas");
         canvas.className = "reader-canvas";
 
         async function drawSinglePage() {
-          if (page === totalPages) {
-            body.replaceChildren(readerEndPageImage());
-            controls.innerHTML = `<button data-prev>‹</button><span class="reader-page">${page} / ${totalPages}</span><button data-next disabled>›</button>`;
-            $("[data-prev]", controls)?.addEventListener("click", async () => { page--; await drawSinglePage(); });
+          if (drawInProgress) return;
+          drawInProgress = true;
+          try {
+            if (page === totalPages) {
+              body.replaceChildren(readerEndPageImage());
+              controls.innerHTML = `<button data-prev>‹</button><span class="reader-page">${page} / ${totalPages}</span><button data-next disabled>›</button>`;
+              $("[data-prev]", controls)?.addEventListener("click", async () => {
+                if (drawInProgress || page <= firstPage) return;
+                page--;
+                await drawSinglePage();
+              });
+              onPageChange(item, page, totalPages);
+              return;
+            }
+            const p = await pdf.getPage(page);
+            const baseViewport = p.getViewport({ scale: 1 });
+            const availableWidth = Math.max(240, body.clientWidth - 40);
+            const availableHeight = Math.max(240, body.clientHeight - 40);
+            const scale = Math.max(0.5, Math.min(2.2, availableWidth / baseViewport.width, availableHeight / baseViewport.height));
+            const viewport = p.getViewport({ scale });
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.floor(viewport.width * dpr);
+            canvas.height = Math.floor(viewport.height * dpr);
+            canvas.style.width = `${viewport.width}px`;
+            canvas.style.height = `${viewport.height}px`;
+            const ctx = canvas.getContext("2d", { alpha: false });
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            await p.render({ canvasContext: ctx, viewport }).promise;
+            if (!canvas.isConnected) body.replaceChildren(canvas);
+            controls.innerHTML = `
+              <button data-prev ${page <= firstPage ? "disabled" : ""}>‹</button>
+              <span class="reader-page">${page} / ${totalPages}</span>
+              <button data-next ${page >= pdf.numPages ? "disabled" : ""}>›</button>
+            `;
+            $("[data-prev]", controls)?.addEventListener("click", async () => {
+              if (drawInProgress || page <= firstPage) return;
+              page--;
+              await drawSinglePage();
+            });
+            $("[data-next]", controls)?.addEventListener("click", async () => {
+              if (drawInProgress || page >= pdf.numPages) return;
+              page++;
+              await drawSinglePage();
+            });
+            if (page === pdf.numPages) {
+              const nextButton = $("[data-next]", controls);
+              nextButton?.removeAttribute("disabled");
+              nextButton?.addEventListener("click", async () => {
+                if (drawInProgress) return;
+                page++;
+                await drawSinglePage();
+              }, { once: true });
+            }
             onPageChange(item, page, totalPages);
-            return;
+          } finally {
+            drawInProgress = false;
           }
-          const p = await pdf.getPage(page);
-          const baseViewport = p.getViewport({ scale: 1 });
-          const availableWidth = Math.max(240, body.clientWidth - 40);
-          const availableHeight = Math.max(240, body.clientHeight - 40);
-          const scale = Math.max(0.5, Math.min(2.2, availableWidth / baseViewport.width, availableHeight / baseViewport.height));
-          const viewport = p.getViewport({ scale });
-          const dpr = window.devicePixelRatio || 1;
-          canvas.width = Math.floor(viewport.width * dpr);
-          canvas.height = Math.floor(viewport.height * dpr);
-          canvas.style.width = `${viewport.width}px`;
-          canvas.style.height = `${viewport.height}px`;
-          const ctx = canvas.getContext("2d", { alpha: false });
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-          ctx.fillStyle = "white";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          await p.render({ canvasContext: ctx, viewport }).promise;
-          if (!canvas.isConnected) body.replaceChildren(canvas);
-          controls.innerHTML = `
-            <button data-prev ${page <= firstPage ? "disabled" : ""}>‹</button>
-            <span class="reader-page">${page} / ${totalPages}</span>
-            <button data-next ${page >= pdf.numPages ? "disabled" : ""}>›</button>
-          `;
-          $("[data-prev]", controls)?.addEventListener("click", async () => { if(page > 1){page--; await drawSinglePage();} });
-          $("[data-next]", controls)?.addEventListener("click", async () => { if(page < pdf.numPages){page++; await drawSinglePage();} });
-          if (page === pdf.numPages) {
-            const nextButton = $("[data-next]", controls);
-            nextButton?.removeAttribute("disabled");
-            nextButton?.addEventListener("click", async () => { page++; await drawSinglePage(); }, { once: true });
-          }
-          onPageChange(item, page, totalPages);
         }
         await drawSinglePage();
       } else if (currentReadingMode === 'double-page') {
