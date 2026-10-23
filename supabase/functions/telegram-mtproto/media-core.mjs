@@ -60,9 +60,9 @@ export function createMediaHandler({ lookup, open, health = async () => ({ ok: t
         return new Response(stream, { status: range ? 206 : 200, headers });
       } catch (error) { await release(); throw error; }
     } catch (error) {
-      const status = error instanceof MediaError ? error.status : (Number.isInteger((error as any)?.status) ? Number((error as any).status) : 502);
+      const status = error instanceof MediaError ? error.status : (Number.isInteger(error?.status) ? Number(error.status) : 502);
       const message = error instanceof Error ? error.message : 'Falha ao acessar o arquivo.';
-      const code = error instanceof MediaError ? error.code : String((error as any)?.code || 'media_error');
+      const code = error instanceof MediaError ? error.code : String(error?.code || 'media_error');
       console.error('telegram_mtproto_request_failed', { code, message });
       return json({ error: message, code }, status);
     }
