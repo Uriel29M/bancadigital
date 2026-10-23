@@ -59,7 +59,7 @@ window.BancaTelegram = (() => {
     if (!data?.edition) return item;
     if (String(data.edition.id) !== String(item.id)) throw new Error('O cadastro compartilhado está inconsistente.');
     const merged = { ...item, ...data.edition, catalogEditedAt: data.updated_at };
-    const fields = ['fileUrl', 'telegramUrl', 'telegramFileId', 'telegramFileName', 'telegramFileSize', 'format'];
+    const fields = ['fileUrl', 'telegramUrl', 'telegramFileId', 'telegramFileName', 'telegramFileSize', 'telegramPages', 'telegramPageFiles', 'telegramPagesPending', 'telegramPagesMigration', 'format'];
     for (const field of fields) {
       if (Object.prototype.hasOwnProperty.call(data.edition, field)) merged[field] = data.edition[field];
       else delete merged[field];
