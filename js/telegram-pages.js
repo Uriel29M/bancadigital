@@ -190,12 +190,39 @@
 
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop telegram-pages-progress-overlay";
-    overlay.innerHTML = '<div class="modal" role="status" aria-live="polite"><h2>Migrando edição para o Telegram</h2><p data-tg-pages-status>Preparando o arquivo…</p><progress data-tg-pages-progress max="100" value="0" style="width:100%"></progress><p class="section-subtitle" data-tg-pages-detail>O original será mantido como link reserva.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-close disabled>Fechar</button></div></div>';
+    overlay.innerHTML = '<div class="modal telegram-pages-progress-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Migração de edição para o Telegram"><div class="section-head"><div><h2>Migrando edição para o Telegram</h2><div data-tg-pages-status role="status" aria-live="polite">Preparando o arquivo…</div></div><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-minimize>Minimizar</button><button type="button" class="small-btn" data-tg-pages-restore>Abrir</button></div></div><progress data-tg-pages-progress max="100" value="0" aria-label="Progresso da migração"></progress><p class="section-subtitle" data-tg-pages-detail>O original será mantido como link reserva.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-close disabled>Fechar</button></div></div>';
     document.body.appendChild(overlay);
+    const dialog = overlay.querySelector(".telegram-pages-progress-modal");
     const statusNode = overlay.querySelector("[data-tg-pages-status]");
     const detailNode = overlay.querySelector("[data-tg-pages-detail]");
     const progress = overlay.querySelector("[data-tg-pages-progress]");
     const close = overlay.querySelector("[data-tg-pages-close]");
+    const minimizeButton = overlay.querySelector("[data-tg-pages-minimize]");
+    const restoreButton = overlay.querySelector("[data-tg-pages-restore]");
+    const minimize = () => {
+      overlay.classList.add("is-minimized");
+      dialog?.setAttribute("aria-modal", "false");
+      dialog?.setAttribute("role", "region");
+      restoreButton?.focus();
+    };
+    const restore = () => {
+      overlay.classList.remove("is-minimized");
+      dialog?.setAttribute("aria-modal", "true");
+      dialog?.setAttribute("role", "dialog");
+      dialog?.focus();
+    };
+    minimizeButton?.addEventListener("click", minimize);
+    restoreButton?.addEventListener("click", restore);
+    overlay.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !overlay.classList.contains("is-minimized")) {
+        event.preventDefault();
+        event.stopPropagation();
+        minimize();
+      }
+    });
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay && !overlay.classList.contains("is-minimized")) minimize();
+    });
     const status = message => { if (statusNode) statusNode.textContent = message; };
     let prepared = null;
     try {
