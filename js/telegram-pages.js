@@ -206,6 +206,8 @@
     try {
       // O proxy do Telegram consulta catalog_edition_overrides. Registre a
       // edição antes de baixá-la, inclusive quando houver um link direto alternativo.
+      let migrationSource = "";
+      let migrationSourceError = null;
       if (text(item.telegramUrl).trim()) {
         status("Registrando a edição para liberar a fonte do Telegram…");
         await invoke(deps.client, {
@@ -213,20 +215,36 @@
           item_id: String(item.id),
           edition: item,
         });
+        // A rota pública recusa séries/edições ocultas. Esta rota emite um ticket
+        // de curta duração após validar a sessão admin, sem tornar o item público.
+        try {
+          status("Preparando acesso temporário à fonte original…");
+          const resolved = await invoke(deps.client, {
+            action: "resolve-source",
+            item_id: String(item.id),
+            edition: item,
+          });
+          migrationSource = text(resolved?.sourceUrl).trim();
+          if (!migrationSource) throw new Error("O serviço não retornou uma fonte temporária válida.");
+        } catch (error) {
+          migrationSourceError = error;
+        }
       }
       const candidateSources = [...new Set([
         directSource,
+        migrationSource,
         text(deps.downloadSource(item)).trim(),
       ].filter(Boolean))].filter(url => !deps.isExternalArchiveLink?.(url));
-      if (!candidateSources.length) throw new Error("Não foi possível resolver uma fonte compatível para esta edição.");
+      if (!candidateSources.length) throw migrationSourceError || new Error("Não foi possível resolver uma fonte compatível para esta edição.");
       let buffer = null;
       let source = "";
       let sourceError = null;
+      let migrationGatewayError = null;
       for (let sourceIndex = 0; sourceIndex < candidateSources.length; sourceIndex++) {
         const candidate = candidateSources[sourceIndex];
         status(sourceIndex === 0
           ? "Baixando a fonte original…"
-          : "A fonte principal falhou. Tentando a alternativa do Telegram…");
+          : "A fonte principal falhou. Tentando a alternativa disponível…");
         try {
           buffer = await deps.fetchFileArrayBuffer(candidate, (received, total) => {
             if (!statusNode) return;
@@ -237,9 +255,14 @@
           break;
         } catch (error) {
           sourceError = error;
+          if (candidate === migrationSource) migrationGatewayError = error;
         }
       }
-      if (!buffer) throw sourceError || new Error("Não foi possível baixar a fonte original desta edição.");
+      if (!buffer) {
+        if (migrationGatewayError) throw migrationGatewayError;
+        if (migrationSourceError && /Edição indisponível|HTTP 404/i.test(text(sourceError?.message))) throw migrationSourceError;
+        throw sourceError || migrationSourceError || new Error("Não foi possível baixar a fonte original desta edição.");
+      }
       const configuredFormat = text(item.format || "").toLowerCase();
       const detectedFormat = extension(item.telegramFileName || item.fileUrl || source || item.telegramUrl);
       const format = ["pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].includes(configuredFormat) && configuredFormat !== "auto"
