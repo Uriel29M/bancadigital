@@ -201,7 +201,9 @@ async function handle(request: Request) {
         throw new MigrationError("A ordem das páginas no Telegram não foi confirmada. Reinicie a migração.");
       }
       const oldBackups = Array.isArray(edition.backupUrls) ? edition.backupUrls : [];
-      const originalLinks = [edition.fileUrl, edition.telegramUrl]
+      // Usa também o link capturado no início da migração: um override antigo
+      // pode estar sem a URL, mesmo que ela exista no catálogo publicado.
+      const originalLinks = [migration?.sourceUrl, edition.fileUrl, edition.telegramUrl]
         .map((value: unknown) => String(value || "").trim())
         .filter((value: string) => /^https?:\/\//i.test(value));
       const backupUrls = [...new Set([...oldBackups, ...originalLinks].map((value: unknown) => String(value || "").trim()).filter((value: string) => /^https?:\/\//i.test(value)))];
