@@ -109,6 +109,19 @@ async function loadEdition(itemId: string, baseEdition?: unknown) {
     if (String(edition.id || "") !== itemId) throw new MigrationError("A edição enviada não corresponde ao identificador solicitado.");
   }
   if (data?.edition && String(data.edition.id || "") === itemId) edition = { ...edition, ...data.edition };
+  // Um override antigo pode estar incompleto enquanto a fonte ainda existe no
+  // catálogo publicado que o cliente enviou. Só preenche campos de origem ausentes.
+  if (baseEdition && typeof baseEdition === "object" && !Array.isArray(baseEdition)) {
+    const supplied = baseEdition as Record<string, any>;
+    for (const field of ["fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "format"]) {
+      const current = edition[field];
+      const fallback = supplied[field];
+      const missing = current === undefined || current === null || current === ""
+        || (field === "telegramFileSize" && !(Number(current) > 0))
+        || (field === "format" && String(current).toLowerCase() === "auto" && ["pdf", "cbz", "cbr"].includes(String(fallback || "").toLowerCase()));
+      if (missing && fallback !== undefined && fallback !== null && fallback !== "") edition[field] = fallback;
+    }
+  }
   if (!edition.id) throw new MigrationError("Não foi possível identificar a edição original.");
   if (edition.catalogDeleted === true) throw new MigrationError("Esta edição foi excluída do catálogo.");
   return { db, edition, record: data };
