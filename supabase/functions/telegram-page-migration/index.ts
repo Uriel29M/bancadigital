@@ -139,11 +139,17 @@ async function handle(request: Request) {
         throw new MigrationError("Esta edição já está armazenada como páginas JPEG no Telegram.");
       }
       const count = pageCountValue(get("page_count"));
+      const sourceUrl = String(get("source_url") || edition.fileUrl || edition.telegramUrl || "").trim();
+      const existingMigration = edition.telegramPagesMigration;
+      const existingPending = Array.isArray(edition.telegramPagesPending) ? edition.telegramPagesPending : [];
+      if (Number(existingMigration?.pageCount) === count && String(existingMigration?.sourceUrl || "") === sourceUrl) {
+        return json({ ok: true, pageCount: count, uploadedPages: existingPending.length, resumed: existingPending.length > 0 });
+      }
       edition = { ...edition, telegramPagesPending: [], telegramPagesMigration: {
-        pageCount: count, startedAt: new Date().toISOString(), startedBy: user.id,
+        pageCount: count, sourceUrl, startedAt: new Date().toISOString(), startedBy: user.id,
       } };
       const saved = await saveEdition(loaded.db, edition, user.id);
-      return json({ ok: true, pageCount: count, updatedAt: saved.updated_at });
+      return json({ ok: true, pageCount: count, uploadedPages: 0, updatedAt: saved.updated_at });
     }
     if (action === "upload") {
       const pageNumber = pageCountValue(get("page_number"));
