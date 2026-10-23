@@ -593,8 +593,8 @@ export function createAdminFeature(deps) {
           <div class="field"><label>Número da edição / volume</label><input name="volume" type="text" value="${escapeHTML(String(x.issue || ""))}" placeholder="Ex.: 0, 1, Anuário"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
-          <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" required value="${escapeHTML(x.telegramUrl || x.fileUrl || "")}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b></small></div>
-          <div class="field"><label>Formato</label><select name="format">${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
+          <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" ${x.telegramPages?.length ? "" : "required"} ${x.telegramPages?.length ? "readonly" : ""} value="${escapeHTML(x.telegramUrl || x.fileUrl || (x.telegramPages?.length ? ((x.backupUrls || [])[0] || "") : ""))}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">${x.telegramPages?.length ? "Armazenada como páginas JPEG no Telegram; a fonte original fica nos links reserva." : `Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b>`}</small></div>
+          <div class="field"><label>Formato</label><select name="format">${x.telegramPages?.length ? `<option value="telegram-pages" selected>PÁGINAS JPEG NO TELEGRAM</option>` : ""}${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
           <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
           ${isAdminProfile() ? `<div class="field full"><label>Links extras desta edição</label><textarea name="customLinks" rows="4" placeholder="Página oficial | https://...\nEntrevista | https://...">${escapeHTML(customLinksText)}</textarea><small class="format-hint">Somente administradores podem editar. Um por linha. Aceita <b>Nome | URL</b> ou <b>Nome https://...</b>. Os links aparecem como botões apenas no leitor desta edição.</small></div>` : ""}
@@ -622,7 +622,7 @@ export function createAdminFeature(deps) {
       if (series) seriesTitleInput.value = series.seriesTitle || series.name || series.title || "";
     });
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
-    const telegramEditor = window.BancaTelegram.bindEditor($("#edit-form", overlay), sb, x);
+    const telegramEditor = x.telegramPages?.length ? { forSave: async value => value } : window.BancaTelegram.bindEditor($("#edit-form", overlay), sb, x);
     const telegramCoverEditor = window.BancaTelegramCovers.bindEditor($("#edit-form", overlay), sb);
     $("#edit-form", overlay).onsubmit = async event => {
       event.preventDefault();
@@ -630,6 +630,7 @@ export function createAdminFeature(deps) {
       if (form.dataset.saving === "true") return;
       const fd = new FormData(form);
       const sourceUrl = String(fd.get("sourceUrl") || "").trim();
+      const telegramPagesMode = Array.isArray(x.telegramPages) && x.telegramPages.length > 0;
       const isTelegram = isTelegramPostUrl(sourceUrl);
       const telegramFileId = String(fd.get("telegramFileId") || "").trim();
       const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
@@ -659,12 +660,14 @@ export function createAdminFeature(deps) {
         character,
         secondaryCharacters,
         author: String(fd.get("author") || "").trim(),
-        format: String(fd.get("format") || "auto").toLowerCase() === "auto" ? detectFormat(sourceUrl) : String(fd.get("format")).toLowerCase(),
-        fileUrl: isTelegram ? "" : sourceUrl,
+        format: telegramPagesMode ? "telegram-pages" : (String(fd.get("format") || "auto").toLowerCase() === "auto" ? detectFormat(sourceUrl) : String(fd.get("format")).toLowerCase()),
+        fileUrl: telegramPagesMode ? "" : (isTelegram ? "" : sourceUrl),
         backupUrls,
         customLinks,
-        telegramUrl: isTelegram ? sourceUrl : "",
-        telegramFileId: isTelegram ? telegramFileId : "",
+        telegramUrl: telegramPagesMode ? "" : (isTelegram ? sourceUrl : ""),
+        telegramFileId: telegramPagesMode ? "" : (isTelegram ? telegramFileId : ""),
+        telegramFileName: telegramPagesMode ? "" : (x.telegramFileName || ""),
+        telegramFileSize: telegramPagesMode ? 0 : Number(x.telegramFileSize || 0),
         catalogEditedAt: new Date().toISOString(),
         cover: "",
         coverUrl: String(fd.get("coverUrl") || "").trim(),
