@@ -187,11 +187,6 @@
     const usableInitialSources = initialSources.filter(url => !deps.isExternalArchiveLink?.(url));
     if (!initialSources.length) throw new Error("Esta edição não possui uma fonte direta para converter.");
     if (!usableInitialSources.length) throw new Error("Esta fonte é um link externo que não pode ser convertida diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
-    if (!window.confirm(
-      "Migrar \"" + text(deps.itemDisplayTitle?.(item) || item.title || "esta edição") + "\" para páginas JPEG no Telegram?\n\n" +
-      "A edição será convertida e enviada página por página. O link original será mantido como reserva. " +
-      "Cada envio é publicado no Telegram e não pode ser desfeito automaticamente."
-    )) return null;
 
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop telegram-pages-progress-overlay";
