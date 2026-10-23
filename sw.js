@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v692-telegram-source-register";
+const CACHE_VERSION = "banca-digital-shell-v693-telegram-source-fallback";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.265-telegram-pages",
