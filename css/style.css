@@ -3457,10 +3457,12 @@ input:disabled { opacity: .45; cursor: not-allowed; }
 .telegram-pages-progress-overlay.is-minimized {
   inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto;
   width: min(340px, calc(100vw - 24px)); padding: 0; background: transparent;
+  pointer-events: none;
 }
 .telegram-pages-progress-overlay.is-minimized .telegram-pages-progress-modal {
   width: 100%; max-height: min(320px, 60dvh); padding: 16px;
   box-sizing: border-box; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  pointer-events: auto;
 }
 .telegram-pages-progress-overlay.is-minimized .section-head { gap: 10px; margin-bottom: 10px; }
 .telegram-pages-progress-overlay.is-minimized h2 { font-size: 16px; margin-bottom: 4px; }
