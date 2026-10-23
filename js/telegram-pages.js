@@ -206,7 +206,10 @@
         if (total > 0) status("Baixando fonte original… " + Math.round(received / total * 100) + "%");
         else status("Baixando fonte original… " + (received / 1048576).toFixed(1) + " MB");
       });
-      const format = text(item.format || extension(item.fileUrl || item.telegramUrl || source)).toLowerCase();
+      const configuredFormat = text(item.format || "").toLowerCase();
+      const detectedFormat = extension(item.fileUrl || item.telegramUrl || source);
+      const format = ["pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].includes(configuredFormat) && configuredFormat !== "auto"
+        ? configuredFormat : detectedFormat;
       if (format === "pdf") prepared = await preparePdf(buffer, deps, status);
       else if (format === "cbz" || extension(source) === "cbz") prepared = await prepareCbz(buffer, deps, status);
       else if (format === "cbr" || extension(source) === "cbr") prepared = await prepareCbr(buffer, deps, status);
@@ -224,7 +227,6 @@
       });
       let uploaded = Number(begun.uploadedPages || 0);
       if (uploaded > pageCount) throw new Error("O progresso salvo no Telegram ultrapassa o total de páginas do arquivo.");
-      const token = Number(deps.session?.()?.access_token || "");
       if (detailNode) detailNode.textContent = pageCount + " páginas • envio em ordem • limite do Telegram respeitado";
       for (let pageNumber = uploaded + 1; pageNumber <= pageCount; pageNumber++) {
         status("Preparando página " + pageNumber + "/" + pageCount + "…");
