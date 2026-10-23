@@ -46,10 +46,10 @@ function normalizeTelegramPost(value: unknown) {
     const url = new URL(String(value || ""));
     if (url.protocol !== "https:" || !["t.me", "telegram.me", "www.t.me", "www.telegram.me"].includes(url.hostname) || url.username || url.password || url.port) return "";
     const parts = url.pathname.split("/").filter(Boolean);
-    if (parts[0] === "c" && parts.length === 3 && /^\\d+$/.test(parts[1]) && /^\\d+$/.test(parts[2])) {
+    if (parts[0] === "c" && parts.length === 3 && /^[0-9]+$/.test(parts[1]) && /^[0-9]+$/.test(parts[2])) {
       return "https://t.me/c/" + parts[1] + "/" + parts[2];
     }
-    if (parts.length === 2 && /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(parts[0]) && /^\\d+$/.test(parts[1])) {
+    if (parts.length === 2 && /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(parts[0]) && /^[0-9]+$/.test(parts[1])) {
       return "https://t.me/" + parts[0].toLowerCase() + "/" + parts[1];
     }
   } catch {}
@@ -58,7 +58,7 @@ function normalizeTelegramPost(value: unknown) {
 function base64Url(bytes: Uint8Array) {
   let raw = "";
   for (const byte of bytes) raw += String.fromCharCode(byte);
-  return btoa(raw).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+  return btoa(raw).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 function decodeGatewayKey(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
@@ -187,7 +187,7 @@ async function handle(request: Request) {
       const telegramUrl = normalizeTelegramPost(edition.telegramUrl);
       if (!telegramUrl) throw new MigrationError("A edição não tem uma postagem válida do Telegram cadastrada.");
       const filename = String(edition.telegramFileName || edition.fileUrl || "").toLowerCase();
-      const namedFormat = filename.match(/\\.(pdf|cbz|cbr)(?:[?#]|$)/)?.[1] || "";
+      const namedFormat = filename.match(/[.](pdf|cbz|cbr)(?:[?#]|$)/)?.[1] || "";
       const configuredFormat = String(edition.format || "").toLowerCase();
       const format = ["pdf", "cbz", "cbr"].includes(configuredFormat) ? configuredFormat : namedFormat;
       if (!["pdf", "cbz", "cbr"].includes(format)) {
