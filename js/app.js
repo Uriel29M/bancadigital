@@ -13166,6 +13166,18 @@
         const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.migrateTelegramPages));
         if (!item || !isAdminProfile()) return;
         if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
+        if (button.dataset.telegramPagesConfirmPending === "true") return;
+        button.dataset.telegramPagesConfirmPending = "true";
+        let confirmed = false;
+        try {
+          confirmed = await openSiteConfirm(
+            `Converter "${itemDisplayTitle(item)}" em páginas JPEG e enviar cada página ao Telegram? O link original será mantido como reserva.`,
+            { title: "Migrar edição para o Telegram?", confirmLabel: "Converter e enviar" }
+          );
+        } finally {
+          delete button.dataset.telegramPagesConfirmPending;
+        }
+        if (!confirmed) return;
         button.disabled = true;
         button.textContent = "…";
         try {
