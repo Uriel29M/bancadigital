@@ -4,7 +4,7 @@
   const scriptBase = new URL('./', document.currentScript?.src || document.baseURI);
   const pdfModuleUrl = new URL('pdfjs/pdf.min.mjs', scriptBase).href;
   const pdfWorkerUrl = new URL('pdfjs/pdf.worker.min.mjs', scriptBase).href;
-  const readerFormatsUrl = new URL('reader-formats.js?v=1-reader-split', scriptBase).href;
+  const readerFormatsUrl = new URL('reader-formats.js?v=2-telegram-pages', scriptBase).href;
   const appBase = new URL('../', scriptBase);
   const readerRuntimeCache = 'banca-digital-reader-runtime-v1';
   const cbrAssetUrls = [
