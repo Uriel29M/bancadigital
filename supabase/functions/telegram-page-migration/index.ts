@@ -41,6 +41,43 @@ function chatId() {
     || Deno.env.get("TELEGRAM_RESOLVER_CHAT_ID")?.trim()
     || "-1004424843914";
 }
+function normalizeTelegramPost(value: unknown) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol !== "https:" || !["t.me", "telegram.me", "www.t.me", "www.telegram.me"].includes(url.hostname) || url.username || url.password || url.port) return "";
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] === "c" && parts.length === 3 && /^\\d+$/.test(parts[1]) && /^\\d+$/.test(parts[2])) {
+      return "https://t.me/c/" + parts[1] + "/" + parts[2];
+    }
+    if (parts.length === 2 && /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(parts[0]) && /^\\d+$/.test(parts[1])) {
+      return "https://t.me/" + parts[0].toLowerCase() + "/" + parts[1];
+    }
+  } catch {}
+  return "";
+}
+function base64Url(bytes: Uint8Array) {
+  let raw = "";
+  for (const byte of bytes) raw += String.fromCharCode(byte);
+  return btoa(raw).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+}
+function decodeGatewayKey(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
+  const raw = Uint8Array.from(atob(normalized), character => character.charCodeAt(0));
+  if (raw.byteLength !== 32) throw new MigrationError("Chave do gateway inválida.", 503);
+  return raw;
+}
+async function migrationSourceUrl(payload: Record<string, unknown>) {
+  // Mesmo formato de ticket AES-GCM usado pelo proxy do catálogo. Só entregamos
+  // o ticket após requireAdmin; ele expira em 15 minutos e não muda a visibilidade.
+  const encodedKey = "hkO_ParypIsaEaXQ_Qa6v5L0RexY_t6kZUUFj5NoWCI";
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey("raw", decodeGatewayKey(encodedKey), "AES-GCM", false, ["encrypt"]);
+  const data = new TextEncoder().encode(JSON.stringify({ v: 1, e: Math.floor(Date.now() / 1000) + 900, ...payload }));
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data));
+  const target = new URL("/media", "https://media-gateway-production-0bb9.up.railway.app");
+  target.searchParams.set("ticket", "v1." + base64Url(iv) + "." + base64Url(cipher));
+  return target.toString();
+}
 async function telegram(method: string, body: Record<string, unknown> | FormData) {
   const response = await fetch("https://api.telegram.org/bot" + required("TELEGRAM_BOT_TOKEN") + "/" + method, {
     method: "POST",
@@ -142,6 +179,36 @@ async function handle(request: Request) {
       // do Supabase e não consegue resolver uma postagem presente só no catálogo publicado.
       const saved = await saveEdition(loaded.db, edition, user.id);
       return json({ ok: true, registered: true, item_id: itemId, updatedAt: saved.updated_at });
+    }
+    if (action === "resolve-source") {
+      if (Array.isArray(edition.telegramPages) && edition.telegramPages.length) {
+        throw new MigrationError("Esta edição já está armazenada como páginas JPEG no Telegram.");
+      }
+      const telegramUrl = normalizeTelegramPost(edition.telegramUrl);
+      if (!telegramUrl) throw new MigrationError("A edição não tem uma postagem válida do Telegram cadastrada.");
+      const filename = String(edition.telegramFileName || edition.fileUrl || "").toLowerCase();
+      const namedFormat = filename.match(/\\.(pdf|cbz|cbr)(?:[?#]|$)/)?.[1] || "";
+      const configuredFormat = String(edition.format || "").toLowerCase();
+      const format = ["pdf", "cbz", "cbr"].includes(configuredFormat) ? configuredFormat : namedFormat;
+      if (!["pdf", "cbz", "cbr"].includes(format)) {
+        throw new MigrationError("Não foi possível identificar o formato original no Telegram. Salve o formato PDF, CBZ ou CBR nos dados da edição.");
+      }
+      const size = Number(edition.telegramFileSize);
+      if (!Number.isSafeInteger(size) || size < 1) {
+        throw new MigrationError("O Telegram não informou o tamanho do arquivo original. Identifique novamente a postagem antes de migrar.");
+      }
+      const sourceUrl = await migrationSourceUrl({
+        kind: "telegram",
+        itemId,
+        telegramUrl,
+        size,
+        format,
+        telegramApiId: required("TELEGRAM_API_ID"),
+        telegramApiHash: required("TELEGRAM_API_HASH"),
+        telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
+        telegramAllowedChatIds: Deno.env.get("TELEGRAM_ALLOWED_CHAT_IDS") || "-1004424843914",
+      });
+      return json({ ok: true, sourceUrl, format, size });
     }
     if (action === "begin") {
       if (Array.isArray(edition.telegramPages) && edition.telegramPages.length) {
