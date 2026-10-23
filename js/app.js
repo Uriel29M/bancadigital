@@ -38,7 +38,7 @@
   // O snapshot publicado tem prioridade sobre duplicatas e mutações dos selos.
   window.DEFAULT_SERIES = [...new Map([...(window.DEFAULT_SERIES || []), ...(window.PUBLISHED_CATALOG?.series || [])].map(series => [series.id, series])).values()];
   window.DEFAULT_LIBRARY = [...new Map([...(window.DEFAULT_LIBRARY || []), ...(window.PUBLISHED_CATALOG?.library || [])].map(item => [item.id, item])).values()];
-  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "backupUrls", "customLinks", "format"];
+  const EDITION_SOURCE_FIELDS = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "backupUrls", "customLinks", "telegramPages", "telegramPageFiles", "telegramPagesPending", "telegramPagesMigration", "format"];
   function mergeCatalogEdition(item, published) {
     if (!published) return item;
     // Não descarte a edição do ADM enquanto o deploy ainda entrega a versão anterior.
@@ -2650,7 +2650,7 @@
   let readerFormatRenderersPromise = null;
   function loadReaderFormatRenderers() {
     if (!readerFormatRenderersPromise) {
-      readerFormatRenderersPromise = import(appAssetUrl("js/reader-formats.js?v=1-reader-split"))
+      readerFormatRenderersPromise = import(appAssetUrl("js/reader-formats.js?v=2-telegram-pages"))
         .then(module => module.createReaderFormats({
           $,
           READER_END_PAGE_URL,
@@ -5928,13 +5928,61 @@
     }
   }
 
+  async function renderTelegramPagesReader(item, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}) {
+    const pages = Array.isArray(item.telegramPages) ? item.telegramPages : [];
+    if (!pages.length || !window.BancaTelegramPages?.imageUrl) throw new Error("Esta edição não possui páginas JPEG válidas no Telegram.");
+    let pageNumber = Math.max(skipCover && pages.length > 1 ? 2 : 1, Math.min(Number(resumePage) || 1, pages.length + 1));
+    const image = document.createElement("img");
+    image.className = "reader-image";
+    image.alt = "";
+    image.decoding = "async";
+    image.loading = "eager";
+    image.fetchPriority = "high";
+    let loadToken = 0;
+    const draw = () => {
+      const token = ++loadToken;
+      const totalPages = pages.length + 1;
+      if (pageNumber === totalPages) {
+        body.replaceChildren(readerEndPageImage());
+        controls.innerHTML = '<button data-prev>‹</button><span class="reader-page">' + pageNumber + " / " + totalPages + '</span><button data-next disabled>›</button>';
+        $("[data-prev]", controls)?.addEventListener("click", () => { pageNumber = Math.max(1, pageNumber - 1); draw(); });
+        onPageChange(item, pageNumber, totalPages);
+        return;
+      }
+      body.replaceChildren(readerLoadingMarkup("Carregando página " + pageNumber + "/" + pages.length + "…"));
+      image.alt = "Página " + pageNumber;
+      image.onload = () => {
+        if (token !== loadToken) return;
+        body.replaceChildren(image);
+        controls.innerHTML = '<button data-prev ' + (pageNumber <= 1 ? "disabled" : "") + '>‹</button><span class="reader-page">' + pageNumber + " / " + totalPages + '</span><button data-next>›</button>';
+        $("[data-prev]", controls)?.addEventListener("click", () => { if (pageNumber > 1) { pageNumber--; draw(); } });
+        $("[data-next]", controls)?.addEventListener("click", () => { if (pageNumber < totalPages) { pageNumber++; draw(); } });
+        onPageChange(item, pageNumber, totalPages);
+      };
+      image.onerror = () => {
+        if (token !== loadToken) return;
+        const page = pages[pageNumber - 1];
+        body.innerHTML = '<div class="empty" style="margin:auto;max-width:650px"><h3>Não foi possível carregar esta página</h3><p>O leitor não recebeu o JPEG do Telegram. Você pode abrir a postagem individual da página.</p><a class="btn btn-primary" target="_blank" rel="noopener" href="' + escapeHTML(page?.url || "#") + '">Abrir imagem no Telegram</a></div>';
+        controls.innerHTML = '<button data-prev ' + (pageNumber <= 1 ? "disabled" : "") + '>‹</button><span class="reader-page">' + pageNumber + " / " + totalPages + '</span><button data-next ' + (pageNumber >= totalPages ? "disabled" : "") + '>›</button>';
+        $("[data-prev]", controls)?.addEventListener("click", () => { if (pageNumber > 1) { pageNumber--; draw(); } });
+        $("[data-next]", controls)?.addEventListener("click", () => { if (pageNumber < totalPages) { pageNumber++; draw(); } });
+      };
+      image.src = window.BancaTelegramPages.imageUrl(item.id, pageNumber);
+      onPageChange(item, pageNumber, totalPages);
+    };
+    draw();
+    overlay._telegramPagesCleanup = () => { loadToken++; image.onload = image.onerror = null; };
+    return true;
+  }
+
   function openReader(item, options = {}) {
     if (!item) return;
+    const telegramPagesMode = !item.local && Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
     if (!canViewCatalogItem(item)) {
       toast("Esta edição está indisponível.");
       return;
     }
-    if (!options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
+    if (!telegramPagesMode && !options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
       if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
       void window.BancaTelegram.published(item, sb).then(canonical => {
         if (!canonical.telegramFileId && !canonical.fileUrl) {
@@ -5956,11 +6004,11 @@
       toast("Esta edição está indisponível.");
       return;
     }
-    if (!downloadSource(item) && item?.officialUrl) {
+    if (!telegramPagesMode && !downloadSource(item) && item?.officialUrl) {
       window.open(item.officialUrl, "_blank", "noopener");
       return;
     }
-    const sourceUrl = downloadSource(item);
+    const sourceUrl = telegramPagesMode ? window.BancaTelegramPages?.imageUrl(item.id, 1) : downloadSource(item);
     if (isExternalArchiveLink(sourceUrl)) {
       window.open(sourceUrl, "_blank", "noopener");
       return;
@@ -5988,7 +6036,7 @@
     activeReaderCleanup = null;
 
     recordComicRead(item);
-    const sourceCandidates = readerSourceCandidates(item);
+    const sourceCandidates = telegramPagesMode ? [sourceUrl].filter(Boolean) : readerSourceCandidates(item);
     let resolvedUrl = sourceCandidates[0] || "";
 
     if (!resolvedUrl) {
@@ -6003,9 +6051,9 @@
     readerFilePrefetches.delete(resolvedUrl);
     const itemFormat = String(item.format || "").toLowerCase();
     const fileFormat = extension(item.file?.name || item.name || "");
-    const format = /^(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/.test(itemFormat)
+    const format = telegramPagesMode ? "telegram-pages" : (/^(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/.test(itemFormat)
       ? itemFormat
-      : (fileFormat || extension(resolvedUrl)).toLowerCase();
+      : (fileFormat || extension(resolvedUrl)).toLowerCase());
     const skipCover = Object.prototype.hasOwnProperty.call(options, "skipCover") ? options.skipCover === true : shouldSkipCover();
     const savedProgress = progressFor(item);
     const resumePage = savedProgress?.page || (skipCover ? 2 : 1);
@@ -6529,7 +6577,7 @@
 
     const startReader = async () => {
       body.innerHTML = readerLoadingMarkup("Abrindo edição…");
-      const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(format);
+      const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(format) || format === "telegram-pages";
       let selectedIndex = 0;
       if (!item.local && sourceCandidates.length && !isImage) {
         selectedIndex = -1;
@@ -6548,7 +6596,7 @@
         }
         resolvedUrl = sourceCandidates[selectedIndex] || resolvedUrl;
       }
-      const selectedFormat = String(item.format || format).toLowerCase();
+      const selectedFormat = telegramPagesMode ? "telegram-pages" : (item.local ? format : String(item.format || format).toLowerCase());
       if (["pdf", "cbz", "cbr"].includes(selectedFormat)) await ensureReaderDependency(selectedFormat);
       const callback = (...args) => {
         markReaderReady();
@@ -6557,7 +6605,9 @@
         const total = Number(args[2]) || 0;
         void readerAdControllerPromise.then(controller => controller?.onPageChange(page, total)).catch(() => {});
       };
-      if (selectedFormat === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
+      if (selectedFormat === "telegram-pages") {
+        await renderTelegramPagesReader(item, body, controls, overlay, skipCover, resumePage, callback);
+      } else if (selectedFormat === "pdf" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".pdf")) {
         await renderPDFReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
       } else if (selectedFormat === "cbz" || resolvedUrl.toLowerCase().split("?")[0].endsWith(".cbz")) {
         await renderCBZReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
@@ -6565,7 +6615,7 @@
         await renderCBRReader(item, resolvedUrl, body, controls, overlay, skipCover, resumePage, callback, selectedIndex === 0 ? prefetchedBuffer : null);
       }
     };
-    if (format === "pdf" || format === "cbz" || format === "cbr") {
+    if (format === "pdf" || format === "cbz" || format === "cbr" || format === "telegram-pages") {
       void startReader().then(markReaderReady).catch(() => {});
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
       body.innerHTML = readerLoadingMarkup("Abrindo imagem…");
@@ -7637,7 +7687,7 @@
         </div>
         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
         ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${isAdminProfile() ? "card-download-admin-offset" : ""} ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
-        ${isAdminProfile() ? `<button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
+        ${isAdminProfile() ? `<button type="button" class="card-telegram-pages ${item.telegramPages?.length ? "is-complete" : ""}" data-migrate-telegram-pages="${escapeHTML(item.id)}" title="${item.telegramPages?.length ? "Edição já armazenada como JPEG no Telegram" : "Converter e enviar páginas JPEG ao Telegram"}" aria-label="${item.telegramPages?.length ? "Edição já migrada" : "Migrar páginas para o Telegram"}" ${item.telegramPages?.length ? "disabled" : ""}>${item.telegramPages?.length ? "✓" : "⇧"}</button><button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
         <div class="card-body">
           <div class="card-title">${escapeHTML(displayTitle)}</div>
           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${characterButtons}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
@@ -13106,6 +13156,42 @@
     $$('[data-delete-download-series]').forEach(button => button.addEventListener('click', () => deleteSeriesDownloads(button.dataset.deleteDownloadSeries)));
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
     bindCatalogItemVisibility();
+    $$('[data-migrate-telegram-pages]').forEach(button => {
+      if (button.dataset.telegramPagesBound) return;
+      button.dataset.telegramPagesBound = "true";
+      button.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (button.disabled) return;
+        const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.migrateTelegramPages));
+        if (!item || !isAdminProfile()) return;
+        if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
+        button.disabled = true;
+        button.textContent = "…";
+        try {
+          const migrated = await window.BancaTelegramPages.migrate(item, {
+            client: sb, isAdminProfile, session: () => state.session,
+            sessionOffline: () => Boolean(state.session?.offline),
+            fetchFileArrayBuffer, ensureReaderDependency, loadLibarchiveModule,
+            appAssetUrl, downloadSource, isExternalArchiveLink, itemDisplayTitle,
+          });
+          if (!migrated) return;
+          const saved = await saveCatalog("Edição migrada para páginas JPEG no Telegram.", migrated);
+          if (saved) {
+            document.querySelector(".telegram-pages-progress-overlay")?.remove();
+            await refreshSharedCatalog({ renderPage: false }).catch(() => {});
+            render();
+          }
+        } catch (error) {
+          toast(error?.message || "Não foi possível migrar a edição para o Telegram.");
+        } finally {
+          if (button.isConnected) {
+            button.disabled = Boolean(item.telegramPages?.length);
+            button.textContent = item.telegramPages?.length ? "✓" : "⇧";
+          }
+        }
+      });
+    });
     $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
