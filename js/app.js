@@ -5898,10 +5898,13 @@
 
   async function probeReaderSource(url) {
     if (!url || /^blob:/i.test(url)) return true;
-    // O Mega exige uma negociação própria para cada requisição. A sondagem
-    // extra de um byte costuma expirar (546), mas o leitor já faz a leitura
-    // real por faixas e trata o erro no ponto correto.
-    if (/^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url))) return true;
+    // Mega e o gateway de mídia do Telegram fazem negociação por faixa.
+    // Uma sondagem extra de 1 byte pode ser rejeitada sem que o download real
+    // por faixas falhe; deixe o leitor fazer a requisição apropriada ao provedor.
+    if (
+      /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url)) ||
+      isTelegramMediaUrl(url)
+    ) return true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     try {
