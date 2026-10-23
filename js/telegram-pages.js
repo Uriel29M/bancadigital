@@ -179,10 +179,13 @@
     if (!deps?.client || !deps.isAdminProfile?.()) throw new Error("Entre com a conta de administrador para migrar edições.");
     if (navigator.onLine === false || deps.sessionOffline?.()) throw new Error("A migração exige conexão com a internet.");
     if (Array.isArray(item?.telegramPages) && item.telegramPages.length) throw new Error("Esta edição já foi migrada para páginas JPEG no Telegram.");
-    const source = deps.downloadSource(item);
-    if (!source) throw new Error("Esta edição não possui uma fonte direta para converter.");
-    if (deps.isExternalArchiveLink?.(source)) throw new Error("Esta fonte é um link externo que não pode ser convertido diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
+    // Prefere a URL direta. O proxy do Telegram depende de a edição já estar
+    // registrada em catalog_edition_overrides; esse registro é garantido abaixo.
+    const directSource = text(item.fileUrl).trim();
     const originalLink = text(item.fileUrl || item.telegramUrl || "");
+    const initialSource = directSource || deps.downloadSource(item);
+    if (!initialSource) throw new Error("Esta edição não possui uma fonte direta para converter.");
+    if (deps.isExternalArchiveLink?.(directSource || initialSource)) throw new Error("Esta fonte é um link externo que não pode ser convertido diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
     if (!window.confirm(
       "Migrar \"" + text(deps.itemDisplayTitle?.(item) || item.title || "esta edição") + "\" para páginas JPEG no Telegram?\n\n" +
       "A edição será convertida e enviada página por página. O link original será mantido como reserva. " +
@@ -200,6 +203,20 @@
     const status = message => { if (statusNode) statusNode.textContent = message; };
     let prepared = null;
     try {
+      // Se a fonte está numa postagem do Telegram e não há URL direta, primeiro
+      // grave os metadados. O telegram-proxy consulta esse registro no Supabase;
+      // sem isso ele responde 404 "Edição indisponível" antes de começar a migração.
+      if (!directSource && text(item.telegramUrl).trim()) {
+        status("Registrando a edição para liberar a fonte do Telegram…");
+        await invoke(deps.client, {
+          action: "register",
+          item_id: String(item.id),
+          edition: item,
+        });
+      }
+      const source = directSource || deps.downloadSource(item);
+      if (!source) throw new Error("Não foi possível resolver a fonte original desta edição.");
+      if (deps.isExternalArchiveLink?.(source)) throw new Error("Esta fonte é um link externo que não pode ser convertido diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
       status("Baixando a fonte original…");
       const buffer = await deps.fetchFileArrayBuffer(source, (received, total) => {
         if (!statusNode) return;
@@ -259,7 +276,7 @@
       return completed.edition;
     } catch (error) {
       status("A migração foi interrompida.");
-      if (detailNode) detailNode.textContent = (error?.message || String(error)) + " As páginas já enviadas continuam no Telegram; tente novamente para retomar o progresso.";
+      if (detailNode) detailNode.textContent = (error?.message || String(error)) + " Se alguma página já tiver sido enviada, ela continuará no Telegram; corrija o erro e tente novamente para retomar o progresso.";
       if (close) {
         close.disabled = false;
         close.textContent = "Fechar";
