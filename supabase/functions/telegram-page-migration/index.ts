@@ -134,6 +134,15 @@ async function handle(request: Request) {
     }
     const loaded = await loadEdition(itemId, baseEdition);
     let edition = loaded.edition;
+    if (action === "register") {
+      if (Array.isArray(edition.telegramPages) && edition.telegramPages.length) {
+        throw new MigrationError("Esta edição já está armazenada como páginas JPEG no Telegram.");
+      }
+      // Registra o catálogo antes do download: telegram-proxy lê os metadados
+      // do Supabase e não consegue resolver uma postagem presente só no catálogo publicado.
+      const saved = await saveEdition(loaded.db, edition, user.id);
+      return json({ ok: true, registered: true, item_id: itemId, updatedAt: saved.updated_at });
+    }
     if (action === "begin") {
       if (Array.isArray(edition.telegramPages) && edition.telegramPages.length) {
         throw new MigrationError("Esta edição já está armazenada como páginas JPEG no Telegram.");
