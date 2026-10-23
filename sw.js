@@ -1,7 +1,7 @@
-const CACHE_VERSION = "banca-digital-shell-v697-telegram-pages-minimize";
+const CACHE_VERSION = "banca-digital-shell-v698-telegram-minimize-click-through";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.266-telegram-pages-minimize",
+  "./", "./index.html", "./css/style.css?v=2.2.10.267-telegram-minimize-click-through",
   "./js/app.js?v=2.2.10.558-telegram-style-confirm", "./js/reader-deps.js?v=4-telegram-pages", "./js/catalog-sync.js?v=6-telegram-pages",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-pages.js?v=6-minimize",
