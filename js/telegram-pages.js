@@ -179,13 +179,14 @@
     if (!deps?.client || !deps.isAdminProfile?.()) throw new Error("Entre com a conta de administrador para migrar edições.");
     if (navigator.onLine === false || deps.sessionOffline?.()) throw new Error("A migração exige conexão com a internet.");
     if (Array.isArray(item?.telegramPages) && item.telegramPages.length) throw new Error("Esta edição já foi migrada para páginas JPEG no Telegram.");
-    // Prefere a URL direta. O proxy do Telegram depende de a edição já estar
-    // registrada em catalog_edition_overrides; esse registro é garantido abaixo.
+    // Prefere a URL direta; a postagem do Telegram fica como alternativa.
+    // O proxy precisa do registro em catalog_edition_overrides, garantido abaixo.
     const directSource = text(item.fileUrl).trim();
     const originalLink = text(item.fileUrl || item.telegramUrl || "");
-    const initialSource = directSource || deps.downloadSource(item);
-    if (!initialSource) throw new Error("Esta edição não possui uma fonte direta para converter.");
-    if (deps.isExternalArchiveLink?.(directSource || initialSource)) throw new Error("Esta fonte é um link externo que não pode ser convertido diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
+    const initialSources = [...new Set([directSource, text(deps.downloadSource(item)).trim()].filter(Boolean))];
+    const usableInitialSources = initialSources.filter(url => !deps.isExternalArchiveLink?.(url));
+    if (!initialSources.length) throw new Error("Esta edição não possui uma fonte direta para converter.");
+    if (!usableInitialSources.length) throw new Error("Esta fonte é um link externo que não pode ser convertida diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
     if (!window.confirm(
       "Migrar \"" + text(deps.itemDisplayTitle?.(item) || item.title || "esta edição") + "\" para páginas JPEG no Telegram?\n\n" +
       "A edição será convertida e enviada página por página. O link original será mantido como reserva. " +
@@ -203,10 +204,9 @@
     const status = message => { if (statusNode) statusNode.textContent = message; };
     let prepared = null;
     try {
-      // Se a fonte está numa postagem do Telegram e não há URL direta, primeiro
-      // grave os metadados. O telegram-proxy consulta esse registro no Supabase;
-      // sem isso ele responde 404 "Edição indisponível" antes de começar a migração.
-      if (!directSource && text(item.telegramUrl).trim()) {
+      // O proxy do Telegram consulta catalog_edition_overrides. Registre a
+      // edição antes de baixá-la, inclusive quando houver um link direto alternativo.
+      if (text(item.telegramUrl).trim()) {
         status("Registrando a edição para liberar a fonte do Telegram…");
         await invoke(deps.client, {
           action: "register",
@@ -214,17 +214,34 @@
           edition: item,
         });
       }
-      const source = directSource || deps.downloadSource(item);
-      if (!source) throw new Error("Não foi possível resolver a fonte original desta edição.");
-      if (deps.isExternalArchiveLink?.(source)) throw new Error("Esta fonte é um link externo que não pode ser convertido diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
-      status("Baixando a fonte original…");
-      const buffer = await deps.fetchFileArrayBuffer(source, (received, total) => {
-        if (!statusNode) return;
-        if (total > 0) status("Baixando fonte original… " + Math.round(received / total * 100) + "%");
-        else status("Baixando fonte original… " + (received / 1048576).toFixed(1) + " MB");
-      });
+      const candidateSources = [...new Set([
+        directSource,
+        text(deps.downloadSource(item)).trim(),
+      ].filter(Boolean))].filter(url => !deps.isExternalArchiveLink?.(url));
+      if (!candidateSources.length) throw new Error("Não foi possível resolver uma fonte compatível para esta edição.");
+      let buffer = null;
+      let source = "";
+      let sourceError = null;
+      for (let sourceIndex = 0; sourceIndex < candidateSources.length; sourceIndex++) {
+        const candidate = candidateSources[sourceIndex];
+        status(sourceIndex === 0
+          ? "Baixando a fonte original…"
+          : "A fonte principal falhou. Tentando a alternativa do Telegram…");
+        try {
+          buffer = await deps.fetchFileArrayBuffer(candidate, (received, total) => {
+            if (!statusNode) return;
+            if (total > 0) status("Baixando fonte original… " + Math.round(received / total * 100) + "%");
+            else status("Baixando fonte original… " + (received / 1048576).toFixed(1) + " MB");
+          });
+          source = candidate;
+          break;
+        } catch (error) {
+          sourceError = error;
+        }
+      }
+      if (!buffer) throw sourceError || new Error("Não foi possível baixar a fonte original desta edição.");
       const configuredFormat = text(item.format || "").toLowerCase();
-      const detectedFormat = extension(item.fileUrl || item.telegramUrl || source);
+      const detectedFormat = extension(item.telegramFileName || item.fileUrl || source || item.telegramUrl);
       const format = ["pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].includes(configuredFormat) && configuredFormat !== "auto"
         ? configuredFormat : detectedFormat;
       if (format === "pdf") prepared = await preparePdf(buffer, deps, status);
