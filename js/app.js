@@ -2715,7 +2715,7 @@
   let readerFormatRenderersPromise = null;
   function loadReaderFormatRenderers() {
     if (!readerFormatRenderersPromise) {
-      readerFormatRenderersPromise = import(appAssetUrl("js/reader-formats.js?v=2-telegram-pages"))
+      readerFormatRenderersPromise = import(appAssetUrl("js/reader-formats.js?v=3-progressive-telegram"))
         .then(module => module.createReaderFormats({
           $,
           READER_END_PAGE_URL,
