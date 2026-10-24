@@ -6445,7 +6445,16 @@
     // renderer calls markReaderReady() only after its first page is ready.
     if (toggleReadButton) toggleReadButton.disabled = true;
     let readerReady = false;
+    const readerHasRenderedPage = () => {
+      if (!body?.isConnected) return false;
+      const canvas = body.querySelector("canvas");
+      if (canvas && canvas.width > 0 && canvas.height > 0) return true;
+      return Array.from(body.querySelectorAll("img")).some(image =>
+        image.complete && image.naturalWidth > 0 && !image.closest(".reader-loading")
+      );
+    };
     const markReaderReady = () => {
+      if (!readerHasRenderedPage()) return;
       readerReady = true;
       if (toggleReadButton?.isConnected) toggleReadButton.disabled = false;
     };
@@ -6821,8 +6830,9 @@
       const selectedFormat = telegramPagesMode ? "telegram-pages" : (item.local ? format : String(item.format || format).toLowerCase());
       if (["pdf", "cbz", "cbr"].includes(selectedFormat)) await ensureReaderDependency(selectedFormat);
       const callback = (...args) => {
-        markReaderReady();
         saveReadingProgress(...args);
+        // Some renderers announce page selection before that page has loaded.
+        if (readerHasRenderedPage()) markReaderReady();
         const page = Number(args[1]) || 0;
         const total = Number(args[2]) || 0;
         void readerAdControllerPromise.then(controller => controller?.onPageChange(page, total)).catch(() => {});
@@ -6838,7 +6848,11 @@
       }
     };
     if (format === "pdf" || format === "cbz" || format === "cbr" || format === "telegram-pages") {
-      void startReader().then(markReaderReady).catch(() => {});
+      void startReader().then(() => {
+        if (readerHasRenderedPage()) markReaderReady();
+      }).catch(error => {
+        console.warn("[Banca Digital] A edição não terminou de carregar:", error);
+      });
     } else if (["jpg","jpeg","png","webp","gif"].includes(format)) {
       body.innerHTML = readerLoadingMarkup("Abrindo imagem…");
       const image = document.createElement("img");
