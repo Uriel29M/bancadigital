@@ -6118,6 +6118,23 @@
       toast("Esta edição está indisponível.");
       return;
     }
+
+    // Edições do catálogo online usam o leitor independente ComicReader.
+    // Arquivos locais, modo offline e links externos continuam no fluxo original.
+    const comicReaderSource = telegramPagesMode ? "" : downloadSource(item);
+    const canUseComicReader = telegramPagesMode || Boolean(comicReaderSource) || Boolean(item.telegramUrl && window.BANCA_SUPABASE_URL);
+    if (!item.local && !state.session?.offline && navigator.onLine !== false && options.useNativeReader !== true && canUseComicReader && !isExternalArchiveLink(comicReaderSource)) {
+      const returnUrl = new URL(window.location.href);
+      returnUrl.searchParams.delete("ler");
+      returnUrl.searchParams.delete("edicao");
+      returnUrl.searchParams.delete("id");
+      const comicReaderUrl = new URL("https://uriel29m.github.io/comicreader/");
+      comicReaderUrl.searchParams.set("ler", String(item.id));
+      comicReaderUrl.searchParams.set("returnTo", returnUrl.href);
+      window.location.assign(comicReaderUrl.href);
+      return;
+    }
+
     if (!telegramPagesMode && !options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
       if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
       void window.BancaTelegram.published(item, sb).then(canonical => {
