@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v706-read-button-final-render-gate";
+const CACHE_VERSION = "banca-digital-shell-v707-hidden-catalog-realtime";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.267-telegram-minimize-click-through",
-  "./js/app.js?v=2.2.10.570-read-button-final-render-gate", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
+  "./js/app.js?v=2.2.10.571-hidden-catalog-realtime", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-pages.js?v=6-minimize",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
