@@ -5944,47 +5944,102 @@
   async function renderTelegramPagesReader(item, body, controls, overlay, skipCover = false, resumePage = 1, onPageChange = () => {}) {
     const pages = Array.isArray(item.telegramPages) ? item.telegramPages : [];
     if (!pages.length || !window.BancaTelegramPages?.imageUrl) throw new Error("Esta edição não possui páginas JPEG válidas no Telegram.");
-    let pageNumber = Math.max(skipCover && pages.length > 1 ? 2 : 1, Math.min(Number(resumePage) || 1, pages.length + 1));
-    const image = document.createElement("img");
-    image.className = "reader-image";
-    image.alt = "";
-    image.decoding = "async";
-    image.loading = "eager";
-    image.fetchPriority = "high";
-    let loadToken = 0;
-    const draw = () => {
-      const token = ++loadToken;
-      const totalPages = pages.length + 1;
-      if (pageNumber === totalPages) {
-        body.replaceChildren(readerEndPageImage());
-        controls.innerHTML = '<button data-prev>‹</button><span class="reader-page">' + pageNumber + " / " + totalPages + '</span><button data-next disabled>›</button>';
-        $("[data-prev]", controls)?.addEventListener("click", () => { pageNumber = Math.max(1, pageNumber - 1); draw(); });
-        onPageChange(item, pageNumber, totalPages);
-        return;
+    const total = pages.length + 1;
+    const first = skipCover && pages.length > 1 ? 2 : 1;
+    let page = Math.max(first, Math.min(Number(resumePage) || first, total));
+    let token = 0;
+    const cache = new Map();
+    const pending = new Map();
+    const load = n => {
+      if (n < 1 || n > pages.length) return Promise.resolve(null);
+      if (cache.has(n)) return Promise.resolve(cache.get(n));
+      if (!pending.has(n)) {
+        const promise = new Promise((resolve, reject) => {
+          const img = new Image();
+          img.decoding = "async";
+          img.onload = () => { cache.set(n, img); resolve(img); };
+          img.onerror = () => reject(new Error("Falha ao carregar página " + n));
+          img.src = window.BancaTelegramPages.imageUrl(item.id, n);
+        });
+        pending.set(n, promise);
+        promise.then(() => pending.delete(n), () => pending.delete(n));
       }
-      body.replaceChildren(readerLoadingMarkup("Carregando página " + pageNumber + "/" + pages.length + "…"));
-      image.alt = "Página " + pageNumber;
-      image.onload = () => {
-        if (token !== loadToken) return;
-        body.replaceChildren(image);
-        controls.innerHTML = '<button data-prev ' + (pageNumber <= 1 ? "disabled" : "") + '>‹</button><span class="reader-page">' + pageNumber + " / " + totalPages + '</span><button data-next>›</button>';
-        $("[data-prev]", controls)?.addEventListener("click", () => { if (pageNumber > 1) { pageNumber--; draw(); } });
-        $("[data-next]", controls)?.addEventListener("click", () => { if (pageNumber < totalPages) { pageNumber++; draw(); } });
-        onPageChange(item, pageNumber, totalPages);
-      };
-      image.onerror = () => {
-        if (token !== loadToken) return;
-        const page = pages[pageNumber - 1];
-        body.innerHTML = '<div class="empty" style="margin:auto;max-width:650px"><h3>Não foi possível carregar esta página</h3><p>O leitor não recebeu o JPEG do Telegram. Você pode abrir a postagem individual da página.</p><a class="btn btn-primary" target="_blank" rel="noopener" href="' + escapeHTML(page?.url || "#") + '">Abrir imagem no Telegram</a></div>';
-        controls.innerHTML = '<button data-prev ' + (pageNumber <= 1 ? "disabled" : "") + '>‹</button><span class="reader-page">' + pageNumber + " / " + totalPages + '</span><button data-next ' + (pageNumber >= totalPages ? "disabled" : "") + '>›</button>';
-        $("[data-prev]", controls)?.addEventListener("click", () => { if (pageNumber > 1) { pageNumber--; draw(); } });
-        $("[data-next]", controls)?.addEventListener("click", () => { if (pageNumber < totalPages) { pageNumber++; draw(); } });
-      };
-      image.src = window.BancaTelegramPages.imageUrl(item.id, pageNumber);
-      onPageChange(item, pageNumber, totalPages);
+      return pending.get(n);
     };
+    const warm = n => [n + 1, n + 2, n - 1].forEach(next => {
+      if (next >= first && next <= pages.length && !cache.has(next)) void load(next).catch(() => {});
+    });
+    const drawSingle = async () => {
+      const current = ++token;
+      if (page === total) body.replaceChildren(readerEndPageImage());
+      else {
+        try {
+          const loaded = await load(page);
+          if (current !== token) return;
+          const img = document.createElement("img");
+          img.className = "reader-image"; img.alt = "Página " + page; img.decoding = "async"; img.src = loaded.src;
+          body.replaceChildren(img);
+          warm(page);
+        } catch {
+          if (current !== token) return;
+          body.innerHTML = '<div class="empty" style="margin:auto">Não foi possível carregar esta página do Telegram.</div>';
+        }
+      }
+      if (current !== token) return;
+      controls.innerHTML = '<button data-prev ' + (page <= first ? "disabled" : "") + '>‹</button><span class="reader-page">' + page + ' / ' + total + '</span><button data-next ' + (page >= total ? "disabled" : "") + '>›</button>';
+      $("[data-prev]", controls)?.addEventListener("click", () => { if (page > first) { page--; draw(); } });
+      $("[data-next]", controls)?.addEventListener("click", () => { if (page < total) { page++; draw(); } });
+      onPageChange(item, page, total);
+    };
+    const drawDouble = async () => {
+      const current = ++token;
+      const start = page === total ? total : Math.max(first, page <= first + 1 ? first : (page % 2 ? page - 1 : page));
+      const nums = start === total ? [total] : [start, Math.min(start + 1, pages.length)];
+      const spread = document.createElement("div"); spread.className = "reader-double-page";
+      try {
+        for (const n of nums) {
+          const wrapper = document.createElement("div"); wrapper.className = "double-page";
+          if (n === total) wrapper.appendChild(readerEndPageImage());
+          else { const loaded = await load(n); if (current !== token) return; const img = document.createElement("img"); img.className = "reader-image"; img.alt = "Página " + n; img.src = loaded.src; wrapper.appendChild(img); warm(n); }
+          spread.appendChild(wrapper);
+        }
+      } catch { if (current === token) body.innerHTML = '<div class="empty" style="margin:auto">Não foi possível carregar as páginas do Telegram.</div>'; return; }
+      if (current !== token) return;
+      body.replaceChildren(spread);
+      controls.innerHTML = '<button data-prev ' + (start <= first ? "disabled" : "") + '>‹</button><span class="reader-page">' + nums.join("–") + ' / ' + total + '</span><button data-next ' + (nums[nums.length - 1] >= total ? "disabled" : "") + '>›</button>';
+      $("[data-prev]", controls)?.addEventListener("click", () => { if (start > first) { page = Math.max(first, start - 2); draw(); } });
+      $("[data-next]", controls)?.addEventListener("click", () => { if (nums[nums.length - 1] < total) { page = Math.min(total, start + 2); draw(); } });
+      onPageChange(item, start, total);
+    };
+    const drawScroll = () => {
+      ++token;
+      const container = document.createElement("div"); container.className = "image-continuous-scroll-container";
+      const els = [];
+      for (let n = first; n <= total; n++) {
+        const wrapper = document.createElement("div"); wrapper.className = "image-page-wrapper"; wrapper.dataset.pageNum = String(n);
+        if (n === total) wrapper.appendChild(readerEndPageImage());
+        else { const img = document.createElement("img"); img.className = "reader-image"; img.alt = "Página " + n; img.loading = "lazy"; img.decoding = "async"; img.src = window.BancaTelegramPages.imageUrl(item.id, n); wrapper.appendChild(img); }
+        container.appendChild(wrapper); els.push(wrapper);
+      }
+      body.replaceChildren(container);
+      const update = () => {
+        const visible = els.find(el => { const rect = el.getBoundingClientRect(); return rect.bottom > 0 && rect.top < window.innerHeight / 2; }) || els[0];
+        if (!visible) return;
+        page = Number(visible.dataset.pageNum);
+        controls.innerHTML = '<button data-prev ' + (page <= first ? "disabled" : "") + '>↑</button><span class="reader-page">' + page + ' / ' + total + '</span><button data-next ' + (page >= total ? "disabled" : "") + '>↓</button>';
+        $("[data-prev]", controls)?.addEventListener("click", () => els[Math.max(0, els.indexOf(visible) - 1)]?.scrollIntoView({behavior:"smooth",block:"start"}));
+        $("[data-next]", controls)?.addEventListener("click", () => els[Math.min(els.length - 1, els.indexOf(visible) + 1)]?.scrollIntoView({behavior:"smooth",block:"start"}));
+        onPageChange(item, page, total);
+      };
+      container.addEventListener("scroll", update, {passive:true}); update();
+      els.find(el => Number(el.dataset.pageNum) === page)?.scrollIntoView({block:"start"});
+      overlay._telegramPagesScrollCleanup = () => container.removeEventListener("scroll", update);
+    };
+    const draw = () => state.readingMode === "continuous-scroll" ? drawScroll() : state.readingMode === "double-page" ? void drawDouble() : void drawSingle();
+    const selector = $("#reading-mode-select", overlay);
+    if (selector) { selector.disabled = false; selector.addEventListener("change", event => { setReadingMode(event.target.value); draw(); }); }
     draw();
-    overlay._telegramPagesCleanup = () => { loadToken++; image.onload = image.onerror = null; };
+    overlay._telegramPagesCleanup = () => { token++; cache.clear(); pending.clear(); overlay._telegramPagesScrollCleanup?.(); };
     return true;
   }
 
@@ -6073,7 +6128,7 @@
     let readerGrayscale = options.grayscale === true;
     const overlay = document.createElement("div");
     overlay.className = "reader-overlay";
-    const supportedFormatsForModes = ["pdf", "cbz", "cbr"];
+    const supportedFormatsForModes = ["pdf", "cbz", "cbr", "telegram-pages"];
     const showModeSelector = supportedFormatsForModes.includes(format);
     overlay.innerHTML = `
       <div class="reader-top">
