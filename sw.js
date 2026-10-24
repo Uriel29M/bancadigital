@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v710-moderation-history-modal";
+const CACHE_VERSION = "banca-digital-shell-v711-profile-separation";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.268-moderation-history-modal",
-  "./js/app.js?v=2.2.10.574-moderation-history-modal", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
+  "./js/app.js?v=2.2.10.575-profile-separation", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-pages.js?v=6-minimize",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",

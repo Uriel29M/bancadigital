@@ -3,6 +3,8 @@
 
   // Sistema de facções temporariamente desativado; módulos e dados são preservados.
   const FACTIONS_ENABLED = false;
+  const PROFILE_SITE_MODE = false;
+  const PROFILE_SITE_BASE = "https://uriel29m.github.io/perfil/";
 
   // --- Inicialização de Bibliotecas ---
   // --- Fim da Inicialização ---
@@ -1834,6 +1836,10 @@
     activeReaderCleanup = null;
     handlingRoute = true;
     const profileUsername = params.get("perfil");
+    if (!readerId && profileUsername && !PROFILE_SITE_MODE) {
+      window.location.replace(publicProfileHref(profileUsername, params.get("lista") || null, params.get("album") === "1", params.get("lista_top10") || ""));
+      return;
+    }
     if (!readerId && profileUsername) {
       loadPublicProfile(profileUsername, params.get("lista") || null, params.get("album") === "1", { top10ListId: params.get("lista_top10") || null });
       handlingRoute = false;
@@ -2774,21 +2780,31 @@
     return libarchiveModulePromise;
   }
 
-  function publicProfileHref(username, collectionId = "", album = false) {
-    const url = new URL(window.location.href);
-    url.search = "";
-    url.hash = "";
+  function publicProfileHref(username, collectionId = "", album = false, top10ListId = "") {
+    const url = new URL(PROFILE_SITE_BASE);
     url.searchParams.set("perfil", cleanUsername(username));
     if (collectionId) url.searchParams.set("lista", collectionId);
     if (album) url.searchParams.set("album", "1");
-    return `${url.pathname}?${url.searchParams.toString()}`;
+    if (top10ListId) url.searchParams.set("lista_top10", top10ListId);
+    return url.href;
+  }
+
+  function navigateToPublicProfile(username, collectionId = null, album = false, top10ListId = null) {
+    const profileUrl = publicProfileHref(username, collectionId || "", album, top10ListId || "");
+    if (!PROFILE_SITE_MODE) {
+      window.location.assign(profileUrl);
+      return;
+    }
+    return loadPublicProfile(username, collectionId || null, album, { top10ListId: top10ListId || null });
   }
 
   function openOwnPublicProfile() {
     if (!state.session?.user || !state.profile?.username) return openAuthPage();
     const profileUrl = publicProfileHref(state.profile.username);
-    if (`${window.location.pathname}${window.location.search}` !== profileUrl) {
-      window.history.pushState({ [ROUTE_HISTORY_KEY]: true, [ROUTE_HISTORY_INDEX_KEY]: currentRouteHistoryIndex() + 1 }, "", profileUrl);
+    const currentUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    if (!PROFILE_SITE_MODE || currentUrl !== profileUrl) {
+      window.location.assign(profileUrl);
+      return;
     }
     loadPublicProfile(state.profile.username);
   }
@@ -9271,7 +9287,7 @@
       button.dataset.bound = "true";
       button.onclick = () => {
         button.closest(".chat-modal, .comments-modal, .top10-comments-modal")?.querySelector("[data-close]")?.click();
-        loadPublicProfile(button.dataset.chatTop10Owner, null, false, { top10ListId: button.dataset.chatTop10Open });
+        navigateToPublicProfile(button.dataset.chatTop10Owner, null, false, button.dataset.chatTop10Open);
       };
     });
     $$('[data-chat-top10-preview-item]', root).forEach(row => {
@@ -12573,15 +12589,15 @@
       } else if (notification?.type === "collection_like" && notification.metadata?.collection_id) {
         openCollection(String(notification.metadata.collection_id));
       } else if ((notification?.type === "top10_item_like" || notification?.type === "top10_item_dislike") && notification.metadata?.profile_username) {
-        await loadPublicProfile(notification.metadata.profile_username, null, false, { top10ListId: notification.metadata.list_id || null });
+        await navigateToPublicProfile(notification.metadata.profile_username, null, false, notification.metadata.list_id || null);
       } else if ((notification?.type === "profile_wall_comment" || notification?.type === "profile_wall_reply") && notification.metadata?.profile_username) {
-        await loadPublicProfile(notification.metadata.profile_username);
+        await navigateToPublicProfile(notification.metadata.profile_username);
       } else if (notification?.type === "mention" && notification.metadata?.item_id) {
         const item = state.db.library.find(entry => String(entry.id) === String(notification.metadata.item_id));
         if (item) openCommentsPopup(item);
         else openNotificationsPopup();
       } else if (notification?.type === "follow" && notification.actor?.username) {
-        await loadPublicProfile(notification.actor.username);
+        await navigateToPublicProfile(notification.actor.username);
       } else {
         openNotificationsPopup();
       }
@@ -12592,7 +12608,7 @@
       const notification = state.notifications.find(item => String(item.id) === String(link.closest("[data-notification-open]")?.dataset.notificationOpen));
       await markNotificationRead(notification?.id);
       overlay.remove();
-      await loadPublicProfile(link.dataset.notificationProfile);
+      await navigateToPublicProfile(link.dataset.notificationProfile);
     });
     $('[data-mark-all-notifications]', overlay)?.addEventListener("click", async () => {
       await markAllNotificationsRead();
@@ -14419,7 +14435,7 @@
       if (a === "notifications-popup") openNotificationsPopup();
       if (a === "staff-activity") { if (canViewBancaMonitoring()) openNotificationsPopup("staff"); }
       if (a === "logout") signOut();
-      if (a === "profile") openProfileSettings();
+      if (a === "profile") { if (PROFILE_SITE_MODE) openProfileSettings(); else openOwnPublicProfile(); }
       if (a === "submit") { if (isAdminProfile()) openSubmission(); else toast("O envio de quadrinhos é exclusivo para administradores."); }
       if (a === "open-local-box") { state.localBoxVisible = true; setSection("local-box"); }
       });
