@@ -7892,7 +7892,8 @@
     return isNoveltyTimestamp(Math.min(...timestamps));
   }
 
-  function card(item, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, directOpen = false, coverChoices = null, seriesContext = false, collectionContext = null) {
+  function card(item, progressMap = state.readingProgress, favoriteIds = state.favoriteIds, directOpen = false, coverChoices = null, seriesContext = false, collectionContext = null, allowHiddenPreview = false) {
+    if (!allowHiddenPreview && !isAdminProfile() && !canViewCatalogItem(item, false)) return "";
     const publicCollection = state.section === "public-profile" && state.publicProfile?.collectionId
       ? state.publicProfile.collections?.find(collection => collection.id === state.publicProfile.collectionId)
       : null;
@@ -14970,6 +14971,7 @@
   }
 
   function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null, allowHiddenPreview = false, forcePage = false) {
+    if (!allowHiddenPreview && !isAdminProfile()) editions = visibleCatalogItems(Array.isArray(editions) ? editions : [], false);
     const seriesRouteId = series?.seriesId || series?.id || "";
     const pageMode = forcePage || (state.section === "series" && String(state.seriesPageId || "") === String(seriesRouteId));
     if (!pageMode && window.matchMedia?.("(max-width: 760px)")?.matches && seriesRouteId) {
@@ -14993,7 +14995,7 @@
     const volumeTabs = volumeEntries.length > 1
       ? `<div class="series-volume-tabs">${volumeEntries.map(([label], index) => `<button class="small-btn ${index === 0 ? "is-active" : ""}" type="button" data-series-volume-tab="${index}">${escapeHTML(label)}</button>`).join("")}</div>`
       : "";
-    const volumePanels = volumeEntries.map(([label, items], index) => `<div class="series-volume-panel" data-series-volume-panel="${index}" ${index ? "hidden" : ""}><div class="section-subtitle series-volume-heading">${escapeHTML(label)}</div><div class="results-grid">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, true)).join("")}</div></div>`).join("");
+    const volumePanels = volumeEntries.map(([label, items], index) => `<div class="series-volume-panel" data-series-volume-panel="${index}" ${index ? "hidden" : ""}><div class="section-subtitle series-volume-heading">${escapeHTML(label)}</div><div class="results-grid">${items.map(item => card(item, state.readingProgress, state.favoriteIds, false, null, true, null, allowHiddenPreview)).join("")}</div></div>`).join("");
     overlay.innerHTML = `
       <div class="${pageMode ? "series-page-shell series-modal" : "modal series-modal"}">
         <div class="section-head">
@@ -15325,6 +15327,14 @@
   }
 
   function seriesCard(item, favoriteIds = state.favoriteIds) {
+    if (!item) return "";
+    if (!isAdminProfile() && !canViewCatalogItem(item, false)) {
+      const visibleEdition = item.seriesId
+        ? state.db.library.find(entry => entry.seriesId === item.seriesId && canViewCatalogItem(entry, false))
+        : null;
+      if (!visibleEdition) return "";
+      item = visibleEdition;
+    }
     const series = seriesDefinitionFor(item);
     const editions = seriesEditions(item);
     const novelty = isNewCatalogSeries(editions);
@@ -15554,9 +15564,17 @@
     if (seriesId) updateSeriesCoverImages(seriesId);
     if (state.authReady && state.section !== "reader" && !readerIsOpen) render();
   })?.catch(error => console.warn("Capas padrão compartilhadas indisponíveis:", error));
-  if (sb) sb.channel("banca-series-visibility").on("postgres_changes", { event: "*", schema: "public", table: "catalog_series_visibility" }, () => {
-    loadCatalogVisibility().then(() => { if (state.authReady && !readerIsOpen) render(); }).catch(error => console.warn("Visibilidade das séries indisponível:", error));
-  }).subscribe();
+  if (sb) {
+    const refreshCatalogVisibility = () => {
+      loadCatalogVisibility()
+        .then(() => { if (state.authReady && !readerIsOpen) render(); })
+        .catch(error => console.warn("Não foi possível atualizar a visibilidade do catálogo:", error));
+    };
+    sb.channel("banca-catalog-visibility")
+      .on("postgres_changes", { event: "*", schema: "public", table: "catalog_item_visibility" }, refreshCatalogVisibility)
+      .on("postgres_changes", { event: "*", schema: "public", table: "catalog_series_visibility" }, refreshCatalogVisibility)
+      .subscribe();
+  }
   BancaCatalogSync.start(sb, refreshSharedCatalog);
   refreshSharedCatalog()
     .catch(error => console.warn("Catálogo compartilhado indisponível; usando cópia local:", error));
