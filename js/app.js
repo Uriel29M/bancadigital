@@ -993,7 +993,17 @@
   function isExternalArchiveLink(url) {
     return /^(?:https?:\/\/)(?:(?:www\.)?mediafire\.com\/\?|mega\.co\.nz\/#!)/i.test(String(url || ""));
   }
-  function downloadCacheKey(url) { const proxy = proxiedFileUrl(url); return `${proxy}${proxy.includes("?") ? "&" : "?"}v=240`; }
+  function downloadCacheKey(url) {
+    const proxy = proxiedFileUrl(url);
+    let version = 240;
+    try {
+      // This edition's Telegram archive was unavailable during prior attempts;
+      // force a fresh local Cache API entry after the server-side recovery.
+      const parsed = new URL(proxy, location.origin);
+      if (parsed.searchParams.get("item_id") === "series-all-star-western-2011-novos-52-033") version = 241;
+    } catch {}
+    return `${proxy}${proxy.includes("?") ? "&" : "?"}v=${version}`;
+  }
   async function downloadCoverDataUrl(item) {
     const selectedChoice = state.coverChoices?.get?.(item?.id) || state.coverChoices?.get?.(String(item?.id));
     const source = selectedChoice?.cover_url || coverFor(item);
