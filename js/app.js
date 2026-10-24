@@ -4163,20 +4163,81 @@
     return `<div class="content sticker-album-page"><div class="section-head"><div><div class="eyebrow">Coleção de figurinhas</div><h1 class="section-title">Álbum de ${isOwn ? "@" : "@"}${escapeHTML(profile?.username || "")}</h1><div class="section-subtitle">Personagens em ordem alfabética, separados por editora. Cada personagem recebe uma figurinha quando todas as edições atuais forem lidas.</div></div><div class="profile-actions">${isOwn ? `<button class="small-btn" data-action="open-profile-page">Perfil</button>` : `<a class="small-btn" href="${escapeHTML(publicProfileHref(profile.username))}">Voltar ao perfil</a>`}</div></div>${viewTabs}${requestPanel}${albumContent}</div>`;
   }
 
-  function toggleReadingCompleted(item, totalPages = progressFor(item)?.total_pages || 1) {
-    if (!state.session || !sb || item?.local) return;
+  const pendingReadingStatus = new Set();
+
+  async function toggleReadingCompleted(item, totalPages = progressFor(item)?.total_pages || 1) {
+    const userId = state.session?.user?.id;
+    if (!userId || !sb || item?.local || !item?.id) {
+      toast("Não foi possível marcar a edição. Confira se você está conectado à sua conta.");
+      return null;
+    }
+    const itemKey = String(item.id);
+    if (pendingReadingStatus.has(itemKey)) return null;
+    pendingReadingStatus.add(itemKey);
+
     const current = progressFor(item);
+    const previous = current ? { ...current } : null;
+    const shelf = ensureShelfSnapshot().read;
+    const wasInReadShelf = shelf.has(item.id);
     const completed = !current?.completed;
-    const row = { user_id: state.session.user.id, item_id: item.id, page: current?.page || 1, total_pages: totalPages, completed, completion_source: completed ? "manual" : null, updated_at: new Date().toISOString() };
+    const row = {
+      user_id: userId,
+      item_id: itemKey,
+      page: Math.max(1, Number(current?.page) || 1),
+      total_pages: Math.max(1, Number(totalPages) || Number(current?.total_pages) || 1),
+      completed,
+      completion_source: completed ? "manual" : null,
+      updated_at: new Date().toISOString()
+    };
+
     state.readingProgress.set(item.id, row);
-    if (row.completed) rememberShelfItem("read", item.id);
-    updateCompletionCards(item, row.completed);
-    if (row.completed && isSeriesCompleted(item)) { awardAchievement("first_completed"); awardAchievement("five_completed"); }
-    const result = sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
-    result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
-    const nextCompleted = row.completed;
-    result.then(response => { if (response.error) console.warn("Não foi possível atualizar o status de leitura:", response.error.message); });
-    return nextCompleted;
+    if (completed) shelf.add(item.id);
+    else shelf.delete(item.id);
+    updateCompletionCards(item, completed);
+    const readButton = $("[data-toggle-read]");
+    if (readButton) readButton.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
+
+    try {
+      const result = await sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
+      if (result.error) throw result.error;
+      if (state.session?.user?.id !== userId) return null;
+
+      if (completed && !previous?.completed) {
+        awardAchievement("first_read");
+        if (isSeriesCompleted(item)) {
+          awardAchievement("first_completed");
+          awardAchievement("five_completed");
+        }
+        await Promise.allSettled([
+          Promise.resolve().then(() => maybeAwardReadSticker(item)),
+          Promise.resolve().then(() => maybeAwardCharacterStickers(item))
+        ]);
+        if (state.profile?.faction_id) {
+          const completion = await sb.rpc("complete_faction_mandatory_read", { p_item_id: itemKey });
+          if (completion.error) console.warn("Não foi possível atualizar a leitura obrigatória:", completion.error.message);
+          const mandatory = await sb.rpc("get_faction_mandatory_reads", { p_faction_id: state.profile.faction_id });
+          if (!mandatory.error) state.factionMandatoryReads.set(state.profile.faction_id, mandatory.data || []);
+        }
+        if (state.section === "factions" && state.factionPageId === state.profile?.faction_id) {
+          await loadFactions();
+          render();
+        }
+      }
+      return completed;
+    } catch (error) {
+      if (previous) state.readingProgress.set(item.id, previous);
+      else state.readingProgress.delete(item.id);
+      const currentShelf = ensureShelfSnapshot().read;
+      if (wasInReadShelf) currentShelf.add(item.id);
+      else currentShelf.delete(item.id);
+      updateCompletionCards(item, Boolean(previous?.completed));
+      if (readButton?.isConnected) readButton.textContent = previous?.completed ? "Desmarcar como lida" : "Marcar como lida";
+      console.warn("Não foi possível atualizar o status de leitura:", error);
+      toast("Não foi possível salvar o status de leitura. Confira a conexão e tente novamente.");
+      return null;
+    } finally {
+      pendingReadingStatus.delete(itemKey);
+    }
   }
 
   const coverMemoryCache = new Map();
@@ -6380,22 +6441,21 @@
     });
     body.classList.toggle("reader-page-swipe", ["single-page", "double-page"].includes(state.readingMode));
     const toggleReadButton = $("[data-toggle-read]", overlay);
-    if (toggleReadButton) toggleReadButton.disabled = true;
-    const markReaderReady = () => { if (toggleReadButton) toggleReadButton.disabled = false; };
-    let readerReadyObserver = null;
-    if (toggleReadButton && "MutationObserver" in window) {
-      readerReadyObserver = new MutationObserver(() => {
-        if (body.querySelector("canvas, img, .image-continuous-scroll-container, .pdf-continuous-scroll-container, .reader-double-page")) {
-          markReaderReady();
-          readerReadyObserver.disconnect();
-          readerReadyObserver = null;
-        }
-      });
-      readerReadyObserver.observe(body, { childList: true, subtree: true });
-    }
-    toggleReadButton?.addEventListener("click", event => {
-      const completed = toggleReadingCompleted(item, progressFor(item)?.total_pages || 1);
-      event.currentTarget.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
+    // Marking an edition as read is independent of page rendering. Never leave
+    // this control disabled while images, archives, or PDFs are loading.
+    toggleReadButton?.addEventListener("click", async event => {
+      const button = event.currentTarget;
+      if (button.dataset.savingRead === "true") return;
+      button.dataset.savingRead = "true";
+      button.disabled = true;
+      const completed = await toggleReadingCompleted(item, progressFor(item)?.total_pages || 1);
+      if (completed !== null) {
+        button.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
+      } else if (button.isConnected) {
+        button.textContent = progressFor(item)?.completed ? "Desmarcar como lida" : "Marcar como lida";
+      }
+      delete button.dataset.savingRead;
+      if (button.isConnected) button.disabled = false;
     });
     overlay._readerNavigate = direction => {
       const button = direction > 0 ? $("[data-next]", controls) : $("[data-prev]", controls);
