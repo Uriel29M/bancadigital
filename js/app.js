@@ -6458,6 +6458,10 @@
       readerReady = true;
       if (toggleReadButton?.isConnected) toggleReadButton.disabled = false;
     };
+    body.addEventListener("load", event => {
+      const image = event.target;
+      if (image?.tagName === "IMG" && image.complete && image.naturalWidth > 0) markReaderReady();
+    }, true);
     toggleReadButton?.addEventListener("click", async event => {
       const button = event.currentTarget;
       if (!readerReady || button.dataset.savingRead === "true") return;
