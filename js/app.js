@@ -5990,14 +5990,30 @@
       return pending.get(n);
     };
     const warm = n => {
-      // Mantém a página atual e duas de cada lado pré-carregadas.
+      // Prioridade imediata: duas páginas anteriores e duas posteriores.
       for (const next of [n - 2, n - 1, n + 1, n + 2]) {
         if (next >= first && next <= pages.length && !cache.has(next) && !pending.has(next)) {
           void load(next).catch(() => {});
         }
       }
-      // Evita acumular a edição inteira na memória.
-      for (const key of cache.keys()) if (Math.abs(key - n) > 2) cache.delete(key);
+    };
+    let backgroundStarted = false;
+    const preloadAllInBackground = () => {
+      if (backgroundStarted) return;
+      backgroundStarted = true;
+      // Carrega a edição inteira em segundo plano, sem disparar centenas de pedidos simultâneos.
+      const queue = Array.from({ length: pages.length }, (_, i) => i + 1)
+        .filter(n => n >= first && n <= pages.length && !cache.has(n))
+        .sort((a, b) => Math.abs(a - page) - Math.abs(b - page));
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < queue.length) {
+          const n = queue[cursor++];
+          if (cache.has(n)) continue;
+          try { await load(n); } catch { /* A navegação pode tentar novamente quando a página for solicitada. */ }
+        }
+      };
+      void Promise.all([worker(), worker()]);
     };
     const drawSingle = async () => {
       const current = ++token;
@@ -6087,6 +6103,7 @@
       overlay._telegramPagesScrollCleanup = () => container.removeEventListener("scroll", update);
     };
     const draw = () => state.readingMode === "continuous-scroll" ? drawScroll() : state.readingMode === "double-page" ? void drawDouble() : void drawSingle();
+    preloadAllInBackground();
     const selector = $("#reading-mode-select", overlay);
     if (selector) { selector.disabled = false; selector.addEventListener("change", event => { setReadingMode(event.target.value); draw(); }); }
     draw();
