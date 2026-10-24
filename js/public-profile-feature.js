@@ -229,17 +229,7 @@ export function createPublicProfileFeature(deps) {
     const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", savedOwnerIds) : { data: [] };
     const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
     const savedShelfCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
-    const savedFactionIdsResult = await sb.from("faction_catalog_saves").select("catalog_id").eq("user_id", profile.data.id);
-    const savedFactionIds = (savedFactionIdsResult.data || []).map(row => row.catalog_id);
-    const savedFactionRows = savedFactionIds.length ? (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").in("id", savedFactionIds)).data || [] : [];
-    const savedFactionIdsByFaction = [...new Set(savedFactionRows.map(catalog => catalog.faction_id).filter(Boolean))];
-    const savedFactionInfoRows = savedFactionIdsByFaction.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", savedFactionIdsByFaction)).data || [] : [];
-    const savedFactionInfo = new Map(savedFactionInfoRows.map(faction => [faction.id, faction]));
-    const savedFactionCollections = savedFactionRows.map(catalog => {
-      const faction = savedFactionInfo.get(catalog.faction_id);
-      return faction ? { ...catalog, id: `faction-catalog-${catalog.id}`, catalog_id: catalog.id, faction_id: faction.id, faction_page_key: faction.page_key, faction_name: faction.name, faction_emblem: faction.emblem, username: "", collection_type: "comic", is_public: true, is_faction_catalog: true } : null;
-    }).filter(Boolean);
-    const savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
+    const savedPublicCollections = [...savedShelfCollections];
     const wallCommentsResult = await loadProfileWallComments(profile.data.id);
     const activity = await buildPublicProfileActivity(profile.data, activityResults.map(result => result.data || []), [...(collections.data || []), ...(savedCollectionsResult.data || [])]);
     state.publicProfile = {

@@ -1,6 +1,9 @@
 (() => {
   "use strict";
 
+  // Sistema de facções temporariamente desativado; módulos e dados são preservados.
+  const FACTIONS_ENABLED = false;
+
   // --- Inicialização de Bibliotecas ---
   // --- Fim da Inicialização ---
   const DB_KEY = `bancaDigitalDB_v1:${window.CATALOG_VERSION || "local"}`;
@@ -11,6 +14,7 @@
     return userId ? `${RANDOM_AVATAR_BASE_URL}?seed=${encodeURIComponent(userId)}&backgroundColor=${colorValue(backgroundColor)}&shapeColor=${colorValue(characterColor)}` : DEFAULT_AVATAR_URL;
   }
   function factionColorForProfile(profile = {}) {
+    if (!FACTIONS_ENABLED) return "#777777";
     const profileId = profile?.id || profile?.user_id;
     const factionId = profile?.faction_id || state.factionByUser.get(profileId);
     return state.factions.find(item => item.id === factionId)?.color || "#777777";
@@ -635,6 +639,7 @@
     return String(profile?.plan || "").trim().toLowerCase();
   }
   function canChooseFaction(profile = state.profile) {
+    if (!FACTIONS_ENABLED) return false;
     // Apenas contas Comum e Lenda participam da disputa de facções.
     // Uma allowlist evita abrir o seletor para planos novos ou inválidos.
     return ["free", "premium"].includes(normalizedPlan(profile));
@@ -1674,7 +1679,6 @@
     home: "",
     comic: "quadrinhos",
     ranking: "ranking",
-    factions: "faccoes",
     collections: "colecoes",
     search: "pesquisar",
     downloads: "downloads",
@@ -1687,6 +1691,7 @@
   };
 
   function currentFactionId(profile = state.profile) {
+    if (!FACTIONS_ENABLED) return null;
     if (profile?.faction_id) return profile.faction_id;
     if (!["free", "premium"].includes(normalizedPlan(profile))) return null;
     const userId = profile?.id || state.session?.user?.id;
@@ -1695,7 +1700,7 @@
   }
 
   function canAccessFactions() {
-    return Boolean(currentFactionId());
+    return FACTIONS_ENABLED && Boolean(currentFactionId());
   }
 
   function requireAuthenticatedSection() {
@@ -1764,6 +1769,14 @@
   }
 
   function navigate(params, replace = false) {
+    if (!FACTIONS_ENABLED && params && typeof params === "object") {
+      params = { ...params };
+      if (params.pagina === "faccoes" || params.pagina === "factions") delete params.pagina;
+      if (params.secao === "faccoes") delete params.secao;
+      delete params.faccao;
+      delete params.catalogo;
+      delete params.membros;
+    }
     const offlineNavigation = navigator.onLine === false && activateOfflineMode();
     if (offlineNavigation) params = { pagina: "downloads" };
     const url = routeUrl(params);
@@ -1782,6 +1795,7 @@
   }
 
   function setSectionRoute(section, replace = false) {
+    if (!FACTIONS_ENABLED && section === "factions") return navigate({}, replace);
     const route = sectionRoutes[section];
     if (route === undefined) return setSection(section);
     const params = new URLSearchParams(window.location.search);
@@ -1841,7 +1855,7 @@
       state.collectionId = params.get("colecao") || null;
       state.seriesPageId = section === "series" ? params.get("serie") || null : null;
       state.rankingCategory = section === "ranking" ? params.get("categoria") || null : null;
-      const factionRouteValue = section === "factions" ? params.get("faccao") || null : null;
+      const factionRouteValue = FACTIONS_ENABLED && section === "factions" ? params.get("faccao") || null : null;
       const routedFaction = factionRouteValue ? state.factions.find(faction => String(faction.page_key) === String(factionRouteValue) || faction.id === factionRouteValue) : null;
       state.factionPageId = routedFaction?.id || factionRouteValue;
       state.factionCatalogId = section === "factions" ? params.get("catalogo") || null : null;
@@ -1853,7 +1867,7 @@
       render();
       if (section === "search") loadSearchUsers(state.search);
       if (section === "ranking" && state.authReady) loadRankingData();
-      if (section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      if (FACTIONS_ENABLED && section === "ranking" && params.get("secao") === "faccoes") setTimeout(() => $(".ranking-faction-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     }
     handlingRoute = false;
   }
@@ -2028,10 +2042,8 @@
         return;
       }
       state.rankingMembers = result.data || [];
-      const rankingIds = state.rankingMembers.map(member => member.user_id).filter(Boolean);
-      const factionRows = rankingIds.length ? await sb.from("profiles_public").select("id, faction_id").in("id", rankingIds) : { data: [] };
-      state.factionByUser = new Map((factionRows.data || []).map(row => [row.id, row.faction_id]));
-      state.rankingMembers = state.rankingMembers.map(member => ({ ...member, faction_id: state.factionByUser.get(member.user_id) || null }));
+      state.rankingMembers = (result.data || []).map(({ faction_id, faction_color, faction_name, faction_emblem, ...member }) => member);
+      state.factionByUser = new Map();
     } catch (error) {
       console.warn("Não foi possível carregar o ranking:", error?.message || error);
       state.rankingMembers = [];
@@ -2042,6 +2054,34 @@
   }
 
   async function loadFactions() {
+    if (!FACTIONS_ENABLED) {
+      state.factions = [];
+      state.factionByUser = new Map();
+      state.factionMembers = [];
+      state.factionRoles = [];
+      state.factionRoleMembers = [];
+      state.factionStats = new Map();
+      state.factionAchievements = new Map();
+      state.factionElections = new Map();
+      state.factionMandatoryReads = new Map();
+      state.factionCatalogs = [];
+      state.factionAbafacImages = [];
+      state.factionAbafacCatalogs = new Map();
+      state.factionPinnedImprints = new Map();
+      state.factionPinnedCharacters = new Map();
+      state.factionPinnedCollections = new Map();
+      state.factionPinnedPublicCollections = new Map();
+      state.factionPublicPinnedCollectionDetails = new Map();
+      state.factionCatalogLikeIds = new Set();
+      state.factionCatalogLikeCounts = new Map();
+      state.factionCatalogSaveIds = new Set();
+      state.factionPageId = null;
+      state.factionCatalogId = null;
+      state.factionMembersView = false;
+      state.factionMemberSearch = "";
+      state.rankingFaction = null;
+      return;
+    }
     if (!sb) return;
     // Use all public faction columns so older deployments continue to load while
     // the mural_notice migration is being applied. Newer databases include it.
@@ -2156,6 +2196,7 @@
   }
 
   async function joinFaction(factionId) {
+    if (!FACTIONS_ENABLED) return;
     if (!sb || !state.session?.user?.id || !factionId || ["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
     const result = await sb.rpc("choose_faction", { p_faction_id: factionId });
     if (result.error) return toast(result.error.message || "Não foi possível entrar nesta facção.");
@@ -2167,6 +2208,7 @@
   }
 
   function factionDot(profile = {}) {
+    if (!FACTIONS_ENABLED) return "";
     if (String(profile?.username || "").toLowerCase() === "guria") return "";
     const factionId = profile.faction_id || state.factionByUser.get(profile.id);
     const faction = state.factions.find(item => item.id === factionId) || { color: profile.faction_color, name: "Facção", emblem: "" };
@@ -2183,6 +2225,7 @@
   }
 
   function factionRoleForProfile(profile = {}) {
+    if (!FACTIONS_ENABLED) return null;
     const profileId = profile?.id;
     const role = state.factionRoles.find(item => item && String(item.user_id) === String(profileId));
     if (!role || !["leader", "curator"].includes(role.role)) return null;
@@ -2203,6 +2246,7 @@
   }
 
   function factionRoleTitleMarkup(profile = {}, includeEmblem = true) {
+    if (!FACTIONS_ENABLED) return "";
     const roleInfo = factionRoleForProfile(profile);
     if (!roleInfo) return "";
     const label = roleInfo.role.role === "leader" ? "Líder" : "Curador";
@@ -2212,6 +2256,7 @@
   }
 
   function hydrateFactionRoleTitles(root = document) {
+    if (!FACTIONS_ENABLED) return;
     const profile = state.section === "public-profile" ? state.publicProfile?.profile : state.profile;
     const roleInfo = factionRoleForProfile(profile);
     const staffLabel = staffTitleForProfile(profile);
@@ -2244,6 +2289,7 @@
   }
 
   function hydrateCommentFactionRoleTitles(root = document) {
+    if (!FACTIONS_ENABLED) return;
     const roleProfiles = new Map((state.factionRoleMembers || []).map(item => [String(item.profile?.username || "").toLowerCase(), item.profile]).filter(([username, profile]) => username && profile));
     $$(".comment-author-info", root).forEach(info => {
       if ($("[data-faction-role-title]", info)) return;
@@ -2279,6 +2325,7 @@
   }
 
   function hydrateChatFactionRoleTitles(root = document) {
+    if (!FACTIONS_ENABLED) return;
     const roleProfiles = new Map((state.factionRoleMembers || []).map(item => [String(item.profile?.username || "").toLowerCase(), item.profile]).filter(([username, profile]) => username && profile));
     $$(".chat-message", root).forEach(message => {
       if ($("[data-faction-role-title]", message)) return;
@@ -2292,6 +2339,7 @@
   }
 
   function decorateFactionNames(root = document) {
+    if (!FACTIONS_ENABLED) return;
     const profiles = [
       state.profile,
       state.publicProfile?.profile,
@@ -2421,6 +2469,7 @@
   }
 
   async function openFactionChoice(...args) {
+    if (!FACTIONS_ENABLED) return;
     return (await loadFactionEditorsFeature()).openFactionChoice(...args);
   }
   let sharedCatalogRefresh = null;
@@ -2932,21 +2981,6 @@
       .slice(0, 8);
     const publicCollectionView = publicCollections.map(collection => ({ ...collection, username: collectionOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
     state.featuredComicCollections = publicCollectionView.filter(collection => collection.collection_type !== "blog" && collection.is_featured).slice(0, 8);
-    const factionCatalogRows = (await sb.from("faction_catalogs").select("id, faction_id, name, cover_url, item_ids, is_featured, created_at").order("created_at", { ascending: false })).data || [];
-    const factionIds = [...new Set(factionCatalogRows.map(catalog => catalog.faction_id).filter(Boolean))];
-    const factionInfoRows = factionIds.length ? (await sb.from("factions").select("id, page_key, name, emblem").in("id", factionIds)).data || [] : [];
-    const factionInfo = new Map(factionInfoRows.map(faction => [faction.id, faction]));
-    const factionLikeRows = (await sb.from("faction_catalog_likes").select("catalog_id")).data || [];
-    const factionLikeCounts = factionLikeRows.reduce((counts, row) => counts.set(String(row.catalog_id), (counts.get(String(row.catalog_id)) || 0) + 1), new Map());
-    const publicFactionCollections = factionCatalogRows.map(catalog => {
-      const faction = factionInfo.get(catalog.faction_id);
-      if (!faction) return null;
-      return { ...catalog, id: `faction-catalog-${catalog.id}`, catalog_id: catalog.id, faction_id: faction.id, faction_page_key: faction.page_key, faction_name: faction.name, faction_emblem: faction.emblem, username: "", collection_type: "comic", is_public: true, is_faction_catalog: true, likes: factionLikeCounts.get(String(catalog.id)) || 0 };
-    }).filter(Boolean);
-    state.popularPublicCollections = [...state.popularPublicCollections, ...publicFactionCollections]
-      .sort((a, b) => b.likes - a.likes || String(a.name).localeCompare(String(b.name), "pt-BR"))
-      .slice(0, 8);
-    state.featuredComicCollections = [...state.featuredComicCollections, ...publicFactionCollections.filter(collection => collection.is_featured)].slice(0, 8);
     const comicLikes = await sb.from("comic_likes").select("item_id, user_id, created_at");
     state.comicLikeIds = new Set((comicLikes.data || []).filter(row => row.user_id === session?.user?.id).map(row => row.item_id));
     state.comicLikeAddedAt = new Map((comicLikes.data || []).filter(row => row.user_id === session?.user?.id).map(row => [row.item_id, row.created_at]));
@@ -2995,8 +3029,7 @@
       const savedOwnersResult = savedOwnerIds.length ? await sb.from("profiles_public").select("id, username").in("id", savedOwnerIds) : { data: [] };
       const savedOwners = new Map((savedOwnersResult.data || []).map(owner => [owner.id, owner.username]));
       const savedShelfCollections = (savedCollectionsResult.data || []).map(collection => ({ ...collection, username: savedOwners.get(collection.owner_id) || "" })).filter(collection => collection.username);
-      const savedFactionCollections = publicFactionCollections.filter(collection => state.factionCatalogSaveIds.has(String(collection.catalog_id)));
-      state.savedPublicCollections = [...savedShelfCollections, ...savedFactionCollections];
+      state.savedPublicCollections = [...savedShelfCollections];
       state.wallComments = await loadProfileWallComments(session.user.id);
       const favorites = await sb.from("favorites").select("item_id, created_at").eq("user_id", session.user.id);
       state.favoriteIds = new Set((favorites.data || []).map(row => row.item_id));
@@ -3049,7 +3082,7 @@
     if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["Série Mensal", "Recentes", "Vários autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
     }
-    if (state.session && canChooseFaction() && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
+    if (FACTIONS_ENABLED && state.session && canChooseFaction() && !state.profile.faction_id) setTimeout(openFactionChoice, 0);
     if (state.section === "ranking") loadRankingData();
   }
 
@@ -11188,9 +11221,7 @@
   function rankingMemberMarkup(member, showRank = false) {
     const online = member.is_online === true;
     const current = state.session?.user?.id === member.user_id;
-    const staff = ["moderator", "banca", "admin"].includes(member.plan);
-    const faction = state.factions.find(item => item.id === member.faction_id);
-    const lineColor = staff ? "#ffffff" : faction?.color || "#ffffff";
+    const lineColor = "#ffffff";
     const rank = showRank && member.ranking ? `<span class="ranking-position">${member.ranking}º</span>` : "";
     const title = member.title ? `<span class="ranking-title" style="--title-bg:${safeTitleColor(member.title_color)}">${escapeHTML(member.title)}</span>` : "";
     const levelMarkup = member.plan === "banca"
@@ -11218,7 +11249,7 @@
   function renderRankingPage() {
     const members = state.rankingMembers || [];
     if (state.rankingCategory) return renderRankingCategoryPage(members);
-    const eligibleMembers = members.filter(member => ["free", "premium"].includes(member.plan) && (!state.rankingFaction || member.faction_id === state.rankingFaction));
+    const eligibleMembers = members.filter(member => ["free", "premium"].includes(member.plan));
     const periodLabels = { day: "24 horas", week: "7 dias", all: "Hall da fama" };
     const topMembers = eligibleMembers.slice(0, 3);
     const groups = [
@@ -11231,7 +11262,7 @@
         ? `<div class="ranking-self ranking-self-unavailable"><strong>Precisa de ajuda?</strong><span>Envie uma mensagem se tiver algum problema ou precisar de ajuda.</span></div>`
         : `<div class="ranking-self"><strong>Nível ${state.profile.level || 1}</strong><span>${Number(state.profile.xp || 0).toLocaleString("pt-BR")} XP · Check-in: 🔥 ${state.profile.daily_streak || 0} dia(s)</span></div>`
       : "";
-    return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${rankingSelf}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Comum</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Lenda</strong><p>Todos os benefícios Comum, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Lenda, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div><div class="ranking-faction-tabs"><button class="small-btn ${!state.rankingFaction ? "is-active" : ""}" data-ranking-faction="">Todas as facções</button>${state.factions.map(faction => `<button class="small-btn ${state.rankingFaction === faction.id ? "is-active" : ""}" data-ranking-faction="${escapeHTML(faction.id)}" style="--faction-filter-color:${escapeHTML(faction.color)}"><span class="faction-dot" style="--faction-color:${escapeHTML(faction.color)}"></span>${escapeHTML(faction.name)}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Comum ou Lenda nesta seleção.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = rankingCategoryMembers(members, plan).filter(member => plan === "staff" || !state.rankingFaction || member.faction_id === state.rankingFaction); const sectionFactionId = state.profile?.faction_id; const sectionColor = state.factions.find(faction => faction.id === sectionFactionId)?.color || "#ffffff"; return `<section class="ranking-group ranking-group-abafac linhafac" style="--ranking-section-color:${escapeHTML(sectionColor)}"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
+    return `<div class="content ranking-page"><div class="section-head"><div><div class="eyebrow">Atividade da comunidade</div><h1 class="section-title">Ranking</h1><div class="section-subtitle">Ganhe XP lendo, participando e mantendo seu check-in diário.</div></div>${rankingSelf}</div><section class="section ranking-benefits"><div class="section-head"><div><h2 class="section-title">Vantagens por plano</h2><div class="section-subtitle">Todos podem ganhar XP; os planos liberam recursos diferentes.</div></div></div><div class="ranking-benefit-grid"><article class="ranking-benefit-card"><strong>Comum</strong><p>Leitura do catálogo, check-in diário, XP e participação no ranking.</p></article><article class="ranking-benefit-card is-premium"><strong>Lenda</strong><p>Todos os benefícios Comum, capas variantes, estilos de capa e posição no ranking.</p></article><article class="ranking-benefit-card is-moderator"><strong>Moderador</strong><p>Recursos Lenda, ferramentas de moderação, gestão da comunidade e destaque de coleções.</p></article></div></section><div class="ranking-tabs">${Object.entries(periodLabels).map(([period, label]) => `<button class="small-btn ${state.rankingPeriod === period ? "is-active" : ""}" data-ranking-period="${period}">${label}</button>`).join("")}</div>${state.rankingLoading ? '<div class="empty">Carregando ranking...</div>' : !eligibleMembers.length ? '<div class="empty">Ainda não há participantes Comum ou Lenda nesta seleção.</div>' : `<section class="section ranking-leaders"><div class="section-head"><div><h2 class="section-title">Membros mais ativos</h2><div class="section-subtitle">${periodLabels[state.rankingPeriod]} · moderadores e administradores não disputam posições.</div></div></div><div class="ranking-top-grid">${topMembers.map(member => `<div class="ranking-top-card"><span class="ranking-top-place">${member.ranking}º</span>${rankingMemberMarkup(member)}</div>`).join("")}</div></section>`}<section class="section ranking-directory"><div class="section-head"><div><h2 class="section-title">Todos os usuários</h2><div class="section-subtitle">Organizados por tipo de conta e com presença online.</div></div></div>${groups.map(([plan, label]) => { const group = rankingCategoryMembers(members, plan); return `<section class="ranking-group"><h3>${label}<span>${group.length}</span></h3><div class="ranking-member-list">${group.map(member => rankingMemberMarkup(member, true)).join("") || '<div class="empty">Nenhum usuário nesta categoria.</div>'}</div></section>`; }).join("")}</section></div>`;
   }
 
   function legacyFactionLeadershipMarkup(factionId) {
@@ -12596,7 +12627,7 @@
       markup = '<div class="content series-selection-page"><div class="empty">Série indisponível.</div></div>';
     }
     else if (state.section === "ranking") markup = renderRankingPage();
-    else if (state.section === "factions") markup = state.factionMembersView ? renderFactionMembersPage() : renderFactionPage();
+    else if (state.section === "factions") { if (FACTIONS_ENABLED) markup = state.factionMembersView ? renderFactionMembersPage() : renderFactionPage(); else { state.section = "home"; markup = renderHome(); } }
     else if (state.section === "manga") markup = renderCatalog("manga");
     else if (state.section === "collections") markup = renderCollections();
     else if (state.section === "collection") markup = renderCollectionPage();
@@ -12611,7 +12642,7 @@
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
     if (state.section === "entity") markup = markup.replace(/<section class="section character-news-section"[\s\S]*?<\/section>/i, "");
-    if (state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
+    if (FACTIONS_ENABLED && state.section === "factions") markup = markup.replace(/blogs?/gi, "atividades");
     applyProfileTheme(state.section === "public-profile" ? state.publicProfile?.profile : state.section === "album" ? state.profile : null);
     // A estante recebe abas e o Top 10 depois da renderização inicial. Por isso,
     // comparar apenas o HTML base pode esconder alterações nos itens do ranking.
@@ -13752,7 +13783,7 @@
         render();
       }));
     }
-    if (state.section === "ranking" && $(".ranking-benefits") && !$(".ranking-faction-overview")) {
+    if (FACTIONS_ENABLED && state.section === "ranking" && $(".ranking-benefits") && !$(".ranking-faction-overview")) {
       const overview = document.createElement("section");
       overview.className = "section ranking-faction-overview";
       overview.innerHTML = `<div class="section-head"><div><h2 class="section-title">Facções</h2><div class="section-subtitle">Escolha um lado para conhecer sua página e acompanhar a disputa.</div></div></div>${factionOverviewNoticeMarkup()}${factionOverviewMarkup()}`;
