@@ -440,7 +440,9 @@ export function createReaderFormats(deps) {
 
   async function renderCBZRangeSinglePage(item, url, body, controls, overlay, skipCover, resumePage, onPageChange) {
     const isMega = /^https:\/\/(?:www\.)?mega\.nz\/file\//i.test(String(url || ""));
-    if (item.local || isMega || isTelegramMediaUrl(url) || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
+    // Telegram-hosted CBZs can also use HTTP range reads. Keep the fast path
+    // for single-page mode; other modes fall back to the regular archive reader.
+    if (item.local || isMega || state.readingMode !== "single-page" || !window.zipJsReady || !/^https?:\/\//i.test(url)) return false;
     let reader;
     try {
       const zipjs = await window.zipJsReady;
@@ -454,8 +456,30 @@ export function createReaderFormats(deps) {
       const img = document.createElement("img");
       img.className = "reader-image";
       const urls = new Set();
+      const pageBlobs = new Map();
+      const pageLoads = new Map();
+      const getPageBlob = index => {
+        if (pageBlobs.has(index)) return Promise.resolve(pageBlobs.get(index));
+        if (!pageLoads.has(index)) {
+          pageLoads.set(index, entries[index].getData(new zipjs.BlobWriter()).then(blob => {
+            pageBlobs.set(index, blob);
+            return blob;
+          }).finally(() => pageLoads.delete(index)));
+        }
+        return pageLoads.get(index);
+      };
+      const prefetchAround = index => {
+        // Warm the next pages in the background so turning pages doesn't
+        // trigger a new network wait or re-display the loading status.
+        for (const nextIndex of [index + 1, index + 2, index - 1]) {
+          if (nextIndex >= pages[0] && nextIndex < entries.length && pages.includes(nextIndex) && !pageBlobs.has(nextIndex)) {
+            void getPageBlob(nextIndex).catch(() => {});
+          }
+        }
+      };
       const draw = async () => {
-        const blob = await entries[page].getData(new zipjs.BlobWriter());
+        const blob = await getPageBlob(page);
+        prefetchAround(page);
         const objectUrl = URL.createObjectURL(blob);
         urls.add(objectUrl);
         if (img.dataset.url) { URL.revokeObjectURL(img.dataset.url); urls.delete(img.dataset.url); }
@@ -469,7 +493,20 @@ export function createReaderFormats(deps) {
         onPageChange(item, page + 1, entries.length);
       };
       await draw();
-      $("[data-close-reader]", overlay).addEventListener("click", async () => { for (const objectUrl of urls) URL.revokeObjectURL(objectUrl); await reader.close(); }, { once: true });
+      const modeSelect = $("#reading-mode-select", overlay);
+      if (modeSelect) {
+        modeSelect.disabled = false;
+        modeSelect.value = "single-page";
+        modeSelect.addEventListener("change", event => {
+          setReadingMode(event.target.value);
+          overlay._reopenReader?.({ skipCover });
+        });
+      }
+      $("[data-close-reader]", overlay).addEventListener("click", async () => {
+        for (const objectUrl of urls) URL.revokeObjectURL(objectUrl);
+        pageBlobs.clear();
+        await reader.close();
+      }, { once: true });
       return true;
     } catch (error) {
       try { await reader?.close(); } catch {}
