@@ -1291,129 +1291,6 @@
   }
 
   let activeSeriesExport = null;
-  let activeTelegramPageMigration = null;
-  async function migrateSeriesToTelegram(series, editions, button) {
-    if (!isAdminProfile()) return;
-    if (activeTelegramPageMigration) {
-      toast("J\u00e1 existe uma migra\u00e7\u00e3o para o Telegram em andamento. Aguarde a conclus\u00e3o.");
-      return;
-    }
-    if (!window.BancaTelegramPages?.migrate) {
-      toast("O migrador do Telegram n\u00e3o foi carregado. Atualize a p\u00e1gina e tente novamente.");
-      return;
-    }
-
-    const seriesId = String(series?.seriesId || editions?.find(item => item?.seriesId)?.seriesId || "");
-    const seriesName = String(series?.seriesTitle || series?.title || "s\u00e9rie");
-    if (!seriesId) return toast("N\u00e3o foi poss\u00edvel identificar esta s\u00e9rie.");
-
-    // Combina a lista aberta com o estado atual, deduplicando estritamente pelo ID.
-    // Isso inclui todas as edi\u00e7\u00f5es da s\u00e9rie, inclusive as ocultas no cat\u00e1logo p\u00fablico.
-    const editionMap = new Map();
-    for (const item of Array.isArray(editions) ? editions : []) {
-      if (item?.id && String(item.seriesId || "") === seriesId) editionMap.set(String(item.id), item);
-    }
-    for (const item of state.db.library.filter(entry => String(entry.seriesId || "") === seriesId && entry?.id)) {
-      editionMap.set(String(item.id), item);
-    }
-    const ordered = [...editionMap.values()].sort((a, b) => issueSortValue(a) - issueSortValue(b));
-    if (!ordered.length) return toast("Esta s\u00e9rie n\u00e3o possui edi\u00e7\u00f5es para migrar.");
-
-    const pending = ordered.filter(item => !Array.isArray(item.telegramPages) || item.telegramPages.length === 0);
-    if (!pending.length) {
-      button.disabled = true;
-      button.textContent = "\u2713 S\u00e9rie migrada";
-      return toast("Todas as edi\u00e7\u00f5es desta s\u00e9rie j\u00e1 est\u00e3o no Telegram.");
-    }
-
-    const lock = { type: "series", seriesId, itemId: "" };
-    activeTelegramPageMigration = lock;
-    const originalLabel = button.textContent;
-    button.disabled = true;
-    button.textContent = "Confirmando\u2026";
-    let confirmed = false;
-    try {
-      confirmed = await openSiteConfirm(
-        `Migrar as ${pending.length} edi\u00e7\u00f5es pendentes de \"${seriesName}\" para o Telegram? Cada edi\u00e7\u00e3o ser\u00e1 enviada e salva separadamente, vinculada ao seu pr\u00f3prio ID; nenhuma p\u00e1gina ser\u00e1 compartilhada entre edi\u00e7\u00f5es. O link original de cada edi\u00e7\u00e3o ser\u00e1 mantido como reserva.`,
-        { title: "Migrar s\u00e9rie para o Telegram?", confirmLabel: "Migrar todas" }
-      );
-    } catch (error) {
-      toast(error?.message || "N\u00e3o foi poss\u00edvel confirmar a migra\u00e7\u00e3o da s\u00e9rie.");
-    }
-    if (!confirmed) {
-      if (activeTelegramPageMigration === lock) activeTelegramPageMigration = null;
-      if (button.isConnected) {
-        button.disabled = false;
-        button.textContent = originalLabel;
-      }
-      return;
-    }
-
-    let completedCount = 0;
-    let alreadyMigratedCount = ordered.length - pending.length;
-    let currentTitle = "";
-    try {
-      for (let index = 0; index < pending.length; index++) {
-        if (!isAdminProfile()) throw new Error("Acesso exclusivo para administradores.");
-        const requested = pending[index];
-        const itemId = String(requested.id);
-        const item = state.db.library.find(entry => String(entry.id) === itemId);
-        if (!item) throw new Error(`A edi\u00e7\u00e3o \"${itemDisplayTitle(requested)}\" n\u00e3o est\u00e1 mais no cat\u00e1logo.`);
-        if (String(item.seriesId || "") !== seriesId) {
-          throw new Error(`A edi\u00e7\u00e3o \"${itemDisplayTitle(item)}\" n\u00e3o pertence mais \u00e0 s\u00e9rie selecionada. A migra\u00e7\u00e3o foi interrompida.`);
-        }
-        if (Array.isArray(item.telegramPages) && item.telegramPages.length) {
-          alreadyMigratedCount++;
-          continue;
-        }
-
-        currentTitle = itemDisplayTitle(item);
-        lock.itemId = itemId;
-        button.textContent = `\u21e7 ${index + 1}/${pending.length}`;
-
-        // Importante: n\u00e3o usar Promise.all aqui. Cada edi\u00e7\u00e3o termina e \u00e9 salva
-        // antes de a pr\u00f3xima come\u00e7ar; o servi\u00e7o recebe sempre o ID exato da edi\u00e7\u00e3o.
-        const migrated = await window.BancaTelegramPages.migrate({ ...item }, {
-          client: sb, isAdminProfile, session: () => state.session,
-          sessionOffline: () => Boolean(state.session?.offline),
-          fetchFileArrayBuffer, ensureReaderDependency, loadLibarchiveModule,
-          appAssetUrl, downloadSource, isExternalArchiveLink, itemDisplayTitle,
-        });
-
-        if (String(migrated?.id ?? "") !== itemId) {
-          throw new Error(`O servidor n\u00e3o confirmou o ID correto para \"${currentTitle}\". Interrompi a s\u00e9rie para evitar qualquer associa\u00e7\u00e3o incorreta de p\u00e1ginas.`);
-        }
-        if (String(migrated?.seriesId ?? "") !== seriesId) {
-          throw new Error(`O servidor retornou \"${currentTitle}\" com outro ID de s\u00e9rie. A migra\u00e7\u00e3o foi interrompida por seguran\u00e7a.`);
-        }
-        if (!Array.isArray(migrated.telegramPages) || migrated.telegramPages.length < 1) {
-          throw new Error(`O servidor n\u00e3o confirmou as p\u00e1ginas de \"${currentTitle}\". A pr\u00f3xima edi\u00e7\u00e3o n\u00e3o ser\u00e1 iniciada.`);
-        }
-
-        const saved = await saveCatalog(`Edi\u00e7\u00e3o ${currentTitle} migrada para p\u00e1ginas JPEG no Telegram.`, migrated);
-        if (!saved) throw new Error(`N\u00e3o foi poss\u00edvel salvar \"${currentTitle}\" no cat\u00e1logo. A pr\u00f3xima edi\u00e7\u00e3o n\u00e3o ser\u00e1 iniciada.`);
-        document.querySelector(".telegram-pages-progress-overlay")?.remove();
-        completedCount++;
-      }
-
-      await refreshSharedCatalog({ renderPage: false }).catch(() => {});
-      render();
-      toast(`Migra\u00e7\u00e3o da s\u00e9rie conclu\u00edda: ${completedCount} edi\u00e7\u00f5es migradas; ${alreadyMigratedCount} j\u00e1 estavam no Telegram.`);
-    } catch (error) {
-      toast(`Migra\u00e7\u00e3o da s\u00e9rie interrompida ap\u00f3s ${completedCount} edi\u00e7\u00e3o(\u00f5es) conclu\u00eddas${currentTitle ? `; edi\u00e7\u00e3o atual: ${currentTitle}` : ""}. ${error?.message || "Erro desconhecido."} Nenhuma pr\u00f3xima edi\u00e7\u00e3o foi iniciada.`);
-    } finally {
-      if (activeTelegramPageMigration === lock) activeTelegramPageMigration = null;
-      if (button.isConnected) {
-        const allMigrated = ordered.every(item => {
-          const latest = state.db.library.find(entry => String(entry.id) === String(item.id));
-          return Array.isArray(latest?.telegramPages) && latest.telegramPages.length > 0;
-        });
-        button.disabled = allMigrated;
-        button.textContent = allMigrated ? "\u2713 S\u00e9rie migrada" : originalLabel;
-      }
-    }
-  }
-
   function openSeriesExport(series, editions) {
     if (!isAdminProfile()) return;
     if (activeSeriesExport) { activeSeriesExport.restore(); return; }
@@ -6077,41 +5954,92 @@
       if (n < 1 || n > pages.length) return Promise.resolve(null);
       if (cache.has(n)) return Promise.resolve(cache.get(n));
       if (!pending.has(n)) {
-        const promise = new Promise((resolve, reject) => {
-          const img = new Image();
-          img.decoding = "async";
-          img.onload = () => { cache.set(n, img); resolve(img); };
-          img.onerror = () => reject(new Error("Falha ao carregar página " + n));
-          img.src = window.BancaTelegramPages.imageUrl(item.id, n);
-        });
+        const promise = (async () => {
+          let lastError;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const img = await new Promise((resolve, reject) => {
+                const candidate = new Image();
+                let settled = false;
+                const finish = (fn, value) => {
+                  if (settled) return;
+                  settled = true;
+                  clearTimeout(timer);
+                  candidate.onload = null;
+                  candidate.onerror = null;
+                  fn(value);
+                };
+                const timer = setTimeout(() => {
+                  candidate.src = "";
+                  finish(reject, new Error("Tempo esgotado ao carregar página " + n));
+                }, 5000);
+                candidate.decoding = "async";
+                candidate.onload = () => finish(resolve, candidate);
+                candidate.onerror = () => finish(reject, new Error("Falha ao carregar página " + n));
+                candidate.src = window.BancaTelegramPages.imageUrl(item.id, n);
+              });
+              cache.set(n, img);
+              return img;
+            } catch (error) { lastError = error; }
+          }
+          throw lastError || new Error("Falha ao carregar página " + n);
+        })();
         pending.set(n, promise);
         promise.then(() => pending.delete(n), () => pending.delete(n));
       }
       return pending.get(n);
     };
-    const warm = n => [n + 1, n + 2, n - 1].forEach(next => {
-      if (next >= first && next <= pages.length && !cache.has(next)) void load(next).catch(() => {});
-    });
-    const drawSingle = async () => {
-      const current = ++token;
-      if (page === total) body.replaceChildren(readerEndPageImage());
-      else {
-        try {
-          const loaded = await load(page);
-          if (current !== token) return;
-          const img = document.createElement("img");
-          img.className = "reader-image"; img.alt = "Página " + page; img.decoding = "async"; img.src = loaded.src;
-          body.replaceChildren(img);
-          warm(page);
-        } catch {
-          if (current !== token) return;
-          body.innerHTML = '<div class="empty" style="margin:auto">Não foi possível carregar esta página do Telegram.</div>';
+    const warm = n => {
+      // Mantém a página atual e duas de cada lado pré-carregadas.
+      for (const next of [n - 2, n - 1, n + 1, n + 2]) {
+        if (next >= first && next <= pages.length && !cache.has(next) && !pending.has(next)) {
+          void load(next).catch(() => {});
         }
       }
+      // Evita acumular a edição inteira na memória.
+      for (const key of cache.keys()) if (Math.abs(key - n) > 2) cache.delete(key);
+    };
+    const drawSingle = async () => {
+      const current = ++token;
+      const showControls = () => {
+        controls.innerHTML = '<button data-prev ' + (page <= first ? "disabled" : "") + '>‹</button><span class="reader-page">' + page + ' / ' + total + '</span><button data-next ' + (page >= total ? "disabled" : "") + '>›</button>';
+        $("[data-prev]", controls)?.addEventListener("click", () => {
+          if (page > first) { page--; drawSingle(); }
+        });
+        $("[data-next]", controls)?.addEventListener("click", () => {
+          if (page < total) { page++; drawSingle(); }
+        });
+      };
+      showControls();
+      onPageChange(item, page, total);
+      if (page === total) {
+        body.replaceChildren(readerEndPageImage());
+        return;
+      }
+      // Keep the controls live while the image loads; a slow request can't lock navigation.
+      body.innerHTML = '<div class="empty" style="margin:auto">Carregando página ' + page + '…</div>';
+      try {
+        const requestedPage = page;
+        const loaded = await load(requestedPage);
+        if (current !== token || requestedPage !== page) return;
+        const img = document.createElement("img");
+        img.className = "reader-image";
+        img.alt = "Página " + requestedPage;
+        img.decoding = "async";
+        img.src = loaded.src;
+        body.replaceChildren(img);
+        warm(requestedPage);
+      } catch {
+        if (current !== token || page < 1 || page > pages.length) return;
+        body.innerHTML = '<div class="empty" style="margin:auto">Falha ao carregar esta página. <button type="button" data-retry-page>Tentar novamente</button></div>';
+        $("[data-retry-page]", body)?.addEventListener("click", () => {
+          cache.delete(page);
+          pending.delete(page);
+          drawSingle();
+        }, { once: true });
+      }
       if (current !== token) return;
-      controls.innerHTML = '<button data-prev ' + (page <= first ? "disabled" : "") + '>‹</button><span class="reader-page">' + page + ' / ' + total + '</span><button data-next ' + (page >= total ? "disabled" : "") + '>›</button>';
-      $("[data-prev]", controls)?.addEventListener("click", () => { if (page > first) { page--; draw(); } });
-      $("[data-next]", controls)?.addEventListener("click", () => { if (page < total) { page++; draw(); } });
+      showControls();
       onPageChange(item, page, total);
     };
     const drawDouble = async () => {
@@ -13354,59 +13282,43 @@
         event.preventDefault();
         event.stopPropagation();
         if (button.disabled) return;
-        if (activeTelegramPageMigration) {
-          toast("J\u00e1 existe uma migra\u00e7\u00e3o para o Telegram em andamento. Aguarde a conclus\u00e3o.");
-          return;
-        }
         const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.migrateTelegramPages));
         if (!item || !isAdminProfile()) return;
-        if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram n\u00e3o foi carregado. Atualize a p\u00e1gina e tente novamente.");
+        if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
         if (button.dataset.telegramPagesConfirmPending === "true") return;
-
-        const migrationLock = { type: "edition", itemId: String(item.id) };
-        activeTelegramPageMigration = migrationLock;
         button.dataset.telegramPagesConfirmPending = "true";
         let confirmed = false;
         try {
           confirmed = await openSiteConfirm(
-            `Converter \"${itemDisplayTitle(item)}\" em p\u00e1ginas JPEG e enviar cada p\u00e1gina ao Telegram? O link original ser\u00e1 mantido como reserva.`,
-            { title: "Migrar edi\u00e7\u00e3o para o Telegram?", confirmLabel: "Converter e enviar" }
+            `Converter "${itemDisplayTitle(item)}" em páginas JPEG e enviar cada página ao Telegram? O link original será mantido como reserva.`,
+            { title: "Migrar edição para o Telegram?", confirmLabel: "Converter e enviar" }
           );
-        } catch (error) {
-          toast(error?.message || "N\u00e3o foi poss\u00edvel confirmar a migra\u00e7\u00e3o.");
         } finally {
           delete button.dataset.telegramPagesConfirmPending;
         }
-        if (!confirmed) {
-          if (activeTelegramPageMigration === migrationLock) activeTelegramPageMigration = null;
-          return;
-        }
+        if (!confirmed) return;
         button.disabled = true;
-        button.textContent = "\u2026";
+        button.textContent = "…";
         try {
-          const migrated = await window.BancaTelegramPages.migrate({ ...item }, {
+          const migrated = await window.BancaTelegramPages.migrate(item, {
             client: sb, isAdminProfile, session: () => state.session,
             sessionOffline: () => Boolean(state.session?.offline),
             fetchFileArrayBuffer, ensureReaderDependency, loadLibarchiveModule,
             appAssetUrl, downloadSource, isExternalArchiveLink, itemDisplayTitle,
           });
-          if (String(migrated?.id ?? "") !== String(item.id)) {
-            throw new Error("O servidor n\u00e3o confirmou o ID correto da edi\u00e7\u00e3o. A altera\u00e7\u00e3o n\u00e3o ser\u00e1 publicada para evitar associar p\u00e1ginas incorretamente.");
-          }
-          const saved = await saveCatalog("Edi\u00e7\u00e3o migrada para p\u00e1ginas JPEG no Telegram.", migrated);
+          if (!migrated) return;
+          const saved = await saveCatalog("Edição migrada para páginas JPEG no Telegram.", migrated);
           if (saved) {
             document.querySelector(".telegram-pages-progress-overlay")?.remove();
             await refreshSharedCatalog({ renderPage: false }).catch(() => {});
             render();
           }
         } catch (error) {
-          toast(error?.message || "N\u00e3o foi poss\u00edvel migrar a edi\u00e7\u00e3o para o Telegram.");
+          toast(error?.message || "Não foi possível migrar a edição para o Telegram.");
         } finally {
-          if (activeTelegramPageMigration === migrationLock) activeTelegramPageMigration = null;
           if (button.isConnected) {
-            const latest = state.db.library.find(entry => String(entry.id) === String(item.id)) || item;
-            button.disabled = Boolean(latest.telegramPages?.length);
-            button.textContent = latest.telegramPages?.length ? "\u2713" : "\u21e7";
+            button.disabled = Boolean(item.telegramPages?.length);
+            button.textContent = item.telegramPages?.length ? "✓" : "⇧";
           }
         }
       });
@@ -14991,16 +14903,6 @@
       obtainButton.title = "Salvar todas as edições no computador";
       downloadSeriesButton.after(obtainButton);
       obtainButton.addEventListener("click", () => { if (!pageMode) overlay.remove(); openSeriesExport(series, editions); });
-      const migrateSeriesButton = document.createElement("button");
-      migrateSeriesButton.className = "small-btn";
-      migrateSeriesButton.type = "button";
-      migrateSeriesButton.textContent = "⇧ Migrar série";
-      migrateSeriesButton.title = "Converter e enviar todas as edições desta série ao Telegram, sem misturar suas páginas";
-      const allSeriesEditionsMigrated = editions.length > 0 && editions.every(item => Array.isArray(item.telegramPages) && item.telegramPages.length > 0);
-      migrateSeriesButton.disabled = allSeriesEditionsMigrated;
-      if (allSeriesEditionsMigrated) migrateSeriesButton.textContent = "✓ Série migrada";
-      obtainButton.after(migrateSeriesButton);
-      migrateSeriesButton.addEventListener("click", () => migrateSeriesToTelegram(series, editions, migrateSeriesButton));
       addEditionButton.addEventListener("click", () => {
         const latest = seriesEditions({ seriesId: series.seriesId || series.id }).at(-1) || series;
         if (!pageMode) overlay.remove();
