@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v708-factions-paused";
+const CACHE_VERSION = "banca-digital-shell-v709-faction-chats-paused";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.267-telegram-minimize-click-through",
-  "./js/app.js?v=2.2.10.572-factions-paused", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
+  "./js/app.js?v=2.2.10.573-faction-chats-paused", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-pages.js?v=6-minimize",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",

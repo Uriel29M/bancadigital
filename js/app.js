@@ -9187,13 +9187,14 @@
     { id: "faccao-vigilia-cobalto", name: "Legado", access: "faction", factionId: "vigilia-cobalto" },
     { id: "faccao-forja-dourada", name: "Ruptura", access: "faction", factionId: "forja-dourada" },
     { id: "faccao-nevoa-violeta", name: "Horizonte", access: "faction", factionId: "nevoa-violeta" }
-  ];
+  ].filter(room => FACTIONS_ENABLED || !room.factionId);
   const SHERIFF_ROOM_IDS = new Set(["geral", "decenautas", "marvetes", "leitores-colecionadores"]);
   const isSheriffRoom = room => Boolean(room && SHERIFF_ROOM_IDS.has(room.id) && !room.factionId);
-  const isFactionChatSheriff = (room, userId) => Boolean(room?.factionId && userId && state.factionRoles.some(role => role.faction_id === room.factionId && role.user_id === userId && ["leader", "curator"].includes(role.role)));
-  const factionChatSheriffIds = room => new Set((state.factionRoles || []).filter(role => role.faction_id === room?.factionId && ["leader", "curator"].includes(role.role)).map(role => String(role.user_id)));
+  const isFactionChatSheriff = (room, userId) => Boolean(FACTIONS_ENABLED && room?.factionId && userId && state.factionRoles.some(role => role.faction_id === room.factionId && role.user_id === userId && ["leader", "curator"].includes(role.role)));
+  const factionChatSheriffIds = room => new Set(FACTIONS_ENABLED ? (state.factionRoles || []).filter(role => role.faction_id === room?.factionId && ["leader", "curator"].includes(role.role)).map(role => String(role.user_id)) : []);
 
   function canOpenChatRoom(room) {
+    if (!room || (!FACTIONS_ENABLED && room.factionId)) return false;
     if (room.factionId) return ["moderator", "banca", "admin"].includes(state.profile?.plan) || state.profile?.faction_id === room.factionId;
     return room.access === "public"
       || (room.access === "premium" && hasLegendaryAccess())
@@ -9201,7 +9202,7 @@
   }
 
   function chatRoomLabel(room) {
-    if (room.factionId) return "Exclusivo";
+    if (FACTIONS_ENABLED && room.factionId) return "Exclusivo";
     return room.access === "premium" ? "Lenda" : room.access === "staff" ? "Staff" : "Público";
   }
 
@@ -9522,11 +9523,12 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=8-faction-bubble-body-command"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=9-faction-chats-paused"))
         .then(module => module.createChatFeature({
           $,
           $$,
           CHAT_ROOMS,
+          factionsEnabled: FACTIONS_ENABLED,
           askModerationReason,
           avatarMarkup,
           canOpenChatRoom,

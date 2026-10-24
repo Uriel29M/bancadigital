@@ -10,6 +10,7 @@ export function createChatFeature(deps) {
     chatRoomLabel,
     cleanUsername,
     escapeHTML,
+    factionsEnabled = true,
     factionChatSheriffIds,
     factionDot,
     formatCommentDate,
@@ -79,7 +80,7 @@ export function createChatFeature(deps) {
     const username = cleanUsername(profile.username || "usuário");
     const isGuria = username.toLowerCase() === "guria";
     const title = isGuria ? "" : String(profile.title || "").trim();
-    const factionCommand = /^\/fac(?:\s+|$)/i.test(String(message.body || ""));
+    const factionCommand = factionsEnabled && /^\/fac(?:\s+|$)/i.test(String(message.body || ""));
     const displayedBody = factionCommand ? String(message.body || "").replace(/^\/fac(?:\s+|$)/i, "").trimStart() : message.body;
     const faction = factionCommand
       ? state.factions.find(item => String(item.id) === String(profile.faction_id || state.factionByUser.get(profile.id)))
@@ -520,6 +521,7 @@ export function createChatFeature(deps) {
   }
 
   async function openChatRoom(room) {
+    if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
     const mobilePage = usesMobileChatPage();
     discardActiveMobileChatPage();
     const sheriffResult = isSheriffRoom(room) && sb ? await sb.rpc("get_chat_room_sheriff", { p_room_id: room.id }) : { data: [] };
@@ -850,7 +852,7 @@ export function createChatFeature(deps) {
       if (!submitButton || submitButton.disabled) return;
       submitButton.disabled = true;
       const optimisticId = `chat-pending-${Date.now()}`;
-      const optimisticFaction = /^\/fac(?:\s+|$)/i.test(body)
+      const optimisticFaction = factionsEnabled && /^\/fac(?:\s+|$)/i.test(body)
         ? state.factions.find(item => String(item.id) === String(state.profile?.faction_id))
         : null;
       const optimisticFactionColor = /^#[0-9a-f]{6}$/i.test(String(optimisticFaction?.color || "")) ? String(optimisticFaction.color) : "";
