@@ -175,10 +175,14 @@
       close: () => {},
     };
   }
+  let activeMigrationItemId = null;
   async function migrate(item, deps) {
     if (!deps?.client || !deps.isAdminProfile?.()) throw new Error("Entre com a conta de administrador para migrar edições.");
     if (navigator.onLine === false || deps.sessionOffline?.()) throw new Error("A migração exige conexão com a internet.");
     if (Array.isArray(item?.telegramPages) && item.telegramPages.length) throw new Error("Esta edição já foi migrada para páginas JPEG no Telegram.");
+    const migrationItemId = text(item?.id).trim();
+    if (!migrationItemId) throw new Error("A edição não possui um ID válido para a migração.");
+    if (activeMigrationItemId !== null) throw new Error(`A edição \"${activeMigrationItemId}\" já está em migração. Aguarde antes de iniciar outra para evitar misturar páginas.`);
     // Prefere a URL direta; a postagem do Telegram fica como alternativa.
     // O proxy precisa do registro em catalog_edition_overrides, garantido abaixo.
     const directSource = text(item.fileUrl).trim();
@@ -188,6 +192,7 @@
     if (!initialSources.length) throw new Error("Esta edição não possui uma fonte direta para converter.");
     if (!usableInitialSources.length) throw new Error("Esta fonte é um link externo que não pode ser convertida diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
 
+    activeMigrationItemId = migrationItemId;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop telegram-pages-progress-overlay";
     overlay.innerHTML = '<div class="modal telegram-pages-progress-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Migração de edição para o Telegram"><div class="section-head"><div><h2>Migrando edição para o Telegram</h2><div data-tg-pages-status role="status" aria-live="polite">Preparando o arquivo…</div></div><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-minimize>Minimizar</button><button type="button" class="small-btn" data-tg-pages-restore>Abrir</button></div></div><progress data-tg-pages-progress max="100" value="0" aria-label="Progresso da migração"></progress><p class="section-subtitle" data-tg-pages-detail>O original será mantido como link reserva.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-close disabled>Fechar</button></div></div>';
@@ -325,6 +330,9 @@
       }
       status("Confirmando os links individuais e salvando a edição…");
       const completed = await invoke(deps.client, { action: "complete", item_id: String(item.id), page_count: pageCount });
+      if (String(completed?.edition?.id ?? "") !== migrationItemId) {
+        throw new Error("O servidor retornou uma edição diferente da solicitada. A migração foi interrompida para evitar associar páginas à edição errada.");
+      }
       if (!completed?.edition?.telegramPages?.length || completed.edition.telegramPages.length !== pageCount) {
         throw new Error("O Telegram recebeu as páginas, mas não foi possível confirmar a lista completa de links.");
       }
@@ -347,6 +355,7 @@
       throw error;
     } finally {
       try { await prepared?.close?.(); } catch {}
+      if (activeMigrationItemId === migrationItemId) activeMigrationItemId = null;
       if (!statusNode?.textContent?.startsWith("Migração foi interrompida") && close && !close.onclick) {
         close.disabled = false;
         close.onclick = () => overlay.remove();
