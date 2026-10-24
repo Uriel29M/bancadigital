@@ -2799,7 +2799,10 @@
   }
 
   function openOwnPublicProfile() {
-    if (!state.session?.user || !state.profile?.username) return openAuthPage();
+    if (!state.session?.user || !state.profile?.username) {
+      if (!PROFILE_SITE_MODE) { window.location.assign(`${PROFILE_SITE_BASE}?pagina=entrar`); return; }
+      return openAuthPage();
+    }
     const profileUrl = publicProfileHref(state.profile.username);
     const currentUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
     if (!PROFILE_SITE_MODE || currentUrl !== profileUrl) {
@@ -14426,7 +14429,7 @@
       if (a === "focus-search") { setSection("search"); setTimeout(() => $("#search-input")?.focus(), 30); }
       if (a === "do-search") { state.search = $("#search-input")?.value || ""; navigate({ pagina: "pesquisar", q: state.search }); }
       if (a === "open-admin") { if (isAdminProfile()) openAdmin(); }
-      if (a === "open-auth") state.session ? openOwnPublicProfile() : openAuthPage();
+      if (a === "open-auth") { if (!PROFILE_SITE_MODE) window.location.assign(`${PROFILE_SITE_BASE}?pagina=entrar`); else state.session ? openOwnPublicProfile() : openAuthPage(); }
       if (a === "open-profile-page") {
         openOwnPublicProfile();
       }
