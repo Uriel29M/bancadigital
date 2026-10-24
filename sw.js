@@ -1,8 +1,9 @@
-const CACHE_VERSION = "banca-digital-shell-v712-profile-login";
+const CACHE_VERSION = "banca-digital-shell-v713-offline-reader-module";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.268-moderation-history-modal",
-  "./js/app.js?v=2.2.10.576-profile-login", "./js/reader-deps.js?v=5-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
+  "./js/app.js?v=2.2.10.577-offline-reader-module", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-pages.js?v=6-minimize",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
