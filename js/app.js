@@ -4165,7 +4165,7 @@
 
   const pendingReadingStatus = new Set();
 
-  async function toggleReadingCompleted(item, totalPages = progressFor(item)?.total_pages || 1) {
+  async function toggleReadingCompleted(item, totalPages = progressFor(item)?.total_pages || 1, readButton = null) {
     const userId = state.session?.user?.id;
     if (!userId || !sb || item?.local || !item?.id) {
       toast("Não foi possível marcar a edição. Confira se você está conectado à sua conta.");
@@ -4194,8 +4194,8 @@
     if (completed) shelf.add(item.id);
     else shelf.delete(item.id);
     updateCompletionCards(item, completed);
-    const readButton = $("[data-toggle-read]");
-    if (readButton) readButton.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
+    const currentReadButton = readButton || $("[data-toggle-read]");
+    if (currentReadButton) currentReadButton.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
 
     try {
       const result = await sb.from("reading_progress").upsert(row, { onConflict: "user_id,item_id" });
@@ -4231,7 +4231,7 @@
       if (wasInReadShelf) currentShelf.add(item.id);
       else currentShelf.delete(item.id);
       updateCompletionCards(item, Boolean(previous?.completed));
-      if (readButton?.isConnected) readButton.textContent = previous?.completed ? "Desmarcar como lida" : "Marcar como lida";
+      if (currentReadButton?.isConnected) currentReadButton.textContent = previous?.completed ? "Desmarcar como lida" : "Marcar como lida";
       console.warn("Não foi possível atualizar o status de leitura:", error);
       toast("Não foi possível salvar o status de leitura. Confira a conexão e tente novamente.");
       return null;
@@ -6441,21 +6441,30 @@
     });
     body.classList.toggle("reader-page-swipe", ["single-page", "double-page"].includes(state.readingMode));
     const toggleReadButton = $("[data-toggle-read]", overlay);
-    // Marking an edition as read is independent of page rendering. Never leave
-    // this control disabled while images, archives, or PDFs are loading.
+    // This control stays unavailable while the edition is loading. The
+    // renderer calls markReaderReady() only after its first page is ready.
+    if (toggleReadButton) toggleReadButton.disabled = true;
+    let readerReady = false;
+    const markReaderReady = () => {
+      readerReady = true;
+      if (toggleReadButton?.isConnected) toggleReadButton.disabled = false;
+    };
     toggleReadButton?.addEventListener("click", async event => {
       const button = event.currentTarget;
-      if (button.dataset.savingRead === "true") return;
+      if (!readerReady || button.dataset.savingRead === "true") return;
       button.dataset.savingRead = "true";
       button.disabled = true;
-      const completed = await toggleReadingCompleted(item, progressFor(item)?.total_pages || 1);
-      if (completed !== null) {
-        button.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
-      } else if (button.isConnected) {
-        button.textContent = progressFor(item)?.completed ? "Desmarcar como lida" : "Marcar como lida";
+      try {
+        const completed = await toggleReadingCompleted(item, progressFor(item)?.total_pages || 1, button);
+        if (completed !== null) {
+          button.textContent = completed ? "Desmarcar como lida" : "Marcar como lida";
+        } else if (button.isConnected) {
+          button.textContent = progressFor(item)?.completed ? "Desmarcar como lida" : "Marcar como lida";
+        }
+      } finally {
+        delete button.dataset.savingRead;
+        if (button.isConnected) button.disabled = !readerReady;
       }
-      delete button.dataset.savingRead;
-      if (button.isConnected) button.disabled = false;
     });
     overlay._readerNavigate = direction => {
       const button = direction > 0 ? $("[data-next]", controls) : $("[data-prev]", controls);
