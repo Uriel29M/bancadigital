@@ -4145,3 +4145,82 @@ input:disabled { opacity: .45; cursor: not-allowed; }
     padding: 0;
   }
 }
+
+
+/* Histórico de moderação dos chats no mesmo padrão dos modais da Banca. */
+.chat-moderation-history-modal {
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(82vh, 760px);
+}
+.chat-moderation-history-modal .section-head {
+  align-items: flex-start;
+  gap: 14px;
+}
+.chat-moderation-history-modal .section-head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.chat-moderation-history-modal .section-head h2 {
+  line-height: 1.25;
+}
+.chat-moderation-history-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+.chat-moderation-history-item {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.chat-moderation-history-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.chat-moderation-history-action {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.chat-moderation-history-date {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.chat-moderation-history-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.chat-moderation-history-empty {
+  margin: 0;
+  padding: 22px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .chat-moderation-history-backdrop { padding: 12px; }
+  .chat-moderation-history-modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    padding: 18px;
+  }
+  .chat-moderation-history-modal .section-head { gap: 10px; }
+  .chat-moderation-history-modal .section-head h2 { font-size: 20px; }
+  .chat-moderation-history-date { white-space: normal; }
+}

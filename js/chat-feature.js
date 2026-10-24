@@ -368,6 +368,69 @@ export function createChatFeature(deps) {
     });
   }
 
+  function showChatModerationHistory(items, room) {
+    const actionLabels = {
+      mute: "Silenciamento aplicado",
+      unmute: "Silenciamento removido",
+      clear_recent: "Mensagens recentes removidas",
+      delete_message: "Mensagem excluída",
+      pin: "Mensagem fixada",
+      unpin: "Mensagem desafixada",
+      slow_mode: "Slow mode alterado"
+    };
+    const records = Array.isArray(items) ? items.slice(0, 20) : [];
+    const formatDate = value => {
+      const date = value ? new Date(value) : null;
+      if (!date || !Number.isFinite(date.getTime())) return { label: "Data indisponível", iso: "" };
+      return {
+        label: date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
+        iso: date.toISOString()
+      };
+    };
+    const rows = records.map(item => {
+      const rawAction = String(item?.action || "Ação registrada");
+      const label = actionLabels[rawAction] || rawAction.replace(/[_-]+/g, " ");
+      const created = formatDate(item?.created_at);
+      const until = item?.duration_until ? formatDate(item.duration_until) : null;
+      return `<article class="chat-moderation-history-item">
+        <div class="chat-moderation-history-item-head">
+          <span class="chat-moderation-history-action">${escapeHTML(label)}</span>
+          <time class="chat-moderation-history-date"${created.iso ? ` datetime="${escapeHTML(created.iso)}"` : ""}>${escapeHTML(created.label)}</time>
+        </div>
+        ${until ? `<p class="chat-moderation-history-detail">Duração até ${escapeHTML(until.label)}</p>` : ""}
+      </article>`;
+    }).join("");
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop chat-moderation-history-backdrop";
+    overlay.innerHTML = `<section class="modal chat-moderation-history-modal" role="dialog" aria-modal="true" aria-labelledby="chat-moderation-history-title">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">Moderação da sala</div>
+          <h2 id="chat-moderation-history-title">Histórico de moderação</h2>
+          <div class="section-subtitle">Últimas ${records.length} ações registradas${room?.name ? ` em ${escapeHTML(room.name)}` : ""}.</div>
+        </div>
+        <button type="button" class="small-btn" data-chat-history-close aria-label="Fechar histórico de moderação">Fechar</button>
+      </div>
+      <div class="chat-moderation-history-list">${rows || '<p class="chat-moderation-history-empty">Nenhuma ação de moderação registrada nesta sala.</p>'}</div>
+    </section>`;
+    let closed = false;
+    const finish = () => {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKeydown);
+      overlay.remove();
+    };
+    const onKeydown = event => {
+      if (event.key === "Escape") finish();
+    };
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay || event.target.closest?.("[data-chat-history-close]")) finish();
+    });
+    document.addEventListener("keydown", onKeydown);
+    document.body.appendChild(overlay);
+    overlay.querySelector("[data-chat-history-close]")?.focus();
+  }
+
   function askChatMuteDuration() {
     return new Promise(resolve => {
       const overlay = document.createElement("div");
@@ -549,9 +612,10 @@ export function createChatFeature(deps) {
           if (result.error) toast(result.error.message || "Não foi possível atualizar o slow mode."); else toast("Slow mode atualizado.");
         }
         const history = await sb.rpc("get_chat_moderation_history", { p_room_id: room.id, p_limit: 20 });
-        if (!history.error && history.data?.length) {
-          const summary = history.data.map(item => `${new Date(item.created_at).toLocaleString("pt-BR")} · ${item.action}${item.duration_until ? ` até ${new Date(item.duration_until).toLocaleString("pt-BR")}` : ""}`).join("\n");
-          window.alert(`Histórico de moderação\n\n${summary}`);
+        if (history.error) {
+          toast(history.error.message || "Não foi possível carregar o histórico de moderação.");
+        } else {
+          showChatModerationHistory(history.data || [], room);
         }
       };
       $(".chat-modal-actions", overlay)?.prepend(toolsButton);

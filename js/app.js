@@ -9523,7 +9523,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=9-faction-chats-paused"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=10-moderation-history-modal"))
         .then(module => module.createChatFeature({
           $,
           $$,
