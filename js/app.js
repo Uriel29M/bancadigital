@@ -13270,9 +13270,12 @@
       // A Wiki rápida é hidratada fora do HTML principal. Como texto e link
       // podem mudar sem alterar o markup base, force a reconstrução da página
       // do personagem para que as novas informações sejam carregadas agora.
+      const currentCharacterSetting = state.section === "entity" && state.entityFilter?.kind === "character"
+        ? characterSettingForName(state.entityFilter.value)
+        : null;
       const refreshCurrentCharacterPage = state.section === "entity"
         && state.entityFilter?.kind === "character"
-        && publisherKey(state.entityFilter.value) === key;
+        && (publisherKey(state.entityFilter.value) === key || currentCharacterSetting?.character_key === key);
       if (refreshCurrentCharacterPage) $("#main")?.replaceChildren();
       overlay.remove();
       render();
