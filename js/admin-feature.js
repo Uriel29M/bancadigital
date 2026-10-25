@@ -536,9 +536,10 @@ export function createAdminFeature(deps) {
           const saved = await saveCatalog(hasPages ? "Capa da edição migrada para o Telegram." : "Edição e capa migradas para o Telegram.", migrated);
           if (saved) {
             if (deps.refreshSharedCatalog) await deps.refreshSharedCatalog({ renderPage: false }).catch(() => {});
+            document.querySelector(".telegram-pages-progress-overlay")?.remove();
             overlay.remove();
             render();
-            toast(hasCover ? "Capa atualizada no Telegram." : "Migração para o Telegram concluída.");
+            toast(hasPages ? "Capa atualizada no Telegram." : "Migração para o Telegram concluída.");
           } else {
             button.disabled = false;
             button.textContent = originalText;
