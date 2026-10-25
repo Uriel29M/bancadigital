@@ -1,7 +1,7 @@
 /* Shared edition records are authoritative over browser and static catalog caches. */
 window.BancaCatalogSync = (() => {
   const table = "catalog_edition_overrides";
-  const fields = ["coverUrl", "cover", "featuredCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "backupUrls", "telegramPages", "telegramPageFiles", "telegramPagesPending", "telegramPagesMigration", "format"];
+  const fields = ["coverUrl", "cover", "featuredCoverUrl", "originalCoverUrl", "fileUrl", "telegramUrl", "telegramFileId", "telegramFileName", "telegramFileSize", "telegramCoverFileId", "telegramCoverMessageId", "telegramCoverPostUrl", "telegramCoverFileSize", "telegramCoverWidth", "telegramCoverHeight", "telegramPagesCoverPending", "backupUrls", "telegramPages", "telegramPageFiles", "telegramPagesPending", "telegramPagesMigration", "format"];
   const rows = new Map();
   const pending = new Set();
   let channel = null;
