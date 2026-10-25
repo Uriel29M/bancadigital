@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v723-telegram-migration-selector";
+const CACHE_VERSION = "banca-digital-shell-v724-telegram-migration-selector";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.268-moderation-history-modal",
