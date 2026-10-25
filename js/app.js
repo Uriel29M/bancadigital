@@ -2636,12 +2636,13 @@
   let profileFeaturePromise = null;
   function loadProfileFeature() {
     if (!profileFeaturePromise) {
-      profileFeaturePromise = import(appAssetUrl("js/profile-feature.js?v=1-profile-split"))
+      profileFeaturePromise = import(appAssetUrl("js/profile-feature.js?v=2-album-paused"))
         .then(module => module.createProfileFeature({
           $,
           $$,
           PROFILE_ACCENT_THEMES,
           PROFILE_BACKGROUND_THEMES,
+          canAccessStickerAlbum,
           RANDOM_AVATAR_BASE_URL,
           cleanUsername,
           escapeHTML,
@@ -3287,7 +3288,7 @@
   function loadPublicProfileFeature() {
     if (publicProfileFeature) return Promise.resolve(publicProfileFeature);
     if (!publicProfileFeaturePromise) {
-      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=3-protected-staff-blocking"))
+      publicProfileFeaturePromise = import(appAssetUrl("js/public-profile-feature.js?v=4-album-paused"))
         .then(module => {
           publicProfileFeature = module.createPublicProfileFeature({
             $,
@@ -4112,7 +4113,7 @@
   function loadStickerActionsFeature() {
     if (stickerActionsFeature) return Promise.resolve(stickerActionsFeature);
     if (!stickerActionsFeaturePromise) {
-      stickerActionsFeaturePromise = import(appAssetUrl("js/sticker-actions-feature.js?v=1-sticker-actions-split"))
+      stickerActionsFeaturePromise = import(appAssetUrl("js/sticker-actions-feature.js?v=2-album-paused"))
         .then(module => {
           stickerActionsFeature = module.createStickerActionsFeature({
             $,
@@ -4124,6 +4125,7 @@
             sb,
             state,
             stickerCoverCandidates,
+            stickerAlbumEnabled: STICKER_ALBUM_ENABLED,
             stickerFingerprint,
             stickerGroups,
             stickerRarityLabel,
