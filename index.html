@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=317-telegram-migration-selector", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=318-telegram-migration-selector", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
