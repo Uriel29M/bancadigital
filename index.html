@@ -140,6 +140,89 @@
     <script src="js/app.js?v=2.2.10.602-click-fallback"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
+    // Repara bloqueios órfãos de modal e oferece navegação de contingência
+    // caso o app principal falhe ao registrar algum listener de clique.
+    (() => {
+      const app = document.getElementById("app");
+      const modalRoot = document.getElementById("modal-root");
+      const isVisibleModal = element => {
+        if (!element || element.classList.contains("is-minimized") || element.closest("[hidden]")) return false;
+        const style = getComputedStyle(element);
+        return style.display !== "none" && style.visibility !== "hidden"
+          && Number(style.opacity || 1) > 0 && element.getClientRects().length > 0;
+      };
+      const syncInteraction = () => {
+        const open = [...(modalRoot?.querySelectorAll(".modal-backdrop") || [])].some(isVisibleModal);
+        const wasLocked = Boolean(app?.inert || document.body.classList.contains("modal-open")
+          || document.documentElement.classList.contains("modal-open"));
+        if (app) app.inert = open;
+        document.body.classList.toggle("modal-open", open);
+        document.documentElement.classList.toggle("modal-open", open);
+        if (!open && wasLocked && document.body.style.position === "fixed") {
+          const top = Math.abs(Number.parseFloat(document.body.style.top) || 0);
+          document.body.style.position = "";
+          document.body.style.top = "";
+          document.body.style.width = "";
+          document.body.style.overflow = "";
+          if (top) window.scrollTo({ top, left: 0, behavior: "auto" });
+        }
+      };
+      syncInteraction();
+      if (modalRoot && "MutationObserver" in window) {
+        new MutationObserver(syncInteraction).observe(modalRoot, {
+          childList: true, subtree: true, attributes: true,
+          attributeFilter: ["class", "style", "hidden", "aria-hidden"]
+        });
+      }
+
+      const routes = {
+        home: "", comics: "quadrinhos", comic: "quadrinhos",
+        ranking: "ranking", collections: "colecoes", search: "pesquisar",
+        downloads: "downloads", "local-box": "caixa"
+      };
+      const stateSections = { comics: "comic" };
+      const fallbackClick = event => {
+        syncInteraction();
+        if ([...(modalRoot?.querySelectorAll(".modal-backdrop") || [])].some(isVisibleModal)) return;
+        const target = event.target instanceof Element ? event.target : null;
+        const control = target?.closest("[data-section], [data-action]");
+        if (!control) return;
+
+        let section = control.dataset.section || "";
+        const action = control.dataset.action || "";
+        let searchQuery = null;
+        if (!section) {
+          if (action === "home") section = "home";
+          else if (action === "downloads") section = "downloads";
+          else if (action === "focus-search" || action === "do-search") section = "search";
+          else return;
+        }
+        if (!(section in routes)) return;
+        if (action === "do-search") searchQuery = document.getElementById("search-input")?.value || "";
+
+        window.setTimeout(() => {
+          const route = routes[section];
+          const current = new URL(window.location.href);
+          const expectedPage = route || "";
+          const actualPage = current.searchParams.get("pagina") || "";
+          const expectedSection = stateSections[section] || section;
+          const currentSection = window.BancaDigital?.state?.section;
+          const routeAlreadyCorrect = actualPage === expectedPage;
+          const appAlreadyCorrect = currentSection === expectedSection;
+          if (routeAlreadyCorrect && appAlreadyCorrect) return;
+
+          current.search = "";
+          current.hash = "";
+          if (route) current.searchParams.set("pagina", route);
+          if (searchQuery !== null && searchQuery) current.searchParams.set("q", searchQuery);
+          window.location.assign(current.pathname + current.search);
+        }, 60);
+      };
+      document.addEventListener("click", fallbackClick, true);
+      window.addEventListener("pageshow", syncInteraction);
+    })();
+  </script>
+  <script>
     (() => {
       const mobileNav = document.querySelector('.mobile-bottom-nav');
       if (!mobileNav) return;
