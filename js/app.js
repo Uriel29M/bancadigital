@@ -15983,7 +15983,7 @@
   document.addEventListener("wheel", preventBackgroundScroll, { passive: false });
   document.addEventListener("touchmove", preventBackgroundScroll, { passive: false });
   const syncModalInteractionState = () => {
-    const hasOpenModal = Boolean(modalRoot?.children.length);
+    const hasOpenModal = Boolean(modalRoot?.querySelector(".modal-backdrop:not(.is-minimized):not([hidden])"));
     document.body.classList.toggle("modal-open", hasOpenModal);
     document.documentElement.classList.toggle("modal-open", hasOpenModal);
     if (appRoot) {
