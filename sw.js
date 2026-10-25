@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v740-navigation-click-fix";
+const CACHE_VERSION = "banca-digital-shell-v741-modal-navigation-fix";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.274-obtain-tray-icon",
-  "./js/app.js?v=2.2.10.600-navigation-click-fix", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/app.js?v=2.2.10.601-modal-navigation-fix", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
