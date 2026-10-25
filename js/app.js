@@ -15425,7 +15425,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=7-telegram-migration-selector"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=8-telegram-migration-selector"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
