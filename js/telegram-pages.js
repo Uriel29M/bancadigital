@@ -177,7 +177,11 @@
   }
   async function prepareCoverBlob(item, deps, status, fallbackFactory) {
     const candidates = [...new Set([item?.coverUrl, item?.cover, item?.featuredCoverUrl]
-      .map(value => typeof value === "string" ? value.trim() : "").filter(Boolean))];
+      .map(value => typeof value === "string" ? value.trim() : "")
+      .filter(Boolean)
+      .map(source => window.BancaTelegram?.normalized(source)
+        ? (window.BancaTelegramCovers?.publicUrl(source) || source)
+        : source))];
     let lastError = null;
     for (const source of candidates) {
       try {
