@@ -1,11 +1,11 @@
-const CACHE_VERSION = "banca-digital-shell-v719-random-telegram-probe";
+const CACHE_VERSION = "banca-digital-shell-v720-telegram-cover-migration";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.268-moderation-history-modal",
   "./js/app.js?v=2.2.10.583-random-telegram-probe", "./js/reader-deps.js?v=5-progressive-telegram",
-  "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
-  "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
-  "./js/telegram-pages.js?v=6-minimize",
+  "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=7-telegram-cover",
+  "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
+  "./js/telegram-pages.js?v=7-cover-migration",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
   "./js/data/dc-comics/recentes.js?v=2.2.7.54",
   "./js/data/dc-comics/black-label.js?v=1.0.14",
