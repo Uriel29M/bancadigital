@@ -8135,6 +8135,8 @@
     const novelty = isNewCatalogItem(item);
     const coverVariants = usableCoverVariants(item);
     const hasCoverVariants = coverVariants.length > 0;
+    const telegramPagesMigrated = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+    const telegramCoverMigrated = Boolean(item.telegramCoverFileId);
     const savedForCover = favoriteIds.has(item.id) || (seriesContext && item.seriesId && favoriteIds.has(item.seriesId));
     const collectionOwner = activeCollectionContext?.ownerId === state.session?.user?.id;
     const adminCanChooseCover = state.profile?.plan === "admin" && !activeCollectionContext?.id;
@@ -8157,7 +8159,7 @@
         </div>
         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
         ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${isAdminProfile() ? "card-download-admin-offset" : ""} ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
-        ${isAdminProfile() ? `<button type="button" class="card-telegram-pages ${item.telegramPages?.length ? "is-complete" : ""}" data-migrate-telegram-pages="${escapeHTML(item.id)}" title="${item.telegramPages?.length ? "Edição já armazenada como JPEG no Telegram" : "Converter e enviar páginas JPEG ao Telegram"}" aria-label="${item.telegramPages?.length ? "Edição já migrada" : "Migrar páginas para o Telegram"}" ${item.telegramPages?.length ? "disabled" : ""}>${item.telegramPages?.length ? "✓" : "⇧"}</button><button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
+        ${isAdminProfile() ? `<button type="button" class="card-telegram-pages ${telegramPagesMigrated ? (telegramCoverMigrated ? "is-complete" : "needs-cover") : ""}" data-migrate-telegram-pages="${escapeHTML(item.id)}" title="${telegramPagesMigrated ? (telegramCoverMigrated ? "Páginas e capa já armazenadas no Telegram" : "Enviar a capa ao Telegram sem reenviar as páginas") : "Converter e enviar páginas JPEG ao Telegram"}" aria-label="${telegramPagesMigrated ? (telegramCoverMigrated ? "Páginas e capa já migradas" : "Migrar somente a capa para o Telegram") : "Migrar páginas para o Telegram"}" ${telegramPagesMigrated && telegramCoverMigrated ? "disabled" : ""}>${telegramPagesMigrated ? (telegramCoverMigrated ? "✓" : "🖼") : "⇧"}</button><button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
         <div class="card-body">
           <div class="card-title">${escapeHTML(displayTitle)}</div>
           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${characterButtons}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
@@ -13641,9 +13643,15 @@
         button.dataset.telegramPagesConfirmPending = "true";
         let confirmed = false;
         try {
+          const needsCoverOnly = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
           confirmed = await openSiteConfirm(
-            `Converter "${itemDisplayTitle(item)}" em páginas JPEG e enviar cada página ao Telegram? O link original será mantido como reserva.`,
-            { title: "Migrar edição para o Telegram?", confirmLabel: "Converter e enviar" }
+            needsCoverOnly
+              ? `Enviar a capa de "${itemDisplayTitle(item)}" ao Telegram? As páginas já salvas serão mantidas.`
+              : `Converter "${itemDisplayTitle(item)}" em páginas JPEG e enviar cada página ao Telegram? O link original será mantido como reserva.`,
+            {
+              title: needsCoverOnly ? "Migrar capa para o Telegram?" : "Migrar edição para o Telegram?",
+              confirmLabel: needsCoverOnly ? "Enviar capa" : "Converter e enviar"
+            }
           );
         } finally {
           delete button.dataset.telegramPagesConfirmPending;
@@ -13659,7 +13667,7 @@
             appAssetUrl, downloadSource, isExternalArchiveLink, itemDisplayTitle,
           });
           if (!migrated) return;
-          const saved = await saveCatalog("Edição migrada para páginas JPEG no Telegram.", migrated);
+          const saved = await saveCatalog(Array.isArray(item.telegramPages) && item.telegramPages.length > 0 ? "Capa da edição migrada para o Telegram." : "Edição e capa migradas para o Telegram.", migrated);
           if (saved) {
             document.querySelector(".telegram-pages-progress-overlay")?.remove();
             await refreshSharedCatalog({ renderPage: false }).catch(() => {});
@@ -13669,8 +13677,12 @@
           toast(error?.message || "Não foi possível migrar a edição para o Telegram.");
         } finally {
           if (button.isConnected) {
-            button.disabled = Boolean(item.telegramPages?.length);
-            button.textContent = item.telegramPages?.length ? "✓" : "⇧";
+            const currentItem = state.db.library.find(entry => String(entry.id) === String(item.id)) || item;
+            const pagesStored = Array.isArray(currentItem.telegramPages) && currentItem.telegramPages.length > 0;
+            const coverStored = Boolean(currentItem.telegramCoverFileId);
+            button.disabled = pagesStored && coverStored;
+            button.textContent = pagesStored ? (coverStored ? "✓" : "🖼") : "⇧";
+            button.title = pagesStored ? (coverStored ? "Páginas e capa já armazenadas no Telegram" : "Enviar a capa ao Telegram sem reenviar as páginas") : "Converter e enviar páginas JPEG ao Telegram";
           }
         }
       });
