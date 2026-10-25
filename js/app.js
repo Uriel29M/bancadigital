@@ -1817,7 +1817,7 @@
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const params = new URLSearchParams(window.location.search);
     if (!STICKER_ALBUM_ENABLED) {
-      const disabledAlbumRoute = params.get("pagina") === "album" || STICKER_ALBUM_ENABLED && params.get("album") === "1";
+      const disabledAlbumRoute = params.get("pagina") === "album" || params.get("album") === "1";
       if (params.get("pagina") === "album") params.delete("pagina");
       params.delete("album");
       if (disabledAlbumRoute) {
