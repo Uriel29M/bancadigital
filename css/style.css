@@ -4243,3 +4243,12 @@ input:disabled { opacity: .45; cursor: not-allowed; }
   .telegram-page-edit-row { gap: 7px; padding: 8px; }
   .telegram-page-edit-controls { flex-direction: column; }
 }
+
+/* Miniaturas vinculadas a cada linha do editor do Telegram. */
+.telegram-page-edit-row { grid-template-columns: 52px minmax(0, 1fr) auto; }
+.telegram-page-edit-thumb { display: block; width: 52px; height: 72px; object-fit: contain; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); }
+.telegram-page-edit-thumb[hidden] { display: none; }
+@media (max-width: 520px) {
+  .telegram-page-edit-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .telegram-page-edit-thumb { width: 44px; height: 62px; }
+}
