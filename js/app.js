@@ -4531,6 +4531,47 @@
     }
   }
 
+  // Telegram usa uma sessão MTProto compartilhada; valide as fontes em fila
+  // para evitar que testes concorrentes invalidem a sessão do gateway.
+  let randomTelegramAvailabilityQueue = Promise.resolve();
+
+  function probeRandomTelegramMediaSource(source, item) {
+    if (!item?.telegramFileId || !isTelegramMediaUrl(source)) return Promise.resolve(false);
+    const check = async () => {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 2800);
+      try {
+        const response = await fetch(source, {
+          method: "GET",
+          headers: { Range: "bytes=0-4095" },
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        const contentRange = String(response.headers.get("content-range") || "");
+        const validRange = response.status === 206 && new RegExp("^bytes 0-[0-9]+/[0-9]+$", "i").test(contentRange);
+        const errorPayload = contentType.includes("text/html") || contentType.includes("application/json") || contentType.includes("text/plain");
+        if (!validRange || errorPayload) {
+          await response.body?.cancel().catch(() => {});
+          return false;
+        }
+        // Lê apenas os primeiros 4 KiB: confirma a fonte sem baixar o quadrinho.
+        const firstBytes = await response.arrayBuffer();
+        return firstBytes.byteLength > 0;
+      } catch {
+        return false;
+      } finally {
+        window.clearTimeout(timeout);
+        controller.abort();
+      }
+    };
+    const queued = randomTelegramAvailabilityQueue.then(check, check);
+    randomTelegramAvailabilityQueue = queued.then(() => undefined, () => undefined);
+    return queued;
+  }
+
   async function getRandomOpenableItem(item) {
     if (!item || item.local || !canViewCatalogItem(item, false)) return null;
 
@@ -4586,10 +4627,18 @@
     const sourcesToCheck = sources.slice(0, isImageFormat ? 2 : 8);
     const checks = await Promise.all(sourcesToCheck.map(async (source, index) => {
       if (isExternalArchiveLink(source)) return index === 0;
-      if (isTelegramMediaUrl(source)) return Boolean(candidate.telegramFileId);
+      if (isTelegramMediaUrl(source)) return await probeRandomTelegramMediaSource(source, candidate);
       return probeReaderSource(source, { timeoutMs: 2400, maxAttempts: 1, rejectTextPayload: true });
     }));
-    return checks.some(Boolean) ? candidate : null;
+    if (!checks.some(Boolean)) return null;
+
+    // Se o gateway do Telegram falhou mas uma reserva está acessível, force
+    // o leitor interno a usar a URL de reserva, sem tentar de novo o proxy ruim.
+    if (sources.some(isTelegramMediaUrl) && isTelegramMediaUrl(sources[0]) && !checks[0]) {
+      if (!checks.slice(1).some(Boolean)) return null;
+      return { ...candidate, telegramUrl: "", _randomUseNativeReader: true };
+    }
+    return candidate;
   }
 
   let randomCatalogPickInProgress = false;
@@ -4598,7 +4647,7 @@
     randomCatalogPickInProgress = true;
     try {
       const offline = navigator.onLine === false || Boolean(state.session?.offline);
-      const possible = visibleCatalogItems().filter(item => {
+      const possible = visibleCatalogItems(state.db.library, false).filter(item => {
         if (!item || item.local) return false;
         if (offline) return downloaded(item.id)?.status === "completed";
         return (Array.isArray(item.telegramPages) && item.telegramPages.length > 0)
@@ -4615,7 +4664,8 @@
         const batch = candidates.slice(start, Math.min(start + batchSize, maximumChecks));
         const available = (await Promise.all(batch.map(getRandomOpenableItem))).filter(Boolean);
         if (available.length) {
-          openReader(weightedRandom(available));
+          const selected = weightedRandom(available);
+          openReader(selected, { useNativeReader: selected._randomUseNativeReader === true });
           return;
         }
       }
