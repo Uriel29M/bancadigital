@@ -89,7 +89,18 @@
       return false;
     }
     try {
-      const result = await sb.from("character_settings").select(CHARACTER_SETTINGS_COLUMNS);
+      let timeoutId = null;
+      const query = sb.from("character_settings").select(CHARACTER_SETTINGS_COLUMNS);
+      const result = await Promise.race([
+        query,
+        new Promise(resolve => {
+          timeoutId = window.setTimeout(() => resolve({
+            data: null,
+            error: { message: "A consulta de configurações de personagens excedeu 5 segundos." }
+          }), 5000);
+        })
+      ]);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
       if (result.error) {
         console.warn("Não foi possível carregar as configurações dos personagens:", result.error.message);
         characterSettingsReady = true;
