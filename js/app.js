@@ -4580,9 +4580,10 @@
       : (fileFormat || extension(sources[0])).toLowerCase();
     if (!supportedFormats.has(readerFormat) && !sources.some(isExternalArchiveLink)) return null;
 
-    // Teste a fonte principal e as primeiras reservas em paralelo. Requisições
-    // por faixa confirmam se há um arquivo; não transferem a edição inteira.
-    const sourcesToCheck = sources.slice(0, 3);
+    // O leitor de imagens tenta somente a fonte principal e uma reserva; os
+    // leitores de PDF/CBZ/CBR podem percorrer mais reservas.
+    const isImageFormat = ["jpg", "jpeg", "png", "webp", "gif"].includes(readerFormat);
+    const sourcesToCheck = sources.slice(0, isImageFormat ? 2 : 8);
     const checks = await Promise.all(sourcesToCheck.map(async source => {
       if (isExternalArchiveLink(source)) return true;
       if (isTelegramMediaUrl(source)) return Boolean(candidate.telegramFileId);
