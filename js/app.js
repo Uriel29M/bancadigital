@@ -4543,7 +4543,7 @@
     const telegramPagesMode = Array.isArray(candidate.telegramPages) && candidate.telegramPages.length > 0;
     if (telegramPagesMode) {
       const firstPageUrl = window.BancaTelegramPages?.imageUrl?.(candidate.id, 1) || "";
-      return firstPageUrl && await probeReaderSource(firstPageUrl, { timeoutMs: 2400, maxAttempts: 1 }) ? candidate : null;
+      return firstPageUrl && await probeReaderSource(firstPageUrl, { timeoutMs: 2400, maxAttempts: 1, rejectTextPayload: true }) ? candidate : null;
     }
 
     // Uma postagem do Telegram não é, sozinha, um arquivo. Confirme que o
@@ -4578,16 +4578,16 @@
     const readerFormat = /^(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/.test(itemFormat)
       ? itemFormat
       : (fileFormat || extension(sources[0])).toLowerCase();
-    if (!supportedFormats.has(readerFormat) && !sources.some(isExternalArchiveLink)) return null;
+    if (!supportedFormats.has(readerFormat) && !isExternalArchiveLink(sources[0])) return null;
 
     // O leitor de imagens tenta somente a fonte principal e uma reserva; os
     // leitores de PDF/CBZ/CBR podem percorrer mais reservas.
     const isImageFormat = ["jpg", "jpeg", "png", "webp", "gif"].includes(readerFormat);
     const sourcesToCheck = sources.slice(0, isImageFormat ? 2 : 8);
-    const checks = await Promise.all(sourcesToCheck.map(async source => {
-      if (isExternalArchiveLink(source)) return true;
+    const checks = await Promise.all(sourcesToCheck.map(async (source, index) => {
+      if (isExternalArchiveLink(source)) return index === 0;
       if (isTelegramMediaUrl(source)) return Boolean(candidate.telegramFileId);
-      return probeReaderSource(source, { timeoutMs: 2400, maxAttempts: 1 });
+      return probeReaderSource(source, { timeoutMs: 2400, maxAttempts: 1, rejectTextPayload: true });
     }));
     return checks.some(Boolean) ? candidate : null;
   }
@@ -6167,7 +6167,7 @@
           signal: controller.signal
         });
         const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-        const isErrorPayload = /(?:text\/html|application\/json|text\/plain)/i.test(contentType);
+        const isErrorPayload = /(?:text\/html|application\/json)/i.test(contentType) || (options.rejectTextPayload === true && contentType.includes("text/plain"));
         if (response.ok && (response.status === 200 || response.status === 206) && !isErrorPayload) return true;
         if (response.status !== 429 && response.status !== 502 && response.status !== 503 && response.status !== 504) return false;
         const retryAfter = Number(response.headers.get("retry-after"));
