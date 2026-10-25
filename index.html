@@ -53,8 +53,7 @@
         <button data-section="home" class="nav-link active">Início</button>
         <button data-section="comics" class="nav-link">Quadrinhos</button>
         <button data-section="local-box" class="nav-link local-box-nav" style="display:none">Minha caixa</button>
-        <a href="#" class="nav-link album-nav" data-public-album-nav style="display:none">Álbum</a>
-      </nav>
+            </nav>
       <div class="top-actions">
         <button class="reader-btn downloads-header-btn" data-action="downloads" title="Downloads" aria-label="Downloads">↓<span class="download-badge" hidden></span></button>
         <button class="reader-btn ranking-header-btn" data-section="ranking" title="Ranking" aria-label="Ranking">🏆</button>
@@ -91,7 +90,6 @@
         <div class="mobile-more-popover" role="menu" aria-label="Mais opções de navegação">
           <button type="button" data-mobile-action="random" role="menuitem">🎲 Aleatório</button>
           <button type="button" data-mobile-section="comics" role="menuitem">Quadrinhos</button>
-          <button type="button" data-mobile-section="album" role="menuitem" hidden>Álbum</button>
         </div>
       </details>
     </nav>
@@ -147,34 +145,11 @@
       if (!mobileNav) return;
 
       const findTopbarControl = (kind, value) => {
-        if (kind === 'section' && value === 'album') {
-          return document.querySelector('.topbar [data-public-album-nav]');
-        }
         const selector = kind === 'section' ? '.topbar [data-section]' : '.topbar [data-action]';
         return Array.from(document.querySelectorAll(selector)).find(element => (
           kind === 'section' ? element.dataset.section === value : element.dataset.action === value
         ));
       };
-
-      const albumNav = document.querySelector('.topbar [data-public-album-nav]');
-      const mobileAlbum = mobileNav.querySelector('[data-mobile-section="album"]');
-      const syncMobileAlbumVisibility = () => {
-        if (!mobileAlbum) return;
-        const available = Boolean(
-          albumNav &&
-          getComputedStyle(albumNav).display !== 'none' &&
-          albumNav.getAttribute('href') &&
-          albumNav.getAttribute('href') !== '#'
-        );
-        mobileAlbum.hidden = !available;
-      };
-      syncMobileAlbumVisibility();
-      if (albumNav) {
-        new MutationObserver(syncMobileAlbumVisibility).observe(albumNav, {
-          attributes: true,
-          attributeFilter: ['style', 'href']
-        });
-      }
 
       mobileNav.addEventListener('click', event => {
         const trigger = event.target.closest('[data-mobile-action], [data-mobile-section]');
