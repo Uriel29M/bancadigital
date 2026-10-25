@@ -1109,7 +1109,7 @@
       const buffer = await readReaderFileCache(downloadCacheKey(entry.url), () => {});
       if (!buffer) throw new Error("Arquivo offline ausente.");
       const objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
-      openReader({ ...item, fileUrl: objectUrl, local: true }, { localObjectUrl: objectUrl });
+      openReader({ ...item, fileUrl: objectUrl, local: true, ...(entry.telegramPagesArchive ? { format: "cbz" } : {}) }, { localObjectUrl: objectUrl });
     } catch { toast("Este download não está disponível offline. Baixe novamente quando estiver conectado."); }
   }
   const MAX_CONCURRENT_DOWNLOADS = 3;
@@ -1146,7 +1146,7 @@
     if (previous?.status === "downloading") return;
     const shouldWait = activeDownloadCount() >= MAX_CONCURRENT_DOWNLOADS;
     const startedAt = previous?.startedAt || new Date().toISOString();
-    state.downloads.set(id, { id, url, status: shouldWait ? "waiting" : "downloading", progress: Number(previous?.progress) || 0, title: itemDisplayTitle(item), snapshot: { ...(previous?.snapshot || item), file: undefined, local: undefined }, startedAt });
+    state.downloads.set(id, { id, url, status: shouldWait ? "waiting" : "downloading", progress: Number(previous?.progress) || 0, title: itemDisplayTitle(item), snapshot: { ...(previous?.snapshot || item), file: undefined, local: undefined }, telegramPagesArchive: useTelegramPages, startedAt });
     persistDownloads(); updateDownloadButtons(id); render();
     if (shouldWait) return;
     const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("Não foi possível preparar a capa offline:", error); return ""; });
