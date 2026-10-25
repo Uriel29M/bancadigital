@@ -436,7 +436,7 @@ export function createAdminFeature(deps) {
         <div class="notice"><b>Oneshots e séries</b><br>Deixe o campo Série vazio para abrir uma edição diretamente. Use o mesmo nome de série em várias edições para criar a seleção de volumes.</div>
         <div class="admin-actions" style="margin-bottom:15px">
           <button class="btn btn-danger" data-new>+ Nova edição</button><button class="small-btn" data-new-collection>+ Criar coleção</button><button class="small-btn" data-achievements>Títulos</button><button class="small-btn" data-account-plan>Tipo de conta</button><button class="small-btn" data-reader-ads>Propagandas</button>
-          <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
+          <button class="small-btn" data-admin-migrate-all-telegram-pages>⇧ Migrar todas para o Telegram</button><button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
         </div>
         <table class="admin-table"><thead><tr><th>Série / edição</th><th>Editora</th><th>Selo</th><th>Personagem</th><th>Ano</th><th>Ações</th></tr></thead><tbody>
           ${state.db.library.map(x => { const migratedPages = Array.isArray(x.telegramPages) && x.telegramPages.length > 0; const migratedCover = Boolean(x.telegramCoverFileId); return `<tr><td><b>${escapeHTML(x.seriesTitle || x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue || (x.seriesId ? "Edição" : "Oneshot"))}</span></td><td>${escapeHTML(x.publisher || "—")}</td><td>${escapeHTML(x.imprint || "—")}</td><td>${escapeHTML(x.character || "—")}</td><td>${escapeHTML(String(x.year || "—"))}</td><td><div class="admin-actions"><button class="small-btn" data-admin-migrate-telegram-pages="${escapeHTML(x.id)}" title="${migratedPages ? (migratedCover ? "Páginas e capa já estão no Telegram" : "Enviar somente a capa ao Telegram") : "Migrar páginas e capa ao Telegram"}" ${migratedPages && migratedCover ? "disabled" : ""}>${migratedPages ? (migratedCover ? "✓ Telegram" : "🖼 Capa") : "⇧ Migrar"}</button><button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button><button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button></div></td></tr>`; }).join("")}
@@ -551,6 +551,150 @@ export function createAdminFeature(deps) {
         }
       };
     });
+
+    const migrateAllTelegramButton = $("[data-admin-migrate-all-telegram-pages]", overlay);
+    if (migrateAllTelegramButton) {
+      migrateAllTelegramButton.onclick = async () => {
+        if (migrateAllTelegramButton.disabled) return;
+        if (!isAdminProfile()) return toast("Entre com a conta de administrador para migrar o catálogo.");
+        if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
+        const byId = new Map();
+        for (const item of state.db.library || []) {
+          const id = String(item?.id || "").trim();
+          if (id && item?.catalogDeleted !== true && !byId.has(id)) byId.set(id, item);
+        }
+        const candidates = [...byId.values()].filter(item => {
+          const pages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+          return !(pages && item.telegramCoverFileId);
+        });
+        const completedAlready = byId.size - candidates.length;
+        let confirmed = false;
+        try {
+          confirmed = await deps.openSiteConfirm(
+            "O lote vai processar " + candidates.length + " edições que ainda não têm páginas JPEG e capa confirmadas no Telegram. " +
+            completedAlready + " já concluídas serão puladas. Cada edição processada terá uma pausa de 1 segundo, além da pausa própria entre páginas. " +
+            "Mantenha esta página aberta e conectada. Falhas serão anotadas para retomada posterior.",
+            { title: "Migrar todas as edições para o Telegram?", confirmLabel: "Iniciar migração em lote" }
+          );
+        } catch (error) { toast(error?.message || "Não foi possível confirmar a migração em lote."); return; }
+        if (!confirmed) return;
+        if (!candidates.length) return toast("Todas as edições atuais já estão migradas.");
+
+        const progressOverlay = document.createElement("div");
+        progressOverlay.className = "modal-backdrop telegram-bulk-progress-overlay";
+        progressOverlay.innerHTML = '<div class="modal telegram-pages-progress-modal" role="dialog" aria-modal="true" aria-label="Migração em lote para o Telegram"><div class="section-head"><div><h2>Migração em lote para o Telegram</h2><div data-tg-bulk-status role="status" aria-live="polite">Preparando a fila…</div></div></div><progress data-tg-bulk-progress max="100" value="0"></progress><p class="section-subtitle" data-tg-bulk-detail>As edições concluídas serão puladas se o lote for retomado.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-bulk-stop>Parar após a edição atual</button><button type="button" class="small-btn" data-tg-bulk-close disabled>Fechar</button></div><details data-tg-bulk-failures hidden><summary>Falhas registradas</summary><pre data-tg-bulk-failure-list style="white-space:pre-wrap;max-height:35vh;overflow:auto"></pre><button type="button" class="small-btn" data-tg-bulk-download>Baixar relatório de falhas</button></details></div>';
+        document.body.appendChild(progressOverlay);
+        const statusNode = $("[data-tg-bulk-status]", progressOverlay);
+        const detailNode = $("[data-tg-bulk-detail]", progressOverlay);
+        const progressNode = $("[data-tg-bulk-progress]", progressOverlay);
+        const stopButton = $("[data-tg-bulk-stop]", progressOverlay);
+        const closeButton = $("[data-tg-bulk-close]", progressOverlay);
+        const failuresNode = $("[data-tg-bulk-failures]", progressOverlay);
+        const failureListNode = $("[data-tg-bulk-failure-list]", progressOverlay);
+        let stopRequested = false;
+        let stopped = false;
+        let successCount = 0;
+        let skippedCount = 0;
+        let finishedCount = 0;
+        const failures = [];
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const migrationDeps = {
+          client: sb, isAdminProfile, session: () => state.session,
+          sessionOffline: () => Boolean(state.session?.offline),
+          fetchFileArrayBuffer: deps.fetchFileArrayBuffer,
+          ensureReaderDependency: deps.ensureReaderDependency,
+          loadLibarchiveModule: deps.loadLibarchiveModule,
+          appAssetUrl: deps.appAssetUrl, downloadSource: deps.downloadSource,
+          isExternalArchiveLink: deps.isExternalArchiveLink, itemDisplayTitle
+        };
+        const updateProgress = () => {
+          if (progressNode) progressNode.value = candidates.length ? (finishedCount / candidates.length) * 100 : 100;
+          if (statusNode) statusNode.textContent = "Concluídas: " + successCount + " • já prontas: " + skippedCount + " • falhas: " + failures.length + " • processadas: " + finishedCount + "/" + candidates.length;
+        };
+        migrateAllTelegramButton.disabled = true;
+        const originalButtonText = migrateAllTelegramButton.textContent;
+        migrateAllTelegramButton.textContent = "Lote em andamento…";
+        stopButton.onclick = () => {
+          stopRequested = true;
+          stopButton.disabled = true;
+          stopButton.textContent = "Parando após esta edição…";
+          if (statusNode) statusNode.textContent = "A parada foi solicitada; a edição atual terminará com segurança.";
+        };
+        closeButton.onclick = () => progressOverlay.remove();
+        try {
+          for (const listedItem of candidates) {
+            if (stopRequested) { stopped = true; break; }
+            const id = String(listedItem.id);
+            const item = (state.db.library || []).find(entry => String(entry?.id || "") === id) || listedItem;
+            const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+            if (hasPages && item.telegramCoverFileId) {
+              skippedCount++;
+              finishedCount++;
+              updateProgress();
+              continue;
+            }
+            if (statusNode) statusNode.textContent = "Migrando " + (finishedCount + 1) + "/" + candidates.length + ": " + itemDisplayTitle(item);
+            if (detailNode) detailNode.textContent = "ID: " + id + " • formato: " + String(item.format || "auto") + " • não feche esta página durante o processamento.";
+            try {
+              const migrated = await window.BancaTelegramPages.migrate(item, migrationDeps);
+              if (!migrated || String(migrated.id || "") !== id ||
+                  !Array.isArray(migrated.telegramPages) || !migrated.telegramPages.length ||
+                  !migrated.telegramCoverFileId) {
+                throw new Error("O servidor não confirmou todas as páginas e a capa desta edição.");
+              }
+              const index = (state.db.library || []).findIndex(entry => String(entry?.id || "") === id);
+              if (index >= 0) state.db.library[index] = { ...state.db.library[index], ...migrated };
+              const saved = await saveCatalog("Edição migrada para o Telegram: " + itemDisplayTitle(item) + ".", migrated);
+              if (!saved) throw new Error("Páginas enviadas, mas a publicação no catálogo não foi confirmada; a edição poderá ser retomada.");
+              if (deps.refreshSharedCatalog) await deps.refreshSharedCatalog({ renderPage: false }).catch(() => {});
+              successCount++;
+            } catch (error) {
+              failures.push({
+                id, title: itemDisplayTitle(item),
+                error: String(error?.message || error || "Erro desconhecido").slice(0, 1000),
+                at: new Date().toISOString()
+              });
+            } finally {
+              document.querySelector(".telegram-pages-progress-overlay")?.remove();
+              finishedCount++;
+              updateProgress();
+              if (detailNode && failures.length) detailNode.textContent = "Última falha: " + failures[failures.length - 1].title + " — " + failures[failures.length - 1].error;
+            }
+            if (!stopRequested && finishedCount < candidates.length) await sleep(1000);
+          }
+          if (stopRequested) stopped = true;
+          if (statusNode) statusNode.textContent = (stopped ? "Lote pausado com segurança." : "Lote finalizado.") +
+            " Concluídas: " + successCount + "; falhas: " + failures.length + "; já prontas: " + skippedCount + ".";
+          if (progressNode && !stopped) progressNode.value = 100;
+          if (detailNode) detailNode.textContent = stopped
+            ? "Execute o lote novamente para retomar. Edições concluídas serão ignoradas; migrações parciais tentarão continuar."
+            : "A pausa de 1 segundo foi respeitada entre as edições. As páginas mantiveram a pausa própria do migrador.";
+          if (failures.length) {
+            failuresNode.hidden = false;
+            failureListNode.textContent = failures.map(f => f.id + " | " + f.title + "\n" + f.error).join("\n\n");
+            $("[data-tg-bulk-download]", progressOverlay).onclick = () => {
+              const blob = new Blob([JSON.stringify({ createdAt: new Date().toISOString(), total: candidates.length, completed: successCount, skipped: skippedCount, failures }, null, 2)], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "relatorio-migracao-telegram.json";
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            };
+          }
+          closeButton.disabled = false;
+          stopButton.hidden = true;
+          closeButton.textContent = "Fechar";
+          closeButton.onclick = () => progressOverlay.remove();
+          if (deps.refreshSharedCatalog) await deps.refreshSharedCatalog({ renderPage: false }).catch(() => {});
+          render();
+        } finally {
+          migrateAllTelegramButton.disabled = false;
+          migrateAllTelegramButton.textContent = originalButtonText;
+        }
+      };
+    }
+
     $$('[data-delete]', overlay).forEach(button => button.onclick = () => deleteCatalogEdition(button, overlay));
     $$('[data-delete-collection]', overlay).forEach(button => button.onclick = () => { state.db.collections = state.db.collections.filter(c => c.id !== button.dataset.deleteCollection); saveCatalog("Coleção excluída."); overlay.remove(); openAdmin(); });
   }
