@@ -3002,6 +3002,13 @@
 
   let restoreInitialRouteAfterAuth = false;
 
+  function restoreInitialRouteIfReady() {
+    if (!restoreInitialRouteAfterAuth || !state.authReady) return false;
+    restoreInitialRouteAfterAuth = false;
+    applyRoute();
+    return true;
+  }
+
   async function loadAccount() {
     const offlineAccount = readOfflineAccount();
     if (!sb) {
@@ -3014,9 +3021,8 @@
       characterSettingsReady = true;
       state.authReady = true;
       syncTopAvatar();
-      // Primeiro renderiza o esqueleto da interface para registrar os eventos.
-      // A rota profunda será aplicada depois que o bootstrap da conta terminar.
-      render();
+      // Não deixe a rota inicial depender de consultas posteriores.
+      if (!restoreInitialRouteIfReady()) render();
       return;
     }
     let remoteSession = null;
@@ -3065,9 +3071,9 @@
     // identidade. Não há estado intermediário visitante/logado.
     state.authReady = true;
     syncTopAvatar();
-    // Registra os eventos da interface antes de aplicar a rota profunda.
-    // A navegação inicial é restaurada após o bootstrap completo da conta.
-    render();
+    // Restaure a URL assim que a sessão estiver resolvida. As consultas
+    // secundárias abaixo continuam carregando sem prender a interface na Home.
+    if (!restoreInitialRouteIfReady()) render();
 
     // O ranking é público e não deve depender da conclusão do carregamento da
     // conta/estante. Inicie-o logo para visitantes sem sessão também.
@@ -16262,10 +16268,7 @@
     .then(async () => {
       // Aplica a URL inicial só depois que a conta e os eventos da interface
       // estiverem prontos. Isso mantém as abas e botões funcionais.
-      if (restoreInitialRouteAfterAuth) {
-        restoreInitialRouteAfterAuth = false;
-        applyRoute();
-      }
+      restoreInitialRouteIfReady();
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
@@ -16274,17 +16277,14 @@
       // Se o bootstrap falhar, a chamada de applyRoute() feita antes da
       // autenticação já terá sido ignorada. Libere a inicialização e aplique
       // a URL solicitada mesmo se uma consulta da conta rejeitar.
-      if (restoreInitialRouteAfterAuth) {
-        restoreInitialRouteAfterAuth = false;
-        if (!state.authReady) {
-          state.session = null;
-          state.profile = null;
-          state.authReady = true;
-          characterSettingsReady = true;
-          syncTopAvatar();
-        }
-        applyRoute();
+      if (!state.authReady) {
+        state.session = null;
+        state.profile = null;
+        state.authReady = true;
+        characterSettingsReady = true;
+        syncTopAvatar();
       }
+      restoreInitialRouteIfReady();
     })
     .then(async () => {
       if (!initialPublicUsername || !state.publicProfile?.loading) return;
