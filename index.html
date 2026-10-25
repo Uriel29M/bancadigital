@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=314-telegram-cover-source", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=315-telegram-cover-ui", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -137,7 +137,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.583-random-telegram-probe"></script>
+    <script src="js/app.js?v=2.2.10.584-telegram-cover-ui"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     (() => {
