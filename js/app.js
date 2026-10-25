@@ -3014,12 +3014,9 @@
       characterSettingsReady = true;
       state.authReady = true;
       syncTopAvatar();
-      if (restoreInitialRouteAfterAuth) {
-        restoreInitialRouteAfterAuth = false;
-        applyRoute();
-      } else {
-        render();
-      }
+      // Primeiro renderiza o esqueleto da interface para registrar os eventos.
+      // A rota profunda será aplicada depois que o bootstrap da conta terminar.
+      render();
       return;
     }
     let remoteSession = null;
@@ -3068,12 +3065,9 @@
     // identidade. Não há estado intermediário visitante/logado.
     state.authReady = true;
     syncTopAvatar();
-    if (restoreInitialRouteAfterAuth) {
-      restoreInitialRouteAfterAuth = false;
-      applyRoute();
-    } else {
-      render();
-    }
+    // Registra os eventos da interface antes de aplicar a rota profunda.
+    // A navegação inicial é restaurada após o bootstrap completo da conta.
+    render();
 
     // O ranking é público e não deve depender da conclusão do carregamento da
     // conta/estante. Inicie-o logo para visitantes sem sessão também.
@@ -16174,7 +16168,12 @@
     : loadAccount();
   accountBootstrap
     .then(async () => {
-      // applyRoute já é executado quando o Auth fica pronto, antes do primeiro render.
+      // Aplica a URL inicial só depois que a conta e os eventos da interface
+      // estiverem prontos. Isso mantém as abas e botões funcionais.
+      if (restoreInitialRouteAfterAuth) {
+        restoreInitialRouteAfterAuth = false;
+        applyRoute();
+      }
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
