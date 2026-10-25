@@ -15544,7 +15544,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=9-telegram-page-order-editor"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=10-telegram-page-preview-order"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
