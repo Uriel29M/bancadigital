@@ -15442,7 +15442,7 @@
           completed++;
           continue;
         }
-        button.textContent = "⇧ " + (completed + 1) + "/" + pending.length + "…";
+        button.textContent = "⇧ " + (index + 1) + "/" + pending.length + "…";
         try {
           const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
           const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
@@ -15490,15 +15490,21 @@
         .map(id => state.db.library.find(item => String(item.id) === id))
         .filter(Boolean);
       const remaining = currentItems.filter(telegramEditionNeedsMigration).length;
-      button.disabled = remaining === 0;
-      button.textContent = remaining
-        ? (isImprint ? "⇧ Migrar selo (" : "⇧ Migrar série (") + remaining + ")"
-        : "✓ Telegram";
-      button.title = remaining
-        ? "Migrar as " + remaining + " edição(ões) ainda pendentes, uma por vez"
-        : (isImprint
-          ? "Todas as edições e capas deste selo já estão no Telegram"
-          : "Todas as edições e capas desta série já estão no Telegram");
+      const statusButton = button.isConnected ? button : (isImprint
+        ? Array.from(document.querySelectorAll("[data-imprint-migrate-telegram]"))
+            .find(candidate => publisherKey(candidate.dataset.imprintMigrateTelegram || "") === publisherKey(scopeName))
+        : button);
+      if (statusButton) {
+        statusButton.disabled = remaining === 0;
+        statusButton.textContent = remaining
+          ? (isImprint ? "⇧ Migrar selo (" : "⇧ Migrar série (") + remaining + ")"
+          : "✓ Telegram";
+        statusButton.title = remaining
+          ? "Migrar as " + remaining + " edição(ões) ainda pendentes, uma por vez"
+          : (isImprint
+            ? "Todas as edições e capas deste selo já estão no Telegram"
+            : "Todas as edições e capas desta série já estão no Telegram");
+      }
     }
   }
 
