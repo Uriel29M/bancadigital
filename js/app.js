@@ -13629,64 +13629,7 @@
     $$('[data-delete-download-series]').forEach(button => button.addEventListener('click', () => deleteSeriesDownloads(button.dataset.deleteDownloadSeries)));
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
     bindCatalogItemVisibility();
-    $$('[data-migrate-telegram-pages]').forEach(button => {
-      if (button.dataset.telegramPagesBound) return;
-      button.dataset.telegramPagesBound = "true";
-      button.addEventListener("click", async event => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (button.disabled) return;
-        const item = state.db.library.find(entry => String(entry.id) === String(button.dataset.migrateTelegramPages));
-        if (!item || !isAdminProfile()) return;
-        if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
-        if (button.dataset.telegramPagesConfirmPending === "true") return;
-        button.dataset.telegramPagesConfirmPending = "true";
-        let confirmed = false;
-        try {
-          const needsCoverOnly = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
-          confirmed = await openSiteConfirm(
-            needsCoverOnly
-              ? `Enviar a capa de "${itemDisplayTitle(item)}" ao Telegram? As páginas já salvas serão mantidas.`
-              : `Converter "${itemDisplayTitle(item)}" em páginas JPEG e enviar cada página ao Telegram? O link original será mantido como reserva.`,
-            {
-              title: needsCoverOnly ? "Migrar capa para o Telegram?" : "Migrar edição para o Telegram?",
-              confirmLabel: needsCoverOnly ? "Enviar capa" : "Converter e enviar"
-            }
-          );
-        } finally {
-          delete button.dataset.telegramPagesConfirmPending;
-        }
-        if (!confirmed) return;
-        button.disabled = true;
-        button.textContent = "…";
-        try {
-          const migrated = await window.BancaTelegramPages.migrate(item, {
-            client: sb, isAdminProfile, session: () => state.session,
-            sessionOffline: () => Boolean(state.session?.offline),
-            fetchFileArrayBuffer, ensureReaderDependency, loadLibarchiveModule,
-            appAssetUrl, downloadSource, isExternalArchiveLink, itemDisplayTitle,
-          });
-          if (!migrated) return;
-          const saved = await saveCatalog(Array.isArray(item.telegramPages) && item.telegramPages.length > 0 ? "Capa da edição migrada para o Telegram." : "Edição e capa migradas para o Telegram.", migrated);
-          if (saved) {
-            document.querySelector(".telegram-pages-progress-overlay")?.remove();
-            await refreshSharedCatalog({ renderPage: false }).catch(() => {});
-            render();
-          }
-        } catch (error) {
-          toast(error?.message || "Não foi possível migrar a edição para o Telegram.");
-        } finally {
-          if (button.isConnected) {
-            const currentItem = state.db.library.find(entry => String(entry.id) === String(item.id)) || item;
-            const pagesStored = Array.isArray(currentItem.telegramPages) && currentItem.telegramPages.length > 0;
-            const coverStored = Boolean(currentItem.telegramCoverFileId);
-            button.disabled = pagesStored && coverStored;
-            button.textContent = pagesStored ? (coverStored ? "✓" : "🖼") : "⇧";
-            button.title = pagesStored ? (coverStored ? "Páginas e capa já armazenadas no Telegram" : "Enviar a capa ao Telegram sem reenviar as páginas") : "Converter e enviar páginas JPEG ao Telegram";
-          }
-        }
-      });
-    });
+    bindTelegramMigrationButtons(document);
     $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -15212,6 +15155,164 @@
     };
   }
 
+  function telegramMigrationDependencies() {
+    return {
+      client: sb,
+      isAdminProfile,
+      session: () => state.session,
+      sessionOffline: () => Boolean(state.session?.offline),
+      fetchFileArrayBuffer,
+      ensureReaderDependency,
+      loadLibarchiveModule,
+      appAssetUrl,
+      downloadSource,
+      isExternalArchiveLink,
+      itemDisplayTitle
+    };
+  }
+
+  function telegramEditionNeedsMigration(item) {
+    const hasPages = Array.isArray(item?.telegramPages) && item.telegramPages.length > 0;
+    const hasCover = Boolean(item?.telegramCoverFileId);
+    return !(hasPages && hasCover);
+  }
+
+  function bindTelegramMigrationButtons(root = document) {
+    root.querySelectorAll("[data-migrate-telegram-pages]").forEach(button => {
+      if (button.dataset.telegramPagesBound) return;
+      button.dataset.telegramPagesBound = "true";
+      button.addEventListener("click", event => {
+        void migrateTelegramEditionButton(button, event);
+      });
+    });
+  }
+
+  async function migrateTelegramEditionButton(button, event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (button.disabled) return;
+    const id = String(button.dataset.migrateTelegramPages || "");
+    const item = state.db.library.find(entry => String(entry.id) === id);
+    if (!item || !isAdminProfile()) return;
+    if (!window.BancaTelegramPages?.migrate) {
+      toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
+      return;
+    }
+    if (button.dataset.telegramPagesConfirmPending === "true") return;
+    button.dataset.telegramPagesConfirmPending = "true";
+    let confirmed = false;
+    try {
+      const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+      confirmed = await openSiteConfirm(
+        hasPages
+          ? "Enviar a capa de \"" + itemDisplayTitle(item) + "\" ao Telegram? As páginas já salvas serão mantidas."
+          : "Converter \"" + itemDisplayTitle(item) + "\" em páginas JPEG e enviar cada página ao Telegram? O link original será mantido como reserva.",
+        {
+          title: hasPages ? "Migrar capa para o Telegram?" : "Migrar edição para o Telegram?",
+          confirmLabel: hasPages ? "Enviar capa" : "Converter e enviar"
+        }
+      );
+    } catch (error) {
+      toast(error?.message || "Não foi possível confirmar a migração.");
+      return;
+    } finally {
+      delete button.dataset.telegramPagesConfirmPending;
+    }
+    if (!confirmed) return;
+    button.disabled = true;
+    try {
+      const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
+      if (!migrated) throw new Error("A migração não retornou uma edição salva.");
+      const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+      const saved = await saveCatalog(hasPages ? "Capa da edição migrada para o Telegram." : "Edição e capa migradas para o Telegram.", migrated);
+      if (!saved) return;
+      document.querySelector(".telegram-pages-progress-overlay")?.remove();
+      await refreshSharedCatalog({ renderPage: false }).catch(() => {});
+      render();
+    } catch (error) {
+      toast(error?.message || "Não foi possível migrar a edição para o Telegram.");
+    } finally {
+      if (button.isConnected) {
+        const current = state.db.library.find(entry => String(entry.id) === id) || item;
+        const pagesStored = Array.isArray(current.telegramPages) && current.telegramPages.length > 0;
+        const coverStored = Boolean(current.telegramCoverFileId);
+        button.disabled = pagesStored && coverStored;
+        button.textContent = pagesStored ? (coverStored ? "✓" : "🖼") : "⇧";
+        button.title = pagesStored
+          ? (coverStored ? "Páginas e capa já armazenadas no Telegram" : "Enviar a capa ao Telegram sem reenviar as páginas")
+          : "Converter e enviar páginas JPEG ao Telegram";
+      }
+    }
+  }
+
+  async function migrateTelegramSeriesSequentially(editions, series, button) {
+    if (!isAdminProfile()) return toast("Apenas administradores podem migrar edições para o Telegram.");
+    if (button.disabled) return;
+    if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
+
+    const editionIds = [...new Set((Array.isArray(editions) ? editions : []).map(item => String(item?.id || "")).filter(Boolean))];
+    const pending = editionIds
+      .map(id => state.db.library.find(item => String(item.id) === id) || editions.find(item => String(item.id) === id))
+      .filter(item => item && telegramEditionNeedsMigration(item));
+    if (!pending.length) {
+      button.disabled = true;
+      button.textContent = "✓ Telegram";
+      return toast("Todas as edições desta série já estão migradas, incluindo as capas.");
+    }
+
+    const seriesName = String(series?.seriesTitle || series?.title || "esta série");
+    let confirmed = false;
+    try {
+      confirmed = await openSiteConfirm(
+        "Migrar " + pending.length + " edição(ões) de \"" + seriesName + "\" para o Telegram em sequência? Cada edição será enviada e salva antes de iniciar a próxima, para impedir que páginas se misturem.",
+        { title: "Migrar série para o Telegram?", confirmLabel: "Migrar " + pending.length + " edições" }
+      );
+    } catch (error) {
+      toast(error?.message || "Não foi possível confirmar a migração da série.");
+      return;
+    }
+    if (!confirmed) return;
+
+    button.disabled = true;
+    let completed = 0;
+    try {
+      for (const queued of pending) {
+        const item = state.db.library.find(entry => String(entry.id) === String(queued.id)) || queued;
+        if (!telegramEditionNeedsMigration(item)) {
+          completed++;
+          continue;
+        }
+        button.textContent = "⇧ " + (completed + 1) + "/" + pending.length + "…";
+        const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+        const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
+        if (!migrated) throw new Error("A migração de \"" + itemDisplayTitle(item) + "\" não retornou uma edição salva.");
+        const saved = await saveCatalog(
+          hasPages ? "Capa de \"" + itemDisplayTitle(item) + "\" migrada para o Telegram." : "Edição \"" + itemDisplayTitle(item) + "\" e capa migradas para o Telegram.",
+          migrated
+        );
+        if (!saved) throw new Error("Não foi possível salvar \"" + itemDisplayTitle(item) + "\". A série foi interrompida para evitar conflito de dados.");
+        completed++;
+        document.querySelector(".telegram-pages-progress-overlay")?.remove();
+        await refreshSharedCatalog({ renderPage: false }).catch(() => {});
+      }
+      render();
+      toast("Migração da série concluída: " + completed + " edição(ões) processadas.");
+    } catch (error) {
+      toast("Migração interrompida após " + completed + " edição(ões). " + (error?.message || "Verifique o catálogo antes de continuar."));
+    } finally {
+      document.querySelector(".telegram-pages-progress-overlay")?.remove();
+      const currentItems = editionIds
+        .map(id => state.db.library.find(item => String(item.id) === id))
+        .filter(Boolean);
+      const remaining = currentItems.filter(telegramEditionNeedsMigration).length;
+      button.disabled = remaining === 0;
+      button.textContent = remaining ? "⇧ Migrar série (" + remaining + ")" : "✓ Telegram";
+      button.title = remaining
+        ? "Migrar as " + remaining + " edição(ões) ainda pendentes, uma por vez"
+        : "Todas as edições e capas desta série já estão no Telegram";
+    }
+  }
+
   function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null, allowHiddenPreview = false, forcePage = false) {
     if (!allowHiddenPreview && !isAdminProfile()) editions = visibleCatalogItems(Array.isArray(editions) ? editions : [], false);
     const seriesRouteId = series?.seriesId || series?.id || "";
@@ -15267,6 +15368,23 @@
       obtainButton.dataset.seriesExport = series.seriesId || series.id;
       obtainButton.title = "Salvar todas as edições no computador";
       downloadSeriesButton.after(obtainButton);
+      const migrateSeriesButton = document.createElement("button");
+      migrateSeriesButton.className = "small-btn";
+      migrateSeriesButton.type = "button";
+      migrateSeriesButton.dataset.migrateSeriesTelegram = series.seriesId || series.id;
+      const seriesEditionIds = [...new Set(editions.map(item => String(item?.id || "")).filter(Boolean))];
+      const initialRemaining = seriesEditionIds
+        .map(id => state.db.library.find(item => String(item.id) === id) || editions.find(item => String(item.id) === id))
+        .filter(item => item && telegramEditionNeedsMigration(item)).length;
+      migrateSeriesButton.textContent = initialRemaining ? "⇧ Migrar série" : "✓ Telegram";
+      migrateSeriesButton.title = initialRemaining
+        ? "Migrar as " + initialRemaining + " edição(ões) pendentes, uma por vez"
+        : "Todas as edições e capas desta série já estão no Telegram";
+      migrateSeriesButton.disabled = initialRemaining === 0;
+      obtainButton.after(migrateSeriesButton);
+      migrateSeriesButton.addEventListener("click", () => {
+        void migrateTelegramSeriesSequentially(editions, series, migrateSeriesButton);
+      });
       obtainButton.addEventListener("click", () => { if (!pageMode) overlay.remove(); openSeriesExport(series, editions); });
       addEditionButton.addEventListener("click", () => {
         const latest = seriesEditions({ seriesId: series.seriesId || series.id }).at(-1) || series;
@@ -15375,8 +15493,9 @@
       event.stopPropagation();
       toggleFavorite(el.dataset.favorite);
     }));
+    bindTelegramMigrationButtons(overlay);
     bindEditionEditButtons(overlay);
-    $$('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
+    $('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       toggleComicLike(el.dataset.likeItem);
     }));
