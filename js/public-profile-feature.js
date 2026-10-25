@@ -343,9 +343,7 @@ export function createPublicProfileFeature(deps) {
     const publicCategories = (publicState.collections || []).filter(category => category.isPublic !== false);
     const selectedCategory = publicCategories.find(category => category.id === publicState.collectionId);
     if (publicState.collectionId && selectedCategory) return renderPublicCollectionPage(publicState, selectedCategory);
-    if (publicState.album && !canAccessStickerAlbum(profile)) {
-      return '<div class="content"><div class="empty">O álbum não está disponível para usuários Banca.</div></div>';
-    }
+    if (publicState.album && !canAccessStickerAlbum(profile)) publicState.album = false;
     if (publicState.album) {
       const isOwnAlbum = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
       return stickerAlbumMarkup(profile, publicState.stickerAwards || [], { isOwn: isOwnAlbum, progressMap: publicState.readingProgress });
@@ -356,7 +354,7 @@ export function createPublicProfileFeature(deps) {
     const isOwnProfile = Boolean(state.session?.user?.id && String(state.session.user.id) === String(profile.id));
     const canModerate = !isOwnProfile && canModerateProfile(profile);
     const publicProfileActions = isOwnProfile
-      ? '<button class="small-btn" data-profile-sticker-choose>Figurinha</button><button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button>'
+      ? `${canAccessStickerAlbum(profile) ? '<button class="small-btn" data-profile-sticker-choose>Figurinha</button>' : ''}<button class="small-btn" data-action="profile">Editar perfil</button><button class="small-btn" data-action="logout">Sair</button>`
       : `${canFollow ? `<button class="small-btn follow-button ${publicState.isFollowing ? "is-following" : ""}" data-follow-profile>${publicState.isFollowing ? "Seguindo" : "Seguir"}</button>` : ""}${canBlock ? `<button class="small-btn block-button" data-block-profile>Bloquear</button>` : ""}<button class="small-btn" data-section="home">Voltar ao início</button>${canModerate ? `<button class="small-btn moderation-button" data-open-moderation>Moderação</button>` : ""}`;
     return renderShelfLikePage({ profile, own: false, savedItems: { items: savedItems, visible: savedVisible }, savedSeries: { items: savedSeries, visible: seriesVisible }, readItems: { items: readItems, visible: readVisible }, completedItems: { items: completedItems, visible: completedVisible }, likedItems: { items: likedItems, visible: likedVisible }, categories: isOwnProfile ? (publicState.collections || []) : publicCategories, profileState: publicState, profileActions: publicProfileActions });
   }
