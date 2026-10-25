@@ -15425,7 +15425,7 @@
   function loadAdminFeature() {
     if (adminFeature) return Promise.resolve(adminFeature);
     if (!adminFeaturePromise) {
-      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=6-reader-edit-item-resolution"))
+      adminFeaturePromise = import(appAssetUrl("js/admin-feature.js?v=7-telegram-migration-selector"))
         .then(module => {
           adminFeature = module.createAdminFeature({
             $,
@@ -15437,6 +15437,14 @@
             currentNoveltyBadgeHours,
             detectFormat,
             escapeHTML,
+            fetchFileArrayBuffer,
+            ensureReaderDependency,
+            loadLibarchiveModule,
+            appAssetUrl,
+            downloadSource,
+            isExternalArchiveLink,
+            openSiteConfirm,
+            refreshSharedCatalog,
             formatType,
             hydrateHomeCovers,
             isAdminProfile,
