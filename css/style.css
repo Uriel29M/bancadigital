@@ -301,7 +301,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .card-telegram-pages:hover { color: #fff; background: #1f587a; }
 .card-telegram-pages:disabled { cursor: default; color: #91e5aa; opacity: .95; }
 .card-telegram-pages.is-complete { color: #91e5aa; }
-.card-obtain-edition { position: absolute; top: 41px; right: 79px; z-index: 2; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.8); color: #fff; font-size: 20px; font-weight: 900; line-height: 30px; cursor: pointer; opacity: .95; }
+.card-obtain-edition { position: absolute; top: 41px; right: 79px; z-index: 2; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.8); color: #fff; font-size: 22px; font-weight: 900; line-height: 30px; -webkit-text-stroke: .65px currentColor; text-shadow: 0 0 0.4px currentColor; cursor: pointer; opacity: .98; }
 .card-obtain-edition:hover { color: #fff; background: #a90d1a; }
 .card-obtain-edition:disabled { cursor: default; opacity: .5; }
 .card-hide-toggle { position: absolute; top: 41px; right: 9px; z-index: 2; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.68); color: #ff7379; font-size: 19px; font-weight: 900; line-height: 30px; cursor: pointer; opacity: .9; }
