@@ -1817,7 +1817,7 @@
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const params = new URLSearchParams(window.location.search);
     if (!STICKER_ALBUM_ENABLED) {
-      const disabledAlbumRoute = params.get("pagina") === "album" || params.STICKER_ALBUM_ENABLED && get("album") === "1";
+      const disabledAlbumRoute = params.get("pagina") === "album" || STICKER_ALBUM_ENABLED && params.get("album") === "1";
       if (params.get("pagina") === "album") params.delete("pagina");
       params.delete("album");
       if (disabledAlbumRoute) {
@@ -1849,11 +1849,11 @@
     handlingRoute = true;
     const profileUsername = params.get("perfil");
     if (!readerId && profileUsername && !PROFILE_SITE_MODE) {
-      window.location.replace(publicProfileHref(profileUsername, params.get("lista") || null, params.STICKER_ALBUM_ENABLED && get("album") === "1", params.get("lista_top10") || ""));
+      window.location.replace(publicProfileHref(profileUsername, params.get("lista") || null, STICKER_ALBUM_ENABLED && params.get("album") === "1", params.get("lista_top10") || ""));
       return;
     }
     if (!readerId && profileUsername) {
-      loadPublicProfile(profileUsername, params.get("lista") || null, params.STICKER_ALBUM_ENABLED && get("album") === "1", { top10ListId: params.get("lista_top10") || null });
+      loadPublicProfile(profileUsername, params.get("lista") || null, STICKER_ALBUM_ENABLED && params.get("album") === "1", { top10ListId: params.get("lista_top10") || null });
       handlingRoute = false;
       return;
     }
@@ -1877,7 +1877,7 @@
       const routedFaction = factionRouteValue ? state.factions.find(faction => String(faction.page_key) === String(factionRouteValue) || faction.id === factionRouteValue) : null;
       state.factionPageId = routedFaction?.id || factionRouteValue;
       state.factionCatalogId = section === "factions" ? params.get("catalogo") || null : null;
-      state.stickerAlbumView = section === "album" || params.STICKER_ALBUM_ENABLED && get("album") === "1" ? "album" : "album";
+      state.stickerAlbumView = section === "album" || STICKER_ALBUM_ENABLED && params.get("album") === "1" ? "album" : "album";
       state.factionMembersView = section === "factions" && params.get("membros") === "1";
       state.factionMemberSearch = state.factionMembersView ? params.get("busca") || "" : "";
       if (section === "search") state.search = params.get("q") || "";
@@ -9483,7 +9483,7 @@
       if (parsed.origin !== window.location.origin || parsed.searchParams.has("ler") || parsed.searchParams.has("lista_top10")) return null;
       const profile = parsed.searchParams.get("perfil");
       const collection = parsed.searchParams.get("lista");
-      const album = parsed.searchParams.STICKER_ALBUM_ENABLED && get("album") === "1";
+      const album = STICKER_ALBUM_ENABLED && parsed.searchParams.get("album") === "1";
       const page = parsed.searchParams.get("pagina");
       const faction = parsed.searchParams.get("faccao");
       const kind = parsed.searchParams.get("tipo");
@@ -15527,7 +15527,7 @@
   }
   if (!STICKER_ALBUM_ENABLED) {
     const initialRouteUrl = new URL(window.location.href);
-    const disabledAlbumRoute = initialRouteUrl.searchParams.get("pagina") === "album" || initialRouteUrl.searchParams.STICKER_ALBUM_ENABLED && get("album") === "1";
+    const disabledAlbumRoute = initialRouteUrl.searchParams.get("pagina") === "album" || initialRouteUrl.searchParams.get("album") === "1";
     if (initialRouteUrl.searchParams.get("pagina") === "album") initialRouteUrl.searchParams.delete("pagina");
     initialRouteUrl.searchParams.delete("album");
     if (disabledAlbumRoute) window.history.replaceState(window.history.state || {}, "", `${initialRouteUrl.pathname}${initialRouteUrl.search}${initialRouteUrl.hash}`);
@@ -15547,7 +15547,7 @@
       : "";
   if (initialPublicUsername && /^[a-z0-9_]{3,24}$/.test(initialPublicUsername)) {
     state.section = "public-profile";
-    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, top10ListId: queryTop10List, album: new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1" };
+    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, top10ListId: queryTop10List, album: STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1" };
   } else if (legacyShelfRoute) {
     // Evita que a rota antiga pisque a home enquanto a sessão é recuperada.
     state.section = "public-profile";
@@ -15567,7 +15567,7 @@
   // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
   // a rota pública não fique bloqueada pelas consultas globais do aplicativo.
   const earlyPublicProfileLoad = initialPublicUsername && sb
-    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1", { basicOnly: true, top10ListId: queryTop10List })
+    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { basicOnly: true, top10ListId: queryTop10List })
       .catch(error => console.warn("Perfil público inicial indisponível:", error))
     : null;
   // Dependências pesadas do leitor são carregadas apenas quando PDF/CBZ/CBR
@@ -15663,14 +15663,14 @@
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
-      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1", { top10ListId: queryTop10List });
+      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
     .catch(error => console.warn("Supabase indisponível:", error))
     .then(async () => {
       if (!initialPublicUsername || !state.publicProfile?.loading) return;
       try {
-        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1", { top10ListId: queryTop10List });
+        await loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       } catch (error) {
         console.warn("Public profile load failed:", error);
         state.publicProfile = { error: "Não foi possível carregar este perfil agora.", username: initialPublicUsername };
