@@ -8859,7 +8859,7 @@
       const imprintCharacterRail = imprintCharacterMarkup(allItems);
       const entityCards = ((sortCatalogCards(uniqueCatalogItems(items)).map(item => item.seriesId ? seriesCard(item) : card(item)).join("") || '<div class="empty">Nenhuma edição encontrada.</div>') + (relatedImprintsMarkup ? `</div></section>${relatedImprintsMarkup}<section class="section"><div class="results-grid">` : ""));
       const factionPinButton = canFeatureInFaction ? `<button class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-imprint-pin="${escapeHTML(filter.value)}" data-faction-imprint-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "★ Fixado na facção" : "☆ Fixar na facção"}</button>` : "";
-      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${imprintCharacterRail}</div>`;
+      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>${isAdminProfile() ? `<button class="small-btn" type="button" data-imprint-migrate-telegram="${escapeHTML(filter.value)}" title="Migrar todas as edições deste selo, incluindo as de todas as séries">⇧ Migrar selo para o Telegram</button>` : ""}` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${imprintCharacterRail}</div>`;
     }
     if (filter.kind !== "publisher") {
       const entityCards = sortCatalogCards(uniqueCatalogItems(items)).map(item => filter.kind === "character" && item.seriesId ? seriesCard(item) : card(item)).join("");
@@ -14193,9 +14193,34 @@
         button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
       });
     }
-    $$('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
-    $$('[data-imprint-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openImprintSettings(el.dataset.imprintSettings); }));
-    $$('[data-legendary-event-toggle]').forEach(button => button.addEventListener("click", async event => {
+    $('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
+    $('[data-imprint-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openImprintSettings(el.dataset.imprintSettings); }));
+    $('[data-imprint-migrate-telegram]').forEach(button => {
+      if (button.dataset.imprintMigrateTelegramBound) return;
+      button.dataset.imprintMigrateTelegramBound = "true";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isAdminProfile()) return toast("Apenas administradores podem migrar edições para o Telegram.");
+        const imprintName = String(button.dataset.imprintMigrateTelegram || "").trim();
+        if (!imprintName) return;
+        const imprintKey = publisherKey(imprintName);
+        const catalogItems = (state.db.library || []).filter(item => item && item.catalogDeleted !== true);
+        const directlyMatched = catalogItems.filter(item => publisherKey(item.imprint || "") === imprintKey);
+        const seriesIds = new Set(directlyMatched.map(item => String(item.seriesId || "")).filter(Boolean));
+        const editions = catalogItems.filter(item =>
+          publisherKey(item.imprint || "") === imprintKey ||
+          (item.seriesId && seriesIds.has(String(item.seriesId)))
+        );
+        void migrateTelegramSeriesSequentially(
+          editions,
+          { seriesTitle: imprintName },
+          button,
+          { scope: "imprint", delayMs: 1000 }
+        );
+      });
+    });
+    $('[data-legendary-event-toggle]').forEach(button => button.addEventListener("click", async event => {
       event.preventDefault();
       if (state.profile?.plan !== "admin" || !sb) return;
       button.disabled = true;
@@ -15369,11 +15394,14 @@
     }
   }
 
-  async function migrateTelegramSeriesSequentially(editions, series, button) {
+  async function migrateTelegramSeriesSequentially(editions, series, button, options = {}) {
     if (!isAdminProfile()) return toast("Apenas administradores podem migrar edições para o Telegram.");
     if (button.disabled) return;
     if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
 
+    const isImprint = options.scope === "imprint";
+    const delayMs = Math.max(0, Number(options.delayMs) || 0);
+    const scopeName = String(series?.seriesTitle || series?.title || (isImprint ? "este selo" : "esta série"));
     const editionIds = [...new Set((Array.isArray(editions) ? editions : []).map(item => String(item?.id || "")).filter(Boolean))];
     const pending = editionIds
       .map(id => state.db.library.find(item => String(item.id) === id) || editions.find(item => String(item.id) === id))
@@ -15381,48 +15409,81 @@
     if (!pending.length) {
       button.disabled = true;
       button.textContent = "✓ Telegram";
-      return toast("Todas as edições desta série já estão migradas, incluindo as capas.");
+      return toast(isImprint
+        ? "Todas as edições do selo \"" + scopeName + "\" já estão migradas, incluindo as capas."
+        : "Todas as edições desta série já estão migradas, incluindo as capas.");
     }
 
-    const seriesName = String(series?.seriesTitle || series?.title || "esta série");
     let confirmed = false;
     try {
       confirmed = await openSiteConfirm(
-        "Migrar " + pending.length + " edição(ões) de \"" + seriesName + "\" para o Telegram em sequência? Cada edição será enviada e salva antes de iniciar a próxima, para impedir que páginas se misturem.",
-        { title: "Migrar série para o Telegram?", confirmLabel: "Migrar " + pending.length + " edições" }
+        "Migrar " + pending.length + " edição(ões) " + (isImprint ? "do selo " : "da série ") + "\"" + scopeName + "\" para o Telegram em sequência? Cada edição será enviada e salva antes de iniciar a próxima, para impedir que páginas se misturem." +
+          (delayMs ? " Haverá um intervalo de 1 segundo entre as edições." : ""),
+        {
+          title: isImprint ? "Migrar todas as edições do selo?" : "Migrar série para o Telegram?",
+          confirmLabel: "Migrar " + pending.length + " edições"
+        }
       );
     } catch (error) {
-      toast(error?.message || "Não foi possível confirmar a migração da série.");
+      toast(error?.message || "Não foi possível confirmar a migração.");
       return;
     }
     if (!confirmed) return;
 
     button.disabled = true;
     let completed = 0;
+    const failures = [];
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     try {
-      for (const queued of pending) {
+      for (let index = 0; index < pending.length; index++) {
+        const queued = pending[index];
         const item = state.db.library.find(entry => String(entry.id) === String(queued.id)) || queued;
         if (!telegramEditionNeedsMigration(item)) {
           completed++;
           continue;
         }
         button.textContent = "⇧ " + (completed + 1) + "/" + pending.length + "…";
-        const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
-        const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
-        if (!migrated) throw new Error("A migração de \"" + itemDisplayTitle(item) + "\" não retornou uma edição salva.");
-        const saved = await saveCatalog(
-          hasPages ? "Capa de \"" + itemDisplayTitle(item) + "\" migrada para o Telegram." : "Edição \"" + itemDisplayTitle(item) + "\" e capa migradas para o Telegram.",
-          migrated
-        );
-        if (!saved) throw new Error("Não foi possível salvar \"" + itemDisplayTitle(item) + "\". A série foi interrompida para evitar conflito de dados.");
-        completed++;
-        document.querySelector(".telegram-pages-progress-overlay")?.remove();
-        await refreshSharedCatalog({ renderPage: false }).catch(() => {});
+        try {
+          const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+          const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
+          if (!migrated || String(migrated.id || "") !== String(item.id) ||
+              !Array.isArray(migrated.telegramPages) || !migrated.telegramPages.length ||
+              !migrated.telegramCoverFileId) {
+            throw new Error("O Telegram não confirmou todas as páginas e a capa desta edição.");
+          }
+          const saved = await saveCatalog(
+            hasPages ? "Capa de \"" + itemDisplayTitle(item) + "\" migrada para o Telegram." : "Edição \"" + itemDisplayTitle(item) + "\" e capa migradas para o Telegram.",
+            migrated
+          );
+          if (!saved) throw new Error("Não foi possível salvar \"" + itemDisplayTitle(item) + "\" no catálogo.");
+          completed++;
+          document.querySelector(".telegram-pages-progress-overlay")?.remove();
+          await refreshSharedCatalog({ renderPage: false }).catch(() => {});
+        } catch (error) {
+          if (!isImprint) throw error;
+          const failure = {
+            id: String(item.id),
+            title: itemDisplayTitle(item),
+            error: String(error?.message || error || "Erro desconhecido").slice(0, 500)
+          };
+          failures.push(failure);
+          console.error("[TELEGRAM] Falha ao migrar edição do selo", scopeName, failure);
+        } finally {
+          document.querySelector(".telegram-pages-progress-overlay")?.remove();
+        }
+        if (delayMs && index < pending.length - 1) await sleep(delayMs);
       }
       render();
-      toast("Migração da série concluída: " + completed + " edição(ões) processadas.");
+      if (failures.length) {
+        const first = failures[0];
+        toast("Migração do selo \"" + scopeName + "\" finalizada: " + completed + " concluída(s), " + failures.length + " falha(s). Primeira falha: " + first.title + " — " + first.error);
+      } else {
+        toast(isImprint
+          ? "Migração do selo \"" + scopeName + "\" concluída: " + completed + " edição(ões) processadas."
+          : "Migração da série concluída: " + completed + " edição(ões) processadas.");
+      }
     } catch (error) {
-      toast("Migração interrompida após " + completed + " edição(ões). " + (error?.message || "Verifique o catálogo antes de continuar."));
+      toast((isImprint ? "Migração do selo interrompida após " : "Migração interrompida após ") + completed + " edição(ões). " + (error?.message || "Verifique o catálogo antes de continuar."));
     } finally {
       document.querySelector(".telegram-pages-progress-overlay")?.remove();
       const currentItems = editionIds
@@ -15430,10 +15491,14 @@
         .filter(Boolean);
       const remaining = currentItems.filter(telegramEditionNeedsMigration).length;
       button.disabled = remaining === 0;
-      button.textContent = remaining ? "⇧ Migrar série (" + remaining + ")" : "✓ Telegram";
+      button.textContent = remaining
+        ? (isImprint ? "⇧ Migrar selo (" : "⇧ Migrar série (") + remaining + ")"
+        : "✓ Telegram";
       button.title = remaining
         ? "Migrar as " + remaining + " edição(ões) ainda pendentes, uma por vez"
-        : "Todas as edições e capas desta série já estão no Telegram";
+        : (isImprint
+          ? "Todas as edições e capas deste selo já estão no Telegram"
+          : "Todas as edições e capas desta série já estão no Telegram");
     }
   }
 
