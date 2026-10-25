@@ -55,27 +55,11 @@ function normalizeTelegramPost(value: unknown) {
   } catch {}
   return "";
 }
-function base64Url(bytes: Uint8Array) {
-  let raw = "";
-  for (const byte of bytes) raw += String.fromCharCode(byte);
-  return btoa(raw).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-function decodeGatewayKey(value: string) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
-  const raw = Uint8Array.from(atob(normalized), character => character.charCodeAt(0));
-  if (raw.byteLength !== 32) throw new MigrationError("Chave do gateway inválida.", 503);
-  return raw;
-}
-async function migrationSourceUrl(payload: Record<string, unknown>) {
-  // Mesmo formato de ticket AES-GCM usado pelo proxy do catálogo. Só entregamos
-  // o ticket após requireAdmin; ele expira em 15 minutos e não muda a visibilidade.
-  const encodedKey = "hkO_ParypIsaEaXQ_Qa6v5L0RexY_t6kZUUFj5NoWCI";
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await crypto.subtle.importKey("raw", decodeGatewayKey(encodedKey), "AES-GCM", false, ["encrypt"]);
-  const data = new TextEncoder().encode(JSON.stringify({ v: 1, e: Math.floor(Date.now() / 1000) + 900, ...payload }));
-  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data));
-  const target = new URL("/media", "https://media-gateway-production-0bb9.up.railway.app");
-  target.searchParams.set("ticket", "v1." + base64Url(iv) + "." + base64Url(cipher));
+function migrationSourceUrl(itemId: string) {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(itemId)) throw new MigrationError("Identificador de edição inválido.");
+  // Use o proxy nativo do Supabase/MTProto; o fluxo de migração não depende do Railway.
+  const target = new URL("/functions/v1/telegram-proxy", required("SUPABASE_URL"));
+  target.searchParams.set("item_id", itemId);
   return target.toString();
 }
 async function telegram(method: string, body: Record<string, unknown> | FormData) {
@@ -210,17 +194,7 @@ async function handle(request: Request) {
       if (!Number.isSafeInteger(size) || size < 1) {
         throw new MigrationError("O Telegram não informou o tamanho do arquivo original. Identifique novamente a postagem antes de migrar.");
       }
-      const sourceUrl = await migrationSourceUrl({
-        kind: "telegram",
-        itemId,
-        telegramUrl,
-        size,
-        format,
-        telegramApiId: required("TELEGRAM_API_ID"),
-        telegramApiHash: required("TELEGRAM_API_HASH"),
-        telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
-        telegramAllowedChatIds: Deno.env.get("TELEGRAM_ALLOWED_CHAT_IDS") || "-1004424843914",
-      });
+      const sourceUrl = migrationSourceUrl(itemId);
       return json({ ok: true, sourceUrl, format, size });
     }
     if (action === "begin") {
