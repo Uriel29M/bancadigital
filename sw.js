@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v732-single-edition-obtain";
+const CACHE_VERSION = "banca-digital-shell-v733-symbolic-obtain";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
-  "./", "./index.html", "./css/style.css?v=2.2.10.271-single-edition-obtain",
-  "./js/app.js?v=2.2.10.593-single-edition-obtain", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./", "./index.html", "./css/style.css?v=2.2.10.272-symbolic-obtain",
+  "./js/app.js?v=2.2.10.594-symbolic-obtain", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
