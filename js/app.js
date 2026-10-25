@@ -3000,6 +3000,8 @@
     return (fallback.data || []).map(comment => ({ ...comment, profiles: byId.get(comment.user_id) || {} }));
   }
 
+  let restoreInitialRouteAfterAuth = false;
+
   async function loadAccount() {
     const offlineAccount = readOfflineAccount();
     if (!sb) {
@@ -3011,7 +3013,13 @@
       }
       characterSettingsReady = true;
       state.authReady = true;
-      render();
+      syncTopAvatar();
+      if (restoreInitialRouteAfterAuth) {
+        restoreInitialRouteAfterAuth = false;
+        applyRoute();
+      } else {
+        render();
+      }
       return;
     }
     let remoteSession = null;
@@ -3060,7 +3068,12 @@
     // identidade. Não há estado intermediário visitante/logado.
     state.authReady = true;
     syncTopAvatar();
-    render();
+    if (restoreInitialRouteAfterAuth) {
+      restoreInitialRouteAfterAuth = false;
+      applyRoute();
+    } else {
+      render();
+    }
 
     // O ranking é público e não deve depender da conclusão do carregamento da
     // conta/estante. Inicie-o logo para visitantes sem sessão também.
@@ -8859,7 +8872,7 @@
       const imprintCharacterRail = imprintCharacterMarkup(allItems);
       const entityCards = ((sortCatalogCards(uniqueCatalogItems(items)).map(item => item.seriesId ? seriesCard(item) : card(item)).join("") || '<div class="empty">Nenhuma edição encontrada.</div>') + (relatedImprintsMarkup ? `</div></section>${relatedImprintsMarkup}<section class="section"><div class="results-grid">` : ""));
       const factionPinButton = canFeatureInFaction ? `<button class="small-btn ${isFactionPinned ? "is-liked" : ""}" data-faction-imprint-pin="${escapeHTML(filter.value)}" data-faction-imprint-pinned="${isFactionPinned ? "true" : "false"}">${isFactionPinned ? "★ Fixado na facção" : "☆ Fixar na facção"}</button>` : "";
-      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>${isAdminProfile() ? `<button class="small-btn" type="button" data-imprint-migrate-telegram="${escapeHTML(filter.value)}" title="Migrar todas as edições deste selo, incluindo as de todas as séries">⇧ Migrar selo para o Telegram</button>` : ""}` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${imprintCharacterRail}</div>`;
+      return `<div class="content publisher-page imprint-page"><div class="section-head"><div><div class="eyebrow">Explorar catálogo · Selo</div><h1 class="section-title">${escapeHTML(filter.value)}</h1><div class="section-subtitle">${items.length} edição(ões) deste selo</div></div><div class="publisher-page-actions"><button class="small-btn" data-section="home">Voltar ao início</button><button class="small-btn ${saved ? "is-liked" : ""}" data-save-imprint="${escapeHTML(filter.value)}">${saved ? "★ Selo salvo" : "☆ Salvar selo"}</button>${factionPinButton}${canManage ? `<button class="small-btn" data-imprint-settings="${escapeHTML(filter.value)}">Configurar selo</button>${isAdminProfile() ? `<button class="small-btn" type="button" data-imprint-migrate-telegram="${escapeHTML(filter.value)}" title="Migrar todas as edições deste selo, incluindo as de todas as séries">Migrar</button>` : ""}` : ""}</div></div>${setting?.cover_url ? `<div class="entity-wiki"><div class="entity-wiki-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(setting.cover_url))}')"></div></div>` : ""}${wikiMarkup}<section class="section"><div class="results-grid">${entityCards || '<div class="empty">Nenhuma edição encontrada.</div>'}</div></section>${imprintCharacterRail}</div>`;
     }
     if (filter.kind !== "publisher") {
       const entityCards = sortCatalogCards(uniqueCatalogItems(items)).map(item => filter.kind === "character" && item.seriesId ? seriesCard(item) : card(item)).join("");
@@ -15408,7 +15421,7 @@
       .filter(item => item && telegramEditionNeedsMigration(item));
     if (!pending.length) {
       button.disabled = true;
-      button.textContent = "✓ Telegram";
+      button.textContent = isImprint ? "✓ Migrado" : "✓ Telegram";
       return toast(isImprint
         ? "Todas as edições do selo \"" + scopeName + "\" já estão migradas, incluindo as capas."
         : "Todas as edições desta série já estão migradas, incluindo as capas.");
@@ -15442,7 +15455,7 @@
           completed++;
           continue;
         }
-        button.textContent = "⇧ " + (index + 1) + "/" + pending.length + "…";
+        button.textContent = isImprint ? "Migrando " + (index + 1) + "/" + pending.length + "…" : "⇧ " + (index + 1) + "/" + pending.length + "…";
         try {
           const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
           const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
@@ -15497,8 +15510,8 @@
       if (statusButton) {
         statusButton.disabled = remaining === 0;
         statusButton.textContent = remaining
-          ? (isImprint ? "⇧ Migrar selo (" : "⇧ Migrar série (") + remaining + ")"
-          : "✓ Telegram";
+          ? (isImprint ? "Migrar" : "⇧ Migrar série (" + remaining + ")")
+          : (isImprint ? "✓ Migrado" : "✓ Telegram");
         statusButton.title = remaining
           ? "Migrar as " + remaining + " edição(ões) ainda pendentes, uma por vez"
           : (isImprint
@@ -16051,6 +16064,9 @@
     state.publicProfile = { loading: true, username: "" };
   }
   const bootOfflineAccount = readOfflineAccount();
+  // A rota inicial só é restaurada após a sessão ser resolvida. No modo offline,
+  // mantém-se a regra de abrir Downloads em vez de navegar para páginas online.
+  restoreInitialRouteAfterAuth = !initialPublicUsername && !(navigator.onLine === false && bootOfflineAccount?.user);
   if (!initialPublicUsername && navigator.onLine === false && bootOfflineAccount?.user) {
     state.session = { user: bootOfflineAccount.user, offline: true };
     state.profile = offlineProfileFor(bootOfflineAccount.user, bootOfflineAccount.profile, bootOfflineAccount.username);
@@ -16158,8 +16174,7 @@
     : loadAccount();
   accountBootstrap
     .then(async () => {
-      if (state.section === "reader" && !activeReaderCleanup) applyRoute();
-      if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
+      // applyRoute já é executado quando o Auth fica pronto, antes do primeiro render.
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
