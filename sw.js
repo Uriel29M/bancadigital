@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v737-imprint-telegram-migration";
+const CACHE_VERSION = "banca-digital-shell-v738-imprint-telegram-migration";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.274-obtain-tray-icon",
-  "./js/app.js?v=2.2.10.597-imprint-telegram-migration", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/app.js?v=2.2.10.598-imprint-telegram-migration", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
