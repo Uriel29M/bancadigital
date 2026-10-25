@@ -439,7 +439,7 @@ export function createAdminFeature(deps) {
           <button class="small-btn" data-export>Exportar</button><button class="small-btn" data-import>Importar</button>
         </div>
         <table class="admin-table"><thead><tr><th>Série / edição</th><th>Editora</th><th>Selo</th><th>Personagem</th><th>Ano</th><th>Ações</th></tr></thead><tbody>
-          ${state.db.library.map(x => `<tr><td><b>${escapeHTML(x.seriesTitle || x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue || (x.seriesId ? "Edição" : "Oneshot"))}</span></td><td>${escapeHTML(x.publisher || "—")}</td><td>${escapeHTML(x.imprint || "—")}</td><td>${escapeHTML(x.character || "—")}</td><td>${escapeHTML(String(x.year || "—"))}</td><td><div class="admin-actions"><button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button><button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button></div></td></tr>`).join("")}
+          ${state.db.library.map(x => { const migratedPages = Array.isArray(x.telegramPages) && x.telegramPages.length > 0; const migratedCover = Boolean(x.telegramCoverFileId); return `<tr><td><b>${escapeHTML(x.seriesTitle || x.title)}</b><br><span style="color:#777">${escapeHTML(x.issue || (x.seriesId ? "Edição" : "Oneshot"))}</span></td><td>${escapeHTML(x.publisher || "—")}</td><td>${escapeHTML(x.imprint || "—")}</td><td>${escapeHTML(x.character || "—")}</td><td>${escapeHTML(String(x.year || "—"))}</td><td><div class="admin-actions"><button class="small-btn" data-admin-migrate-telegram-pages="${escapeHTML(x.id)}" title="${migratedPages ? (migratedCover ? "Páginas e capa já estão no Telegram" : "Enviar somente a capa ao Telegram") : "Migrar páginas e capa ao Telegram"}" ${migratedPages && migratedCover ? "disabled" : ""}>${migratedPages ? (migratedCover ? "✓ Telegram" : "🖼 Capa") : "⇧ Migrar"}</button><button class="small-btn" data-edit="${escapeHTML(x.id)}">Editar</button><button class="small-btn danger" data-delete="${escapeHTML(x.id)}">Excluir</button></div></td></tr>`; }).join("")}
         </tbody></table>
         <h3 style="margin-top:28px">Coleções</h3>
         <div class="admin-collection-list">${state.db.collections.map(c => `<div><b>${escapeHTML(c.title)}</b><span>${c.issueIds.length} edições</span><button class="small-btn danger" data-delete-collection="${escapeHTML(c.id)}">Excluir</button></div>`).join("") || "Nenhuma coleção criada."}</div>
@@ -499,7 +499,57 @@ export function createAdminFeature(deps) {
     $("[data-account-plan]", overlay).onclick = () => { overlay.remove(); openAccountPlanAdmin(); };
     $("[data-reader-ads]", overlay).onclick = () => { overlay.remove(); openReaderAdsAdmin(); };
     $("[data-export]", overlay).onclick = exportDB; $("[data-import]", overlay).onclick = importDB;
-    $$('[data-edit]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openEditForm(button.dataset.edit); });
+    $('[data-edit]', overlay).forEach(button => button.onclick = () => { overlay.remove(); openEditForm(button.dataset.edit); });
+    $('[data-admin-migrate-telegram-pages]', overlay).forEach(button => {
+      button.onclick = async () => {
+        if (button.disabled) return;
+        const id = String(button.dataset.adminMigrateTelegramPages || "");
+        const item = state.db.library.find(entry => String(entry.id) === id);
+        if (!item || !isAdminProfile()) return;
+        if (!window.BancaTelegramPages?.migrate) return toast("O migrador do Telegram não foi carregado. Atualize a página e tente novamente.");
+        const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
+        const hasCover = Boolean(item.telegramCoverFileId);
+        let confirmed = false;
+        try {
+          confirmed = await deps.openSiteConfirm(
+            hasPages
+              ? `Enviar a capa de "${itemDisplayTitle(item)}" ao Telegram? As páginas já salvas serão mantidas.`
+              : `Converter "${itemDisplayTitle(item)}" em páginas JPEG e enviar também a capa ao Telegram?`,
+            { title: hasPages ? "Migrar capa para o Telegram?" : "Migrar edição para o Telegram?", confirmLabel: hasPages ? "Enviar capa" : "Converter e enviar" }
+          );
+        } catch (error) { toast(error?.message || "Não foi possível confirmar a migração."); return; }
+        if (!confirmed) return;
+        button.disabled = true;
+        const originalText = button.textContent;
+        button.textContent = "…";
+        try {
+          const migrated = await window.BancaTelegramPages.migrate(item, {
+            client: sb, isAdminProfile, session: () => state.session,
+            sessionOffline: () => Boolean(state.session?.offline),
+            fetchFileArrayBuffer: deps.fetchFileArrayBuffer,
+            ensureReaderDependency: deps.ensureReaderDependency,
+            loadLibarchiveModule: deps.loadLibarchiveModule,
+            appAssetUrl: deps.appAssetUrl, downloadSource: deps.downloadSource,
+            isExternalArchiveLink: deps.isExternalArchiveLink, itemDisplayTitle
+          });
+          if (!migrated) return;
+          const saved = await saveCatalog(hasPages ? "Capa da edição migrada para o Telegram." : "Edição e capa migradas para o Telegram.", migrated);
+          if (saved) {
+            if (deps.refreshSharedCatalog) await deps.refreshSharedCatalog({ renderPage: false }).catch(() => {});
+            overlay.remove();
+            render();
+            toast(hasCover ? "Capa atualizada no Telegram." : "Migração para o Telegram concluída.");
+          } else {
+            button.disabled = false;
+            button.textContent = originalText;
+          }
+        } catch (error) {
+          toast(error?.message || "Não foi possível migrar a edição para o Telegram.");
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      };
+    });
     $$('[data-delete]', overlay).forEach(button => button.onclick = () => deleteCatalogEdition(button, overlay));
     $$('[data-delete-collection]', overlay).forEach(button => button.onclick = () => { state.db.collections = state.db.collections.filter(c => c.id !== button.dataset.deleteCollection); saveCatalog("Coleção excluída."); overlay.remove(); openAdmin(); });
   }
