@@ -88,12 +88,17 @@ export async function checkSource(url, item, serviceUrl, fetcher = fetch) {
 
 export async function inspectEdition(item, check) {
   const urls = sourcesFor(item);
-  if (!urls.length) return { action: 'hide', reason: 'Edicao sem fonte de arquivo' };
+  if (!urls.length) {
+    return {
+      action: 'review',
+      reason: 'A edição não possui uma fonte direta cadastrada. Nenhuma edição é ocultada automaticamente.',
+    };
+  }
   const results = [];
   for (const url of urls) {
     let result = await check(url, item);
     if (result.state === 'broken') result = await check(url, item);
-    results.push(result);
+    results.push({ ...result, url });
     if (result.state === 'working') {
       if (results.length === 1) return { action: 'none' };
       // Telegram posts need metadata, not just a URL, to become a primary.
@@ -104,6 +109,10 @@ export async function inspectEdition(item, check) {
     }
   }
   return results.every(result => result.state === 'broken')
-    ? { action: 'hide', reason: results.map(result => result.reason).join('; ') }
+    ? {
+        action: 'review',
+        reason: 'Todas as fontes foram classificadas como indisponíveis pelo verificador. A edição foi mantida visível e precisa de conferência manual. ' +
+          results.map(result => `${result.url}: ${result.reason || result.state}`).join('; '),
+      }
     : { action: 'none', uncertain: true };
 }
