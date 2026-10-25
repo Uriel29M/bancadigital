@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v715-album-disabled";
+const CACHE_VERSION = "banca-digital-shell-v716-album-disabled";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.268-moderation-history-modal",
-  "./js/app.js?v=2.2.10.579-album-disabled", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/app.js?v=2.2.10.580-album-disabled", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=6-telegram-pages",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=5-external-media-gateway",
   "./js/telegram-pages.js?v=6-minimize",
