@@ -649,15 +649,17 @@ export function createAdminFeature(deps) {
     const telegramPagesEditorMarkup = isAdminProfile() && telegramPagesForEditor.length ? `
       <div class="field full telegram-pages-editor">
         <label>Imagens da edição no Telegram — ${telegramPagesForEditor.length} páginas</label>
-        <p class="format-hint">Confira os links das postagens. Use ↑ e ↓ para mudar a sequência; essa ordem será aplicada às imagens abertas no leitor. Para manter o link correspondente à imagem, informe a postagem da própria página.</p>
+        <p class="format-hint">Confira as miniaturas e os links. Use ↑ e ↓ para mudar a sequência no leitor. Alterar o link muda a referência da postagem, não substitui o arquivo JPEG já salvo; informe o link da mesma imagem para manter a correspondência.</p>
         <div class="telegram-page-edit-list" data-telegram-pages-list>
           ${telegramPagesForEditor.map(({ page, sourceIndex }, index) => {
             const file = telegramPageFilesByIndex.get(sourceIndex);
             const url = String(page?.url || file?.url || "").trim();
             const safeUrl = safeTelegramPageUrl(url);
+            const previewUrl = window.BancaTelegramPages?.imageUrl(x.id, sourceIndex) || "";
             return `<div class="telegram-page-edit-row" data-telegram-page-row data-source-index="${sourceIndex}">
+              <img class="telegram-page-edit-thumb" data-page-thumb src="${escapeHTML(previewUrl)}" alt="" loading="lazy" decoding="async" aria-hidden="true">
               <div class="telegram-page-edit-main">
-                <div class="telegram-page-edit-heading"><strong data-page-order-label>Imagem ${index + 1}</strong>${safeUrl ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">Abrir postagem ↗</a>` : '<span class="format-hint">Link ainda não disponível</span>'}</div>
+                <div class="telegram-page-edit-heading"><strong data-page-order-label>Imagem ${index + 1}</strong><a data-telegram-page-open-link href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer" ${safeUrl ? "" : "hidden"}>Abrir postagem ↗</a></div>
                 <input type="url" data-telegram-page-url required value="${escapeHTML(url)}" aria-label="Link da postagem da imagem ${index + 1}" placeholder="https://t.me/canal/123">
               </div>
               <div class="telegram-page-edit-controls">
@@ -722,6 +724,18 @@ export function createAdminFeature(deps) {
         if (down) { down.disabled = index === rows.length - 1; down.setAttribute("aria-label", "Mover imagem " + (index + 1) + " para baixo"); }
       });
     };
+    telegramPageList?.querySelectorAll("[data-page-thumb]").forEach(image => {
+      image.addEventListener("error", () => { image.hidden = true; }, { once: true });
+    });
+    telegramPageList?.addEventListener("input", event => {
+      const input = event.target.closest("[data-telegram-page-url]");
+      if (!input) return;
+      const link = input.closest("[data-telegram-page-row]")?.querySelector("[data-telegram-page-open-link]");
+      if (!link) return;
+      const safeUrl = safeTelegramPageUrl(input.value);
+      link.href = safeUrl;
+      link.hidden = !safeUrl;
+    });
     telegramPageList?.addEventListener("click", event => {
       const button = event.target.closest("[data-telegram-page-up], [data-telegram-page-down]");
       if (!button || button.disabled) return;
