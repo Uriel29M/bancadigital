@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v729-editable-original-source";
+const CACHE_VERSION = "banca-digital-shell-v730-telegram-pages-download-priority";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.270-telegram-page-editor",
-  "./js/app.js?v=2.2.10.590-editable-original-source", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/app.js?v=2.2.10.591-telegram-pages-download-priority", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
