@@ -633,6 +633,12 @@ export function createAdminFeature(deps) {
       .map(link => `${String(link?.label || "").trim()} | ${String(link?.url || "").trim()}`)
       .filter(line => !/^\s*\|\s*$/.test(line))
       .join("\n");
+    const telegramPagesModeForEditor = Array.isArray(x.telegramPages) && x.telegramPages.length > 0;
+    const telegramBackupUrls = (Array.isArray(x.backupUrls) ? x.backupUrls : []).map(value => String(value || "").trim()).filter(Boolean);
+    const backupUrlsText = (telegramPagesModeForEditor ? telegramBackupUrls.slice(1) : telegramBackupUrls).join("\n");
+    const sourceUrlForEditor = telegramPagesModeForEditor
+      ? (telegramBackupUrls[0] || "")
+      : (x.telegramUrl || x.fileUrl || "");
     const telegramPageFiles = Array.isArray(x.telegramPageFiles) ? x.telegramPageFiles : [];
     const telegramPageFilesByIndex = new Map(telegramPageFiles.map((page, index) => [Number(page?.index) || index + 1, page]));
     const telegramPagesForEditor = (Array.isArray(x.telegramPages) ? x.telegramPages : [])
@@ -681,11 +687,11 @@ export function createAdminFeature(deps) {
           <div class="field"><label>Número da edição / volume</label><input name="volume" type="text" value="${escapeHTML(String(x.issue || ""))}" placeholder="Ex.: 0, 1, Anuário"><label class="checkbox-inline"><input name="oneShot" type="checkbox" ${!x.seriesId && !x.issue ? "checked" : ""}> Volume único</label></div>
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
-          <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" ${x.telegramPages?.length ? "" : "required"} ${x.telegramPages?.length ? "readonly" : ""} value="${escapeHTML(x.telegramUrl || x.fileUrl || (x.telegramPages?.length ? ((x.backupUrls || [])[0] || "") : ""))}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">${x.telegramPages?.length ? "Armazenada como páginas JPEG no Telegram; a fonte original fica nos links reserva." : `Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b>`}</small></div>
+          <div class="field full"><label>${telegramPagesModeForEditor ? "Link da fonte original (editável; não altera as imagens do Telegram)" : "Link da fonte (Telegram ou arquivo direto)"}</label><input name="sourceUrl" type="url" ${telegramPagesModeForEditor ? "" : "required"} value="${escapeHTML(sourceUrlForEditor)}" placeholder="https://t.me/canal/123 ou link direto do arquivo"><small class="format-hint">${telegramPagesModeForEditor ? "Este endereço será salvo como primeira fonte reserva. As páginas JPEG e a ordem delas permanecem independentes deste link." : `Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b>`}</small></div>
           ${telegramPagesEditorMarkup}
           <div class="field"><label>Formato</label><select name="format">${x.telegramPages?.length ? `<option value="telegram-pages" selected>PÁGINAS JPEG NO TELEGRAM</option>` : ""}${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
           <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
-          <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
+          <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML(backupUrlsText)}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
           ${isAdminProfile() ? `<div class="field full"><label>Links extras desta edição</label><textarea name="customLinks" rows="4" placeholder="Página oficial | https://...\nEntrevista | https://...">${escapeHTML(customLinksText)}</textarea><small class="format-hint">Somente administradores podem editar. Um por linha. Aceita <b>Nome | URL</b> ou <b>Nome https://...</b>. Os links aparecem como botões apenas no leitor desta edição.</small></div>` : ""}
           <div class="field full"><label>Link da capa (opcional)</label><input name="coverUrl" type="url" value="${escapeHTML(x.coverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa.jpg"><small class="format-hint">Aceita imagem direta ou postagem de foto/imagem do Telegram. Se preenchido, substitui a primeira página do arquivo.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="coverUrl">Identificar imagem</button><span data-telegram-cover-status="coverUrl" role="status" aria-live="polite"></span></div></div>
           <div class="field full"><label>Imagem exclusiva do destaque (opcional)</label><input name="featuredCoverUrl" type="url" value="${escapeHTML(x.featuredCoverUrl || "")}" placeholder="https://t.me/bancahq/123 ou https://.../capa-do-destaque.jpg"><small class="format-hint">Aceita imagem direta ou postagem do Telegram. Use uma imagem horizontal ou em alta resolução para o destaque.</small><div class="telegram-cover-tools"><button type="button" class="small-btn" data-resolve-telegram-cover="featuredCoverUrl">Identificar imagem</button><span data-telegram-cover-status="featuredCoverUrl" role="status" aria-live="polite"></span></div></div>
@@ -758,6 +764,14 @@ export function createAdminFeature(deps) {
       const fd = new FormData(form);
       const sourceUrl = String(fd.get("sourceUrl") || "").trim();
       const telegramPagesMode = Array.isArray(x.telegramPages) && x.telegramPages.length > 0;
+      if (telegramPagesMode && sourceUrl) {
+        try {
+          const parsedSource = new URL(sourceUrl);
+          if (!["http:", "https:"].includes(parsedSource.protocol)) throw new Error("protocolo inválido");
+        } catch {
+          return toast("O link da fonte original precisa ser uma URL HTTP ou HTTPS válida.");
+        }
+      }
       let editedTelegramPages = null;
       let editedTelegramPageFiles = null;
       const currentTelegramPageList = form.querySelector("[data-telegram-pages-list]");
@@ -791,7 +805,11 @@ export function createAdminFeature(deps) {
       }
       const isTelegram = isTelegramPostUrl(sourceUrl);
       const telegramFileId = String(fd.get("telegramFileId") || "").trim();
-      const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+      let backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+      if (telegramPagesMode) {
+        const primarySource = sourceUrl.trim();
+        backupUrls = [...new Set([primarySource, ...backupUrls].filter(Boolean))];
+      }
       const explicitSeriesId = fd.get("oneShot") === "on" ? "" : String(fd.get("seriesId") || "").trim();
       const targetSeries = explicitSeriesId ? findSeries(explicitSeriesId) : null;
       const seriesTitle = fd.get("oneShot") === "on" ? "" : String(targetSeries?.seriesTitle || targetSeries?.name || targetSeries?.title || fd.get("seriesTitle") || (explicitSeriesId ? fd.get("title") : "") || "").trim();
