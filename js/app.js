@@ -78,6 +78,33 @@
   try { localStorage.removeItem("bancaSavedWikiArticles"); } catch {}
   let characterSettingsReady = false;
   let readerIsOpen = false;
+
+  const CHARACTER_SETTINGS_COLUMNS = "character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls";
+
+  // Carrega primeiro os dados persistidos dos personagens. O formulário e a
+  // Wiki rápida não devem depender do sucesso das outras etapas do bootstrap.
+  async function loadCharacterSettingsFromDatabase() {
+    if (!sb || navigator.onLine === false) {
+      characterSettingsReady = true;
+      return false;
+    }
+    try {
+      const result = await sb.from("character_settings").select(CHARACTER_SETTINGS_COLUMNS);
+      if (result.error) {
+        console.warn("Não foi possível carregar as configurações dos personagens:", result.error.message);
+        characterSettingsReady = true;
+        return false;
+      }
+      state.characterSettings = new Map((result.data || []).map(setting => [setting.character_key, setting]));
+      characterSettingsReady = true;
+      wikiCharacterImageCache.clear();
+      return true;
+    } catch (error) {
+      console.warn("Falha ao consultar as configurações dos personagens:", error);
+      characterSettingsReady = true;
+      return false;
+    }
+  }
   const KNIGHT_TERRORS_VOLUME_GROUPS = [
     ["Principal", 7], ["Batman", 2], ["Devastadora", 2], ["Coringa", 2],
     ["Hera Venenosa", 2], ["Adão Negro", 2], ["Robin", 2], ["Flash", 2],
@@ -3066,14 +3093,25 @@
       saveOfflineAccount(state.profile);
     }
 
+    // Carregue as configurações antes de renderizar a página do personagem.
+    // Assim, mesmo que outra rotina visual falhe, os valores salvos ficam
+    // disponíveis para a Wiki rápida e para "Configurar personagem".
+    await loadCharacterSettingsFromDatabase();
+
     // Só agora o primeiro paint da SPA é liberado. Para visitante, session é
     // nula; para conta autenticada, session e profile já pertencem à mesma
     // identidade. Não há estado intermediário visitante/logado.
     state.authReady = true;
     syncTopAvatar();
-    // Restaure a URL assim que a sessão estiver resolvida. As consultas
-    // secundárias abaixo continuam carregando sem prender a interface na Home.
-    if (!restoreInitialRouteIfReady()) render();
+    // Uma falha em renderização não deve interromper as consultas seguintes.
+    try {
+      if (!restoreInitialRouteIfReady()) render();
+    } catch (error) {
+      console.error("Falha na renderização inicial; continuando o carregamento do perfil e dos personagens:", error);
+    }
+    if (state.section === "entity" && state.entityFilter?.kind === "character") {
+      loadWikiQuickInfo(state.entityFilter.value, "character");
+    }
 
     // O ranking é público e não deve depender da conclusão do carregamento da
     // conta/estante. Inicie-o logo para visitantes sem sessão também.
@@ -3112,10 +3150,7 @@
     state.publisherSettings = new Map((publisherSettings.data || []).map(setting => [setting.publisher_key, setting]));
     const imprintSettings = await sb.from("imprint_settings").select("imprint_key, imprint_name, cover_url, wikipedia_url, is_pinned");
     state.imprintSettings = new Map((imprintSettings.data || []).map(setting => [setting.imprint_key, setting]));
-    const characterSettings = await sb.from("character_settings").select("character_key, character_name, character_type, character_alignment, redirect_character_key, assigned_character_keys, cover_url, wikipedia_url, authored_text, is_pinned, is_hidden, deviantart_fanarts_enabled, deviantart_gallery_url, deviantart_fanart_image_urls");
-    state.characterSettings = new Map((characterSettings.data || []).map(setting => [setting.character_key, setting]));
-    characterSettingsReady = true;
-    wikiCharacterImageCache.clear();
+    // character_settings já foi carregado antes da primeira renderização.
     const publicCollectionsResult = await sb.from("shelf_collections").select("id, owner_id, name, cover_url, item_ids, collection_type, is_featured, sort_order").eq("is_public", true).limit(50);
     const publicCollections = publicCollectionsResult.data || [];
     const collectionOwnerIds = [...new Set(publicCollections.map(collection => collection.owner_id).filter(Boolean))];
@@ -3228,10 +3263,13 @@
       navigate(isFactionStaff() ? { pagina: "ranking", secao: "faccoes" } : {}, true);
       return;
     }
-    render();
-    // A rota pode ter sido renderizada antes de character_settings terminar.
-    // Nesse caso render() pode considerar o HTML idêntico e não reexecutar a
-    // hidratação da Wiki rápida; inicie-a explicitamente após as configurações.
+    try {
+      render();
+    } catch (error) {
+      console.error("Falha na renderização final do bootstrap da conta:", error);
+    }
+    // As configurações já foram carregadas no início. Reexecute a Wiki rápida
+    // para atualizar textos/imagens mesmo se o HTML anterior parecia idêntico.
     if (state.section === "entity" && state.entityFilter?.kind !== "year" && !["Série Mensal", "Recentes", "Vários autores"].some(value => value.toLowerCase() === String(state.entityFilter.value || "").trim().toLowerCase())) {
       loadWikiQuickInfo(state.entityFilter.value, state.entityFilter.kind);
     }
@@ -13174,12 +13212,22 @@
     toast(hidden ? "Personagem ocultado para os usuários." : "Personagem visível novamente para todos.");
   }
 
-  function openCharacterSettings(name) {
+  async function openCharacterSettings(name) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
-    // Use também o nome exibido para localizar configurações cujo personagem
-    // foi renomeado. O character_key original continua sendo a chave da linha.
     const requestedKey = publisherKey(name);
-    const existingSetting = characterSettingForName(name) || state.characterSettings.get(requestedKey);
+    let existingSetting = characterSettingForName(name) || state.characterSettings.get(requestedKey);
+
+    // Se o bootstrap não trouxe os registros, consulte a fonte persistente antes
+    // de abrir o formulário. Nunca exiba um formulário vazio se a consulta falhar.
+    if (!existingSetting || !characterSettingsReady) {
+      const loaded = await loadCharacterSettingsFromDatabase();
+      existingSetting = characterSettingForName(name) || state.characterSettings.get(requestedKey);
+      if (!loaded && !existingSetting) {
+        return toast("Não foi possível carregar os dados salvos deste personagem. Tente novamente antes de editar.");
+      }
+    }
+
+    // Preserve a chave original do banco se o nome exibido mudou.
     const key = existingSetting?.character_key || requestedKey;
     const setting = existingSetting || {};
     const isAdmin = state.profile?.plan === "admin";
