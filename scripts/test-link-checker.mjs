@@ -13,10 +13,16 @@ test('promotes a working backup only after confirming the primary failure', asyn
   assert.deepEqual(calls, [item.fileUrl, item.fileUrl, item.backupUrls[0]]);
 });
 
-test('hides only when every source is confirmed broken', async () => {
-  assert.equal((await inspectEdition(item, async () => result('broken'))).action, 'hide');
+test('never auto-hides: missing or apparently broken sources go to manual review', async () => {
+  const allBroken = await inspectEdition(item, async () => result('broken'));
+  assert.equal(allBroken.action, 'review');
+  assert.match(allBroken.reason, /mantida visível/i);
+  assert.match(allBroken.reason, /main.cbz/);
+  assert.match(allBroken.reason, /backup.cbz/);
   assert.equal((await inspectEdition(item, async url => result(url === item.fileUrl ? 'broken' : 'unknown'))).action, 'none');
-  assert.equal((await inspectEdition({ id: 'missing' }, async () => { throw Error('unexpected probe'); })).action, 'hide');
+  const noSource = await inspectEdition({ id: 'missing' }, async () => { throw Error('unexpected probe'); });
+  assert.equal(noSource.action, 'review');
+  assert.match(noSource.reason, /fonte direta/i);
 });
 
 test('healthy primary, recovered primary and transient failures stay unchanged', async () => {
