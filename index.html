@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=312-random-telegram-probe", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=313-telegram-cover-migration", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -118,9 +118,9 @@
   <script src="js/reader-deps.js?v=5-progressive-telegram"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
-  <script src="js/catalog-sync.js?v=6-telegram-pages"></script>
-  <script src="js/telegram-auto.js?v=5-external-media-gateway"></script>
-  <script src="js/telegram-pages.js?v=6-minimize"></script>
+  <script src="js/catalog-sync.js?v=7-telegram-cover"></script>
+  <script src="js/telegram-auto.js?v=6-telegram-cover"></script>
+  <script src="js/telegram-pages.js?v=7-cover-migration"></script>
   <script src="js/series-default-covers.js?v=1"></script>
   <script src="js/telegram-covers.js?v=2"></script>
   <script src="js/data.js?v=2.2.7.39"></script>
