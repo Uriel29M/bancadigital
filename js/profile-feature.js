@@ -1,7 +1,7 @@
 export function createProfileFeature(deps) {
   const {
     $,
-    $,
+    $$,
     canAccessStickerAlbum,
     PROFILE_ACCENT_THEMES,
     PROFILE_BACKGROUND_THEMES,
