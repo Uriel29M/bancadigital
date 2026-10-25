@@ -13433,6 +13433,60 @@
     openSeriesSelection(item, editions, false, false, null, true);
   }
 
+  // Clique de contingência para abrir o seletor de edições da série.
+  // É registrado antes dos demais vínculos do bind(), para continuar ativo
+  // mesmo se outra rotina de interface falhar durante a inicialização.
+  if (!document.documentElement.dataset.bancaSeriesSelectorClickBound) {
+    document.documentElement.dataset.bancaSeriesSelectorClickBound = "true";
+    document.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const directSeriesControl = target.closest("[data-view-series], [data-home-banner-series]");
+      if (directSeriesControl) {
+        const seriesId = String(
+          directSeriesControl.dataset.viewSeries ||
+          directSeriesControl.dataset.homeBannerSeries ||
+          ""
+        ).trim();
+        if (!seriesId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const first = state.db.library.find(item => String(item.seriesId ?? "").trim() === seriesId);
+        if (!first) {
+          toast("Não foi possível localizar esta série no catálogo. Atualize a página e tente novamente.");
+          return;
+        }
+        const editions = seriesEditions(first);
+        if (!editions.length) {
+          toast("Esta série não possui edições disponíveis.");
+          return;
+        }
+        openSeriesSelection(first, editions);
+        return;
+      }
+
+      const seriesCard = target.closest(".series-card[data-open-series]");
+      if (!seriesCard || target.closest("button, a, input, select, textarea, [data-entity-kind]")) return;
+      const seriesId = String(seriesCard.dataset.openSeries || "").trim();
+      if (!seriesId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const first = state.db.library.find(item => String(item.seriesId ?? "").trim() === seriesId);
+      if (!first) {
+        toast("Não foi possível localizar esta série no catálogo. Atualize a página e tente novamente.");
+        return;
+      }
+      const editions = seriesEditions(first);
+      if (!editions.length) {
+        toast("Esta série não possui edições disponíveis.");
+        return;
+      }
+      openSeriesSelection(first, editions);
+    }, true);
+  }
+
   function bind() {
     $$('[data-bucho-series]').forEach(button => button.addEventListener("click", () => {
       openBuchoSeries(state.db.library.find(item => item.id === button.dataset.buchoSeries));
@@ -14801,8 +14855,13 @@
     });
     $$('[data-collection]').forEach(el => el.addEventListener("click", () => openCollection(el.dataset.collection)));
     const openSeriesById = seriesId => {
-      const first = state.db.library.find(item => item.seriesId === seriesId);
-      if (first) openSeriesSelection(first, seriesEditions(first));
+      const key = String(seriesId || "").trim();
+      if (!key) return;
+      const first = state.db.library.find(item => String(item.seriesId ?? "").trim() === key);
+      if (!first) return toast("Não foi possível localizar esta série no catálogo. Atualize a página e tente novamente.");
+      const editions = seriesEditions(first);
+      if (!editions.length) return toast("Esta série não possui edições disponíveis.");
+      openSeriesSelection(first, editions);
     };
     const editorialBannerSection = $(".homepage-banner-section");
     if (editorialBannerSection && state.profile?.plan === "admin" && !$("[data-open-homepage-banners]", editorialBannerSection)) {

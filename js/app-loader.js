@@ -3,7 +3,7 @@
 
   const loadApp = () => new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'js/app.js?v=2.2.10.608-character-settings-recovery';
+    script.src = 'js/app.js?v=2.2.10.609-series-selector-click-fix';
     script.onload = resolve;
     script.onerror = () => reject(new Error('Não foi possível carregar o app.js.'));
     document.body.appendChild(script);
