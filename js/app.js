@@ -16021,6 +16021,84 @@
     }).observe(modalRoot, { childList: true, subtree: true });
   }
   syncModalInteractionState();
+
+  // Fallback global: se uma rotina de bind() falhar antes de chegar aos
+  // controles do cabeçalho, as abas continuam navegáveis. Os elementos que
+  // já receberam os listeners normais são ignorados para evitar ações duplas.
+  if (!document.documentElement.dataset.bancaNavigationFallbackBound) {
+    document.documentElement.dataset.bancaNavigationFallbackBound = "true";
+    document.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const sectionControl = target.closest("[data-section]");
+      if (sectionControl && !sectionControl.dataset.sectionBound) {
+        event.preventDefault();
+        event.stopPropagation();
+        const section = sectionControl.dataset.section;
+        if (section === "factions") {
+          if (!requireAuthenticatedSection()) return;
+          if (isFactionStaff()) return navigate({ pagina: "ranking", secao: "faccoes" });
+          const ownFactionId = currentFactionId();
+          if (!ownFactionId) return navigate({}, true);
+          return navigate({ pagina: "faccoes", faccao: factionRouteKey(ownFactionId) });
+        }
+        if (section === "album" && !requireAuthenticatedSection()) return;
+        setSection(section === "comics" ? "comic" : section);
+        return;
+      }
+
+      const actionControl = target.closest("[data-action]");
+      if (!actionControl || actionControl.dataset.actionBound) return;
+      const action = actionControl.dataset.action;
+      const supportedActions = new Set([
+        "home", "random", "focus-search", "do-search", "open-admin",
+        "open-auth", "open-profile-page", "messages", "downloads",
+        "notifications-popup", "staff-activity", "logout", "profile",
+        "submit", "open-local-box"
+      ]);
+      if (!supportedActions.has(action)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === "home") setSection("home");
+      else if (action === "random") openRandomCatalogItem();
+      else if (action === "focus-search") {
+        setSection("search");
+        window.setTimeout(() => $("#search-input")?.focus(), 30);
+      } else if (action === "do-search") {
+        state.search = $("#search-input")?.value || "";
+        navigate({ pagina: "pesquisar", q: state.search });
+      } else if (action === "open-admin") {
+        if (isAdminProfile()) openAdmin();
+      } else if (action === "open-auth") {
+        if (!PROFILE_SITE_MODE) window.location.assign(`${PROFILE_SITE_BASE}?pagina=entrar`);
+        else state.session ? openOwnPublicProfile() : openAuthPage();
+      } else if (action === "open-profile-page") {
+        openOwnPublicProfile();
+      } else if (action === "messages") {
+        openChat();
+      } else if (action === "downloads") {
+        setSection("downloads");
+      } else if (action === "notifications-popup") {
+        openNotificationsPopup();
+      } else if (action === "staff-activity") {
+        if (canViewBancaMonitoring()) openNotificationsPopup("staff");
+      } else if (action === "logout") {
+        signOut();
+      } else if (action === "profile") {
+        if (PROFILE_SITE_MODE) openProfileSettings();
+        else openOwnPublicProfile();
+      } else if (action === "submit") {
+        if (isAdminProfile()) openSubmission();
+        else toast("O envio de quadrinhos é exclusivo para administradores.");
+      } else if (action === "open-local-box") {
+        state.localBoxVisible = true;
+        setSection("local-box");
+      }
+    }, true);
+  }
+
   const pathParts = window.location.pathname.split("/").filter(Boolean);
   if (!window.history.state?.[ROUTE_HISTORY_KEY]) {
     window.history.replaceState({
