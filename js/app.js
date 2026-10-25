@@ -3,6 +3,8 @@
 
   // Sistema de facções temporariamente desativado; módulos e dados são preservados.
   const FACTIONS_ENABLED = false;
+  // Álbum de figurinhas temporariamente desativado; dados e módulos são preservados.
+  const STICKER_ALBUM_ENABLED = false;
   const PROFILE_SITE_MODE = false;
   const PROFILE_SITE_BASE = "https://uriel29m.github.io/perfil/";
 
@@ -647,7 +649,7 @@
     return ["free", "premium"].includes(normalizedPlan(profile));
   }
   function canAccessStickerAlbum(profile = state.profile) {
-    return Boolean(profile) && normalizedPlan(profile) !== "banca";
+    return STICKER_ALBUM_ENABLED && Boolean(profile) && normalizedPlan(profile) !== "banca";
   }
   function hasLegendaryAccess(profile = state.profile) {
     return ["premium", "moderator", "banca", "admin"].includes(normalizedPlan(profile));
@@ -1798,6 +1800,7 @@
 
   function setSectionRoute(section, replace = false) {
     if (!FACTIONS_ENABLED && section === "factions") return navigate({}, replace);
+    if (!STICKER_ALBUM_ENABLED && section === "album") return navigate({}, replace);
     const route = sectionRoutes[section];
     if (route === undefined) return setSection(section);
     const params = new URLSearchParams(window.location.search);
@@ -1813,6 +1816,15 @@
     cancelCoverLoads();
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     const params = new URLSearchParams(window.location.search);
+    if (!STICKER_ALBUM_ENABLED) {
+      const disabledAlbumRoute = params.get("pagina") === "album" || params.STICKER_ALBUM_ENABLED && get("album") === "1";
+      if (params.get("pagina") === "album") params.delete("pagina");
+      params.delete("album");
+      if (disabledAlbumRoute) {
+        const cleanedSearch = params.toString();
+        window.history.replaceState(window.history.state || {}, "", `${window.location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ""}${window.location.hash}`);
+      }
+    }
     const readerId = params.get("ler");
     const page = params.get("pagina") || "";
     if (!readerId && page === "estante") {
@@ -1837,11 +1849,11 @@
     handlingRoute = true;
     const profileUsername = params.get("perfil");
     if (!readerId && profileUsername && !PROFILE_SITE_MODE) {
-      window.location.replace(publicProfileHref(profileUsername, params.get("lista") || null, params.get("album") === "1", params.get("lista_top10") || ""));
+      window.location.replace(publicProfileHref(profileUsername, params.get("lista") || null, params.STICKER_ALBUM_ENABLED && get("album") === "1", params.get("lista_top10") || ""));
       return;
     }
     if (!readerId && profileUsername) {
-      loadPublicProfile(profileUsername, params.get("lista") || null, params.get("album") === "1", { top10ListId: params.get("lista_top10") || null });
+      loadPublicProfile(profileUsername, params.get("lista") || null, params.STICKER_ALBUM_ENABLED && get("album") === "1", { top10ListId: params.get("lista_top10") || null });
       handlingRoute = false;
       return;
     }
@@ -1865,7 +1877,7 @@
       const routedFaction = factionRouteValue ? state.factions.find(faction => String(faction.page_key) === String(factionRouteValue) || faction.id === factionRouteValue) : null;
       state.factionPageId = routedFaction?.id || factionRouteValue;
       state.factionCatalogId = section === "factions" ? params.get("catalogo") || null : null;
-      state.stickerAlbumView = section === "album" || params.get("album") === "1" ? "album" : "album";
+      state.stickerAlbumView = section === "album" || params.STICKER_ALBUM_ENABLED && get("album") === "1" ? "album" : "album";
       state.factionMembersView = section === "factions" && params.get("membros") === "1";
       state.factionMemberSearch = state.factionMembersView ? params.get("busca") || "" : "";
       if (section === "search") state.search = params.get("q") || "";
@@ -2605,6 +2617,7 @@
   }
 
   function profileStickerMarkup(profile, awards = []) {
+    if (!STICKER_ALBUM_ENABLED) return "";
     const selectedId = profile?.profile_sticker_award_id;
     const award = (awards || []).find(entry => String(entry.id) === String(selectedId) && entry.album_section !== "repeated" && entry.cover_url);
     if (!award) return "";
@@ -2612,6 +2625,7 @@
   }
 
   function profileDisplayStickersMarkup(profile, awards = [], rows = []) {
+    if (!STICKER_ALBUM_ENABLED) return "";
     const awardById = new Map((awards || []).map(award => [String(award.id), award]));
     const selected = (rows || []).slice().sort((a, b) => Number(a.slot) - Number(b.slot)).map(row => awardById.get(String(row.award_id))).filter(award => award?.cover_url && award.album_section !== "repeated");
     if (!selected.length) return "";
@@ -2784,7 +2798,7 @@
     const url = new URL(PROFILE_SITE_BASE);
     url.searchParams.set("perfil", cleanUsername(username));
     if (collectionId) url.searchParams.set("lista", collectionId);
-    if (album) url.searchParams.set("album", "1");
+    if (STICKER_ALBUM_ENABLED && album) url.searchParams.set("album", "1");
     if (top10ListId) url.searchParams.set("lista_top10", top10ListId);
     return url.href;
   }
@@ -4165,6 +4179,7 @@
     return (await loadStickerActionsFeature()).requestSticker(...args);
   }
   function stickerRequestsMarkup(ownerId = state.profile?.id) {
+    if (!STICKER_ALBUM_ENABLED) return "";
     const requests = (state.stickerRequests || []).filter(request => request.owner_id === ownerId && request.status === "pending");
     if (!requests.length) return '<div class="empty">Nenhum pedido pendente.</div>';
     return `<div class="sticker-request-list-wrap"><div class="sticker-request-list-summary">${requests.length} pedido${requests.length === 1 ? "" : "s"} pendente${requests.length === 1 ? "" : "s"}</div><div class="sticker-request-list">${requests.map(request => { const requester = state.stickerRequestProfiles.get(request.requester_id); const offers = [request.offered_award_id, request.offered_award_id_2].map(id => state.stickerRequestOffers.get(String(id))).filter(Boolean); const desired = (state.stickerAwards || []).find(award => award.character_id === request.character_id && award.edition_fingerprint === request.edition_fingerprint); const person = requester ? `<a class="sticker-request-person sticker-request-person-link" href="${escapeHTML(publicProfileHref(requester.username))}">${avatarMarkup(requester, "sticker-request-avatar")}<span><strong>@${escapeHTML(requester.username)}</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></span></a>` : `<div class="sticker-request-person"><span><strong>Usuário</strong><small>${request.request_type === "trade" ? "Quer sua figurinha de" : "Pediu"} <b>${escapeHTML(request.character_name)}</b></small></span></div>`; return `<article class="sticker-request-row">${person}<div class="sticker-request-actions">${offers.length ? `<span class="sticker-request-offer">${offers.map(offer => `<span class="sticker-request-offer-item"><img src="${escapeHTML(offer.cover_url)}" alt="Figurinha oferecida"><strong>${escapeHTML(offer.character_name)}</strong><small>${offer.rarity === "gold" ? "Dourada" : offer.rarity === "silver" ? "Prateada" : "Comum"}</small></span>`).join("")}</span>` : ""}<span class="sticker-request-buttons"><button class="small-btn" data-sticker-request="${request.id}" data-sticker-response="accepted">Aceitar</button><button class="small-btn" data-sticker-view-album="${requester ? escapeHTML(requester.username) : ""}" ${requester ? "" : "disabled"}>Ver álbum</button><button class="small-btn danger" data-sticker-request="${request.id}" data-sticker-response="declined">Recusar</button></span>${desired ? `<span class="sticker-request-target"><img src="${escapeHTML(desired.cover_url)}" alt="Figurinha desejada"><strong>${escapeHTML(desired.character_name)}</strong><small>${desired.rarity === "gold" ? "Dourada" : desired.rarity === "silver" ? "Prateada" : "Comum"}</small></span>` : ""}</div></article>`; }).join("")}</div></div>`;
@@ -9468,7 +9483,7 @@
       if (parsed.origin !== window.location.origin || parsed.searchParams.has("ler") || parsed.searchParams.has("lista_top10")) return null;
       const profile = parsed.searchParams.get("perfil");
       const collection = parsed.searchParams.get("lista");
-      const album = parsed.searchParams.get("album") === "1";
+      const album = parsed.searchParams.STICKER_ALBUM_ENABLED && get("album") === "1";
       const page = parsed.searchParams.get("pagina");
       const faction = parsed.searchParams.get("faccao");
       const kind = parsed.searchParams.get("tipo");
@@ -12658,7 +12673,7 @@
     else if (state.section === "signup") markup = renderSignupPage();
     else if (state.section === "downloads") markup = renderDownloadsPage();
     else if (state.section === "local-box") markup = renderLocalBoxPage();
-    else if (state.section === "album") markup = canAccessStickerAlbum() ? stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true }) : '<div class="content"><div class="empty">É preciso criar uma conta para usar o álbum.</div></div>';
+    else if (state.section === "album") { if (STICKER_ALBUM_ENABLED && canAccessStickerAlbum()) markup = stickerAlbumMarkup(state.profile, state.stickerAwards, { isOwn: true }); else { state.section = "home"; markup = renderHome(); } }
     else if (state.section === "messages") markup = main.querySelector(".chat-page-shell") ? main.innerHTML : '<div class="content chat-page-loading"><div class="empty">Carregando mensagens...</div></div>';
     else if (state.section === "public-profile") markup = renderPublicProfilePage();
     else if (state.section === "password-reset") markup = renderPasswordResetPage();
@@ -13108,6 +13123,7 @@
       if (sticker.dataset.profileStickerAlbumBound) return;
       sticker.dataset.profileStickerAlbumBound = "true";
       const openAlbum = () => {
+        if (!STICKER_ALBUM_ENABLED) return;
         if (state.section === "public-profile" && sticker.dataset.profileStickerOwner) {
           window.location.href = publicProfileHref(sticker.dataset.profileStickerOwner, "", true);
           return;
@@ -15509,6 +15525,13 @@
       [ROUTE_HISTORY_INDEX_KEY]: 0,
     }, "", window.location.href);
   }
+  if (!STICKER_ALBUM_ENABLED) {
+    const initialRouteUrl = new URL(window.location.href);
+    const disabledAlbumRoute = initialRouteUrl.searchParams.get("pagina") === "album" || initialRouteUrl.searchParams.STICKER_ALBUM_ENABLED && get("album") === "1";
+    if (initialRouteUrl.searchParams.get("pagina") === "album") initialRouteUrl.searchParams.delete("pagina");
+    initialRouteUrl.searchParams.delete("album");
+    if (disabledAlbumRoute) window.history.replaceState(window.history.state || {}, "", `${initialRouteUrl.pathname}${initialRouteUrl.search}${initialRouteUrl.hash}`);
+  }
   // O site pode ser servido na raiz ou por uma pasta do GitHub Pages. Essas
   // pastas não são nomes de usuário e não devem abrir o perfil público.
   const siteBasePaths = new Set(["banca-digital-quadrinhos-v3", "bancadigital", "banca-digital"]);
@@ -15524,7 +15547,7 @@
       : "";
   if (initialPublicUsername && /^[a-z0-9_]{3,24}$/.test(initialPublicUsername)) {
     state.section = "public-profile";
-    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, top10ListId: queryTop10List, album: new URLSearchParams(window.location.search).get("album") === "1" };
+    state.publicProfile = { loading: true, username: initialPublicUsername, collectionId: queryPublicCollection, top10ListId: queryTop10List, album: new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1" };
   } else if (legacyShelfRoute) {
     // Evita que a rota antiga pisque a home enquanto a sessão é recuperada.
     state.section = "public-profile";
@@ -15544,7 +15567,7 @@
   // Busca somente o perfil básico em paralelo ao bootstrap da conta, para que
   // a rota pública não fique bloqueada pelas consultas globais do aplicativo.
   const earlyPublicProfileLoad = initialPublicUsername && sb
-    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { basicOnly: true, top10ListId: queryTop10List })
+    ? loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1", { basicOnly: true, top10ListId: queryTop10List })
       .catch(error => console.warn("Perfil público inicial indisponível:", error))
     : null;
   // Dependências pesadas do leitor são carregadas apenas quando PDF/CBZ/CBR
@@ -15640,14 +15663,14 @@
     .then(async () => {
       if (state.section === "reader" && !activeReaderCleanup) applyRoute();
       if (!initialPublicUsername && new URLSearchParams(window.location.search).get("pagina") === "estante") applyRoute();
-      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
+      if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
     .catch(error => console.warn("Supabase indisponível:", error))
     .then(async () => {
       if (!initialPublicUsername || !state.publicProfile?.loading) return;
       try {
-        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
+        await loadPublicProfile(initialPublicUsername, queryPublicCollection, new URLSearchParams(window.location.search).STICKER_ALBUM_ENABLED && get("album") === "1", { top10ListId: queryTop10List });
       } catch (error) {
         console.warn("Public profile load failed:", error);
         state.publicProfile = { error: "Não foi possível carregar este perfil agora.", username: initialPublicUsername };
