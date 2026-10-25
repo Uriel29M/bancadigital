@@ -13170,8 +13170,12 @@
 
   function openCharacterSettings(name) {
     if (!sb || !["moderator", "banca", "admin"].includes(state.profile?.plan)) return;
-    const key = publisherKey(name);
-    const setting = state.characterSettings.get(key) || {};
+    // Use também o nome exibido para localizar configurações cujo personagem
+    // foi renomeado. O character_key original continua sendo a chave da linha.
+    const requestedKey = publisherKey(name);
+    const existingSetting = characterSettingForName(name) || state.characterSettings.get(requestedKey);
+    const key = existingSetting?.character_key || requestedKey;
+    const setting = existingSetting || {};
     const isAdmin = state.profile?.plan === "admin";
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop";
@@ -13263,6 +13267,13 @@
        }));
       state.characterSettings.set(key, next);
       wikiCharacterImageCache.clear();
+      // A Wiki rápida é hidratada fora do HTML principal. Como texto e link
+      // podem mudar sem alterar o markup base, force a reconstrução da página
+      // do personagem para que as novas informações sejam carregadas agora.
+      const refreshCurrentCharacterPage = state.section === "entity"
+        && state.entityFilter?.kind === "character"
+        && publisherKey(state.entityFilter.value) === key;
+      if (refreshCurrentCharacterPage) $("#main")?.replaceChildren();
       overlay.remove();
       render();
       toast("Configuração do personagem salva.");
