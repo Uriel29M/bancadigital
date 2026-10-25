@@ -1366,13 +1366,17 @@
   }
 
   let activeSeriesExport = null;
-  function openSeriesExport(series, editions) {
+  function openSeriesExport(series, editions, includeHidden = false) {
     if (!isAdminProfile()) return;
     if (activeSeriesExport) { activeSeriesExport.restore(); return; }
-    editions = editions.filter(item => !isHiddenCatalogItem(item));
+    editions = includeHidden ? editions.slice() : editions.filter(item => !isHiddenCatalogItem(item));
+    const singleEdition = editions.length === 1;
+    const singleEditionTitle = singleEdition ? itemDisplayTitle(editions[0]) : "";
+    const exportTitle = singleEdition ? "Obter edição" : "Obter série";
+    const exportSubtitle = singleEdition ? singleEditionTitle : (series.seriesTitle || series.title);
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop series-export-overlay";
-    overlay.innerHTML = `<div class="modal series-export-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Obter série"><div class="section-head"><div><h2>Obter série</h2><div class="section-subtitle">${escapeHTML(series.seriesTitle || series.title)} · ${editions.length} edições</div></div><div class="modal-actions"><button type="button" class="small-btn" data-export-minimize>Minimizar</button><button type="button" class="small-btn" data-export-restore>Abrir</button></div></div><form><label class="field series-export-settings"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p class="series-export-description">Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão.</p><p data-export-status role="status" aria-live="polite">Escolha o formato e clique em Obter.</p><progress data-export-progress max="100" value="0" aria-label="Progresso da série"></progress><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button type="button" class="small-btn" data-export-skip hidden>Pular edição</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal series-export-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="${exportTitle}"><div class="section-head"><div><h2>${exportTitle}</h2><div class="section-subtitle">${escapeHTML(exportSubtitle)} · ${editions.length} ${singleEdition ? "edição" : "edições"}</div></div><div class="modal-actions"><button type="button" class="small-btn" data-export-minimize>Minimizar</button><button type="button" class="small-btn" data-export-restore>Abrir</button></div></div><form><label class="field series-export-settings"><span>Tipo de arquivo das edições</span><select name="format"><option value="cbz" selected>CBZ</option><option value="cbr">CBR</option><option value="pdf">PDF</option><option value="original">Original (PDF, CBZ ou CBR)</option></select></label><p class="series-export-description">${singleEdition ? "Apenas esta edição será baixada no formato escolhido, sem criar um ZIP." : "Todas as edições serão reunidas em um ZIP para salvar no computador. Arquivos que já estiverem no formato escolhido serão mantidos sem conversão."}</p><p data-export-status role="status" aria-live="polite">Escolha o formato e clique em Obter.</p><progress data-export-progress max="100" value="0" aria-label="${singleEdition ? "Progresso da edição" : "Progresso da série"}"></progress><div class="modal-actions"><button type="button" class="small-btn" data-close>Fechar</button><button type="button" class="small-btn" data-export-skip hidden>Pular edição</button><button class="btn btn-danger" type="submit">Obter</button></div></form></div>`;
     document.body.appendChild(overlay);
     const controller = new AbortController();
     let busy = false;
@@ -1418,6 +1422,9 @@
       let currentTitle = "";
       let skipped = 0;
       let exported = 0;
+      let singleOutput = null;
+      let singleOutputFormat = "";
+      let singleOutputName = "";
       const skipButton = $('[data-export-skip]', overlay);
       try {
         await ensureReaderDependency("cbz");
@@ -1466,12 +1473,41 @@
           status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
           const format = useTelegramPages ? "cbz" : seriesExportFormat(buffer);
           const output = await seriesExportConvert(buffer, format, select.value, Zip, controller.signal);
-          bundle.file(`${String(index + 1).padStart(4, "0")} - ${safeName(currentTitle)}.${select.value === "original" ? format : select.value}`, output);
+          const outputFormat = select.value === "original" ? format : select.value;
+          if (singleEdition) {
+            singleOutput = output;
+            singleOutputFormat = outputFormat;
+            singleOutputName = `${safeName(currentTitle)}.${outputFormat}`;
+          } else {
+            bundle.file(`${String(index + 1).padStart(4, "0")} - ${safeName(currentTitle)}.${outputFormat}`, output);
+          }
           exported++;
           progress.value = (index + 1) / ordered.length * 90;
         }
         currentTitle = "";
         if (!exported) throw new Error("Nenhuma edição com arquivo disponível para obter.");
+        if (singleEdition) {
+          if (controller.signal.aborted) return;
+          const mimeType = singleOutputFormat === "pdf"
+            ? "application/pdf"
+            : singleOutputFormat === "cbz"
+              ? "application/vnd.comicbook+zip"
+              : singleOutputFormat === "cbr"
+                ? "application/vnd.comicbook-rar"
+                : "application/octet-stream";
+          const blob = singleOutput instanceof Blob ? singleOutput : new Blob([singleOutput], { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = singleOutputName || `${safeName(singleEditionTitle)}.${singleOutputFormat || "cbz"}`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          progress.value = 100;
+          status.textContent = `Edição preparada. Download de ${link.download} enviado ao navegador.`;
+          return;
+        }
         status.textContent = "Reunindo edições no ZIP…";
         const blob = await bundle.generateAsync({ type: "blob", compression: "STORE" }, metadata => {
           if (controller.signal.aborted) throw new DOMException("Cancelado", "AbortError");
@@ -8229,7 +8265,7 @@
         </div>
         ${completed ? '<div class="card-completed">✓ Lida</div>' : ''}
         ${state.session && item.type === "comic" ? (() => { const download = downloaded(item.id); const status = download?.status || "idle"; return `<button class="card-download ${isAdminProfile() ? "card-download-admin-offset" : ""} ${status === "completed" ? "is-downloaded" : status === "downloading" ? "is-downloading" : ""}" data-download="${escapeHTML(item.id)}" title="${status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : "Permitir leitura offline"}">${status === "downloading" ? "…" : "↓"}</button>`; })() : ""}
-        ${isAdminProfile() ? `<button type="button" class="card-telegram-pages ${telegramPagesMigrated ? (telegramCoverMigrated ? "is-complete" : "needs-cover") : ""}" data-migrate-telegram-pages="${escapeHTML(item.id)}" title="${telegramPagesMigrated ? (telegramCoverMigrated ? "Páginas e capa já armazenadas no Telegram" : "Enviar a capa ao Telegram sem reenviar as páginas") : "Converter e enviar páginas JPEG ao Telegram"}" aria-label="${telegramPagesMigrated ? (telegramCoverMigrated ? "Páginas e capa já migradas" : "Migrar somente a capa para o Telegram") : "Migrar páginas para o Telegram"}" ${telegramPagesMigrated && telegramCoverMigrated ? "disabled" : ""}>${telegramPagesMigrated ? (telegramCoverMigrated ? "✓" : "🖼") : "⇧"}</button><button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
+        ${isAdminProfile() ? `<button type="button" class="card-obtain-edition" data-obtain-edition="${escapeHTML(item.id)}" title="Obter somente esta edição" aria-label="Obter somente esta edição">Obter</button><button type="button" class="card-telegram-pages ${telegramPagesMigrated ? (telegramCoverMigrated ? "is-complete" : "needs-cover") : ""}" data-migrate-telegram-pages="${escapeHTML(item.id)}" title="${telegramPagesMigrated ? (telegramCoverMigrated ? "Páginas e capa já armazenadas no Telegram" : "Enviar a capa ao Telegram sem reenviar as páginas") : "Converter e enviar páginas JPEG ao Telegram"}" aria-label="${telegramPagesMigrated ? (telegramCoverMigrated ? "Páginas e capa já migradas" : "Migrar somente a capa para o Telegram") : "Migrar páginas para o Telegram"}" ${telegramPagesMigrated && telegramCoverMigrated ? "disabled" : ""}>${telegramPagesMigrated ? (telegramCoverMigrated ? "✓" : "🖼") : "⇧"}</button><button type="button" class="card-hide-toggle ${hidden ? "is-hidden" : ""}" data-hide-item="${escapeHTML(item.id)}" title="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}" aria-label="${hidden ? "Mostrar edição para todos" : "Ocultar edição para usuários comuns"}">${hidden ? "◉" : "⊘"}</button>` : ""}
         <div class="card-body">
           <div class="card-title">${escapeHTML(displayTitle)}</div>
           <div class="card-meta">${entityButton("year", String(item.year || ""), String(item.year || ""))}${characterButtons}${entityButton("publisher", item.publisher)}${entityButton("imprint", item.imprint)}</div>
@@ -13700,6 +13736,7 @@
     $$('[data-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleFavorite(el.dataset.favorite); }));
     bindCatalogItemVisibility();
     bindTelegramMigrationButtons(document);
+    bindEditionObtainButtons(document);
     $$('[data-hide-series]').forEach(el => el.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -15257,6 +15294,23 @@
     });
   }
 
+  function bindEditionObtainButtons(root = document) {
+    root.querySelectorAll("[data-obtain-edition]").forEach(button => {
+      if (button.dataset.obtainEditionBound) return;
+      button.dataset.obtainEditionBound = "true";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (button.disabled) return;
+        if (!isAdminProfile()) return toast("Apenas administradores podem obter edições.");
+        const id = String(button.dataset.obtainEdition || "");
+        const item = state.db.library.find(entry => String(entry.id) === id);
+        if (!item) return toast("Não foi possível localizar esta edição.");
+        openSeriesExport(item, [item], true);
+      });
+    });
+  }
+
   async function migrateTelegramEditionButton(button, event) {
     event?.preventDefault();
     event?.stopPropagation();
@@ -15564,6 +15618,7 @@
       toggleFavorite(el.dataset.favorite);
     }));
     bindTelegramMigrationButtons(overlay);
+    bindEditionObtainButtons(overlay);
     bindEditionEditButtons(overlay);
     $('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
