@@ -1,7 +1,8 @@
 export function createProfileFeature(deps) {
   const {
     $,
-    $$,
+    $,
+    canAccessStickerAlbum,
     PROFILE_ACCENT_THEMES,
     PROFILE_BACKGROUND_THEMES,
     RANDOM_AVATAR_BASE_URL,
@@ -22,6 +23,7 @@ export function createProfileFeature(deps) {
   } = deps;
 
   function openProfileStickerPicker() {
+    if (!canAccessStickerAlbum(state.profile)) return;
     if (!state.session) return openAuthPage();
     const awards = (state.stickerAwards || []).filter(award => award.album_section !== "repeated" && award.cover_url);
     const selectedId = state.profile?.profile_sticker_award_id;
@@ -80,7 +82,7 @@ export function createProfileFeature(deps) {
   function openProfileSettings() {
     if (!state.session) return openAuthPage();
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
-    overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label><label class="checkbox-inline"><input name="shelfCompletedPublic" type="checkbox" ${state.profile?.shelf_completed_public !== false ? "checked" : ""}> Mostrar coleção Concluídos</label><label class="checkbox-inline"><input name="shelfLikedPublic" type="checkbox" ${state.profile?.shelf_liked_public !== false ? "checked" : ""}> Mostrar coleção Curtidos</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> Mostrar Mural do perfil / Figurinhas em destaque</label></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
+    overlay.innerHTML = `<div class="modal"><div class="section-head"><div><h2>Meu perfil</h2><div class="section-subtitle">Personalize seu @, sua foto e a visibilidade da estante</div></div><button class="small-btn" data-close>Fechar</button></div><form id="profile-form"><div class="form-grid"><div class="field full"><label>@usuário</label><input name="username" pattern="[A-Za-z0-9_]{3,24}" required value="${escapeHTML(state.profile?.username || "")}"></div><div class="field full"><label>Foto de perfil</label><input name="avatar" type="file" accept="image/png,image/jpeg,image/webp"></div><div class="field full"><label>Visibilidade no perfil público</label><label class="checkbox-inline"><input name="shelfSavedPublic" type="checkbox" ${state.profile?.shelf_saved_public !== false ? "checked" : ""}> Mostrar coleção Salvos</label><label class="checkbox-inline"><input name="shelfSeriesPublic" type="checkbox" ${state.profile?.shelf_series_public !== false ? "checked" : ""}> Mostrar coleção Séries salvas</label><label class="checkbox-inline"><input name="shelfReadPublic" type="checkbox" ${state.profile?.shelf_read_public !== false ? "checked" : ""}> Mostrar coleção Lidos</label><label class="checkbox-inline"><input name="shelfCompletedPublic" type="checkbox" ${state.profile?.shelf_completed_public !== false ? "checked" : ""}> Mostrar coleção Concluídos</label><label class="checkbox-inline"><input name="shelfLikedPublic" type="checkbox" ${state.profile?.shelf_liked_public !== false ? "checked" : ""}> Mostrar coleção Curtidos</label><label class="checkbox-inline"><input name="wallPublic" type="checkbox" ${state.profile?.profile_wall_public !== false ? "checked" : ""}> ${canAccessStickerAlbum(state.profile) ? "Mostrar Mural do perfil / Figurinhas em destaque" : "Mostrar Mural do perfil"}</label></div></div><div class="modal-actions"><button type="button" class="small-btn" data-close>Cancelar</button><button class="btn btn-danger">Salvar perfil</button></div></form></div>`;
      $("#modal-root").appendChild(overlay); $$('[data-close]', overlay).forEach(button => button.onclick = () => closeProfileSettings());
     const deleteAccountButton = document.createElement("button");
     deleteAccountButton.type = "button";
@@ -235,6 +237,7 @@ export function createProfileFeature(deps) {
   }
 
   async function toggleProfileDisplaySticker(button) {
+    if (!canAccessStickerAlbum(state.profile)) return;
     if (!state.session?.user?.id || !sb) return openAuthPage();
     const awardId = Number(button.dataset.profileDisplayToggle);
     const selected = button.dataset.profileDisplaySelected === "true";
