@@ -73,7 +73,7 @@ Deno.serve(async request => {
     const visibility = batch.length ? await supabase.from("catalog_item_visibility").select("item_id").eq("is_hidden", true).in("item_id", batch.map(entry => entry.item.id)) : { data: [], error: null };
     if (visibility.error) throw visibility.error;
     const hiddenIds = new Set(visibility.data.map(row => row.item_id));
-    const counts = { checked: 0, hidden: 0, swapped: 0, uncertain: 0 };
+    const counts = { checked: 0, hidden: 0, swapped: 0, review: 0, uncertain: 0 };
     let cursor = 0;
     let disabled = false;
     const deadline = Date.now() + 75000;
@@ -95,6 +95,7 @@ Deno.serve(async request => {
         if (applied.error) throw applied.error;
         if (applied.data === "hidden") counts.hidden++;
         if (applied.data === "swapped") counts.swapped++;
+        if (applied.data === "review") counts.review++;
         if (applied.data === "disabled") disabled = true;
       }
     }));
