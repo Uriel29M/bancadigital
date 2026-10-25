@@ -999,6 +999,62 @@
   // A postagem identifica a edição; o file_id, capturado pelo bot, é o que
   // permite ao gateway pedir o binário à API oficial do Telegram.
   function downloadSource(item) { if (item?.local) return item.fileUrl || ""; return telegramProxyUrl(item) || item?.fileUrl || (!isTelegramPostUrl(item?.telegramUrl) ? item?.telegramUrl : "") || ""; }
+  function hasTelegramPageDownload(item) {
+    return !item?.local && Array.isArray(item?.telegramPages) && item.telegramPages.length > 0;
+  }
+  function telegramPagesDownloadCacheUrl(item) {
+    if (!item?.id) return "";
+    try { return new URL("/__banca-telegram-pages__/" + encodeURIComponent(String(item.id)) + ".cbz", location.origin).toString(); }
+    catch { return ""; }
+  }
+  async function downloadTelegramPagesAsCbz(item, onProgress = () => {}, onComplete = () => {}, signal = null, cacheOffline = false, ZipCtor = null) {
+    const pages = Array.isArray(item?.telegramPages) ? item.telegramPages : [];
+    if (!pages.length || !window.BancaTelegramPages?.imageUrl) {
+      throw new Error("Esta edição possui páginas do Telegram, mas o serviço de imagens não está disponível. Atualize a página e tente novamente.");
+    }
+    const Zip = ZipCtor || await window.jszipReady;
+    if (typeof Zip !== "function") throw new Error("Não foi possível carregar o gerador de arquivos CBZ.");
+    const zip = new Zip();
+    const check = () => {
+      if (signal?.aborted) throw new DOMException("Download cancelado.", "AbortError");
+    };
+    for (let index = 0; index < pages.length; index++) {
+      check();
+      const pageUrl = window.BancaTelegramPages.imageUrl(item.id, index + 1);
+      if (!pageUrl) throw new Error("Não foi possível gerar o link da página " + (index + 1) + " do Telegram.");
+      const response = await fetch(pageUrl, {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        ...(signal ? { signal } : {})
+      });
+      if (!response.ok) throw new Error("Falha ao baixar a página " + (index + 1) + " do Telegram (HTTP " + response.status + ").");
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (/text\/|application\/json/i.test(contentType)) {
+        throw new Error("O Telegram não retornou uma imagem válida para a página " + (index + 1) + ".");
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+        throw new Error("A página " + (index + 1) + " recebida do Telegram não é um JPEG válido.");
+      }
+      zip.file(String(index + 1).padStart(5, "0") + ".jpg", bytes);
+      onProgress(index + 1, pages.length);
+    }
+    check();
+    const buffer = await zip.generateAsync({ type: "arraybuffer", compression: "STORE" }, () => check());
+    check();
+    if (!buffer?.byteLength) throw new Error("O Telegram não retornou páginas para montar o CBZ.");
+    if (cacheOffline) {
+      const cacheUrl = telegramPagesDownloadCacheUrl(item);
+      if (!cacheUrl || !await writeReaderFileCache(downloadCacheKey(cacheUrl), buffer)) {
+        throw new Error("Não foi possível salvar as páginas do Telegram para leitura offline.");
+      }
+    }
+    onComplete();
+    return buffer;
+  }
+
   function isExternalArchiveLink(url) {
     return /^(?:https?:\/\/)(?:(?:www\.)?mediafire\.com\/\?|mega\.co\.nz\/#!)/i.test(String(url || ""));
   }
@@ -1075,9 +1131,13 @@
 
   async function startDownload(item) {
     if (!state.session) return openAuthPage();
-    const url = downloadSource(item);
+    const useTelegramPages = hasTelegramPageDownload(item);
+    const url = useTelegramPages ? telegramPagesDownloadCacheUrl(item) : downloadSource(item);
+    if (useTelegramPages && !window.BancaTelegramPages?.imageUrl) {
+      return toast("As páginas do Telegram não carregaram. Atualize a página e tente novamente.");
+    }
     if (!url) return toast("Este quadrinho não possui um arquivo direto para baixar.");
-    if (isExternalArchiveLink(url)) {
+    if (!useTelegramPages && isExternalArchiveLink(url)) {
       window.open(url, "_blank", "noopener");
       return;
     }
@@ -1091,13 +1151,14 @@
     if (shouldWait) return;
     const coverPromise = downloadCoverDataUrl(item).catch(error => { console.warn("Não foi possível preparar a capa offline:", error); return ""; });
     try {
-      const offlineFormat = String(item.format || extension(url) || "").toLowerCase();
+      const offlineFormat = useTelegramPages ? "cbz" : String(item.format || extension(url) || "").toLowerCase();
       if (["pdf", "cbz", "cbr"].includes(offlineFormat)) await ensureReaderDependency(offlineFormat);
-      await fetchFileArrayBuffer(url, (received, total) => {
+      const onDownloadProgress = (received, total) => {
         const current = state.downloads.get(id); if (!current) return;
         current.progress = total ? Math.min(100, received / total * 100) : 0; current.received = received; current.total = total;
         state.downloads.set(id, current); if (total && received >= total) persistDownloads(); if (state.section === "downloads") renderDownloadsProgress();
-      }, () => {
+      };
+      const onOfflinePrepared = () => {
         const ready = state.downloads.get(id);
         if (!ready) return;
         ready.status = "downloading";
@@ -1106,7 +1167,12 @@
         ready.completedAt = ready.completedAt || new Date().toISOString();
         state.downloads.set(id, ready);
         persistDownloads();
-      });
+      };
+      if (useTelegramPages) {
+        await downloadTelegramPagesAsCbz(item, onDownloadProgress, onOfflinePrepared, null, true);
+      } else {
+        await fetchFileArrayBuffer(url, onDownloadProgress, onOfflinePrepared);
+      }
       const current = state.downloads.get(id);
       if (current) {
         current.preparing = true;
@@ -1365,8 +1431,9 @@
           if (!isAdminProfile()) throw new Error("Acesso exclusivo para administradores.");
           currentTitle = itemDisplayTitle(item);
           status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
-          const source = downloadSource(item);
-          if (!source || isExternalArchiveLink(source)) {
+          const useTelegramPages = hasTelegramPageDownload(item);
+          const source = useTelegramPages ? telegramPagesDownloadCacheUrl(item) : downloadSource(item);
+          if (!useTelegramPages && (!source || isExternalArchiveLink(source))) {
             status.textContent = `${currentTitle}: Edição sem arquivo direto disponível. Clique em Pular edição para continuar.`;
             await new Promise(resolve => {
               const finish = () => {
@@ -1385,16 +1452,19 @@
             progress.value = (index + 1) / ordered.length * 90;
             continue;
           }
-          const buffer = await fetchFileArrayBuffer(source, (received, total) => {
+          const onExportProgress = (received, total) => {
             if (controller.signal.aborted) return;
             const fraction = total > 0 ? Math.min(received / total, 1) : 0;
-            const detail = total > 0 ? `${Math.round(fraction * 100)}%` : `${(received / 1048576).toFixed(1)} MB`;
-            status.textContent = `Baixando ${index + 1}/${ordered.length}: ${currentTitle} · ${detail}`;
+            const detail = total > 0 ? Math.round(fraction * 100) + "%" : (received / 1048576).toFixed(1) + " MB";
+            status.textContent = "Baixando " + (index + 1) + "/" + ordered.length + ": " + currentTitle + " · " + detail;
             progress.value = (index + fraction * 0.8) / ordered.length * 90;
-          }, () => {}, controller.signal);
+          };
+          const buffer = useTelegramPages
+            ? await downloadTelegramPagesAsCbz(item, onExportProgress, () => {}, controller.signal, false, Zip)
+            : await fetchFileArrayBuffer(source, onExportProgress, () => {}, controller.signal);
           if (controller.signal.aborted) return;
           status.textContent = `Preparando ${index + 1}/${ordered.length}: ${currentTitle}`;
-          const format = seriesExportFormat(buffer);
+          const format = useTelegramPages ? "cbz" : seriesExportFormat(buffer);
           const output = await seriesExportConvert(buffer, format, select.value, Zip, controller.signal);
           bundle.file(`${String(index + 1).padStart(4, "0")} - ${safeName(currentTitle)}.${select.value === "original" ? format : select.value}`, output);
           exported++;
