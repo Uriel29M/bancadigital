@@ -9,6 +9,7 @@ export function createStickerActionsFeature(deps) {
     sb,
     state,
     stickerCoverCandidates,
+    stickerAlbumEnabled = true,
     stickerFingerprint,
     stickerGroups,
     stickerRarityLabel,
@@ -16,6 +17,7 @@ export function createStickerActionsFeature(deps) {
   } = deps;
 
   async function maybeAwardReadSticker(item) {
+    if (!stickerAlbumEnabled) return;
     if (!state.session || !sb || !item || item.local || Math.random() >= 0.25) return;
     const group = stickerGroups().find(entry => entry.kind === "character" && entry.items.some(itemEntry => String(itemEntry.id) === String(item.id)));
     if (!group) return;
@@ -41,6 +43,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   async function maybeAwardCharacterStickers(item) {
+    if (!stickerAlbumEnabled) return;
     if (!state.session || !sb || !item || item.local) return;
     const groups = stickerGroups().filter(group => ["character", "team"].includes(group.kind) && group.items.some(entry => String(entry.id) === String(item.id)));
     for (const group of groups) {
@@ -76,6 +79,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   async function maybeAwardCompletedStickers() {
+    if (!stickerAlbumEnabled) return;
     if (!state.session || !sb) return;
     for (const group of stickerGroups().filter(entry => ["character", "team"].includes(entry.kind))) {
       if (group.items.every(entry => state.readingProgress.get(entry.id)?.completed)) await maybeAwardCharacterStickers(group.items[0]);
@@ -83,6 +87,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   function openStickerPreview(imageUrl, label = "Figurinha") {
+    if (!stickerAlbumEnabled) return;
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop sticker-preview-backdrop";
     overlay.innerHTML = `<div class="modal sticker-preview-modal"><button type="button" class="small-btn" data-close>Fechar</button><img src="${escapeHTML(imageUrl)}" alt="${escapeHTML(label)}" draggable="false"><strong>${escapeHTML(label)}</strong></div>`;
@@ -94,6 +99,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   function chooseStickerForTrade(offerable = []) {
+    if (!stickerAlbumEnabled) return null;
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop";
@@ -116,6 +122,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   function chooseStickerForDonation(offerable = []) {
+    if (!stickerAlbumEnabled) return null;
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop";
@@ -135,6 +142,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   function chooseAdminStickerRarity() {
+    if (!stickerAlbumEnabled) return null;
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop";
@@ -149,6 +157,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   function chooseStickerCoverCandidate(group, candidates = []) {
+    if (!stickerAlbumEnabled) return null;
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop";
@@ -190,6 +199,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   function askStickerDiscardConfirmation() {
+    if (!stickerAlbumEnabled) return false;
     return new Promise(resolve => {
       const overlay = document.createElement("div");
       overlay.className = "modal-backdrop";
@@ -203,6 +213,7 @@ export function createStickerActionsFeature(deps) {
   }
 
   async function requestSticker(characterId, ownerId, type) {
+    if (!stickerAlbumEnabled) return false;
     if (!state.session) return openAuthPage();
     const group = stickerGroups().find(entry => entry.id === characterId);
     const ownerAwards = state.publicProfile?.stickerAwards || [];
