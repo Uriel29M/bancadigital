@@ -633,6 +633,41 @@ export function createAdminFeature(deps) {
       .map(link => `${String(link?.label || "").trim()} | ${String(link?.url || "").trim()}`)
       .filter(line => !/^\s*\|\s*$/.test(line))
       .join("\n");
+    const telegramPageFiles = Array.isArray(x.telegramPageFiles) ? x.telegramPageFiles : [];
+    const telegramPageFilesByIndex = new Map(telegramPageFiles.map((page, index) => [Number(page?.index) || index + 1, page]));
+    const telegramPagesForEditor = (Array.isArray(x.telegramPages) ? x.telegramPages : [])
+      .map((page, index) => ({ page, sourceIndex: Number(page?.index) || index + 1 }))
+      .sort((a, b) => a.sourceIndex - b.sourceIndex);
+    const safeTelegramPageUrl = value => {
+      try {
+        const parsed = new URL(String(value || "").trim());
+        return parsed.protocol === "https:" && ["t.me", "www.t.me", "telegram.me", "www.telegram.me"].includes(parsed.hostname.toLowerCase())
+          ? parsed.href
+          : "";
+      } catch { return ""; }
+    };
+    const telegramPagesEditorMarkup = isAdminProfile() && telegramPagesForEditor.length ? `
+      <div class="field full telegram-pages-editor">
+        <label>Imagens da edição no Telegram — ${telegramPagesForEditor.length} páginas</label>
+        <p class="format-hint">Confira os links das postagens. Use ↑ e ↓ para mudar a sequência; essa ordem será aplicada às imagens abertas no leitor. Para manter o link correspondente à imagem, informe a postagem da própria página.</p>
+        <div class="telegram-page-edit-list" data-telegram-pages-list>
+          ${telegramPagesForEditor.map(({ page, sourceIndex }, index) => {
+            const file = telegramPageFilesByIndex.get(sourceIndex);
+            const url = String(page?.url || file?.url || "").trim();
+            const safeUrl = safeTelegramPageUrl(url);
+            return `<div class="telegram-page-edit-row" data-telegram-page-row data-source-index="${sourceIndex}">
+              <div class="telegram-page-edit-main">
+                <div class="telegram-page-edit-heading"><strong data-page-order-label>Imagem ${index + 1}</strong>${safeUrl ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">Abrir postagem ↗</a>` : '<span class="format-hint">Link ainda não disponível</span>'}</div>
+                <input type="url" data-telegram-page-url required value="${escapeHTML(url)}" aria-label="Link da postagem da imagem ${index + 1}" placeholder="https://t.me/canal/123">
+              </div>
+              <div class="telegram-page-edit-controls">
+                <button type="button" class="small-btn" data-telegram-page-up aria-label="Mover imagem ${index + 1} para cima" title="Mover para cima" ${index === 0 ? "disabled" : ""}>↑</button>
+                <button type="button" class="small-btn" data-telegram-page-down aria-label="Mover imagem ${index + 1} para baixo" title="Mover para baixo" ${index === telegramPagesForEditor.length - 1 ? "disabled" : ""}>↓</button>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>` : "";
     const overlay = document.createElement("div"); overlay.className = "modal-backdrop";
     overlay.innerHTML = `
       <div class="modal"><div class="section-head"><div><h2>${id ? "Editar edição" : "Nova edição"}</h2><div class="section-subtitle">A capa será extraída da primeira página</div></div><button class="small-btn" data-close>Fechar</button></div>
@@ -645,6 +680,7 @@ export function createAdminFeature(deps) {
           <div class="field"><label>Tipo</label><select name="type"><option value="comic" ${x.type === "comic" ? "selected" : ""}>Quadrinho</option><option value="manga" ${x.type === "manga" ? "selected" : ""}>Mangá</option></select></div>
           <div class="field"><label>Ano</label><input name="year" type="number" value="${escapeHTML(x.year || "")}"></div><div class="field"><label>Editora</label><input name="publisher" value="${escapeHTML(x.publisher || "")}"></div><div class="field"><label>Selo</label><input name="imprint" value="${escapeHTML(x.imprint || "")}" placeholder="Ex.: Vertigo, Marvel, Turma da Mônica"></div><div class="field"><label>Personagem principal</label><input name="character" value="${escapeHTML(x.character || "")}"></div><div class="field full"><label>Personagens secundários</label><textarea name="secondaryCharacters" rows="3" placeholder="Um personagem por linha">${escapeHTML(secondaryCharacters.join("\n"))}</textarea><small class="format-hint">Um personagem por linha. O personagem principal continua no campo acima.</small></div><div class="field"><label>Autor</label><input name="author" value="${escapeHTML(x.author || "")}"></div>
           <div class="field full"><label>Link da fonte (Telegram ou arquivo direto)</label><input name="sourceUrl" ${x.telegramPages?.length ? "" : "required"} ${x.telegramPages?.length ? "readonly" : ""} value="${escapeHTML(x.telegramUrl || x.fileUrl || (x.telegramPages?.length ? ((x.backupUrls || [])[0] || "") : ""))}" placeholder="https://t.me/canal/123 ou arquivo.pdf"><small class="format-hint">${x.telegramPages?.length ? "Armazenada como páginas JPEG no Telegram; a fonte original fica nos links reserva." : `Formato detectado: <b data-format-preview>${escapeHTML(x.format || "auto")}</b>`}</small></div>
+          ${telegramPagesEditorMarkup}
           <div class="field"><label>Formato</label><select name="format">${x.telegramPages?.length ? `<option value="telegram-pages" selected>PÁGINAS JPEG NO TELEGRAM</option>` : ""}${["auto", "pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"].map(format => `<option value="${format}" ${String(x.format || "auto").toLowerCase() === format ? "selected" : ""}>${format.toUpperCase()}</option>`).join("")}</select><small class="format-hint">Em posts do Telegram, selecione PDF, CBZ ou CBR.</small></div>
           <div class="field full"><label>Arquivo do Telegram</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="small-btn" data-resolve-telegram>Identificar arquivo</button><span data-telegram-status role="status" aria-live="polite">${x.telegramFileId ? "Arquivo identificado" : "Cole uma postagem para identificar o arquivo automaticamente."}</span></div><input name="telegramFileId" type="hidden" value="${escapeHTML(x.telegramFileId || "")}"><small class="format-hint">O bot identifica o PDF, CBZ ou CBR e salva apenas seus metadados. O arquivo permanece no Telegram.</small></div>
           <div class="field full"><label>Links reserva (um por linha)</label><textarea name="backupUrls" placeholder="https://segunda-fonte/...\nhttps://terceira-fonte/...">${escapeHTML((x.backupUrls || []).join("\n"))}</textarea><small class="format-hint">Serão tentados automaticamente se a fonte principal falhar.</small></div>
@@ -673,6 +709,32 @@ export function createAdminFeature(deps) {
       if (series) seriesTitleInput.value = series.seriesTitle || series.name || series.title || "";
     });
     source.addEventListener("input", () => preview.textContent = detectFormat(source.value));
+    const telegramPageList = $("[data-telegram-pages-list]", overlay);
+    const refreshTelegramPageOrderControls = () => {
+      if (!telegramPageList) return;
+      const rows = [...telegramPageList.querySelectorAll("[data-telegram-page-row]")];
+      rows.forEach((row, index) => {
+        const label = row.querySelector("[data-page-order-label]");
+        const up = row.querySelector("[data-telegram-page-up]");
+        const down = row.querySelector("[data-telegram-page-down]");
+        if (label) label.textContent = "Imagem " + (index + 1);
+        if (up) { up.disabled = index === 0; up.setAttribute("aria-label", "Mover imagem " + (index + 1) + " para cima"); }
+        if (down) { down.disabled = index === rows.length - 1; down.setAttribute("aria-label", "Mover imagem " + (index + 1) + " para baixo"); }
+      });
+    };
+    telegramPageList?.addEventListener("click", event => {
+      const button = event.target.closest("[data-telegram-page-up], [data-telegram-page-down]");
+      if (!button || button.disabled) return;
+      const row = button.closest("[data-telegram-page-row]");
+      if (!row) return;
+      if (button.hasAttribute("data-telegram-page-up") && row.previousElementSibling) {
+        telegramPageList.insertBefore(row, row.previousElementSibling);
+      } else if (button.hasAttribute("data-telegram-page-down") && row.nextElementSibling) {
+        telegramPageList.insertBefore(row.nextElementSibling, row);
+      }
+      refreshTelegramPageOrderControls();
+    });
+    refreshTelegramPageOrderControls();
     const telegramEditor = x.telegramPages?.length ? { forSave: async value => value } : window.BancaTelegram.bindEditor($("#edit-form", overlay), sb, x);
     const telegramCoverEditor = window.BancaTelegramCovers.bindEditor($("#edit-form", overlay), sb);
     $("#edit-form", overlay).onsubmit = async event => {
@@ -682,6 +744,37 @@ export function createAdminFeature(deps) {
       const fd = new FormData(form);
       const sourceUrl = String(fd.get("sourceUrl") || "").trim();
       const telegramPagesMode = Array.isArray(x.telegramPages) && x.telegramPages.length > 0;
+      let editedTelegramPages = null;
+      let editedTelegramPageFiles = null;
+      const currentTelegramPageList = form.querySelector("[data-telegram-pages-list]");
+      if (telegramPagesMode && isAdminProfile() && currentTelegramPageList) {
+        const originalPages = Array.isArray(x.telegramPages) ? x.telegramPages : [];
+        const originalFiles = Array.isArray(x.telegramPageFiles) ? x.telegramPageFiles : [];
+        const pagesByIndex = new Map(originalPages.map((page, index) => [Number(page?.index) || index + 1, page]));
+        const filesByIndex = new Map(originalFiles.map((page, index) => [Number(page?.index) || index + 1, page]));
+        const rows = [...currentTelegramPageList.querySelectorAll("[data-telegram-page-row]")];
+        if (rows.length !== originalPages.length) return toast("A lista de imagens mudou inesperadamente. Feche e abra a edição novamente antes de salvar.");
+        if (originalFiles.length && originalFiles.length !== rows.length) return toast("Os arquivos vinculados não correspondem à quantidade de páginas. Nenhuma alteração foi salva.");
+        const nextPages = [];
+        const nextFiles = [];
+        const seenUrls = new Set();
+        for (let index = 0; index < rows.length; index++) {
+          const row = rows[index];
+          const sourceIndex = Number(row.dataset.sourceIndex);
+          const page = pagesByIndex.get(sourceIndex);
+          const file = filesByIndex.get(sourceIndex);
+          const value = String(row.querySelector("[data-telegram-page-url]")?.value || "").trim();
+          const link = safeTelegramPageUrl(value);
+          if (!page || (originalFiles.length && !file)) return toast("Não foi possível localizar os metadados da imagem " + (index + 1) + ". Nenhuma alteração foi salva.");
+          if (!link) return toast("Imagem " + (index + 1) + ": informe um link HTTPS válido de uma postagem do Telegram.");
+          if (seenUrls.has(link)) return toast("Há links de postagem repetidos. Cada imagem precisa ter seu próprio link.");
+          seenUrls.add(link);
+          nextPages.push({ ...page, index: index + 1, url: link });
+          if (originalFiles.length) nextFiles.push({ ...file, index: index + 1, url: link });
+        }
+        editedTelegramPages = nextPages;
+        editedTelegramPageFiles = originalFiles.length ? nextFiles : originalFiles;
+      }
       const isTelegram = isTelegramPostUrl(sourceUrl);
       const telegramFileId = String(fd.get("telegramFileId") || "").trim();
       const backupUrls = String(fd.get("backupUrls") || "").split(/\r?\n/).map(value => value.trim()).filter(Boolean);
@@ -727,6 +820,10 @@ export function createAdminFeature(deps) {
         tags: String(fd.get("tags") || "").split(",").map(s => s.trim()).filter(Boolean),
         featured: fd.get("featured") === "on"
       };
+      if (editedTelegramPages) {
+        item.telegramPages = editedTelegramPages;
+        item.telegramPageFiles = editedTelegramPageFiles;
+      }
       if (Array.isArray(item.characters)) item.characters = [character, ...secondaryCharacters];
       delete item.randomWeight;
       const submit = form.querySelector('button.btn');
