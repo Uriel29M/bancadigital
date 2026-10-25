@@ -175,14 +175,76 @@
       close: () => {},
     };
   }
+  async function prepareCoverBlob(item, deps, status, fallbackFactory) {
+    const candidates = [...new Set([item?.coverUrl, item?.cover, item?.featuredCoverUrl]
+      .map(value => typeof value === "string" ? value.trim() : "").filter(Boolean))];
+    let lastError = null;
+    for (const source of candidates) {
+      try {
+        status("Baixando a capa atual…");
+        const buffer = await deps.fetchFileArrayBuffer(source, () => {});
+        return await imageBlobToJpeg(new Blob([buffer]));
+      } catch (error) { lastError = error; }
+    }
+    if (fallbackFactory) {
+      try {
+        status("A fonte da capa não respondeu. Preparando a primeira página como capa…");
+        const fallback = await fallbackFactory();
+        if (fallback instanceof Blob) return fallback;
+        return await imageBlobToJpeg(new Blob([fallback]));
+      } catch (error) { lastError = error; }
+    }
+    throw new Error("Não foi possível obter a capa desta edição" + (lastError?.message ? ": " + lastError.message : "."));
+  }
+  async function uploadCover(item, deps, status, fallbackFactory) {
+    const blob = await prepareCoverBlob(item, deps, status, fallbackFactory);
+    const form = new FormData();
+    form.set("action", "upload-cover");
+    form.set("item_id", String(item.id));
+    form.set("file", blob, "capa.jpg");
+    const result = await invoke(deps.client, form, true);
+    if (!result?.coverUploaded || !result?.telegramCoverFileId) throw new Error("O Telegram recebeu a capa, mas o servidor não confirmou o registro.");
+    return result;
+  }
+  async function migrateCoverOnly(item, deps) {
+    const id = text(item?.id).trim();
+    activeMigrationItemId = id;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop telegram-pages-progress-overlay";
+    overlay.innerHTML = '<div class="modal telegram-pages-progress-modal" role="dialog" aria-modal="true" aria-label="Migrar capa para o Telegram"><div class="section-head"><div><h2>Migrando capa para o Telegram</h2><div data-tg-cover-status role="status" aria-live="polite">Preparando a capa…</div></div></div><progress data-tg-cover-progress max="100" value="0"></progress><p class="section-subtitle">As páginas existentes serão preservadas.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-cover-close disabled>Fechar</button></div></div>';
+    document.body.appendChild(overlay);
+    const statusNode = overlay.querySelector("[data-tg-cover-status]");
+    const progress = overlay.querySelector("[data-tg-cover-progress]");
+    const close = overlay.querySelector("[data-tg-cover-close]");
+    const status = message => { if (statusNode) statusNode.textContent = message; };
+    try {
+      const result = await uploadCover(item, deps, status, async () => {
+        const buffer = await deps.fetchFileArrayBuffer(imageUrl(id, 1), () => {});
+        return await imageBlobToJpeg(new Blob([buffer]));
+      });
+      const edition = result.edition;
+      if (String(edition?.id || "") !== id || !edition?.telegramCoverFileId || !String(edition?.coverUrl || "").includes("cover=1")) throw new Error("O servidor não confirmou a substituição da capa desta edição.");
+      if (progress) progress.value = 100;
+      status("Capa enviada ao Telegram e atualizada no catálogo.");
+      if (close) { close.disabled = false; close.textContent = "Concluído"; close.onclick = () => overlay.remove(); }
+      return edition;
+    } catch (error) {
+      status("Não foi possível migrar a capa.");
+      const detail = overlay.querySelector(".section-subtitle");
+      if (detail) detail.textContent = (error?.message || String(error)) + " As páginas existentes não foram modificadas.";
+      if (close) { close.disabled = false; close.textContent = "Fechar"; close.onclick = () => overlay.remove(); }
+      throw error;
+    } finally { if (activeMigrationItemId === id) activeMigrationItemId = null; }
+  }
   let activeMigrationItemId = null;
   async function migrate(item, deps) {
     if (!deps?.client || !deps.isAdminProfile?.()) throw new Error("Entre com a conta de administrador para migrar edições.");
     if (navigator.onLine === false || deps.sessionOffline?.()) throw new Error("A migração exige conexão com a internet.");
-    if (Array.isArray(item?.telegramPages) && item.telegramPages.length) throw new Error("Esta edição já foi migrada para páginas JPEG no Telegram.");
+    const hasTelegramPages = Array.isArray(item?.telegramPages) && item.telegramPages.length > 0;
     const migrationItemId = text(item?.id).trim();
     if (!migrationItemId) throw new Error("A edição não possui um ID válido para a migração.");
     if (activeMigrationItemId !== null) throw new Error(`A edição \"${activeMigrationItemId}\" já está em migração. Aguarde antes de iniciar outra para evitar misturar páginas.`);
+    if (hasTelegramPages) { if (item.telegramCoverFileId) throw new Error("Esta edição já tem as páginas e a capa hospedadas no Telegram."); return migrateCoverOnly(item, deps); }
     // Prefere a URL direta; a postagem do Telegram fica como alternativa.
     // O proxy precisa do registro em catalog_edition_overrides, garantido abaixo.
     const directSource = text(item.fileUrl).trim();
@@ -309,9 +371,13 @@
         source_url: originalLink,
         edition: item,
       });
+      if (!begun.coverUploaded) {
+        status("Preparando a capa para o Telegram…");
+        await uploadCover(item, deps, status, () => prepared.getPage(1));
+      }
       let uploaded = Number(begun.uploadedPages || 0);
       if (uploaded > pageCount) throw new Error("O progresso salvo no Telegram ultrapassa o total de páginas do arquivo.");
-      if (detailNode) detailNode.textContent = pageCount + " páginas • envio em ordem • limite do Telegram respeitado";
+      if (detailNode) detailNode.textContent = pageCount + " páginas + capa • envio em ordem • limite do Telegram respeitado";
       for (let pageNumber = uploaded + 1; pageNumber <= pageCount; pageNumber++) {
         status("Preparando página " + pageNumber + "/" + pageCount + "…");
         const blob = await prepared.getPage(pageNumber);
@@ -335,6 +401,9 @@
       }
       if (!completed?.edition?.telegramPages?.length || completed.edition.telegramPages.length !== pageCount) {
         throw new Error("O Telegram recebeu as páginas, mas não foi possível confirmar a lista completa de links.");
+      }
+      if (!completed.edition.telegramCoverFileId || !String(completed.edition.coverUrl || "").includes("cover=1")) {
+        throw new Error("As páginas foram enviadas, mas a capa do Telegram não foi confirmada.");
       }
       if (progress) progress.value = 100;
       status("Migração concluída. Publicando a edição no catálogo…");
