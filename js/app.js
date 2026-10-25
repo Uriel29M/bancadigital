@@ -16269,7 +16269,23 @@
       if (initialPublicUsername) await loadPublicProfile(initialPublicUsername, queryPublicCollection, STICKER_ALBUM_ENABLED && new URLSearchParams(window.location.search).get("album") === "1", { top10ListId: queryTop10List });
       pumpDownloadQueue();
     })
-    .catch(error => console.warn("Supabase indisponível:", error))
+    .catch(error => {
+      console.warn("Supabase indisponível:", error);
+      // Se o bootstrap falhar, a chamada de applyRoute() feita antes da
+      // autenticação já terá sido ignorada. Libere a inicialização e aplique
+      // a URL solicitada mesmo se uma consulta da conta rejeitar.
+      if (restoreInitialRouteAfterAuth) {
+        restoreInitialRouteAfterAuth = false;
+        if (!state.authReady) {
+          state.session = null;
+          state.profile = null;
+          state.authReady = true;
+          characterSettingsReady = true;
+          syncTopAvatar();
+        }
+        applyRoute();
+      }
+    })
     .then(async () => {
       if (!initialPublicUsername || !state.publicProfile?.loading) return;
       try {
