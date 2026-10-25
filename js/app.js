@@ -4514,13 +4514,119 @@
     return items[Math.floor(Math.random() * items.length)];
   }
 
-  function openRandomCatalogItem() {
-    const candidates = visibleCatalogItems().filter(item => !item.local);
-    if (!candidates.length) {
-      toast("Ainda não há quadrinhos disponíveis para sortear.");
-      return;
+  function shuffleRandomItems(items) {
+    const shuffled = [...items];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const other = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[other]] = [shuffled[other], shuffled[index]];
     }
-    openReader(weightedRandom(candidates));
+    return shuffled;
+  }
+
+  function isHttpUrl(value) {
+    try {
+      return ["http:", "https:"].includes(new URL(String(value || "")).protocol);
+    } catch {
+      return false;
+    }
+  }
+
+  async function getRandomOpenableItem(item) {
+    if (!item || item.local || !canViewCatalogItem(item, false)) return null;
+
+    // Sem conexão, só sorteie arquivos que já foram baixados por completo.
+    if (navigator.onLine === false || state.session?.offline) {
+      return downloaded(item.id)?.status === "completed" ? item : null;
+    }
+
+    let candidate = item;
+    const telegramPagesMode = Array.isArray(candidate.telegramPages) && candidate.telegramPages.length > 0;
+    if (telegramPagesMode) {
+      const firstPageUrl = window.BancaTelegramPages?.imageUrl?.(candidate.id, 1) || "";
+      return firstPageUrl && await probeReaderSource(firstPageUrl, { timeoutMs: 2400, maxAttempts: 1 }) ? candidate : null;
+    }
+
+    // Uma postagem do Telegram não é, sozinha, um arquivo. Confirme que o
+    // cadastro tem file_id ou URL de arquivo antes de enviar o usuário ao leitor.
+    if (isTelegramPostUrl(candidate.telegramUrl)) {
+      if (!candidate.telegramFileId && !candidate.fileUrl && sb && window.BancaTelegram?.published) {
+        try {
+          const canonical = await window.BancaTelegram.published(candidate, sb);
+          if (canonical?.telegramFileId || canonical?.fileUrl) {
+            candidate = canonical;
+          } else {
+            const published = (window.DEFAULT_LIBRARY || []).find(entry => String(entry.id) === String(candidate.id));
+            if (published?.telegramFileId || published?.fileUrl) candidate = mergeCatalogEdition(candidate, published);
+            else return null;
+          }
+        } catch {
+          return null;
+        }
+      }
+      if (!candidate.telegramFileId && !candidate.fileUrl) return null;
+      // Sem file_id, o proxy do Telegram não tem como buscar o binário. Use a
+      // URL de arquivo cadastrada como reserva em vez de gerar um proxy vazio.
+      if (!candidate.telegramFileId && candidate.fileUrl) candidate = { ...candidate, telegramUrl: "" };
+    }
+
+    const sources = readerSourceCandidates(candidate);
+    if (!sources.length) return isHttpUrl(candidate.officialUrl) ? candidate : null;
+
+    const supportedFormats = new Set(["pdf", "cbz", "cbr", "jpg", "jpeg", "png", "webp", "gif"]);
+    const itemFormat = String(candidate.format || "").toLowerCase();
+    const fileFormat = extension(candidate.file?.name || candidate.name || "");
+    const readerFormat = /^(pdf|cbz|cbr|jpg|jpeg|png|webp|gif)$/.test(itemFormat)
+      ? itemFormat
+      : (fileFormat || extension(sources[0])).toLowerCase();
+    if (!supportedFormats.has(readerFormat) && !sources.some(isExternalArchiveLink)) return null;
+
+    // Teste a fonte principal e as primeiras reservas em paralelo. Requisições
+    // por faixa confirmam se há um arquivo; não transferem a edição inteira.
+    const sourcesToCheck = sources.slice(0, 3);
+    const checks = await Promise.all(sourcesToCheck.map(async source => {
+      if (isExternalArchiveLink(source)) return true;
+      if (isTelegramMediaUrl(source)) return Boolean(candidate.telegramFileId);
+      return probeReaderSource(source, { timeoutMs: 2400, maxAttempts: 1 });
+    }));
+    return checks.some(Boolean) ? candidate : null;
+  }
+
+  let randomCatalogPickInProgress = false;
+  async function openRandomCatalogItem() {
+    if (randomCatalogPickInProgress) return;
+    randomCatalogPickInProgress = true;
+    try {
+      const offline = navigator.onLine === false || Boolean(state.session?.offline);
+      const possible = visibleCatalogItems().filter(item => {
+        if (!item || item.local) return false;
+        if (offline) return downloaded(item.id)?.status === "completed";
+        return (Array.isArray(item.telegramPages) && item.telegramPages.length > 0)
+          || isTelegramPostUrl(item.telegramUrl)
+          || readerSourceCandidates(item).length > 0
+          || isHttpUrl(item.officialUrl);
+      });
+      const candidates = shuffleRandomItems(possible);
+      // Limita a verificação para que um catálogo com muitas fontes quebradas
+      // não deixe o botão preso. A cada tentativa entram só edições verificadas.
+      const maximumChecks = Math.min(candidates.length, 24);
+      const batchSize = 4;
+      for (let start = 0; start < maximumChecks; start += batchSize) {
+        const batch = candidates.slice(start, Math.min(start + batchSize, maximumChecks));
+        const available = (await Promise.all(batch.map(getRandomOpenableItem))).filter(Boolean);
+        if (available.length) {
+          openReader(weightedRandom(available));
+          return;
+        }
+      }
+      toast(candidates.length
+        ? "Não encontrei uma edição com fonte acessível para abrir. Tente novamente mais tarde."
+        : "Ainda não há quadrinhos disponíveis para sortear.");
+    } catch (error) {
+      console.warn("[Banca Digital] Não foi possível sortear uma edição disponível:", error);
+      toast("Não foi possível verificar as edições agora. Tente novamente.");
+    } finally {
+      randomCatalogPickInProgress = false;
+    }
   }
 
   function normalizedSeriesKey(value = "") {
@@ -6036,7 +6142,9 @@
     return [primary, item?.fileUrl, ...backups].map(value => String(value || "").trim()).filter((value, index, values) => value && values.indexOf(value) === index);
   }
 
-  async function probeReaderSource(url) {
+  async function probeReaderSource(url, options = {}) {
+    const timeoutMs = Number(options.timeoutMs) > 0 ? Math.min(Number(options.timeoutMs), 30000) : 30000;
+    const maxAttempts = Number.isInteger(options.maxAttempts) && options.maxAttempts > 0 ? Math.min(options.maxAttempts, 5) : 5;
     if (!url || /^blob:/i.test(url)) return true;
     // Mega e o gateway de mídia do Telegram fazem negociação por faixa.
     // Uma sondagem extra de 1 byte pode ser rejeitada sem que o download real
@@ -6046,9 +6154,9 @@
       isTelegramMediaUrl(url)
     ) return true;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         const response = await fetch(proxiedFileUrl(url), {
           method: "GET",
           headers: { Range: "bytes=0-0" },
@@ -6058,10 +6166,11 @@
           signal: controller.signal
         });
         const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-        if (response.ok && (response.status === 200 || response.status === 206) && !contentType.includes("text/html")) return true;
+        const isErrorPayload = /(?:text\/html|application\/json|text\/plain)/i.test(contentType);
+        if (response.ok && (response.status === 200 || response.status === 206) && !isErrorPayload) return true;
         if (response.status !== 429 && response.status !== 502 && response.status !== 503 && response.status !== 504) return false;
         const retryAfter = Number(response.headers.get("retry-after"));
-        if (attempt < 4) await new Promise(resolve => setTimeout(resolve, Math.max(500 * (attempt + 1), Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(10000, retryAfter * 1000) : 0)));
+        if (attempt < maxAttempts - 1) await new Promise(resolve => setTimeout(resolve, Math.max(500 * (attempt + 1), Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(10000, retryAfter * 1000) : 0)));
       }
       return false;
     } catch {
