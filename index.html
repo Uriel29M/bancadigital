@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=338-character-image-fallback", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=339-remove-ranking-random", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -56,8 +56,6 @@
             </nav>
       <div class="top-actions">
         <button class="reader-btn downloads-header-btn" data-action="downloads" title="Downloads" aria-label="Downloads">↓<span class="download-badge" hidden></span></button>
-        <button class="reader-btn ranking-header-btn" data-section="ranking" title="Ranking" aria-label="Ranking">🏆</button>
-        <button class="reader-btn random-header-btn" data-action="random" title="Surpreenda-me" aria-label="Surpreenda-me">🎲</button>
         <button class="reader-btn messages-header-btn" data-action="messages" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></button>
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
         <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜</button>
@@ -69,10 +67,6 @@
       <button type="button" class="mobile-bottom-item" data-mobile-action="downloads" aria-label="Downloads">
         <span class="mobile-bottom-icon" aria-hidden="true">↓</span>
         <span>Downloads</span>
-      </button>
-      <button type="button" class="mobile-bottom-item" data-mobile-section="ranking" aria-label="Ranking">
-        <span class="mobile-bottom-icon" aria-hidden="true">🏆</span>
-        <span>Ranking</span>
       </button>
       <button type="button" class="mobile-bottom-item" data-mobile-section="home" aria-label="Início">
         <span class="mobile-bottom-icon" aria-hidden="true"><img class="mobile-bottom-icon-image" src="assets/barracavermelhaicon.png?v=2" alt=""></span>
@@ -88,7 +82,6 @@
           <span>Mais</span>
         </summary>
         <div class="mobile-more-popover" role="menu" aria-label="Mais opções de navegação">
-          <button type="button" data-mobile-action="random" role="menuitem">🎲 Aleatório</button>
           <button type="button" data-mobile-section="comics" role="menuitem">Quadrinhos</button>
         </div>
       </details>
