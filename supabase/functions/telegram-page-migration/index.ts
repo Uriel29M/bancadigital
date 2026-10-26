@@ -62,6 +62,12 @@ function migrationSourceUrl(itemId: string) {
   target.searchParams.set("item_id", itemId);
   return target.toString();
 }
+function telegramCoverImageUrl(itemId: string) {
+  const target = new URL("/functions/v1/telegram-page-image", required("SUPABASE_URL"));
+  target.searchParams.set("item_id", itemId);
+  target.searchParams.set("cover", "1");
+  return target.toString();
+}
 async function telegram(method: string, body: Record<string, unknown> | FormData) {
   const response = await fetch("https://api.telegram.org/bot" + required("TELEGRAM_BOT_TOKEN") + "/" + method, {
     method: "POST",
@@ -177,7 +183,7 @@ async function handle(request: Request) {
       && get("page_number") !== null
       && get("page_count") !== null
       && String(get("item_id") || "").trim() !== "";
-    if (!["register", "resolve-source", "begin", "upload", "complete"].includes(action) && looksLikePageUpload) {
+    if (!["register", "resolve-source", "begin", "upload", "upload-cover", "complete"].includes(action) && looksLikePageUpload) {
       console.warn("[telegram-page-migration] ação multipart normalizada como upload", {
         suppliedAction, contentType, hasFile: Boolean(requestedFile),
         pageNumber: String(get("page_number") || ""),
@@ -237,6 +243,63 @@ async function handle(request: Request) {
       } };
       const saved = await saveEdition(loaded.db, edition, user.id);
       return json({ ok: true, pageCount: count, uploadedPages: 0, updatedAt: saved.updated_at });
+    }
+    if (action === "upload-cover") {
+      const coverUrl = telegramCoverImageUrl(itemId);
+      if (edition.telegramCoverFileId) {
+        // A repetição após uma falha pode acontecer com o catálogo cliente ainda desatualizado.
+        // Reutiliza a capa já enviada em vez de publicar cópias no Telegram.
+        if (String(edition.coverUrl || "") !== coverUrl) {
+          edition = { ...edition, coverUrl };
+          const saved = await saveEdition(loaded.db, edition, user.id);
+          edition = saved.edition;
+        }
+        return json({ ok: true, coverUploaded: true, telegramCoverFileId: edition.telegramCoverFileId, edition });
+      }
+      const file = get("file") as File | Blob | null;
+      uploadDiagnostic = {
+        uploadType: "cover",
+        fileType: file && typeof (file as any).type === "string" ? String((file as any).type) : "",
+        fileSize: file && typeof (file as any).size === "number" ? Number((file as any).size) : null,
+        fileTag: Object.prototype.toString.call(file),
+      };
+      if (!file || typeof (file as any).arrayBuffer !== "function" || typeof (file as any).size !== "number") {
+        throw new MigrationError("A capa JPEG não foi recebida como arquivo. Tente novamente.");
+      }
+      if (!file.size || file.size > MAX_PHOTO_BYTES) throw new MigrationError("A capa JPEG precisa ter até 10 MB.");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      uploadDiagnostic.jpegSignature = Array.from(bytes.slice(0, 3)).map(value => value.toString(16).padStart(2, "0")).join("");
+      uploadDiagnostic.jpegEnd = Array.from(bytes.slice(-4)).map(value => value.toString(16).padStart(2, "0")).join("");
+      if (!jpegLooksValid(bytes)) throw new MigrationError("A capa recebida não contém uma estrutura JPEG válida.");
+      const form = new FormData();
+      form.set("chat_id", chatId());
+      form.set("photo", new Blob([bytes], { type: "image/jpeg" }), "capa.jpg");
+      const title = String(edition.title || edition.seriesTitle || "Quadrinho").replace(/\s+/g, " ").slice(0, 100);
+      form.set("caption", title + " · capa");
+      form.set("disable_notification", "true");
+      const message = await telegram("sendPhoto", form);
+      const cover = photoDetails(message, 1);
+      const previousCoverUrl = String(edition.coverUrl || "").trim();
+      const originalCoverUrl = String(edition.originalCoverUrl || (
+        previousCoverUrl && !previousCoverUrl.includes("cover=1") ? previousCoverUrl : ""
+      )).trim();
+      edition = {
+        ...edition,
+        telegramCoverFileId: cover.fileId,
+        telegramCoverMessageId: cover.messageId,
+        telegramCoverPostUrl: cover.url,
+        telegramCoverFileSize: cover.fileSize,
+        telegramCoverWidth: cover.width,
+        telegramCoverHeight: cover.height,
+        coverUrl,
+        ...(originalCoverUrl ? { originalCoverUrl } : {}),
+      };
+      const saved = await saveEdition(loaded.db, edition, user.id);
+      return json({
+        ok: true, coverUploaded: true,
+        telegramCoverFileId: saved.edition.telegramCoverFileId,
+        edition: saved.edition, updatedAt: saved.updated_at,
+      });
     }
     if (action === "upload") {
       const pageNumber = pageCountValue(get("page_number"));
@@ -326,7 +389,7 @@ async function handle(request: Request) {
     const status = error instanceof MigrationError ? error.status : 500;
     const retryAfter = error instanceof MigrationError ? error.retryAfter : undefined;
     if (status >= 500 || !(error instanceof MigrationError)) console.error("telegram-page-migration", error);
-    else if (action === "upload") console.warn("[telegram-page-migration] upload recusado", {
+    else if (action === "upload" || action === "upload-cover") console.warn("[telegram-page-migration] upload recusado", {
       itemId, status, message: error instanceof Error ? error.message : String(error), ...uploadDiagnostic,
     });
     else if (String(error instanceof Error ? error.message : error).includes("Ação de migração desconhecida")) {
