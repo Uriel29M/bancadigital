@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v759-chat-instant-open";
+const CACHE_VERSION = "banca-digital-shell-v760-offline-search-downloads";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.275-search-landing",
-  "./js/app.js?v=2.2.10.617-chat-instant-open", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/app.js?v=2.2.10.618-offline-search-downloads", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/chat-feature.js?v=11-instant-open", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
