@@ -1829,6 +1829,7 @@
     ranking: "ranking",
     collections: "colecoes",
     search: "pesquisar",
+    "search-home": "busca",
     downloads: "downloads",
     "local-box": "caixa",
     album: "album",
@@ -2025,6 +2026,7 @@
       state.factionMembersView = section === "factions" && params.get("membros") === "1";
       state.factionMemberSearch = state.factionMembersView ? params.get("busca") || "" : "";
       if (section === "search") state.search = params.get("q") || "";
+      if (section === "search-home") state.search = params.get("q") || "";
       if (section === "entity") state.entityFilter = { kind: params.get("tipo") || "character", value: params.get("valor") || "" };
       render();
       if (section === "search") loadSearchUsers(state.search);
@@ -11287,6 +11289,20 @@
     return wikiCharacterCarouselPromise;
   }
 
+  function renderSearchLanding() {
+    return `
+      <section class="search-home-page" aria-label="Busca na Banca Digital">
+        <h1 class="search-home-wordmark" aria-label="Banca Digital"><span>Banca</span><span class="brand-accent">Digital</span></h1>
+        <div class="search-home-bar">
+          <div class="search-wrap">
+            <input id="search-input" class="search-input" type="search" value="${escapeHTML(state.search)}" placeholder="Quadrinhos, mangás, personagens..." aria-label="Buscar no catálogo" autocomplete="off">
+            <button class="btn btn-danger" data-action="do-search" type="button">Buscar</button>
+            <button class="search-home-random" data-action="random" type="button" title="Surpreenda-me" aria-label="Surpreenda-me">🎲</button>
+          </div>
+        </div>
+      </section>`;
+  }
+
   function renderSearch() {
     const q = state.search.trim().toLowerCase();
     const matchingEditions = uniqueCatalogItems(visibleCatalogItems().filter(x => {
@@ -13022,6 +13038,7 @@
     else if (state.section === "manga") markup = renderCatalog("manga");
     else if (state.section === "collections") markup = renderCollections();
     else if (state.section === "collection") markup = renderCollectionPage();
+    else if (state.section === "search-home") markup = renderSearchLanding();
     else if (state.section === "search") markup = renderSearch();
     else if (state.section === "entity") markup = renderEntityPage();
     else if (state.section === "login") markup = renderLoginPage();
@@ -14854,7 +14871,7 @@
       const a = el.dataset.action;
       if (a === "home") setSection("home");
       if (a === "random") openRandomCatalogItem();
-      if (a === "focus-search") { setSection("search"); setTimeout(() => $("#search-input")?.focus(), 30); }
+      if (a === "focus-search") { setSection("search-home"); setTimeout(() => $("#search-input")?.focus(), 30); }
       if (a === "do-search") { state.search = $("#search-input")?.value || ""; navigate({ pagina: "pesquisar", q: state.search }); }
       if (a === "open-admin") { if (isAdminProfile()) openAdmin(); }
       if (a === "open-auth") { if (!PROFILE_SITE_MODE) window.location.assign(`${PROFILE_SITE_BASE}?pagina=entrar`); else state.session ? openOwnPublicProfile() : openAuthPage(); }
@@ -15177,7 +15194,16 @@
       }
     }));
     $("#search-input")?.addEventListener("keydown", e => {
-      if (e.key === "Enter") { state.search = e.target.value; loadSearchUsers(state.search); $("#search-input")?.focus(); }
+      if (e.key !== "Enter") return;
+      if (state.section === "search-home") {
+        e.preventDefault();
+        state.search = e.target.value || "";
+        navigate({ pagina: "pesquisar", q: state.search });
+        return;
+      }
+      state.search = e.target.value;
+      loadSearchUsers(state.search);
+      $("#search-input")?.focus();
     });
     $$('[data-search-collapse]').forEach(button => {
       const content = button.closest(".search-group-summary, .search-initial-head")?.nextElementSibling;
@@ -16225,7 +16251,7 @@
       if (action === "home") setSection("home");
       else if (action === "random") openRandomCatalogItem();
       else if (action === "focus-search") {
-        setSection("search");
+        setSection("search-home");
         window.setTimeout(() => $("#search-input")?.focus(), 30);
       } else if (action === "do-search") {
         state.search = $("#search-input")?.value || "";
