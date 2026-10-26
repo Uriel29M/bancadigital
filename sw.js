@@ -1,9 +1,9 @@
-const CACHE_VERSION = "banca-digital-shell-v754-search-results-stay";
+const CACHE_VERSION = "banca-digital-shell-v755-messages-click-fix";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.275-search-landing",
-  "./js/app.js?v=2.2.10.612-search-results-stay", "./js/reader-deps.js?v=5-progressive-telegram",
-  "./js/reader-formats.js?v=3-progressive-telegram", "./js/catalog-sync.js?v=7-telegram-cover",
+  "./js/app.js?v=2.2.10.613-messages-click-fix", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/reader-formats.js?v=3-progressive-telegram", "./js/chat-feature.js?v=10-moderation-history-modal", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
