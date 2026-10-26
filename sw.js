@@ -1,8 +1,8 @@
-const CACHE_VERSION = "banca-digital-shell-v766-reader-grid-center";
+const CACHE_VERSION = "banca-digital-shell-v767-independent-home-rails";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.276-reader-grid-center",
-  "./js/app.js?v=2.2.10.621-offline-series-downloads", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/app.js?v=2.2.10.622-independent-home-rails", "./js/reader-deps.js?v=5-progressive-telegram",
   "./js/reader-formats.js?v=3-progressive-telegram", "./js/chat-feature.js?v=11-instant-open", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
