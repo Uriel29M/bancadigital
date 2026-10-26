@@ -9962,7 +9962,8 @@
       .then(() => openChat())
       .catch(error => {
         console.error("[Banca Digital] Não foi possível abrir Mensagens:", error);
-        toast("Não foi possível abrir Mensagens. Verifique sua conexão e tente novamente.");
+        const detail = String(error?.message || error || "Erro desconhecido").replace(/\\s+/g, " ").trim().slice(0, 180);
+        toast(`Erro ao abrir Mensagens: ${detail}`);
       })
       .finally(() => { messagesLaunchPending = false; });
   }, true);
