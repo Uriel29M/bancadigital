@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=339-remove-ranking-random", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=340-remove-monitoring-button", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -58,7 +58,6 @@
         <button class="reader-btn downloads-header-btn" data-action="downloads" title="Downloads" aria-label="Downloads">↓<span class="download-badge" hidden></span></button>
         <button class="reader-btn messages-header-btn" data-action="messages" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></button>
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
-        <button class="icon-btn staff-activity-button" data-action="staff-activity" title="Monitoramento" aria-label="Monitoramento">📜</button>
         <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
         <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
       </div>
