@@ -210,16 +210,77 @@
     if (!result?.coverUploaded || !result?.telegramCoverFileId) throw new Error("O Telegram recebeu a capa, mas o servidor não confirmou o registro.");
     return result;
   }
-  async function migrateCoverOnly(item, deps) {
+  let activeMigrationItemId = null;
+
+  function prepareMigrationProgress(item, options = {}, coverOnly = false) {
+    const batch = options.batch === true;
+    let overlay = batch
+      ? document.querySelector('.telegram-pages-progress-overlay[data-tg-pages-batch="true"]')
+      : null;
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "modal-backdrop telegram-pages-progress-overlay";
+      if (batch) overlay.dataset.tgPagesBatch = "true";
+      overlay.innerHTML = '<div class="modal telegram-pages-progress-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Migração de edição para o Telegram"><div class="section-head"><div><h2 data-tg-pages-title>Migrando edição para o Telegram</h2><div class="section-subtitle" data-tg-pages-edition></div><div data-tg-pages-status role="status" aria-live="polite">Preparando o arquivo…</div></div><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-minimize>Minimizar</button><button type="button" class="small-btn" data-tg-pages-restore>Abrir</button></div></div><progress data-tg-pages-progress max="100" value="0" aria-label="Progresso da migração"></progress><p class="section-subtitle" data-tg-pages-detail>O original será mantido como link reserva.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-close disabled>Fechar</button></div></div>';
+      document.body.appendChild(overlay);
+
+      const dialog = overlay.querySelector(".telegram-pages-progress-modal");
+      const minimizeButton = overlay.querySelector("[data-tg-pages-minimize]");
+      const restoreButton = overlay.querySelector("[data-tg-pages-restore]");
+      const minimize = () => {
+        overlay.classList.add("is-minimized");
+        dialog?.setAttribute("aria-modal", "false");
+        dialog?.setAttribute("role", "region");
+        restoreButton?.focus();
+      };
+      const restore = () => {
+        overlay.classList.remove("is-minimized");
+        dialog?.setAttribute("aria-modal", "true");
+        dialog?.setAttribute("role", "dialog");
+        dialog?.focus();
+      };
+      minimizeButton?.addEventListener("click", minimize);
+      restoreButton?.addEventListener("click", restore);
+      overlay.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !overlay.classList.contains("is-minimized")) {
+          event.preventDefault();
+          event.stopPropagation();
+          minimize();
+        }
+      });
+      overlay.addEventListener("click", event => {
+        if (event.target === overlay && !overlay.classList.contains("is-minimized")) minimize();
+      });
+    }
+
+    const title = overlay.querySelector("[data-tg-pages-title]");
+    const edition = overlay.querySelector("[data-tg-pages-edition]");
+    const statusNode = overlay.querySelector("[data-tg-pages-status]");
+    const detailNode = overlay.querySelector("[data-tg-pages-detail]");
+    const progress = overlay.querySelector("[data-tg-pages-progress]");
+    const close = overlay.querySelector("[data-tg-pages-close]");
+    const itemLabel = text(options.editionLabel || item?.seriesTitle || item?.title || item?.name || "Edição");
+
+    if (title) title.textContent = coverOnly ? "Migrando capa para o Telegram" : "Migrando edição para o Telegram";
+    if (edition) edition.textContent = batch ? "Edição " + text(options.position || "") + (options.position ? " · " : "") + itemLabel : itemLabel;
+    if (statusNode) statusNode.textContent = coverOnly ? "Preparando a capa…" : "Preparando o arquivo…";
+    if (detailNode) detailNode.textContent = coverOnly
+      ? "As páginas existentes serão preservadas."
+      : "O original será mantido como link reserva.";
+    if (progress) progress.value = 0;
+    if (close) {
+      close.disabled = true;
+      close.textContent = "Fechar";
+      close.onclick = null;
+    }
+    return { overlay, statusNode, detailNode, progress, close, batch };
+  }
+
+  async function migrateCoverOnly(item, deps, options = {}) {
     const id = text(item?.id).trim();
     activeMigrationItemId = id;
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop telegram-pages-progress-overlay";
-    overlay.innerHTML = '<div class="modal telegram-pages-progress-modal" role="dialog" aria-modal="true" aria-label="Migrar capa para o Telegram"><div class="section-head"><div><h2>Migrando capa para o Telegram</h2><div data-tg-cover-status role="status" aria-live="polite">Preparando a capa…</div></div></div><progress data-tg-cover-progress max="100" value="0"></progress><p class="section-subtitle">As páginas existentes serão preservadas.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-cover-close disabled>Fechar</button></div></div>';
-    document.body.appendChild(overlay);
-    const statusNode = overlay.querySelector("[data-tg-cover-status]");
-    const progress = overlay.querySelector("[data-tg-cover-progress]");
-    const close = overlay.querySelector("[data-tg-cover-close]");
+    const ui = prepareMigrationProgress(item, options, true);
+    const { overlay, statusNode, detailNode, progress, close, batch } = ui;
     const status = message => { if (statusNode) statusNode.textContent = message; };
     try {
       const result = await uploadCover(item, deps, status, async () => {
@@ -230,25 +291,27 @@
       if (String(edition?.id || "") !== id || !edition?.telegramCoverFileId || !String(edition?.coverUrl || "").includes("cover=1")) throw new Error("O servidor não confirmou a substituição da capa desta edição.");
       if (progress) progress.value = 100;
       status("Capa enviada ao Telegram e atualizada no catálogo.");
-      if (close) { close.disabled = false; close.textContent = "Concluído"; close.onclick = () => overlay.remove(); }
+      if (detailNode) detailNode.textContent = "Capa concluída.";
+      if (close && !batch) { close.disabled = false; close.textContent = "Concluído"; close.onclick = () => overlay.remove(); }
       return edition;
     } catch (error) {
       status("Não foi possível migrar a capa.");
-      const detail = overlay.querySelector(".section-subtitle");
-      if (detail) detail.textContent = (error?.message || String(error)) + " As páginas existentes não foram modificadas.";
-      if (close) { close.disabled = false; close.textContent = "Fechar"; close.onclick = () => overlay.remove(); }
+      if (detailNode) detailNode.textContent = (error?.message || String(error)) + " As páginas existentes não foram modificadas.";
+      if (close && !batch) { close.disabled = false; close.textContent = "Fechar"; close.onclick = () => overlay.remove(); }
       throw error;
-    } finally { if (activeMigrationItemId === id) activeMigrationItemId = null; }
+    } finally {
+      if (activeMigrationItemId === id) activeMigrationItemId = null;
+    }
   }
-  let activeMigrationItemId = null;
-  async function migrate(item, deps) {
+
+  async function migrate(item, deps, options = {}) {
     if (!deps?.client || !deps.isAdminProfile?.()) throw new Error("Entre com a conta de administrador para migrar edições.");
     if (navigator.onLine === false || deps.sessionOffline?.()) throw new Error("A migração exige conexão com a internet.");
     const hasTelegramPages = Array.isArray(item?.telegramPages) && item.telegramPages.length > 0;
     const migrationItemId = text(item?.id).trim();
     if (!migrationItemId) throw new Error("A edição não possui um ID válido para a migração.");
     if (activeMigrationItemId !== null) throw new Error(`A edição \"${activeMigrationItemId}\" já está em migração. Aguarde antes de iniciar outra para evitar misturar páginas.`);
-    if (hasTelegramPages) { if (item.telegramCoverFileId) throw new Error("Esta edição já tem as páginas e a capa hospedadas no Telegram."); return migrateCoverOnly(item, deps); }
+    if (hasTelegramPages) { if (item.telegramCoverFileId) throw new Error("Esta edição já tem as páginas e a capa hospedadas no Telegram."); return migrateCoverOnly(item, deps, options); }
     // Prefere a URL direta; a postagem do Telegram fica como alternativa.
     // O proxy precisa do registro em catalog_edition_overrides, garantido abaixo.
     const directSource = text(item.fileUrl).trim();
@@ -259,41 +322,8 @@
     if (!usableInitialSources.length) throw new Error("Esta fonte é um link externo que não pode ser convertida diretamente. Cadastre um link direto para o PDF/CBZ/CBR e tente novamente.");
 
     activeMigrationItemId = migrationItemId;
-    const overlay = document.createElement("div");
-    overlay.className = "modal-backdrop telegram-pages-progress-overlay";
-    overlay.innerHTML = '<div class="modal telegram-pages-progress-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="Migração de edição para o Telegram"><div class="section-head"><div><h2>Migrando edição para o Telegram</h2><div data-tg-pages-status role="status" aria-live="polite">Preparando o arquivo…</div></div><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-minimize>Minimizar</button><button type="button" class="small-btn" data-tg-pages-restore>Abrir</button></div></div><progress data-tg-pages-progress max="100" value="0" aria-label="Progresso da migração"></progress><p class="section-subtitle" data-tg-pages-detail>O original será mantido como link reserva.</p><div class="modal-actions"><button type="button" class="small-btn" data-tg-pages-close disabled>Fechar</button></div></div>';
-    document.body.appendChild(overlay);
-    const dialog = overlay.querySelector(".telegram-pages-progress-modal");
-    const statusNode = overlay.querySelector("[data-tg-pages-status]");
-    const detailNode = overlay.querySelector("[data-tg-pages-detail]");
-    const progress = overlay.querySelector("[data-tg-pages-progress]");
-    const close = overlay.querySelector("[data-tg-pages-close]");
-    const minimizeButton = overlay.querySelector("[data-tg-pages-minimize]");
-    const restoreButton = overlay.querySelector("[data-tg-pages-restore]");
-    const minimize = () => {
-      overlay.classList.add("is-minimized");
-      dialog?.setAttribute("aria-modal", "false");
-      dialog?.setAttribute("role", "region");
-      restoreButton?.focus();
-    };
-    const restore = () => {
-      overlay.classList.remove("is-minimized");
-      dialog?.setAttribute("aria-modal", "true");
-      dialog?.setAttribute("role", "dialog");
-      dialog?.focus();
-    };
-    minimizeButton?.addEventListener("click", minimize);
-    restoreButton?.addEventListener("click", restore);
-    overlay.addEventListener("keydown", event => {
-      if (event.key === "Escape" && !overlay.classList.contains("is-minimized")) {
-        event.preventDefault();
-        event.stopPropagation();
-        minimize();
-      }
-    });
-    overlay.addEventListener("click", event => {
-      if (event.target === overlay && !overlay.classList.contains("is-minimized")) minimize();
-    });
+    const ui = prepareMigrationProgress(item, options, false);
+    const { overlay, statusNode, detailNode, progress, close, batch } = ui;
     const status = message => { if (statusNode) statusNode.textContent = message; };
     let prepared = null;
     try {
@@ -411,7 +441,7 @@
       }
       if (progress) progress.value = 100;
       status("Migração concluída. Publicando a edição no catálogo…");
-      if (close) {
+      if (close && !batch) {
         close.disabled = false;
         close.textContent = "Concluído";
         close.onclick = () => overlay.remove();
@@ -420,7 +450,7 @@
     } catch (error) {
       status("A migração foi interrompida.");
       if (detailNode) detailNode.textContent = (error?.message || String(error)) + " Se alguma página já tiver sido enviada, ela continuará no Telegram; corrija o erro e tente novamente para retomar o progresso.";
-      if (close) {
+      if (close && !batch) {
         close.disabled = false;
         close.textContent = "Fechar";
         close.onclick = () => overlay.remove();
@@ -429,7 +459,7 @@
     } finally {
       try { await prepared?.close?.(); } catch {}
       if (activeMigrationItemId === migrationItemId) activeMigrationItemId = null;
-      if (!statusNode?.textContent?.startsWith("Migração foi interrompida") && close && !close.onclick) {
+      if (!batch && !statusNode?.textContent?.startsWith("Migração foi interrompida") && close && !close.onclick) {
         close.disabled = false;
         close.onclick = () => overlay.remove();
       }
