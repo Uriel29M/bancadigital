@@ -50,8 +50,9 @@ export function createChatFeature(deps) {
 
   function prepareMobileChatPage() {
     if (state.section !== "messages") state.chatReturnSection = state.section || "home";
+    // mountChatSurface substitui #main imediatamente; não é necessário
+    // renderizar a página inteira antes de montar o chat.
     state.section = "messages";
-    render();
   }
 
   function mountChatSurface(markup, mobilePage) {
@@ -592,8 +593,15 @@ export function createChatFeature(deps) {
     const chatCanModerate = ["moderator", "banca", "admin"].includes(state.profile?.plan) || (isSheriffRoom(room) && sheriff?.user_id === state.session?.user?.id) || isFactionChatSheriff(room, state.session?.user?.id);
     const factionSheriffIds = factionChatSheriffIds(room);
     removeLegacyChatScrollControls();
-    await markChatMentionsRead(room?.id);
-    await loadNotifications();
+    // Atualizações de notificações são secundárias: não devem atrasar a abertura.
+    void (async () => {
+      try {
+        await markChatMentionsRead(room?.id);
+        await loadNotifications();
+      } catch (error) {
+        console.warn("[chat] atualização de notificações em segundo plano falhou", error);
+      }
+    })();
     if (!state.session || !sb || !room || !canOpenChatRoom(room)) return toast("Você não tem acesso a esta sala.");
     $$('.chat-modal').forEach(modal => modal.closest('.modal-backdrop')?.remove());
     if (mobilePage) prepareMobileChatPage();
@@ -687,7 +695,11 @@ export function createChatFeature(deps) {
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
       await renderChatPins(pinsRoot, room.id, chatCanModerate);
     };
-    await renderMessages();
+    // Deixa a sala e os controles interativos aparecerem enquanto as mensagens carregam.
+    void renderMessages().catch(error => {
+      console.error("[chat room] falha ao carregar mensagens", error);
+      if (messagesRoot) messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
+    });
     channel = sb.channel(`chat-room-${room.id}-${state.session.user.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id) renderMessages(); }).on("postgres_changes", { event: "*", schema: "public", table: "chat_pins", filter: `room_id=eq.${room.id}` }, payload => { if (payload.new?.room_id === room.id || payload.old?.room_id === room.id) renderChatPins(pinsRoot, room.id, chatCanModerate); }).subscribe();
     const chatCompose = $("#chat-room-compose", overlay);
     const getReply = setupChatReplyUI({ messagesRoot, compose: chatCompose, input: chatInput, getMessage: id => chatMessagesById.get(String(id)) });
@@ -737,10 +749,17 @@ export function createChatFeature(deps) {
       state.notifications = state.notifications.filter(notification => !isNotificationFromOpenChat(notification));
       state.notificationUnreadCount = state.notifications.filter(notification => !notification.read_at).length;
     }
-    if (contact?.id) await markChatNotificationsRead(contact.id);
-    await loadNotifications();
     if (mobilePage) prepareMobileChatPage();
-    else render();
+    // No desktop, Mensagens é um modal sobre a página atual: redesenhá-la inteira
+    // antes de abrir é desnecessário. Atualizações remotas ficam em segundo plano.
+    void (async () => {
+      try {
+        if (contact?.id) await markChatNotificationsRead(contact.id);
+        await loadNotifications();
+      } catch (error) {
+        console.warn("[chat] atualização de notificações em segundo plano falhou", error);
+      }
+    })();
     const chatHeaderActions = mobilePage
       ? (contact ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>' : '<button class="small-btn" type="button" data-close>Voltar</button>')
       : `${contact ? '<button class="small-btn" type="button" data-chat-back>Voltar</button>' : ""}<button class="small-btn" data-close>Fechar</button>`;
@@ -897,7 +916,11 @@ export function createChatFeature(deps) {
       updateChatMessageExpansionUI(messagesRoot);
       messagesRoot.scrollTop = messagesRoot.scrollHeight;
     };
-    await renderMessages();
+    // O modal já está visível; carregue o histórico sem bloquear os controles.
+    void renderMessages().catch(error => {
+      console.error("[private chat] falha ao carregar mensagens", error);
+      if (messagesRoot) messagesRoot.innerHTML = '<div class="empty">Não foi possível carregar as mensagens.</div>';
+    });
     channel = sb.channel(`chat-${state.session.user.id}-${contact.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `recipient_id=eq.${state.session.user.id}` }, payload => { if (payload.new?.sender_id === contact.id) renderMessages(); }).subscribe();
     const chatCompose = $("#chat-compose", overlay);
     const chatInput = $("#chat-compose textarea", overlay);
