@@ -15786,7 +15786,15 @@
         button.textContent = isImprint ? "Migrando " + (index + 1) + "/" + pending.length + "…" : "⇧ " + (index + 1) + "/" + pending.length + "…";
         try {
           const hasPages = Array.isArray(item.telegramPages) && item.telegramPages.length > 0;
-          const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies());
+          const editionTitle = itemDisplayTitle(item);
+          const seriesTitle = String(item.seriesTitle || "").trim();
+          const editionLabel = seriesTitle && !publisherKey(editionTitle).startsWith(publisherKey(seriesTitle))
+            ? seriesTitle + " — " + editionTitle : editionTitle;
+          const migrated = await window.BancaTelegramPages.migrate(item, telegramMigrationDependencies(), {
+            batch: true,
+            editionLabel,
+            position: (index + 1) + "/" + pending.length
+          });
           if (!migrated || String(migrated.id || "") !== String(item.id) ||
               !Array.isArray(migrated.telegramPages) || !migrated.telegramPages.length ||
               !migrated.telegramCoverFileId) {
@@ -15798,7 +15806,6 @@
           );
           if (!saved) throw new Error("Não foi possível salvar \"" + itemDisplayTitle(item) + "\" no catálogo.");
           completed++;
-          document.querySelector(".telegram-pages-progress-overlay")?.remove();
           await refreshSharedCatalog({ renderPage: false }).catch(() => {});
         } catch (error) {
           if (!isImprint) throw error;
@@ -15810,7 +15817,6 @@
           failures.push(failure);
           console.error("[TELEGRAM] Falha ao migrar edição do selo", scopeName, failure);
         } finally {
-          document.querySelector(".telegram-pages-progress-overlay")?.remove();
         }
         if (delayMs && index < pending.length - 1) await sleep(delayMs);
       }
