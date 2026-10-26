@@ -1012,7 +1012,7 @@
       }
       if (changed) {
         persistDownloads();
-        if (state.section === "downloads") render();
+        if (["downloads", "search", "search-home"].includes(state.section)) render();
       }
     } catch (error) {
       console.warn("Não foi possível validar os arquivos offline:", error);
@@ -1159,7 +1159,8 @@
   }
   async function openDownloaded(item) {
     const entry = downloaded(item.id);
-    if (!entry || entry.status !== "completed") return;
+    const offline = navigator.onLine === false || Boolean(state.session?.offline);
+    if (!entry || (entry.status !== "completed" && !offline)) return;
     try {
       let buffer = null;
       for (const cacheKey of downloadCacheKeys(entry.url)) {
@@ -1167,6 +1168,15 @@
         if (buffer) break;
       }
       if (!buffer) throw new Error("Arquivo offline ausente.");
+      if (entry.status !== "completed") {
+        entry.status = "completed";
+        entry.preparing = false;
+        entry.progress = 100;
+        entry.completedAt = entry.completedAt || new Date().toISOString();
+        state.downloads.set(String(item.id), entry);
+        persistDownloads();
+        updateDownloadButtons(item.id);
+      }
       const objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
       openReader({ ...item, fileUrl: objectUrl, local: true, ...(entry.telegramPagesArchive ? { format: "cbz" } : {}) }, { localObjectUrl: objectUrl });
     } catch { toast("Este download não está disponível offline. Baixe novamente quando estiver conectado."); }
@@ -6646,7 +6656,7 @@
     const offlineReaderRequested = navigator.onLine === false || Boolean(state.session?.offline);
     if (!item.local && offlineReaderRequested) {
       if (navigator.onLine === false) activateOfflineMode();
-      if (downloaded(item.id)?.status === "completed") {
+      if (downloaded(item.id)) {
         void openDownloaded(item);
         return;
       }
@@ -14001,7 +14011,14 @@
         if (button) { button.disabled = true; button.textContent = 'Preparando…'; }
       }
     });
-    $$('[data-open-download]').forEach(el => el.addEventListener("click", () => { const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownload)) || downloaded(el.dataset.openDownload)?.snapshot; const entry = downloaded(el.dataset.openDownload); if (!item || !entry || entry.status === "waiting" || entry.preparing) return; entry.status === "completed" ? openDownloaded(item) : startDownload(item); }));
+    $$('[data-open-download]').forEach(el => el.addEventListener("click", () => {
+      const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownload)) || downloaded(el.dataset.openDownload)?.snapshot;
+      const entry = downloaded(el.dataset.openDownload);
+      if (!item || !entry || entry.status === "waiting" || entry.preparing) return;
+      const offline = navigator.onLine === false || Boolean(state.session?.offline);
+      if (offline) { void openDownloaded(item); return; }
+      entry.status === "completed" ? openDownloaded(item) : startDownload(item);
+    }));
     $$('.downloads-completed [data-open-download]').forEach(el => {
       const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownload)) || downloaded(el.dataset.openDownload)?.snapshot;
       const replacement = el.cloneNode(true);
@@ -14011,7 +14028,16 @@
       replacement.disabled = Boolean(state.session?.offline || !item?.seriesId);
       el.replaceWith(replacement);
     });
-    $$('[data-open-download-cover]').forEach(el => { const open = () => { const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownloadCover)) || downloaded(el.dataset.openDownloadCover)?.snapshot; const entry = downloaded(el.dataset.openDownloadCover); if (item && entry?.status === "completed") openDownloaded(item); }; el.addEventListener("click", open); el.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }); });
+    $$('[data-open-download-cover]').forEach(el => {
+      const open = () => {
+        const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownloadCover)) || downloaded(el.dataset.openDownloadCover)?.snapshot;
+        const entry = downloaded(el.dataset.openDownloadCover);
+        const offline = navigator.onLine === false || Boolean(state.session?.offline);
+        if (item && entry && (entry.status === "completed" || offline)) void openDownloaded(item);
+      };
+      el.addEventListener("click", open);
+      el.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+    });
     $$('[data-delete-download]').forEach(el => el.addEventListener("click", () => deleteDownload(el.dataset.deleteDownload)));
     $$('[data-series-favorite]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); toggleSeriesFavorite(el.dataset.seriesFavorite); }));
     $$('[data-cover-choice]').forEach(el => {
