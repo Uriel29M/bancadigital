@@ -553,7 +553,7 @@
       const hasMovedSections = Object.keys(sectionPages).length > 0;
       if (!nativeSections.length || hasMovedSections) await bootstrapFromHome();
     } else if (currentPage() === "home" && Object.entries(sectionPages)
-      .some(([key, destination]) => key.startsWith("comic-") && destination === "home")) {
+      .some(([key, destination]) => (key.startsWith("comic-") || key === "legendary-banner") && destination === "home")) {
       await bootstrapComicSectionsOnHome();
     }
     sync();
