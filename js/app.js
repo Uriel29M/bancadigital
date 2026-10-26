@@ -5051,15 +5051,32 @@
     // Hidden editions are never part of reader navigation, even for admins.
     // seriesEditions() may include them for catalog-management screens.
     const visibleEditions = editions.filter(edition => canViewCatalogItem(edition, false));
+    const hideNavigationHost = host => {
+      if (!host) return;
+      host.replaceChildren();
+      host.hidden = true;
+    };
+    const downloadedSeriesEditions = offlineReader
+      ? [...state.downloads.values()]
+        .filter(entry => entry.status === "completed")
+        .map(entry => downloadedItemFor(entry.id))
+        .filter(edition => edition
+          && String(edition.seriesId || "") === String(item.seriesId || "")
+          && canViewCatalogItem(edition, false))
+      : [];
     const navigationEditions = offlineReader
-      ? visibleEditions.filter(edition => edition.id === item.id || downloaded(edition.id)?.status === "completed")
+      ? [...new Map([
+          ...visibleEditions.filter(edition => downloaded(edition.id)?.status === "completed"),
+          ...downloadedSeriesEditions
+        ].map(edition => [String(edition.id), edition])).values()]
+        .sort((a, b) => issueSortValue(a) - issueSortValue(b))
       : visibleEditions;
     if (offlineReader && navigationEditions.length < 2) {
-      if (previousHost) previousHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">‹ Anterior</button>';
-      if (nextHost) nextHost.innerHTML = '<button type="button" disabled title="Nenhuma outra edição desta série está disponível offline">Próxima ›</button>';
+      hideNavigationHost(previousHost);
+      hideNavigationHost(nextHost);
       return;
     }
-    const current = navigationEditions.findIndex(x => x.id === item.id);
+    const current = navigationEditions.findIndex(x => String(x.id) === String(item.id));
     const firstEdition = navigationEditions[0];
     const previousEdition = navigationEditions[current - 1];
     const nextEdition = navigationEditions[current + 1];
@@ -5069,7 +5086,9 @@
       return label ? (/^\d+(?:\.\d+)?$/.test(label) ? `#${escapeHTML(label)}` : escapeHTML(label)) : "Edição";
     };
     const createNavigation = (host, html) => {
-      if (!host || host.querySelector("[data-series-nav]")) return;
+      if (!host) return;
+      host.hidden = false;
+      if (host.querySelector("[data-series-nav]")) return;
       const nav = document.createElement("span");
       nav.dataset.seriesNav = "true";
       nav.className = "series-reader-nav";
@@ -5091,7 +5110,9 @@
       });
     };
     if (current > 0) createNavigation(previousHost, `${current > 1 ? `<button title="Primeira edição${firstEdition?.issue ? ` — ${itemIssueDisplay(firstEdition)}` : ""}" data-series-target="0">« ${editionButtonLabel(firstEdition)}</button>` : ""}<button title="Edição anterior${previousEdition?.issue ? ` — ${itemIssueDisplay(previousEdition)}` : ""}" data-series-target="${current - 1}">‹ ${editionButtonLabel(previousEdition)}</button>`);
+    else hideNavigationHost(previousHost);
     if (current >= 0 && current < navigationEditions.length - 1) createNavigation(nextHost, `<button title="Próxima edição${nextEdition?.issue ? ` — ${itemIssueDisplay(nextEdition)}` : ""}" data-series-target="${current + 1}">${editionButtonLabel(nextEdition)} ›</button>${current < navigationEditions.length - 2 ? `<button title="Última edição${lastEdition?.issue ? ` — ${itemIssueDisplay(lastEdition)}` : ""}" data-series-target="${navigationEditions.length - 1}">${editionButtonLabel(lastEdition)} »</button>` : ""}`);
+    else hideNavigationHost(nextHost);
   }
 
   function openEntityPage(kind, value) {
@@ -6843,7 +6864,15 @@
     $("[data-comment-item]", overlay)?.addEventListener("click", event => { event.stopPropagation(); openCommentsPopup(item); });
     $("[data-view-series]", overlay)?.addEventListener("click", event => {
       event.stopPropagation();
-      const editions = seriesEditions(item);
+      const offlineReader = navigator.onLine === false || Boolean(state.session?.offline);
+      const editions = offlineReader
+        ? [...new Map([...state.downloads.values()]
+            .filter(entry => entry.status === "completed")
+            .map(entry => downloadedItemFor(entry.id))
+            .filter(edition => edition && String(edition.seriesId || "") === String(item.seriesId || "") && canViewCatalogItem(edition, false))
+            .map(edition => [String(edition.id), edition])).values()]
+            .sort((a, b) => issueSortValue(a) - issueSortValue(b))
+        : seriesEditions(item);
       cleanupReader();
       setSection("home");
       openSeriesSelection(item, editions, false, false, item);
