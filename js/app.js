@@ -5055,6 +5055,7 @@
       if (!host) return;
       host.replaceChildren();
       host.hidden = true;
+      host.style.display = "none";
     };
     const downloadedSeriesEditions = offlineReader
       ? [...state.downloads.values()]
@@ -5088,6 +5089,7 @@
     const createNavigation = (host, html) => {
       if (!host) return;
       host.hidden = false;
+      host.style.display = "";
       if (host.querySelector("[data-series-nav]")) return;
       const nav = document.createElement("span");
       nav.dataset.seriesNav = "true";
