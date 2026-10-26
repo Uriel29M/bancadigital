@@ -353,6 +353,13 @@
 
     bootstrapping = true;
     try {
+      // Capture the native Quadrinhos sections before navigating away. This is
+      // essential when the page is opened directly with saved transfers to Inicial.
+      const comicRecords = collectSections("comic");
+      comicRecords.forEach(record => {
+        ensureTransferButton(record);
+        if (!sectionTemplates.has(record.key)) cacheTemplate(record);
+      });
       homeButton.click();
       if (!await waitForSections()) return false;
       const records = collectSections("home");
