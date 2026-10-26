@@ -15843,6 +15843,16 @@
   function openSeriesSelection(series, editions, returnToCoverVariants = false, returnToFileReports = false, returnToReader = null, allowHiddenPreview = false, forcePage = false) {
     if (!allowHiddenPreview && !isAdminProfile()) editions = visibleCatalogItems(Array.isArray(editions) ? editions : [], false);
     const seriesRouteId = series?.seriesId || series?.id || "";
+    if (navigator.onLine === false || state.session?.offline) {
+      editions = [...new Map([...state.downloads.values()]
+        .filter(entry => entry.status === "completed")
+        .map(entry => downloadedItemFor(entry.id))
+        .filter(edition => edition
+          && String(edition.seriesId || "") === String(seriesRouteId)
+          && canViewCatalogItem(edition, false))
+        .map(edition => [String(edition.id), edition])).values()]
+        .sort((a, b) => issueSortValue(a) - issueSortValue(b));
+    }
     const pageMode = forcePage || (state.section === "series" && String(state.seriesPageId || "") === String(seriesRouteId));
     if (!pageMode && window.matchMedia?.("(max-width: 760px)")?.matches && seriesRouteId) {
       navigate({ pagina: "serie", serie: seriesRouteId });
