@@ -15816,7 +15816,9 @@
           };
           failures.push(failure);
           console.error("[TELEGRAM] Falha ao migrar edição do selo", scopeName, failure);
-        } finally {
+          // Stop after the first failure to preserve and show the real reason,
+          // instead of repeating "A migração foi interrompida" for every edition.
+          break;
         }
         if (delayMs && index < pending.length - 1) await sleep(delayMs);
       }
