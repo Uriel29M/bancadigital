@@ -1,9 +1,9 @@
-const CACHE_VERSION = "banca-digital-shell-v758-bind-null-foreach-fix";
+const CACHE_VERSION = "banca-digital-shell-v759-chat-instant-open";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.275-search-landing",
-  "./js/app.js?v=2.2.10.616-bind-null-foreach-fix", "./js/reader-deps.js?v=5-progressive-telegram",
-  "./js/reader-formats.js?v=3-progressive-telegram", "./js/chat-feature.js?v=10-moderation-history-modal", "./js/catalog-sync.js?v=7-telegram-cover",
+  "./js/app.js?v=2.2.10.617-chat-instant-open", "./js/reader-deps.js?v=5-progressive-telegram",
+  "./js/reader-formats.js?v=3-progressive-telegram", "./js/chat-feature.js?v=11-instant-open", "./js/catalog-sync.js?v=7-telegram-cover",
   "./js/catalog-identity.js?v=1", "./js/telegram-auto.js?v=6-telegram-cover",
   "./js/telegram-pages.js?v=8-telegram-cover-source",
   "./js/telegram-covers.js?v=2", "./js/data.js?v=2.2.7.39",
