@@ -43,8 +43,10 @@
     {
       key: "legendary-banner",
       page: "comic",
-      selector: ".legendary-sunday-banner",
-      headSelector: ".section-head, .legendary-sunday-copy, h1, h2, h3",
+      // Administration controls for this banner live in a sibling status row.
+      // The application wraps both in this group for section-order management.
+      selector: ".comic-legendary-section-group, .legendary-sunday-banner",
+      headSelector: ".legendary-sunday-status, .section-head, .legendary-sunday-copy, h1, h2, h3",
       title: "Banner de Lenda"
     }
   ];
