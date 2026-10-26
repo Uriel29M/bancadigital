@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v760-offline-search-downloads";
+const CACHE_VERSION = "banca-digital-shell-v761-offline-search-downloads";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.275-search-landing",
