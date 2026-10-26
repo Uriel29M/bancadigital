@@ -234,13 +234,13 @@
     return sectionPages[key] || defaultPage;
   }
 
-  function makeTransferButton(record, className) {
+  function makeTransferButton(record, displayPage, className) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = ((className || "small-btn") + " section-page-transfer-button").trim();
     button.textContent = "⇄";
     button.dataset.sectionPageTransferKey = record.key;
-    button.title = "Enviar “" + record.title + "” para " + pageLabel(otherPage(record.page));
+    button.title = "Enviar “" + record.title + "” para " + pageLabel(otherPage(displayPage));
     button.setAttribute("aria-label", button.title);
     return button;
   }
@@ -255,7 +255,7 @@
     }
 
     const controls = managedControls(head);
-    const button = makeTransferButton(record, controls[0] && controls[0].className);
+    const button = makeTransferButton(record, record.page, controls[0] && controls[0].className);
     const last = controls[controls.length - 1];
     if (last && last.parentElement && controls.every(item => item.parentElement === last.parentElement)) {
       last.insertAdjacentElement("afterend", button);
@@ -279,7 +279,7 @@
       const buttonClass = reference && reference.className;
       oldButtons.forEach(button => button.remove());
       oldControls.forEach(button => button.remove());
-      const button = makeTransferButton(record, buttonClass);
+      const button = makeTransferButton(record, otherPage(record.page), buttonClass);
       if (parent && cloneHead.contains(parent)) parent.appendChild(button);
       else cloneHead.appendChild(button);
     }
