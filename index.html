@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=342-search-results-stay", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=343-messages-click-fix", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -129,7 +129,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.612-search-results-stay"></script>
+    <script src="js/app.js?v=2.2.10.613-messages-click-fix"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     // Repara bloqueios órfãos de modal e oferece navegação de contingência
