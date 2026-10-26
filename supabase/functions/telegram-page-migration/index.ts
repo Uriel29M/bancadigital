@@ -147,20 +147,28 @@ function pageCountValue(value: unknown) {
   return count;
 }
 function jpegLooksValid(bytes: Uint8Array) {
-  return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8
-    && bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9;
+  // Browser-generated JPEG blobs may include a few trailing bytes in some runtimes.
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return false;
+  const scanFrom = Math.max(2, bytes.length - 64);
+  for (let i = bytes.length - 2; i >= scanFrom; i--) {
+    if (bytes[i] === 0xff && bytes[i + 1] === 0xd9) return true;
+  }
+  return false;
 }
 async function handle(request: Request) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST") return json({ error: "Método não permitido." }, 405);
+  let action = "";
+  let itemId = "";
+  let uploadDiagnostic: Record<string, unknown> = {};
   try {
     const user = await requireAdmin(request);
     const contentType = request.headers.get("content-type") || "";
     const multipart = contentType.toLowerCase().includes("multipart/form-data");
     const body: any = multipart ? await request.formData() : await request.json();
     const get = (key: string) => multipart ? body.get(key) : body[key];
-    const action = String(get("action") || "");
-    const itemId = validItemId(get("item_id"));
+    action = String(get("action") || "");
+    itemId = validItemId(get("item_id"));
     const baseEditionRaw = get("edition");
     let baseEdition: unknown = baseEditionRaw;
     if (typeof baseEditionRaw === "string") {
@@ -222,11 +230,23 @@ async function handle(request: Request) {
       const pending = Array.isArray(edition.telegramPagesPending) ? edition.telegramPagesPending : [];
       if (pageNumber <= pending.length) return json({ ok: true, page: pending[pageNumber - 1], reused: true });
       if (pageNumber !== pending.length + 1) throw new MigrationError("A ordem de envio foi interrompida. Reinicie a migração desta edição.");
-      const file = get("file");
-      if (!(file instanceof File)) throw new MigrationError("A página JPEG não foi enviada.");
+      const file = get("file") as File | Blob | null;
+      uploadDiagnostic = {
+        pageNumber,
+        expectedPages: count,
+        fileType: file && typeof (file as any).type === "string" ? String((file as any).type) : "",
+        fileSize: file && typeof (file as any).size === "number" ? Number((file as any).size) : null,
+        fileTag: Object.prototype.toString.call(file),
+      };
+      // Avoid realm-sensitive instanceof checks on a FormData-parsed File.
+      if (!file || typeof (file as any).arrayBuffer !== "function" || typeof (file as any).size !== "number") {
+        throw new MigrationError("A página JPEG não foi recebida como arquivo. Tente novamente.");
+      }
       if (!file.size || file.size > MAX_PHOTO_BYTES) throw new MigrationError("Cada JPEG precisa ter até 10 MB.");
       const bytes = new Uint8Array(await file.arrayBuffer());
-      if (!jpegLooksValid(bytes)) throw new MigrationError("O arquivo enviado não é um JPEG válido.");
+      uploadDiagnostic.jpegSignature = Array.from(bytes.slice(0, 3)).map(value => value.toString(16).padStart(2, "0")).join("");
+      uploadDiagnostic.jpegEnd = Array.from(bytes.slice(-4)).map(value => value.toString(16).padStart(2, "0")).join("");
+      if (!jpegLooksValid(bytes)) throw new MigrationError("O arquivo recebido não contém uma estrutura JPEG válida.");
       const form = new FormData();
       form.set("chat_id", chatId());
       form.set("photo", new Blob([bytes], { type: "image/jpeg" }), "pagina-" + String(pageNumber).padStart(4, "0") + ".jpg");
@@ -290,6 +310,9 @@ async function handle(request: Request) {
     const status = error instanceof MigrationError ? error.status : 500;
     const retryAfter = error instanceof MigrationError ? error.retryAfter : undefined;
     if (status >= 500 || !(error instanceof MigrationError)) console.error("telegram-page-migration", error);
+    else if (action === "upload") console.warn("[telegram-page-migration] upload recusado", {
+      itemId, status, message: error instanceof Error ? error.message : String(error), ...uploadDiagnostic,
+    });
     return json({
       error: error instanceof Error ? error.message : "Falha na migração para o Telegram.",
       ...(retryAfter ? { retry_after: retryAfter } : {}),
