@@ -25,6 +25,30 @@
   const SECTION_TITLES = Object.fromEntries(TITLE_ALIASES.map(([key, aliases]) => [key, aliases[0]]));
   const KEY_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+  const SPECIAL_SECTIONS = [
+    {
+      key: "recommendations",
+      page: "home",
+      selector: ".global-recommendations-section",
+      headSelector: ".global-recommendations-heading",
+      title: "Escolhas da banca"
+    },
+    {
+      key: "bucho-home",
+      page: "home",
+      selector: ".bucho-hidden-section",
+      headSelector: ".section-head, .bucho-caption, h1, h2, h3",
+      title: "Bucho"
+    },
+    {
+      key: "legendary-banner",
+      page: "comic",
+      selector: ".legendary-sunday-banner",
+      headSelector: ".section-head, .legendary-sunday-copy, h1, h2, h3",
+      title: "Banner de Lenda"
+    }
+  ];
+
   const style = document.createElement("style");
   style.textContent = [
     ".section-page-transfer-host{display:contents}",
@@ -207,7 +231,45 @@
       seenKeys.add(key);
       records.push({ key, root, head, title, page });
     }
+
+    // These three modules render custom headers instead of the usual
+    // .section-head, so they need explicit adapters.
+    for (const spec of SPECIAL_SECTIONS) {
+      if (spec.page !== page) continue;
+      const root = main.querySelector(spec.selector);
+      if (!root || root.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true']")
+        || seenRoots.has(root)) continue;
+
+      const preferredHead = spec.headSelector ? root.querySelector(spec.headSelector) : null;
+      const head = findActionHead(root, spec.key, preferredHead);
+      const title = spec.title || titleText(head) || titleText(root) || spec.key;
+      const record = { key: spec.key, root, head: head || root, title, page };
+      if (seenKeys.has(record.key)) {
+        const existingIndex = records.findIndex(item => item.key === record.key);
+        if (existingIndex >= 0) records.splice(existingIndex, 1);
+      }
+      records.push(record);
+      seenRoots.add(root);
+      seenKeys.add(record.key);
+    }
     return records;
+  }
+
+  function findActionHead(root, key, preferredHead = null) {
+    const transferButtons = Array.from(root.querySelectorAll("button[data-section-page-transfer-key]"));
+    const controlButtons = Array.from(root.querySelectorAll("button")).filter(button =>
+      !button.hasAttribute("data-section-page-transfer-key") && isSectionControl(button));
+    const controls = controlButtons.length ? controlButtons : transferButtons;
+    if (controls.length) {
+      const parent = controls[0].parentElement;
+      if (parent && controls.every(button => button.parentElement === parent)) return parent;
+      const nativeHead = root.matches(".section-head") ? root : root.querySelector(".section-head");
+      if (nativeHead && controls.every(button => nativeHead.contains(button))) return nativeHead;
+      return root;
+    }
+    const nativeHead = root.matches(".section-head") ? root : root.querySelector(".section-head");
+    if (nativeHead) return nativeHead;
+    return preferredHead || root;
   }
 
   function isSectionControl(button) {
@@ -246,8 +308,10 @@
   }
 
   function ensureTransferButton(record) {
-    const head = record.head;
-    const existing = head.querySelector('button[data-section-page-transfer-key="' + record.key + '"]');
+    const root = record.root;
+    const head = record.head || root;
+    const existing = root.querySelector('button[data-section-page-transfer-key="' + record.key + '"]')
+      || head.querySelector('button[data-section-page-transfer-key="' + record.key + '"]');
     if (existing) {
       existing.title = "Enviar “" + record.title + "” para " + pageLabel(otherPage(record.page));
       existing.setAttribute("aria-label", existing.title);
@@ -255,11 +319,13 @@
     }
 
     const controls = managedControls(head);
-    const button = makeTransferButton(record, record.page, controls[0] && controls[0].className);
+    const button = makeTransferButton(record, controls[0] && controls[0].className);
     const last = controls[controls.length - 1];
     if (last && last.parentElement && controls.every(item => item.parentElement === last.parentElement)) {
       last.insertAdjacentElement("afterend", button);
     } else {
+      // A custom section can lack the normal control row entirely. Keep the
+      // transfer action visible in the custom header rather than dropping it.
       head.appendChild(button);
     }
     return button;
@@ -270,19 +336,26 @@
     const clone = record.root.cloneNode(true);
     clone.setAttribute("data-section-page-transfer-clone", "true");
     clone.dataset.sectionPageTransferKey = record.key;
-    const cloneHead = clone.querySelector(".section-head");
-    if (cloneHead) {
-      const oldButtons = Array.from(cloneHead.querySelectorAll("button[data-section-page-transfer-key]"));
-      const oldControls = managedControls(cloneHead);
-      const reference = oldControls[0] || oldButtons[0];
-      const parent = reference?.parentElement || cloneHead;
-      const buttonClass = reference && reference.className;
-      oldButtons.forEach(button => button.remove());
-      oldControls.forEach(button => button.remove());
-      const button = makeTransferButton(record, otherPage(record.page), buttonClass);
-      if (parent && cloneHead.contains(parent)) parent.appendChild(button);
-      else cloneHead.appendChild(button);
+    const cloneHead = findActionHead(
+      clone,
+      record.key,
+      record.head && record.head.matches && record.head.matches(".section-head") ? clone.querySelector(".section-head") : null
+    ) || clone;
+    const oldButtons = Array.from(clone.querySelectorAll("button[data-section-page-transfer-key]"));
+    const oldControls = managedControls(cloneHead);
+    const reference = oldControls[0] || oldButtons[0];
+    const parent = reference && reference.parentElement;
+    const buttonClass = reference && reference.className;
+    oldButtons.forEach(button => button.remove());
+    oldControls.forEach(button => button.remove());
+    const cloneRecord = { ...record, root: clone, head: cloneHead, page: otherPage(record.page) };
+    const button = makeTransferButton(cloneRecord, buttonClass);
+    if (parent && cloneHead.contains(parent)) {
+      parent.appendChild(button);
+    } else {
+      cloneHead.appendChild(button);
     }
+
     sectionTemplates.set(record.key, clone);
     sectionOrigins.set(record.key, record.page);
     if (!templateOrder.includes(record.key)) templateOrder.push(record.key);
@@ -411,10 +484,13 @@
     const page = currentPage();
     if (page !== "home" && page !== "comic") return;
     const destination = otherPage(page);
-    const root = button.closest("[data-section-page-transfer-clone='true']")
+    const clonedRoot = button.closest("[data-section-page-transfer-clone='true']");
+    const registeredRecord = collectSections(page).find(record => record.key === key);
+    const specialRoot = button.closest(".global-recommendations-section, .bucho-hidden-section, .legendary-sunday-banner");
+    const root = clonedRoot || (registeredRecord && registeredRecord.root) || specialRoot
       || rootForHead(button.closest(".section-head") || button.parentElement);
-    const head = root && root.querySelector(".section-head");
-    const title = titleText(head) || SECTION_TITLES[key] || "Seção";
+    const head = (registeredRecord && registeredRecord.head) || findActionHead(root, key);
+    const title = (registeredRecord && registeredRecord.title) || titleText(head) || SECTION_TITLES[key] || "Seção";
 
     if (root && head && !sectionTemplates.has(key)) {
       const origin = root.closest(".section-page-transfer-host")?.dataset.sectionPage === "home"
