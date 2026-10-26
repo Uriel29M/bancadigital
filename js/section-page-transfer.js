@@ -289,8 +289,17 @@
   }
 
   function isSectionControl(button) {
-    const content = (button.textContent || "").replace(/\s+/g, " ").trim();
-    if (/[↑↓⊘]/.test(content)) return true;
+    if (!button) return false;
+    // Identifique controles pelo atributo administrativo, nunca só pelo ícone:
+    // o botão de download "↓" existe nos cards de usuários comuns.
+    if (button.matches([
+      "[data-home-section-move]",
+      "[data-home-section-visibility]",
+      "[data-comic-section-move]",
+      "[data-comic-section-visibility]",
+      "[data-shelf-section-move]",
+      "[data-shelf-category-move]"
+    ].join(", "))) return true;
     const label = normalize((button.getAttribute("aria-label") || "") + " " + (button.getAttribute("title") || ""));
     return /mover.*(para cima|para baixo)|subir secao|descer secao|ocultar secao|esconder secao/.test(label);
   }
@@ -335,12 +344,16 @@
   }
 
   function canManagePage() {
-    if (hasManagementControlsOnPage()) return true;
     const profile = window.BancaDigital && window.BancaDigital.state
       ? window.BancaDigital.state.profile : null;
-    const role = String(profile && (profile.plan || profile.role || profile.type) || "").toLowerCase();
-    return ["banca", "admin"].includes(role)
-      || Boolean(profile && (profile.isAdmin === true || profile.isBanca === true));
+    if (profile && typeof profile === "object") {
+      const role = String(profile.plan || profile.role || profile.type || "").trim().toLowerCase();
+      return ["banca", "admin"].includes(role)
+        || profile.isAdmin === true || profile.isBanca === true;
+    }
+    // Permite inicialização tardia de administradores apenas se controles
+    // administrativos explícitos estiverem renderizados; setas comuns não contam.
+    return hasManagementControlsOnPage();
   }
 
   function ensureTransferButton(record) {
@@ -348,6 +361,12 @@
     const head = record.head || root;
     const existing = root.querySelector('button[data-section-page-transfer-key="' + record.key + '"]')
       || head.querySelector('button[data-section-page-transfer-key="' + record.key + '"]');
+    const canManage = canManagePage();
+    if (!canManage) {
+      // Remove também controles órfãos se a sessão mudou para um usuário comum.
+      existing?.remove();
+      return null;
+    }
     if (existing) {
       existing.title = "Enviar “" + record.title + "” para " + pageLabel(otherPage(record.page));
       existing.setAttribute("aria-label", existing.title);
@@ -355,8 +374,7 @@
     }
 
     const controls = managedControls(head);
-    const canManage = canManagePage();
-    if (!controls.length && (!isSpecialTransferKey(record.key) || !canManage)) return null;
+    if (!controls.length && !isSpecialTransferKey(record.key)) return null;
 
     const button = makeTransferButton(record, controls[0] && controls[0].className);
     const last = controls[controls.length - 1];
