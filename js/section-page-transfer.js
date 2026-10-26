@@ -155,7 +155,7 @@
   function keyFromAttributes(root, head) {
     for (const node of [root, head]) {
       if (!node || !node.dataset) continue;
-      const value = node.dataset.homeSectionKey || node.dataset.sectionKey || node.dataset.sectionId;
+      const value = node.dataset.homeSectionKey;
       if (value && KEY_RE.test(value)) return value;
     }
     return "";
@@ -337,11 +337,10 @@
     return new Promise(resolve => window.requestAnimationFrame(() => resolve()));
   }
 
-  async function waitForSections(maxFrames = 90) {
+  async function waitForSections(expectedPage, maxFrames = 90) {
     for (let attempt = 0; attempt < maxFrames; attempt++) {
       await nextFrame();
-      const page = currentPage();
-      if (page && collectSections(page).length) return true;
+      if (currentPage() === expectedPage && collectSections(expectedPage).length) return true;
     }
     return false;
   }
@@ -361,14 +360,44 @@
         if (!sectionTemplates.has(record.key)) cacheTemplate(record);
       });
       homeButton.click();
-      if (!await waitForSections()) return false;
+      if (!await waitForSections("home")) return false;
       const records = collectSections("home");
-      records.forEach(cacheTemplate);
+      records.forEach(record => {
+        ensureTransferButton(record);
+        cacheTemplate(record);
+      });
       templateOrder = records.map(record => record.key).concat(templateOrder.filter(key => !records.some(record => record.key === key)));
       comicButton.click();
-      await waitForSections();
+      await waitForSections("comic");
     } catch (error) {
       console.warn("[Banca] Não foi possível preparar seções transferidas.", error);
+      return false;
+    } finally {
+      bootstrapping = false;
+    }
+    return true;
+  }
+
+  async function bootstrapComicSectionsOnHome() {
+    const homeButton = document.querySelector('.topbar [data-section="home"]');
+    const comicButton = document.querySelector('.topbar [data-section="comics"]');
+    if (!homeButton || !comicButton || currentPage() !== "home") return false;
+
+    bootstrapping = true;
+    try {
+      comicButton.click();
+      if (!await waitForSections("comic")) return false;
+      const records = collectSections("comic");
+      records.forEach(record => {
+        ensureTransferButton(record);
+        cacheTemplate(record);
+      });
+      templateOrder = templateOrder.filter(key => !records.some(record => record.key === key))
+        .concat(records.map(record => record.key));
+      homeButton.click();
+      await waitForSections("home");
+    } catch (error) {
+      console.warn("[Banca] Não foi possível recuperar seções transferidas para Inicial.", error);
       return false;
     } finally {
       bootstrapping = false;
@@ -447,6 +476,9 @@
       const nativeSections = collectSections("comic");
       const hasMovedSections = Object.keys(sectionPages).length > 0;
       if (!nativeSections.length || hasMovedSections) await bootstrapFromHome();
+    } else if (currentPage() === "home" && Object.entries(sectionPages)
+      .some(([key, destination]) => key.startsWith("comic-") && destination === "home")) {
+      await bootstrapComicSectionsOnHome();
     }
     sync();
 
