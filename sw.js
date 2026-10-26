@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v767-independent-home-rails";
+const CACHE_VERSION = "banca-digital-shell-v768-section-page-transfer";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.276-reader-grid-center",
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "./js/series-default-covers.js?v=1",
   "./js/data/loading-tips.js?v=1.0.0", "./js/supabase.js",
   "./js/series-more.js?v=2-edition-about",
+  "./js/section-page-transfer.js?v=1",
   "./assets/bucho/ocultas.png",
   "./assets/barracavermelhaicon.png?v=2",
   "./assets/barracabrancaicon.png?v=1", "./assets/semfoto.jpg?v=1",
