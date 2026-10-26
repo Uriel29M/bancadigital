@@ -70,19 +70,17 @@ self.addEventListener("fetch", event => {
   const isCatalogData = url.pathname.endsWith("/js/data.js") || url.pathname.includes("/js/data/");
   const isAppJavascript = url.pathname.includes("/js/") && url.pathname.endsWith(".js");
   if (isAppJavascript || url.pathname.endsWith("/css/style.css") || isCatalogData) {
+    const refresh = fetch(request, { cache: "no-store" }).then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const copy = response.clone();
+      return caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).then(() => response);
+    });
+    // Registra a atualização enquanto o evento fetch ainda está ativo.
+    event.waitUntil(refresh.then(() => {}, () => {}));
     event.respondWith((async () => {
       const cached = await caches.match(request)
         || await caches.match(request, { ignoreSearch: true });
-      const refresh = fetch(request, { cache: "no-store" }).then(response => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const copy = response.clone();
-        return caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).then(() => response);
-      });
-      if (cached) {
-        // Devolve o arquivo guardado imediatamente; a rede só atualiza o cache em segundo plano.
-        event.waitUntil(refresh.catch(() => {}));
-        return cached;
-      }
+      if (cached) return cached;
       try {
         return await refresh;
       } catch {
