@@ -240,8 +240,19 @@
     for (const spec of SPECIAL_SECTIONS) {
       if (spec.page !== page) continue;
       const root = main.querySelector(spec.selector);
-      if (!root || root.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true']")
-        || seenRoots.has(root)) continue;
+      if (!root || root.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true']")) continue;
+
+      // Some custom sections are wrapped by a generic section with its own
+      // header. Prefer the precise widget root so we don't create a duplicate
+      // button or accidentally move the whole surrounding page group.
+      for (let recordIndex = records.length - 1; recordIndex >= 0; recordIndex--) {
+        const record = records[recordIndex];
+        if (record.root === root || record.root.contains(root) || root.contains(record.root)) {
+          seenRoots.delete(record.root);
+          seenKeys.delete(record.key);
+          records.splice(recordIndex, 1);
+        }
+      }
 
       const preferredHead = spec.headSelector ? root.querySelector(spec.headSelector) : null;
       const head = findActionHead(root, spec.key, preferredHead);
