@@ -35,7 +35,7 @@
         window.location.reload();
       });
       // Registra cedo: esperar o evento load pode deixar a aba sem controle se a conexão cair durante o carregamento.
-      navigator.serviceWorker.register("./sw.js?v=364-telegram-migration-fix", { updateViaCache: "none" })
+      navigator.serviceWorker.register("./sw.js?v=365-section-page-transfer-role", { updateViaCache: "none" })
         .then(registration => registration.update())
         .catch(error => console.warn("Modo offline indisponível:", error));
     }
@@ -130,7 +130,7 @@
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
     <script src="js/app.js?v=2.2.10.623-telegram-migration-error-detail"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
-  <script src="js/section-page-transfer.js?v=7"></script>
+  <script src="js/section-page-transfer.js?v=8-strict-role"></script>
   <script>
     // Repara bloqueios órfãos de modal e oferece navegação de contingência
     // caso o app principal falhe ao registrar algum listener de clique.
