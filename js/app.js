@@ -11304,6 +11304,7 @@
   }
 
   function renderSearch() {
+    const isPrimarySearch = state.section === "search-home";
     const q = state.search.trim().toLowerCase();
     const matchingEditions = uniqueCatalogItems(visibleCatalogItems().filter(x => {
       const hay = [x.title,x.seriesTitle,x.issue,x.author,x.publisher,x.imprint,x.character,x.description,...(x.tags||[])].join(" ").toLowerCase();
@@ -11415,10 +11416,10 @@
     return `
       <div class="content">
         <div class="section">
-          <h1 class="section-title">Pesquisar</h1>
+          <h1 class="section-title">${isPrimarySearch ? "Busca" : "Pesquisar"}</h1>
           <div class="search-wrap">
             <input id="search-input" class="search-input" value="${escapeHTML(state.search)}" placeholder="Título, autor, personagem, gênero, edição…">
-            <button class="btn btn-danger" data-action="do-search">Pesquisar</button>
+            <button class="btn btn-danger" data-action="do-search">${isPrimarySearch ? "Buscar" : "Pesquisar"}</button>
           </div>
           <div class="section-subtitle">${results.length} resultado(s)</div>
           <div style="margin-top:15px">${publisherMarkup || `<div class="empty">Nada encontrado.</div>`}</div>
@@ -11464,7 +11465,7 @@
     } finally {
       if (request === state.searchCollectionsRequest) {
         state.searchCollectionsLoading = false;
-        if (state.section === "search") render();
+        if (["search", "search-home"].includes(state.section)) render();
       }
     }
   }
@@ -11476,10 +11477,10 @@
     state.searchUsers = [];
     state.searchUsersLoading = Boolean(normalizedQuery && sb && navigator.onLine !== false);
     if (!state.searchUsersLoading) {
-      if (state.section === "search") render();
+      if (["search", "search-home"].includes(state.section)) render();
       return;
     }
-    if (state.section === "search") render();
+    if (["search", "search-home"].includes(state.section)) render();
     const escapedQuery = normalizedQuery.replace(/[\\%_]/g, "\\$&");
     const result = await sb.from("profiles_public")
       .select("id, username, avatar_url, title, title_color, faction_id, profile_hidden, is_banned")
@@ -11487,7 +11488,7 @@
       .eq("profile_hidden", false)
       .neq("is_banned", true)
       .limit(24);
-    if (state.searchUsersQuery !== normalizedQuery || state.section !== "search") return;
+    if (state.searchUsersQuery !== normalizedQuery || !["search", "search-home"].includes(state.section)) return;
     state.searchUsersLoading = false;
     if (result.error) {
       console.warn("Não foi possível pesquisar usuários:", result.error.message);
@@ -13038,7 +13039,7 @@
     else if (state.section === "manga") markup = renderCatalog("manga");
     else if (state.section === "collections") markup = renderCollections();
     else if (state.section === "collection") markup = renderCollectionPage();
-    else if (state.section === "search-home") markup = renderSearchLanding();
+    else if (state.section === "search-home") markup = state.search.trim() ? renderSearch() : renderSearchLanding();
     else if (state.section === "search") markup = renderSearch();
     else if (state.section === "entity") markup = renderEntityPage();
     else if (state.section === "login") markup = renderLoginPage();
@@ -14872,7 +14873,17 @@
       if (a === "home") setSection("home");
       if (a === "random") openRandomCatalogItem();
       if (a === "focus-search") { setSection("search-home"); setTimeout(() => $("#search-input")?.focus(), 30); }
-      if (a === "do-search") { state.search = $("#search-input")?.value || ""; navigate({ pagina: "pesquisar", q: state.search }); }
+      if (a === "do-search") {
+        state.search = $("#search-input")?.value || "";
+        if (state.section === "search-home") {
+          const query = state.search.trim();
+          if (!query) { navigate({ pagina: "busca" }); return; }
+          navigate({ pagina: "busca", q: query });
+          loadSearchUsers(query);
+        } else {
+          navigate({ pagina: "pesquisar", q: state.search });
+        }
+      }
       if (a === "open-admin") { if (isAdminProfile()) openAdmin(); }
       if (a === "open-auth") { if (!PROFILE_SITE_MODE) window.location.assign(`${PROFILE_SITE_BASE}?pagina=entrar`); else state.session ? openOwnPublicProfile() : openAuthPage(); }
       if (a === "open-profile-page") {
@@ -15197,8 +15208,7 @@
       if (e.key !== "Enter") return;
       if (state.section === "search-home") {
         e.preventDefault();
-        state.search = e.target.value || "";
-        navigate({ pagina: "pesquisar", q: state.search });
+        document.querySelector('[data-action="do-search"]')?.click();
         return;
       }
       state.search = e.target.value;
@@ -16255,7 +16265,14 @@
         window.setTimeout(() => $("#search-input")?.focus(), 30);
       } else if (action === "do-search") {
         state.search = $("#search-input")?.value || "";
-        navigate({ pagina: "pesquisar", q: state.search });
+        if (state.section === "search-home") {
+          const query = state.search.trim();
+          if (!query) { navigate({ pagina: "busca" }); return; }
+          navigate({ pagina: "busca", q: query });
+          loadSearchUsers(query);
+        } else {
+          navigate({ pagina: "pesquisar", q: state.search });
+        }
       } else if (action === "open-admin") {
         if (isAdminProfile()) openAdmin();
       } else if (action === "open-auth") {
