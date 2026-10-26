@@ -234,7 +234,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .topbar > .brand, .topbar .nav-link, .topbar .top-actions > button { transition: opacity .16s ease, color .16s ease, background .16s ease; }
 .topbar.is-offline { pointer-events: none; }
 .topbar.is-offline > .brand, .topbar.is-offline .nav-link, .topbar.is-offline .top-actions > button { opacity: .42; }
-.topbar.is-offline .top-actions > .downloads-header-btn { pointer-events: auto; opacity: 1; }
+.topbar.is-offline .top-actions > .downloads-header-btn,
+.topbar.is-offline .top-actions > [data-action="focus-search"] { pointer-events: auto; opacity: 1; }
 .main-nav { display: flex; gap: 6px; align-items: center; flex: 1; }
 .nav-link {
   color: #c6c6cc;
