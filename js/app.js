@@ -989,7 +989,11 @@
       let changed = false;
       for (const entry of state.downloads.values()) {
         if (!entry.url) continue;
-        const cached = await cache.match(downloadCacheKey(entry.url));
+        let cached = null;
+        for (const cacheKey of downloadCacheKeys(entry.url)) {
+          cached = await cache.match(cacheKey);
+          if (cached) break;
+        }
         if (cached && entry.status !== "completed") {
           entry.status = "completed";
           entry.preparing = false;
@@ -1100,12 +1104,25 @@
     const proxy = proxiedFileUrl(url);
     let version = 240;
     try {
-      // This edition's Telegram archive was unavailable during prior attempts;
-      // force a fresh local Cache API entry after the server-side recovery.
+      // Esta edição recebeu uma versão própria após a recuperação da fonte.
+      // O fallback abaixo preserva os downloads salvos com a chave antiga.
       const parsed = new URL(proxy, location.origin);
       if (parsed.searchParams.get("item_id") === "series-all-star-western-2011-novos-52-033") version = 241;
     } catch {}
     return `${proxy}${proxy.includes("?") ? "&" : "?"}v=${version}`;
+  }
+  function downloadCacheKeys(url) {
+    const source = String(url || "").trim();
+    const proxy = proxiedFileUrl(source);
+    const keys = [downloadCacheKey(source)];
+    for (const value of [proxy, source]) {
+      if (!value) continue;
+      keys.push(value);
+      for (const version of [240, 241]) {
+        keys.push(`${value}${value.includes("?") ? "&" : "?"}v=${version}`);
+      }
+    }
+    return [...new Set(keys.filter(Boolean))];
   }
   async function downloadCoverDataUrl(item) {
     const selectedChoice = state.coverChoices?.get?.(item?.id) || state.coverChoices?.get?.(String(item?.id));
@@ -1144,7 +1161,11 @@
     const entry = downloaded(item.id);
     if (!entry || entry.status !== "completed") return;
     try {
-      const buffer = await readReaderFileCache(downloadCacheKey(entry.url), () => {});
+      let buffer = null;
+      for (const cacheKey of downloadCacheKeys(entry.url)) {
+        buffer = await readReaderFileCache(cacheKey, () => {});
+        if (buffer) break;
+      }
       if (!buffer) throw new Error("Arquivo offline ausente.");
       const objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
       openReader({ ...item, fileUrl: objectUrl, local: true, ...(entry.telegramPagesArchive ? { format: "cbz" } : {}) }, { localObjectUrl: objectUrl });
@@ -1926,8 +1947,15 @@
       delete params.catalogo;
       delete params.membros;
     }
-    const offlineNavigation = navigator.onLine === false && activateOfflineMode();
-    if (offlineNavigation) params = { pagina: "downloads" };
+    if (navigator.onLine === false) activateOfflineMode();
+    const offlineNavigation = navigator.onLine === false || Boolean(state.session?.offline);
+    if (offlineNavigation) {
+      const requestedPage = String(params?.pagina || "").toLowerCase();
+      const requestedReaderId = params?.ler || params?.edicao || params?.id;
+      const requestedDownloadedReader = requestedReaderId && downloaded(requestedReaderId)?.status === "completed";
+      const offlineAllowedPage = ["downloads", "busca", "pesquisar"].includes(requestedPage);
+      if (!offlineAllowedPage && !requestedDownloadedReader) params = { pagina: "downloads" };
+    }
     const url = routeUrl(params);
     const currentUrl = `${window.location.pathname}${window.location.search}`;
     if (currentUrl === url) {
@@ -6598,7 +6626,7 @@
       return;
     }
 
-    if (!telegramPagesMode && !options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && sb) {
+    if (!telegramPagesMode && !options.telegramResolved && !item.local && isTelegramPostUrl(item.telegramUrl) && navigator.onLine !== false && !state.session?.offline && sb) {
       if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
       void window.BancaTelegram.published(item, sb).then(canonical => {
         if (!canonical.telegramFileId && !canonical.fileUrl) {
@@ -6615,6 +6643,17 @@
       return;
     }
     if (!item) return;
+    const offlineReaderRequested = navigator.onLine === false || Boolean(state.session?.offline);
+    if (!item.local && offlineReaderRequested) {
+      if (navigator.onLine === false) activateOfflineMode();
+      if (downloaded(item.id)?.status === "completed") {
+        void openDownloaded(item);
+        return;
+      }
+      toast("Esta edição não está disponível offline. Abra Downloads para ver os quadrinhos já baixados.");
+      setSection("downloads");
+      return;
+    }
     if (readerIsOpen && activeReaderCleanup && String(state.readerItemId || "") === String(item.id || "") && document.querySelector(".reader-overlay")) return;
     if (!canViewCatalogItem(item)) {
       toast("Esta edição está indisponível.");
@@ -6627,14 +6666,6 @@
     const sourceUrl = telegramPagesMode ? window.BancaTelegramPages?.imageUrl(item.id, 1) : downloadSource(item);
     if (isExternalArchiveLink(sourceUrl)) {
       window.open(sourceUrl, "_blank", "noopener");
-      return;
-    }
-
-    if (!item.local && navigator.onLine === false) {
-      activateOfflineMode();
-      if (downloaded(item.id)?.status === "completed") return openDownloaded(item);
-      toast("Este quadrinho não está disponível offline. Abra a área de Downloads para ver os quadrinhos baixados.");
-      setSection("downloads");
       return;
     }
 
@@ -7788,7 +7819,7 @@
         return fresh.toString();
       } catch { return proxyUrl; }
     })() : proxyUrl;
-    const cacheKey = `${requestUrl}${requestUrl.includes("?") ? "&" : "?"}v=240`;
+    const cacheKey = forceFresh ? `${requestUrl}${requestUrl.includes("?") ? "&" : "?"}v=240` : downloadCacheKey(source);
     const cached = forceFresh ? null : await readReaderFileCache(cacheKey, onProgress);
     if (cached) { onComplete(); return cached; }
 
@@ -11326,13 +11357,15 @@
 
   function renderSearch() {
     const isPrimarySearch = state.section === "search-home";
+    const offlineSearch = navigator.onLine === false || Boolean(state.session?.offline);
+    const searchableItems = visibleCatalogItems().filter(item => !offlineSearch || downloaded(item.id)?.status === "completed");
     const q = state.search.trim().toLowerCase();
-    const matchingEditions = uniqueCatalogItems(visibleCatalogItems().filter(x => {
+    const matchingEditions = uniqueCatalogItems(searchableItems.filter(x => {
       const hay = [x.title,x.seriesTitle,x.issue,x.author,x.publisher,x.imprint,x.character,x.description,...(x.tags||[])].join(" ").toLowerCase();
       return !q || hay.includes(q);
     }));
     const seenSeries = new Set();
-    const results = matchingEditions.filter(item => {
+    const results = offlineSearch ? matchingEditions : matchingEditions.filter(item => {
       if (!item.seriesId) return true;
       if (seenSeries.has(item.seriesId)) return false;
       seenSeries.add(item.seriesId);
@@ -11364,14 +11397,14 @@
             ${initialOrder.filter(initial => initials.has(initial)).map(initial => `
               <section class="search-initial">
                 <div class="search-initial-head"><h4 class="search-initial-title">${initial}</h4><button type="button" class="small-btn search-collapse-btn" data-search-collapse>Recolher</button></div>
-                <div data-search-collapse-content><div class="results-grid">${initials.get(initial).sort((a, b) => (a.seriesTitle || a.title).localeCompare(b.seriesTitle || b.title, "pt-BR")).map(item => item.seriesId ? seriesCard(item) : card(item)).join("")}</div></div>
+                <div data-search-collapse-content><div class="results-grid">${initials.get(initial).sort((a, b) => (a.seriesTitle || a.title).localeCompare(b.seriesTitle || b.title, "pt-BR")).map(item => offlineSearch ? card(item, state.readingProgress, state.favoriteIds, true) : item.seriesId ? seriesCard(item) : card(item)).join("")}</div></div>
               </section>`).join("")}
             </div>
           </section>`).join("")}
         </div>
       </section>`).join("");
     const userQuery = state.searchUsersQuery || state.search.trim();
-    const userResultsMarkup = !userQuery
+    const userResultsMarkup = offlineSearch || !userQuery
       ? ""
       : `<section class="section search-users-section">
           <div class="section-head"><div><h2 class="section-title">Usuários</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(userQuery)}”</div></div></div>
@@ -11383,11 +11416,11 @@
                 return `<a class="search-user-card" href="${escapeHTML(publicProfileHref(profile.username))}">${avatarMarkup(profile, "search-user-avatar")}<span class="search-user-copy"><strong>${factionDot(profile)}@${escapeHTML(profile.username)}</strong>${title}<small>Ver perfil</small></span></a>`;
               }).join("") || '<div class="empty">Nenhum usuário encontrado.</div>'}</div>`}
         </section>`;
-    const matchingImprints = [...new Set(visibleCatalogItems()
+    const matchingImprints = offlineSearch ? [] : [...new Set(searchableItems
       .map(item => String(item.imprint || "").trim())
       .filter(imprint => imprint && imprint.toLocaleLowerCase("pt-BR").includes(q)))];
     const imprintCards = matchingImprints.map(imprint => {
-      const imprintItems = visibleCatalogItems().filter(item => String(item.imprint || "").trim() === imprint);
+      const imprintItems = searchableItems.filter(item => String(item.imprint || "").trim() === imprint);
       const setting = state.imprintSettings.get(publisherKey(imprint));
       const representative = imprintItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || imprintItems[0];
       const cover = setting?.cover_url || (representative ? coverFor(representative) : "assets/batmanicon.jpg");
@@ -11396,11 +11429,11 @@
     const imprintResultsMarkup = q && imprintCards
       ? `<section class="section search-imprints-section imprint-carousel-section"><div class="section-head"><div><h2 class="section-title">Selos</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div><div class="carousel-controls" aria-label="Navegação dos selos encontrados"><button class="carousel-control" type="button" data-imprint-carousel-prev aria-label="Selo anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-imprint-carousel-next aria-label="Próximo selo" title="Próximo">›</button></div></div><div class="imprint-carousel" data-imprint-carousel aria-label="Selos encontrados"><div class="imprint-carousel-track">${imprintCards}</div></div></section>`
       : "";
-    const matchingPublishers = [...new Set(visibleCatalogItems()
+    const matchingPublishers = offlineSearch ? [] : [...new Set(searchableItems
       .map(item => String(item.publisher || "").trim())
       .filter(publisher => publisher && publisher.toLocaleLowerCase("pt-BR").includes(q)))];
     const publisherCards = matchingPublishers.map(publisher => {
-      const publisherItems = visibleCatalogItems().filter(item => String(item.publisher || "").trim() === publisher);
+      const publisherItems = searchableItems.filter(item => String(item.publisher || "").trim() === publisher);
       const setting = state.publisherSettings.get(publisherKey(publisher));
       const representative = publisherItems.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || publisherItems[0];
       const cover = setting?.cover_url || (representative ? coverFor(representative) : "assets/batmanicon.jpg");
@@ -11409,7 +11442,7 @@
     const publisherResultsMarkup = q && publisherCards
       ? `<section class="section search-publishers-section publisher-carousel-section"><div class="section-head"><div><h2 class="section-title">Editoras</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div><div class="carousel-controls" aria-label="Navegação das editoras encontradas"><button class="carousel-control" type="button" data-publishers-carousel-prev aria-label="Editora anterior" title="Anterior">‹</button><button class="carousel-control" type="button" data-publishers-carousel-next aria-label="Próxima editora" title="Próximo">›</button></div></div><div class="publisher-carousel" data-publishers-carousel aria-label="Editoras encontradas">${publisherCards}</div></section>`
       : "";
-    const characterEntries = visibleCatalogItems().flatMap(item => characterNames(item)
+    const characterEntries = offlineSearch ? [] : searchableItems.flatMap(item => characterNames(item)
       .map(character => character.trim())
       .filter(character => character && !isTeamCharacter(character) && !isRedirectedCharacter(character))
       .map(character => ({ character, item })));
@@ -11426,14 +11459,14 @@
     const characterResultsMarkup = q && characterCards
       ? `<section class="section search-characters-section"><div class="section-head"><div><h2 class="section-title">Personagens</h2><div class="section-subtitle">Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”</div></div></div><div class="publisher-carousel" aria-label="Personagens encontrados">${characterCards}</div></section>`
       : "";
-    const collectionCards = state.db.collections
+    const collectionCards = (offlineSearch ? [] : state.db.collections)
       .filter(collection => !q || String(collection.title || "").toLocaleLowerCase("pt-BR").includes(q))
       .sort((a, b) => String(a.title).localeCompare(String(b.title), "pt-BR"))
       .map(collection => `<button class="publisher-card" type="button" data-collection="${escapeHTML(collection.id)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(proxiedImageUrl(collection.cover || ""))}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(collection.title)}</strong><span>${(collection.issueIds || []).length} edição(ões)</span></div></button>`).join("");
-    const publicCollectionCards = (state.searchCollections || []).map(collection => publicCollectionCard(collection)).join("");
+    const publicCollectionCards = (offlineSearch ? [] : state.searchCollections || []).map(collection => publicCollectionCard(collection)).join("");
     const collectionStatus = state.searchCollectionsLoading ? "Pesquisando coleções..." : state.searchCollectionsError ? "Não foi possível pesquisar as coleções públicas. Tente novamente." : "Nenhuma coleção encontrada.";
     const collectionResultsBody = `${collectionCards ? `<div class="publisher-carousel" aria-label="Coleções encontradas">${collectionCards}</div>` : ""}${publicCollectionCards ? `<div class="public-collections-grid">${publicCollectionCards}</div>` : ""}${state.searchCollectionsLoading || state.searchCollectionsError || (!collectionCards && !publicCollectionCards) ? `<div class="empty">${collectionStatus}</div>` : ""}`;
-    const collectionResultsMarkup = `<section class="section search-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções</h2><div class="section-subtitle">${q ? `Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”` : "Explore as coleções públicas dos usuários."}</div></div></div>${collectionResultsBody}</section>`;
+    const collectionResultsMarkup = offlineSearch ? "" : `<section class="section search-collections-section"><div class="section-head"><div><h2 class="section-title">Coleções</h2><div class="section-subtitle">${q ? `Nomes iguais ou parecidos com “${escapeHTML(state.search.trim())}”` : "Explore as coleções públicas dos usuários."}</div></div></div>${collectionResultsBody}</section>`;
     return `
       <div class="content">
         <div class="section">
