@@ -3346,7 +3346,7 @@
           await markChatNotificationsRead(payload.new.actor_id);
         }
         await loadNotifications();
-        $('[data-chat-room]').forEach(button => {
+        $$('[data-chat-room]').forEach(button => {
           const unread = state.chatRoomUnreadCounts?.[button.dataset.chatRoom] || 0;
           let badge = $(".message-badge", button);
           if (unread) {
@@ -3361,7 +3361,7 @@
             badge?.remove();
           }
         });
-        $('[data-private-chat-user]').forEach(button => {
+        $$('[data-private-chat-user]').forEach(button => {
           const unread = state.chatPrivateUnreadCounts?.[String(button.dataset.privateChatUser)] || 0;
           let badge = $(".message-badge", button);
           if (unread) {
