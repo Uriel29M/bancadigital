@@ -2134,7 +2134,7 @@
   }
 
   const HOME_SECTION_ORDER = [
-    "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "best-series",
+    "recommendations", "character-banner", "continue", "recent", "new-series", "monthly", "pinned-publishers", "pinned-imprints", "pinned-characters", "best-series",
     "featured-collections", "random", "tips", "artist", "random-publisher", "downloads", "most-read-covers", "bucho-hidden", "editorial-banner"
   ];
 
@@ -2144,7 +2144,13 @@
     if (!unique.includes("bucho-hidden") && unique.includes("most-read-covers")) {
       unique.splice(unique.indexOf("most-read-covers") + 1, 0, "bucho-hidden");
     }
-    return [...unique, ...HOME_SECTION_ORDER.filter(key => !unique.includes(key))];
+    const normalized = [...unique];
+    const missingPinnedSections = ["pinned-imprints", "pinned-characters"].filter(key => !normalized.includes(key));
+    const pinnedPublishersIndex = normalized.indexOf("pinned-publishers");
+    if (pinnedPublishersIndex >= 0 && missingPinnedSections.length) {
+      normalized.splice(pinnedPublishersIndex + 1, 0, ...missingPinnedSections);
+    }
+    return [...normalized, ...HOME_SECTION_ORDER.filter(key => !normalized.includes(key))];
   }
 
   async function loadHomepageSettings() {
@@ -8823,7 +8829,6 @@
     }));
     const pinnedCharacters = [...characterEntries.values()].filter(entry => state.characterSettings.get(publisherKey(entry.name))?.is_pinned);
     const characterPinnedRail = pinnedCharacters.length ? `<section class="section character-pinned-section"><div class="section-head"><div><h2 class="section-title">Personagens em destaque</h2><div class="section-subtitle">Acesso rápido aos personagens em destaque.</div></div></div><div class="publisher-carousel">${pinnedCharacters.map(({ name, items }) => { const setting = state.characterSettings.get(publisherKey(name)); const representative = items.find(item => item.featuredCoverUrl || item.coverUrl || item.cover) || items[0]; const cover = setting?.cover_url || coverFor(representative); return `<button class="publisher-card character-card is-pinned" type="button" data-character="${escapeHTML(name)}"><div class="publisher-card-cover" style="background-image:url('${escapeHTML(cover)}')"></div><div class="publisher-card-overlay"></div><div class="publisher-card-info"><strong>${escapeHTML(name)}</strong><span>${items.length} edição(ões)</span></div></button>`; }).join("")}</div></section>` : "";
-    const pinnedEntityRails = `${publisherPinnedRail}${imprintPinnedRail}${characterPinnedRail}`;
 
     const homeSections = {
       recommendations: globalRecommendationsSection(lib),
@@ -8832,7 +8837,9 @@
       recent: rail("Adicionados recentemente", recentlyAdded, "As últimas edições adicionadas ao catálogo.", "", true, false),
       "new-series": recentlyAddedSeriesRail,
       monthly: rail("Mais lidos do mês", mostClicked, "As edições que mais receberam cliques neste mês.", "Ver catálogo", true),
-      "pinned-publishers": pinnedEntityRails,
+      "pinned-publishers": publisherPinnedRail,
+      "pinned-imprints": imprintPinnedRail,
+      "pinned-characters": characterPinnedRail,
       "best-series": bestSeriesRail,
       "featured-collections": featuredCollectionsRail,
       random: rail("Escolha aleatória", randoms, "Como escolher uma revista numa banca: você nunca sabe o que vai encontrar.", "", true, true, "random-choice-section"),
