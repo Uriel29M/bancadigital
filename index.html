@@ -28,17 +28,16 @@
       const initialControllerUrl = navigator.serviceWorker.controller?.scriptURL || "";
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         const nextControllerUrl = navigator.serviceWorker.controller?.scriptURL || "";
-        if (!initialControllerUrl || !nextControllerUrl || nextControllerUrl === initialControllerUrl) return;
+        if (!nextControllerUrl || nextControllerUrl === initialControllerUrl) return;
         const reloadKey = "bancaDigitalReloadedServiceWorker";
         if (sessionStorage.getItem(reloadKey) === nextControllerUrl) return;
         sessionStorage.setItem(reloadKey, nextControllerUrl);
         window.location.reload();
       });
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=349-offline-search-downloads", { updateViaCache: "none" })
-          .then(registration => registration.update())
-          .catch(error => console.warn("Modo offline indisponível:", error));
-      });
+      // Registra cedo: esperar o evento load pode deixar a aba sem controle se a conexão cair durante o carregamento.
+      navigator.serviceWorker.register("./sw.js?v=350-offline-startup", { updateViaCache: "none" })
+        .then(registration => registration.update())
+        .catch(error => console.warn("Modo offline indisponível:", error));
     }
   </script>
 </head>
