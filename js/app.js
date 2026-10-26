@@ -9894,7 +9894,7 @@
   let chatFeaturePromise = null;
   function loadChatFeature() {
     if (!chatFeaturePromise) {
-      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=10-moderation-history-modal"))
+      chatFeaturePromise = import(appAssetUrl("js/chat-feature.js?v=11-instant-open"))
         .then(module => module.createChatFeature({
           $,
           $$,
