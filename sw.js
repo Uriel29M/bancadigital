@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v751-remove-ranking-random";
+const CACHE_VERSION = "banca-digital-shell-v752-remove-monitoring-button";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.274-obtain-tray-icon",
