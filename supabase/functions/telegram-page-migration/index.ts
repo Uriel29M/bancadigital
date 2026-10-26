@@ -167,7 +167,23 @@ async function handle(request: Request) {
     const multipart = contentType.toLowerCase().includes("multipart/form-data");
     const body: any = multipart ? await request.formData() : await request.json();
     const get = (key: string) => multipart ? body.get(key) : body[key];
-    action = String(get("action") || "");
+    const suppliedAction = String(get("action") || "");
+    action = suppliedAction.trim().toLowerCase();
+    // FormData can be normalized differently across browsers/edge runtimes.
+    // Only infer "upload" when the complete, unique page-upload shape is present.
+    const requestedFile = get("file");
+    const looksLikePageUpload = multipart
+      && Boolean(requestedFile)
+      && get("page_number") !== null
+      && get("page_count") !== null
+      && String(get("item_id") || "").trim() !== "";
+    if (!["register", "resolve-source", "begin", "upload", "complete"].includes(action) && looksLikePageUpload) {
+      console.warn("[telegram-page-migration] ação multipart normalizada como upload", {
+        suppliedAction, contentType, hasFile: Boolean(requestedFile),
+        pageNumber: String(get("page_number") || ""),
+      });
+      action = "upload";
+    }
     itemId = validItemId(get("item_id"));
     const baseEditionRaw = get("edition");
     let baseEdition: unknown = baseEditionRaw;
@@ -313,6 +329,11 @@ async function handle(request: Request) {
     else if (action === "upload") console.warn("[telegram-page-migration] upload recusado", {
       itemId, status, message: error instanceof Error ? error.message : String(error), ...uploadDiagnostic,
     });
+    else if (String(error instanceof Error ? error.message : error).includes("Ação de migração desconhecida")) {
+      console.warn("[telegram-page-migration] ação desconhecida", {
+        itemId, action, contentType: request.headers.get("content-type") || "",
+      });
+    }
     return json({
       error: error instanceof Error ? error.message : "Falha na migração para o Telegram.",
       ...(retryAfter ? { retry_after: retryAfter } : {}),
