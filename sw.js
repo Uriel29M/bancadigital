@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v750-character-image-fallback";
+const CACHE_VERSION = "banca-digital-shell-v751-remove-ranking-random";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.274-obtain-tray-icon",
