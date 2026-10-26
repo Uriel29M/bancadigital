@@ -35,7 +35,7 @@
         window.location.reload();
       });
       // Registra cedo: esperar o evento load pode deixar a aba sem controle se a conexão cair durante o carregamento.
-      navigator.serviceWorker.register("./sw.js?v=362-live-section-adaptation", { updateViaCache: "none" })
+      navigator.serviceWorker.register("./sw.js?v=363-telegram-batch-progress", { updateViaCache: "none" })
         .then(registration => registration.update())
         .catch(error => console.warn("Modo offline indisponível:", error));
     }
@@ -111,7 +111,7 @@
   <script src="js/supabase.js"></script>
   <script src="js/catalog-sync.js?v=7-telegram-cover"></script>
   <script src="js/telegram-auto.js?v=6-telegram-cover"></script>
-  <script src="js/telegram-pages.js?v=8-telegram-cover-source"></script>
+  <script src="js/telegram-pages.js?v=9-batch-edition-progress"></script>
   <script src="js/series-default-covers.js?v=1"></script>
   <script src="js/telegram-covers.js?v=2"></script>
   <script src="js/data.js?v=2.2.7.39"></script>
