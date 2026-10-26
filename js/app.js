@@ -9947,6 +9947,26 @@
     return (await loadChatFeature()).openChatRoom(...args);
   }
 
+  // Tratamento prioritário para Mensagens: mantém o clique funcional mesmo
+  // se algum vínculo de navegação falhar e expõe erros do carregamento do chat.
+  let messagesLaunchPending = false;
+  document.addEventListener("click", event => {
+    const target = event.target instanceof Element ? event.target : null;
+    const trigger = target?.closest('.messages-header-btn, [data-mobile-action="messages"]');
+    if (!trigger) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (messagesLaunchPending) return;
+    messagesLaunchPending = true;
+    Promise.resolve()
+      .then(() => openChat())
+      .catch(error => {
+        console.error("[Banca Digital] Não foi possível abrir Mensagens:", error);
+        toast("Não foi possível abrir Mensagens. Verifique sua conexão e tente novamente.");
+      })
+      .finally(() => { messagesLaunchPending = false; });
+  }, true);
+
 
   async function saveShelfCategories(categories) {
     if (sb && state.session) {
