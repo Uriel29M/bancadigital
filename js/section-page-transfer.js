@@ -53,7 +53,6 @@
 
   const style = document.createElement("style");
   style.textContent = [
-    ".section-page-transfer-host{display:contents}",
     ".section-page-transfer-button{flex:0 0 auto;min-width:32px;padding:5px 8px;line-height:1.2;white-space:nowrap}",
     ".section-page-transfer-button:disabled{opacity:.55;cursor:wait}",
     ".section-page-transfer-fallback{position:absolute;top:12px;right:12px;z-index:12}",
@@ -69,6 +68,7 @@
   let bootstrapping = false;
   const sectionTemplates = new Map();
   const sectionOrigins = new Map();
+  const sectionTitles = new Map();
   let templateOrder = [];
 
   function normalize(value) {
@@ -212,7 +212,7 @@
     const heads = Array.from(main.querySelectorAll(".section-head"));
     for (let index = 0; index < heads.length; index++) {
       const head = heads[index];
-      if (head.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true']")) continue;
+      if (head.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true'], [data-section-page-transfer-rendered='true']")) continue;
       const title = titleText(head);
       if (!title) continue;
       const root = rootForHead(head);
@@ -242,7 +242,7 @@
     for (const spec of SPECIAL_SECTIONS) {
       if (spec.page !== page) continue;
       const root = main.querySelector(spec.selector);
-      if (!root || root.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true']")) continue;
+      if (!root || root.closest(".section-page-transfer-host, [data-section-page-transfer-clone='true'], [data-section-page-transfer-rendered='true']")) continue;
 
       // Some custom sections are wrapped by a generic section with its own
       // header. Prefer the precise widget root so we don't create a duplicate
@@ -373,64 +373,61 @@
     return button;
   }
 
+  // Keep the original live DOM node; cloneNode copies HTML but loses the event
+  // listeners and component state installed by app.js.
   function cacheTemplate(record) {
-    if (!record || !KEY_RE.test(record.key)) return;
-    const clone = record.root.cloneNode(true);
-    clone.setAttribute("data-section-page-transfer-clone", "true");
-    clone.dataset.sectionPageTransferKey = record.key;
-    const cloneHead = findActionHead(
-      clone,
-      record.key,
-      record.head && record.head.matches && record.head.matches(".section-head") ? clone.querySelector(".section-head") : null
-    ) || clone;
-    const oldButtons = Array.from(clone.querySelectorAll("button[data-section-page-transfer-key]"));
-    const oldControls = managedControls(cloneHead);
-    const reference = oldControls[0] || oldButtons[0];
-    const parent = reference && reference.parentElement;
-    const buttonClass = reference && reference.className;
-    oldButtons.forEach(button => button.remove());
-    oldControls.forEach(button => button.remove());
-    const cloneRecord = { ...record, root: clone, head: cloneHead, page: otherPage(record.page) };
-    if (canManagePage()) {
-      const button = makeTransferButton(cloneRecord, buttonClass);
-      if (parent && cloneHead.contains(parent)) {
-        parent.appendChild(button);
-      } else if (isSpecialTransferKey(record.key)) {
-        button.classList.add("section-page-transfer-fallback");
-        cloneHead.appendChild(button);
-      } else {
-        cloneHead.appendChild(button);
-      }
-    }
-
-    sectionTemplates.set(record.key, clone);
+    if (!record || !record.root || !KEY_RE.test(record.key)) return;
+    const root = record.root;
+    root.dataset.sectionPageTransferNode = "true";
+    root.dataset.sectionPageTransferKey = record.key;
+    root.dataset.sectionPageTransferOrigin = record.page;
+    sectionTemplates.set(record.key, root);
     sectionOrigins.set(record.key, record.page);
+    sectionTitles.set(record.key, record.title || SECTION_TITLES[record.key] || record.key);
     if (!templateOrder.includes(record.key)) templateOrder.push(record.key);
   }
 
   function renderMovedSections(destinationPage) {
-    const hostClass = "section-page-transfer-host";
-    let host = Array.from(main.children).find(child =>
-      child.classList.contains(hostClass) && child.dataset.sectionPage === destinationPage);
+    const content = main.querySelector(".content") || main;
     const wanted = templateOrder.filter(key =>
       sectionTemplates.has(key) && sectionOrigins.get(key) !== destinationPage
       && actualPageFor(key, sectionOrigins.get(key)) === destinationPage);
+    const wantedSet = new Set(wanted);
+    const roots = wanted.map(key => sectionTemplates.get(key)).filter(Boolean);
 
-    Array.from(main.children).filter(child => child.classList.contains(hostClass)
-      && child.dataset.sectionPage !== destinationPage).forEach(child => child.remove());
+    // Remove moved modules that no longer belong to this page. Their live nodes
+    // remain in the map, ready to be attached again if the destination changes.
+    Array.from(main.querySelectorAll("[data-section-page-transfer-rendered='true']")).forEach(root => {
+      if (!wantedSet.has(root.dataset.sectionPageTransferKey)) {
+        root.remove();
+        delete root.dataset.sectionPageTransferRendered;
+        delete root.dataset.sectionPageTransferDestination;
+      }
+    });
+    if (!roots.length) return;
 
-    if (!wanted.length) {
-      if (host) host.remove();
-      return;
+    roots.forEach(root => {
+      root.dataset.sectionPageTransferNode = "true";
+      root.dataset.sectionPageTransferRendered = "true";
+      root.dataset.sectionPageTransferDestination = destinationPage;
+      const transferButton = root.querySelector("button[data-section-page-transfer-key]");
+      if (transferButton) {
+        const label = "Enviar “" + (sectionTitles.get(transferButton.dataset.sectionPageTransferKey) || "Seção")
+          + "” para " + pageLabel(otherPage(destinationPage));
+        transferButton.title = label;
+        transferButton.setAttribute("aria-label", label);
+      }
+    });
+
+    // Insert into the page's real .content as direct children. An extra wrapper
+    // breaks selectors and layout rules that the original section relies on.
+    const children = Array.from(content.children);
+    const alreadyInOrder = roots.every((root, index) => children[index] === root);
+    if (!alreadyInOrder) {
+      const fragment = document.createDocumentFragment();
+      roots.forEach(root => fragment.appendChild(root));
+      content.insertBefore(fragment, content.firstChild);
     }
-    if (!host) {
-      host = document.createElement("div");
-      host.className = hostClass;
-      host.dataset.sectionPage = destinationPage;
-      host.setAttribute("aria-label", "Seções transferidas para " + pageLabel(destinationPage));
-      main.insertBefore(host, main.firstChild);
-    }
-    host.replaceChildren(...wanted.map(key => sectionTemplates.get(key).cloneNode(true)));
   }
 
   function sync() {
@@ -531,17 +528,19 @@
     const page = currentPage();
     if (page !== "home" && page !== "comic") return;
     const destination = otherPage(page);
-    const clonedRoot = button.closest("[data-section-page-transfer-clone='true']");
+    const transferNode = button.closest("[data-section-page-transfer-node='true']");
     const registeredRecord = collectSections(page).find(record => record.key === key);
-    const specialRoot = button.closest(".global-recommendations-section, .bucho-hidden-section, .legendary-sunday-banner");
-    const root = clonedRoot || (registeredRecord && registeredRecord.root) || specialRoot
+    const specialRoot = button.closest(".global-recommendations-section, .bucho-hidden-section, .comic-legendary-section-group, .legendary-sunday-banner");
+    const root = transferNode || (registeredRecord && registeredRecord.root) || specialRoot
       || rootForHead(button.closest(".section-head") || button.parentElement);
     const head = (registeredRecord && registeredRecord.head) || findActionHead(root, key);
     const title = (registeredRecord && registeredRecord.title) || titleText(head) || SECTION_TITLES[key] || "Seção";
 
     if (root && head && !sectionTemplates.has(key)) {
-      const origin = root.closest(".section-page-transfer-host")?.dataset.sectionPage === "home"
-        ? "comic" : root.closest(".section-page-transfer-host")?.dataset.sectionPage === "comic" ? "home" : page;
+      const knownOrigin = root.dataset.sectionPageTransferOrigin;
+      const origin = ["home", "comic"].includes(knownOrigin) ? knownOrigin
+        : root.dataset.sectionPageTransferRendered === "true"
+          ? otherPage(root.dataset.sectionPageTransferDestination || page) : page;
       cacheTemplate({ key, root, head, title, page: origin });
     }
 
