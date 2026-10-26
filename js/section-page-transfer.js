@@ -54,7 +54,10 @@
     ".section-page-transfer-host{display:contents}",
     ".section-page-transfer-button{flex:0 0 auto;min-width:32px;padding:5px 8px;line-height:1.2;white-space:nowrap}",
     ".section-page-transfer-button:disabled{opacity:.55;cursor:wait}",
-    "@media(max-width:600px){.section-page-transfer-button{min-width:30px;padding:5px 7px}}"
+    ".section-page-transfer-fallback{position:absolute;top:12px;right:12px;z-index:12}",
+    ".global-recommendations-heading .section-page-transfer-fallback{position:static;margin-left:auto}",
+    ".bucho-hidden-section,.legendary-sunday-banner{position:relative}",
+    "@media(max-width:600px){.section-page-transfer-button{min-width:30px;padding:5px 7px}.section-page-transfer-fallback{top:7px;right:7px}}"
   ].join("");
   document.head.appendChild(style);
 
@@ -307,6 +310,17 @@
     return button;
   }
 
+  function hasManagementControlsOnPage() {
+    return Array.from(main.querySelectorAll("button")).some(button =>
+      !button.hasAttribute("data-section-page-transfer-key")
+      && !button.closest(".section-page-transfer-host")
+      && isSectionControl(button));
+  }
+
+  function isSpecialTransferKey(key) {
+    return key === "recommendations" || key === "bucho-home" || key === "legendary-banner";
+  }
+
   function ensureTransferButton(record) {
     const root = record.root;
     const head = record.head || root;
@@ -319,14 +333,20 @@
     }
 
     const controls = managedControls(head);
+    const canManage = hasManagementControlsOnPage();
+    if (!controls.length && (!isSpecialTransferKey(record.key) || !canManage)) return null;
+
     const button = makeTransferButton(record, controls[0] && controls[0].className);
     const last = controls[controls.length - 1];
     if (last && last.parentElement && controls.every(item => item.parentElement === last.parentElement)) {
       last.insertAdjacentElement("afterend", button);
-    } else {
-      // A custom section can lack the normal control row entirely. Keep the
-      // transfer action visible in the custom header rather than dropping it.
+    } else if (isSpecialTransferKey(record.key)) {
+      // The custom widgets have no standard section header. If their management
+      // buttons live outside the widget, place the transfer button in its corner.
+      button.classList.add("section-page-transfer-fallback");
       head.appendChild(button);
+    } else {
+      return null;
     }
     return button;
   }
@@ -349,11 +369,16 @@
     oldButtons.forEach(button => button.remove());
     oldControls.forEach(button => button.remove());
     const cloneRecord = { ...record, root: clone, head: cloneHead, page: otherPage(record.page) };
-    const button = makeTransferButton(cloneRecord, buttonClass);
-    if (parent && cloneHead.contains(parent)) {
-      parent.appendChild(button);
-    } else {
-      cloneHead.appendChild(button);
+    if (hasManagementControlsOnPage() || isSpecialTransferKey(record.key)) {
+      const button = makeTransferButton(cloneRecord, buttonClass);
+      if (parent && cloneHead.contains(parent)) {
+        parent.appendChild(button);
+      } else if (isSpecialTransferKey(record.key)) {
+        button.classList.add("section-page-transfer-fallback");
+        cloneHead.appendChild(button);
+      } else {
+        cloneHead.appendChild(button);
+      }
     }
 
     sectionTemplates.set(record.key, clone);
