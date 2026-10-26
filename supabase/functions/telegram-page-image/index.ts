@@ -23,16 +23,23 @@ function itemIdValue(value: string | null) {
   if (!value || !/^[A-Za-z0-9_-]{1,160}$/.test(value)) throw new PageError("Identificador da edição inválido.", 400);
   return value;
 }
-async function lookup(itemId: string, pageNumber: number) {
+async function lookup(itemId: string, pageNumber: number, cover = false) {
   const client = db();
   const { data: row, error } = await client.from("catalog_edition_overrides").select("edition").eq("item_id", itemId).maybeSingle();
   if (error) throw new PageError("Não foi possível consultar a edição.", 502);
   const edition = row?.edition;
   if (!edition || String(edition.id || "") !== itemId || edition.format !== "telegram-pages") throw new PageError("Edição indisponível.", 404);
-  const pages = Array.isArray(edition.telegramPageFiles) ? edition.telegramPageFiles : [];
-  const page = pages[pageNumber - 1];
-  if (!page || Number(page.index) !== pageNumber || !/^[A-Za-z0-9_-]{8,1024}$/.test(String(page.fileId || ""))) {
-    throw new PageError("Página não encontrada.", 404);
+  let page: Record<string, any> | null = null;
+  if (cover) {
+    const fileId = String(edition.telegramCoverFileId || "");
+    if (!/^[A-Za-z0-9_-]{8,1024}$/.test(fileId)) throw new PageError("Capa não encontrada.", 404);
+    page = { fileId, fileSize: Number(edition.telegramCoverFileSize || 0) };
+  } else {
+    const pages = Array.isArray(edition.telegramPageFiles) ? edition.telegramPageFiles : [];
+    page = pages[pageNumber - 1] || null;
+    if (!page || Number(page.index) !== pageNumber || !/^[A-Za-z0-9_-]{8,1024}$/.test(String(page.fileId || ""))) {
+      throw new PageError("Página não encontrada.", 404);
+    }
   }
   const { data: hidden, error: hiddenError } = await client.from("catalog_item_visibility")
     .select("item_id").eq("item_id", itemId).eq("is_hidden", true).maybeSingle();
@@ -44,9 +51,9 @@ async function lookup(itemId: string, pageNumber: number) {
     if (seriesError) throw new PageError("Não foi possível validar a visibilidade da série.", 502);
     if (hiddenSeries) throw new PageError("Edição indisponível.", 404);
   }
-  return { page };
+  return { page: page as Record<string, any> };
 }
-async function sendToTelegram(fileId: string) {
+async function sendToTelegram(fileId: string, label = "página") {
   const token = required("TELEGRAM_BOT_TOKEN");
   const fileResponse = await fetch("https://api.telegram.org/bot" + token + "/getFile", {
     method: "POST",
@@ -55,13 +62,13 @@ async function sendToTelegram(fileId: string) {
     signal: AbortSignal.timeout(15000),
   });
   const fileJson = await fileResponse.json().catch(() => null);
-  if (!fileResponse.ok || !fileJson?.ok) throw new PageError("O Telegram não conseguiu localizar esta página.", 502);
+  if (!fileResponse.ok || !fileJson?.ok) throw new PageError("O Telegram não conseguiu localizar esta " + label + ".", 502);
   const filePath = String(fileJson.result?.file_path || "");
   const size = Number(fileJson.result?.file_size || 0);
   if (!/^[A-Za-z0-9_./-]+$/.test(filePath) || filePath.includes("..")) throw new PageError("Caminho de imagem inválido.", 502);
   if (size > 10 * 1024 * 1024) throw new PageError("A imagem excede o limite aceito pelo leitor.", 413);
   const response = await fetch("https://api.telegram.org/file/bot" + token + "/" + filePath, { signal: AbortSignal.timeout(45000) });
-  if (!response.ok || !response.body) throw new PageError("Não foi possível baixar a página do Telegram.", 502);
+  if (!response.ok || !response.body) throw new PageError("Não foi possível baixar a " + label + " do Telegram.", 502);
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -91,13 +98,14 @@ async function handler(request: Request) {
   try {
     const url = new URL(request.url);
     const itemId = itemIdValue(url.searchParams.get("item_id"));
-    const pageNumber = Number(url.searchParams.get("page"));
-    if (!Number.isSafeInteger(pageNumber) || pageNumber < 1 || pageNumber > 3000) throw new PageError("Número de página inválido.", 400);
-    const { page } = await lookup(itemId, pageNumber);
+    const cover = url.searchParams.get("cover") === "1";
+    const pageNumber = cover ? 1 : Number(url.searchParams.get("page"));
+    if (!cover && (!Number.isSafeInteger(pageNumber) || pageNumber < 1 || pageNumber > 3000)) throw new PageError("Número de página inválido.", 400);
+    const { page } = await lookup(itemId, pageNumber, cover);
     if (request.method === "HEAD") return new Response(null, {
       status: 200, headers: { ...cors, "Content-Type": "image/jpeg", ...(Number(page.fileSize) > 0 ? { "Content-Length": String(page.fileSize) } : {}) },
     });
-    const bytes = await sendToTelegram(String(page.fileId));
+    const bytes = await sendToTelegram(String(page.fileId), cover ? "capa" : "página");
     return new Response(bytes, {
       status: 200,
       headers: { ...cors, "Content-Type": "image/jpeg", "Content-Length": String(bytes.byteLength) },
