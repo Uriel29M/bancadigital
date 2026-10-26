@@ -321,6 +321,15 @@
     return key === "recommendations" || key === "bucho-home" || key === "legendary-banner";
   }
 
+  function canManagePage() {
+    if (hasManagementControlsOnPage()) return true;
+    const profile = window.BancaDigital && window.BancaDigital.state
+      ? window.BancaDigital.state.profile : null;
+    const role = String(profile && (profile.plan || profile.role || profile.type) || "").toLowerCase();
+    return ["banca", "admin"].includes(role)
+      || Boolean(profile && (profile.isAdmin === true || profile.isBanca === true));
+  }
+
   function ensureTransferButton(record) {
     const root = record.root;
     const head = record.head || root;
@@ -333,7 +342,7 @@
     }
 
     const controls = managedControls(head);
-    const canManage = hasManagementControlsOnPage();
+    const canManage = canManagePage();
     if (!controls.length && (!isSpecialTransferKey(record.key) || !canManage)) return null;
 
     const button = makeTransferButton(record, controls[0] && controls[0].className);
@@ -369,7 +378,7 @@
     oldButtons.forEach(button => button.remove());
     oldControls.forEach(button => button.remove());
     const cloneRecord = { ...record, root: clone, head: cloneHead, page: otherPage(record.page) };
-    if (hasManagementControlsOnPage() || isSpecialTransferKey(record.key)) {
+    if (canManagePage()) {
       const button = makeTransferButton(cloneRecord, buttonClass);
       if (parent && cloneHead.contains(parent)) {
         parent.appendChild(button);
