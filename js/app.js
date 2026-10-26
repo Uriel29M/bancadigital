@@ -14395,9 +14395,9 @@
         button.onclick = event => { event.preventDefault(); event.stopPropagation(); toggleSavePublicCollection(button); };
       });
     }
-    $('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
-    $('[data-imprint-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openImprintSettings(el.dataset.imprintSettings); }));
-    $('[data-imprint-migrate-telegram]').forEach(button => {
+    $$('[data-publisher-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openPublisherSettings(el.dataset.publisherSettings); }));
+    $$('[data-imprint-settings]').forEach(el => el.addEventListener("click", event => { event.stopPropagation(); openImprintSettings(el.dataset.imprintSettings); }));
+    $$('[data-imprint-migrate-telegram]').forEach(button => {
       if (button.dataset.imprintMigrateTelegramBound) return;
       button.dataset.imprintMigrateTelegramBound = "true";
       button.addEventListener("click", event => {
@@ -14422,7 +14422,7 @@
         );
       });
     });
-    $('[data-legendary-event-toggle]').forEach(button => button.addEventListener("click", async event => {
+    $$('[data-legendary-event-toggle]').forEach(button => button.addEventListener("click", async event => {
       event.preventDefault();
       if (state.profile?.plan !== "admin" || !sb) return;
       button.disabled = true;
@@ -15916,7 +15916,7 @@
     bindTelegramMigrationButtons(overlay);
     bindEditionObtainButtons(overlay);
     bindEditionEditButtons(overlay);
-    $('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
+    $$('[data-like-item]', overlay).forEach(el => el.addEventListener("click", event => {
       event.stopPropagation();
       toggleComicLike(el.dataset.likeItem);
     }));
