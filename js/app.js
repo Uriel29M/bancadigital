@@ -5378,6 +5378,7 @@
       ? characterSettingForName(value) || {}
       : kind === "imprint" ? state.imprintSettings.get(publisherKey(value)) || {} : {};
     const customImage = setting.cover_url || "";
+    if (kind === "character" && customImage) cacheCharacterImage(value, customImage);
     const authoredText = String(setting.authored_text || "").trim();
     const configuredWikiUrl = String(setting.wikipedia_url || defaultWikiReferenceForEntity(kind, value)).trim();
     const customWikipediaTitle = configuredWikiUrl ? wikiArticleTitleFromUrl(configuredWikiUrl) : "";
@@ -5407,6 +5408,7 @@
         const parsed = fandomData.parse;
         if (!parsed?.text?.["*"]) throw new Error("Artigo do Fandom não encontrado");
         const fandomImage = fandomImageFromHtml(parsed.text["*"], customFandomReference.url);
+        if (kind === "character" && (customImage || fandomImage)) cacheCharacterImage(value, customImage || fandomImage);
         const safeHtml = fandomTextFromHtml(parsed.text["*"], customFandomReference.url);
         // O resumo deve acompanhar o início do artigo, não concatenar o infobox inteiro.
         const extract = fandomQuickExtractFromHtml(parsed.text["*"]);
@@ -5447,6 +5449,7 @@
       const displayPage = page;
       const displaySourceUrl = setting.wikipedia_url || configuredWikiUrl || "";
       const image = customImage || displayPage.thumbnail?.source || "";
+      if (kind === "character" && image) cacheCharacterImage(value, image);
       const extract = await translateToPortuguese(String(displayPage.extract || "").trim(), wikiSourceLanguage);
       const copy = $("[data-wiki-copy]", host);
       const imageHost = $("[data-wiki-image]", host);
@@ -11087,6 +11090,21 @@
     return state.characterSettings.get(key) || [...state.characterSettings.values()].find(setting => publisherKey(setting?.character_name) === key);
   }
 
+  // Usa na banca a mesma imagem exibida na página do próprio personagem.
+  function cacheCharacterImage(name, source) {
+    const character = String(name || "").trim();
+    const imageUrl = String(source || "").trim();
+    if (!character || !imageUrl) return;
+    wikiCharacterImageCache.set(character, imageUrl);
+    const setting = characterSettingForName(character);
+    if (setting?.character_name) wikiCharacterImageCache.set(String(setting.character_name), imageUrl);
+    document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image], [data-chat-character-image]").forEach(image => {
+      const imageCharacter = image.dataset.top10CharacterImage || image.dataset.chatCharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter;
+      if (!imageCharacter || publisherKey(imageCharacter) !== publisherKey(character)) return;
+      image.src = imageProxyFetchUrl(imageUrl);
+    });
+  }
+
   function isTeamCharacter(name) {
     return characterSettingForName(name)?.character_type === "team";
   }
@@ -11153,14 +11171,15 @@
       const images = [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image], [data-chat-character-image]")].filter(image => !isStoryTop10Image(image));
       const characters = [...new Set(images.map(image => image.dataset.top10CharacterImage || image.dataset.chatCharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter).filter(Boolean))];
       const missing = characters.filter(character => {
-        const setting = state.characterSettings.get(publisherKey(character)) || {};
+        const setting = characterSettingForName(character) || {};
         return !setting.cover_url && !wikiCharacterImageCache.has(character);
       });
       for (let start = 0; start < missing.length; start += 20) {
         const batch = missing.slice(start, start + 20);
         const preferredImages = new Map();
         await Promise.all(batch.map(async character => {
-          const reference = fandomArticleFromUrl(state.characterSettings.get(publisherKey(character))?.wikipedia_url);
+          const setting = characterSettingForName(character) || {};
+          const reference = fandomArticleFromUrl(setting.wikipedia_url || defaultWikiReferenceForEntity("character", character));
           if (!reference) return;
           try {
             const response = await fetchFandomApi(reference);
@@ -11172,11 +11191,14 @@
             console.warn("Imagem de personagem indisponível no Fandom", error);
           }
         }));
-        const preferredTitles = new Map(batch.map(character => [character, wikiArticleTitleFromUrl(state.characterSettings.get(publisherKey(character))?.wikipedia_url)]));
+        const preferredTitles = new Map(batch.map(character => {
+          const setting = characterSettingForName(character) || {};
+          return [character, wikiArticleTitleFromUrl(setting.wikipedia_url || defaultWikiReferenceForEntity("character", character))];
+        }));
         const preferredPages = new Map();
         await Promise.all(batch.map(async character => {
-          const setting = state.characterSettings.get(publisherKey(character)) || {};
-          const sourceUrl = String(setting.wikipedia_url || "");
+          const setting = characterSettingForName(character) || {};
+          const sourceUrl = String(setting.wikipedia_url || defaultWikiReferenceForEntity("character", character) || "");
           if (!/(^|\.)wikipedia\.org\//i.test(sourceUrl) || !preferredTitles.get(character)) return;
           try {
             const response = await fetch(wikiApiUrl({ action: "query", titles: preferredTitles.get(character), prop: "pageimages", piprop: "thumbnail", pithumbsize: "180" }, sourceUrl));
@@ -11204,7 +11226,8 @@
           };
           const searchedImages = new Map();
           await Promise.all(batch.map(async character => {
-            const configuredWikiUrl = String(state.characterSettings.get(publisherKey(character))?.wikipedia_url || "").trim();
+            const setting = characterSettingForName(character) || {};
+            const configuredWikiUrl = String(setting.wikipedia_url || defaultWikiReferenceForEntity("character", character)).trim();
             if (configuredWikiUrl || preferredImages.has(character) || findBatchPage(character)?.thumbnail?.source) return;
             try {
               const response = await fetch(wikiApiUrl({ action: "query", generator: "search", gsrsearch: character, gsrnamespace: "0", gsrlimit: "5", prop: "pageimages", piprop: "thumbnail", pithumbsize: "180" }));
@@ -11217,7 +11240,7 @@
             }
           }));
           batch.forEach(character => {
-            const setting = state.characterSettings.get(publisherKey(character)) || {};
+            const setting = characterSettingForName(character) || {};
             const customImage = setting.cover_url;
             const preferredImage = preferredImages.get(character);
             if (customImage) {
@@ -11228,7 +11251,7 @@
               wikiCharacterImageCache.set(character, preferredImage);
               return;
             }
-            if (setting.wikipedia_url && !preferredPages.get(character)?.thumbnail?.source) {
+            if ((setting.wikipedia_url || defaultWikiReferenceForEntity("character", character)) && !preferredPages.get(character)?.thumbnail?.source) {
               wikiCharacterImageCache.set(character, customImage || "assets/batmanicon.jpg");
               return;
             }
@@ -11237,7 +11260,7 @@
           });
         } catch (error) {
           batch.forEach(character => {
-            const customImage = state.characterSettings.get(publisherKey(character))?.cover_url;
+            const customImage = characterSettingForName(character)?.cover_url;
             wikiCharacterImageCache.set(character, customImage || preferredImages.get(character) || preferredPages.get(character)?.thumbnail?.source || "assets/batmanicon.jpg");
           });
           console.warn("Imagens de personagens indisponíveis", error);
@@ -11245,7 +11268,7 @@
       }
       [...document.querySelectorAll("[data-wiki-character] img, [data-top10-character-image], [data-chat-character-image]")].forEach(image => {
         const character = image.dataset.top10CharacterImage || image.dataset.chatCharacterImage || image.closest("[data-wiki-character]")?.dataset.wikiCharacter;
-        const customImage = state.characterSettings.get(publisherKey(character))?.cover_url;
+        const customImage = characterSettingForName(character)?.cover_url;
         const source = customImage || wikiCharacterImageCache.get(character);
         if (!source) return;
         const fallback = customImage ? imageProxyFetchUrl(customImage) : "assets/batmanicon.jpg";
