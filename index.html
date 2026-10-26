@@ -7,7 +7,7 @@
   <link rel="apple-touch-icon" href="assets/barracabrancaicon.png?v=1">
   <title>Banca Digital — Quadrinhos & Mangás</title>
   <meta name="description" content="Uma banca digital para descobrir, pesquisar e ler quadrinhos e mangás.">
-    <link rel="stylesheet" href="css/style.css?v=2.2.10.274-obtain-tray-icon">
+    <link rel="stylesheet" href="css/style.css?v=2.2.10.275-search-landing">
   <style>
     @media (hover: hover) and (pointer: fine) {
       .card-wrap > .card:hover > .card-completed,
@@ -35,7 +35,7 @@
         window.location.reload();
       });
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js?v=340-remove-monitoring-button", { updateViaCache: "none" })
+        navigator.serviceWorker.register("./sw.js?v=341-search-landing", { updateViaCache: "none" })
           .then(registration => registration.update())
           .catch(error => console.warn("Modo offline indisponível:", error));
       });
@@ -58,7 +58,7 @@
         <button class="reader-btn downloads-header-btn" data-action="downloads" title="Downloads" aria-label="Downloads">↓<span class="download-badge" hidden></span></button>
         <button class="reader-btn messages-header-btn" data-action="messages" title="Mensagens" aria-label="Mensagens">💬<span class="message-badge" hidden></span></button>
         <button class="icon-btn notification-bell" data-action="notifications-popup" title="Notificações" aria-label="Notificações"><span class="notification-bell-icon">🔔</span><span class="notification-badge" hidden></span></button>
-        <button class="icon-btn" data-action="focus-search" title="Pesquisar">⌕</button>
+        <button class="icon-btn" data-action="focus-search" title="Busca" aria-label="Busca">⌕</button>
         <button class="avatar" data-action="open-profile-page" title="Entrar ou abrir meu perfil"><img class="top-avatar-img" src="assets/semfoto.jpg?v=1" alt="Perfil"></button>
       </div>
     </header>
@@ -129,7 +129,7 @@
   <script src="js/data/dc-comics/novos-52.js?v=1.0.26"></script>
   <script src="js/catalog-identity.js?v=1"></script>
   <script src="js/data/loading-tips.js?v=1.0.0"></script>
-    <script src="js/app.js?v=2.2.10.610-character-image-fallback"></script>
+    <script src="js/app.js?v=2.2.10.611-search-landing"></script>
   <script src="js/series-more.js?v=2-edition-about"></script>
   <script>
     // Repara bloqueios órfãos de modal e oferece navegação de contingência
@@ -169,10 +169,10 @@
 
       const routes = {
         home: "", comics: "quadrinhos", comic: "quadrinhos",
-        ranking: "ranking", collections: "colecoes", search: "pesquisar",
+        ranking: "ranking", collections: "colecoes", search: "busca",
         downloads: "downloads", "local-box": "caixa"
       };
-      const stateSections = { comics: "comic" };
+      const stateSections = { comics: "comic", search: "search-home" };
       const fallbackClick = event => {
         syncInteraction();
         if ([...(modalRoot?.querySelectorAll(".modal-backdrop") || [])].some(isVisibleModal)) return;
