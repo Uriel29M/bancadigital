@@ -1157,6 +1157,21 @@
       button.title = status === "completed" ? "Excluir download offline" : status === "downloading" ? "Download em andamento" : status === "waiting" ? "Aguardando na fila" : "Permitir leitura offline";
     });
   }
+  function downloadedItemFor(itemId) {
+    const entry = downloaded(itemId);
+    if (!entry || entry.status !== "completed") return null;
+    const catalogItem = state.db.library.find(item => String(item.id) === String(itemId));
+    if (catalogItem) return entry.snapshot ? { ...catalogItem, ...entry.snapshot, id: catalogItem.id } : catalogItem;
+    return {
+      ...(entry.snapshot || {}),
+      id: entry.id,
+      type: entry.snapshot?.type || "comic",
+      title: entry.title || entry.snapshot?.title || "Quadrinho",
+      format: entry.snapshot?.format || extension(entry.url),
+      fileUrl: entry.snapshot?.fileUrl || entry.url
+    };
+  }
+
   async function openDownloaded(item) {
     const entry = downloaded(item.id);
     const offline = navigator.onLine === false || Boolean(state.session?.offline);
@@ -2017,7 +2032,10 @@
       return;
     }
     const section = params.get("colecao") ? "collection" : Object.keys(sectionRoutes).find(key => sectionRoutes[key] === page) || "home";
-    const item = readerId ? state.db.library.find(entry => entry.id === readerId && canViewCatalogItem(entry, isAdminProfile())) : null;
+    const item = readerId
+      ? state.db.library.find(entry => String(entry.id) === String(readerId) && canViewCatalogItem(entry, isAdminProfile()))
+        || downloadedItemFor(readerId)
+      : null;
 
     // Eventos repetidos de clique, autenticação ou histórico podem reaplicar
     // a mesma rota enquanto o PDF ainda carrega. Preserve o leitor existente
@@ -11368,7 +11386,17 @@
   function renderSearch() {
     const isPrimarySearch = state.section === "search-home";
     const offlineSearch = navigator.onLine === false || Boolean(state.session?.offline);
-    const searchableItems = visibleCatalogItems().filter(item => !offlineSearch || downloaded(item.id)?.status === "completed");
+    const downloadedSearchItems = offlineSearch
+      ? [...state.downloads.values()].filter(entry => entry?.status === "completed").map(entry => {
+          const catalogItem = state.db.library.find(item => String(item.id) === String(entry.id));
+          return catalogItem && entry.snapshot
+            ? { ...catalogItem, ...entry.snapshot, id: catalogItem.id }
+            : catalogItem || { ...(entry.snapshot || {}), id: entry.id, type: entry.snapshot?.type || "comic", title: entry.title || entry.snapshot?.title || "Quadrinho", format: entry.snapshot?.format || extension(entry.url), fileUrl: entry.snapshot?.fileUrl || entry.url };
+        })
+      : [];
+    const searchableItems = offlineSearch
+      ? uniqueCatalogItems([...visibleCatalogItems().filter(item => downloaded(item.id)?.status === "completed"), ...downloadedSearchItems])
+      : visibleCatalogItems();
     const q = state.search.trim().toLowerCase();
     const matchingEditions = uniqueCatalogItems(searchableItems.filter(x => {
       const hay = [x.title,x.seriesTitle,x.issue,x.author,x.publisher,x.imprint,x.character,x.description,...(x.tags||[])].join(" ").toLowerCase();
@@ -14019,15 +14047,6 @@
       if (offline) { void openDownloaded(item); return; }
       entry.status === "completed" ? openDownloaded(item) : startDownload(item);
     }));
-    $$('.downloads-completed [data-open-download]').forEach(el => {
-      const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownload)) || downloaded(el.dataset.openDownload)?.snapshot;
-      const replacement = el.cloneNode(true);
-      replacement.removeAttribute('data-open-download');
-      replacement.dataset.viewSeries = item?.seriesId || '';
-      replacement.textContent = 'Série';
-      replacement.disabled = Boolean(state.session?.offline || !item?.seriesId);
-      el.replaceWith(replacement);
-    });
     $$('[data-open-download-cover]').forEach(el => {
       const open = () => {
         const item = state.db.library.find(entry => String(entry.id) === String(el.dataset.openDownloadCover)) || downloaded(el.dataset.openDownloadCover)?.snapshot;
