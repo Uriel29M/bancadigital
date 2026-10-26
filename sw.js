@@ -1,4 +1,4 @@
-const CACHE_VERSION = "banca-digital-shell-v761-offline-search-downloads";
+const CACHE_VERSION = "banca-digital-shell-v762-offline-startup";
 const SHELL_CACHE = CACHE_VERSION;
 const APP_SHELL = [
   "./", "./index.html", "./css/style.css?v=2.2.10.275-search-landing",
@@ -11,7 +11,9 @@ const APP_SHELL = [
   "./js/data/dc-comics/black-label.js?v=1.0.14",
   "./js/data/dc-comics/milestone.js?v=1.1.1",
   "./js/data/dc-comics/novos-52.js?v=1.0.26",
+  "./js/series-default-covers.js?v=1",
   "./js/data/loading-tips.js?v=1.0.0", "./js/supabase.js",
+  "./js/series-more.js?v=2-edition-about",
   "./assets/bucho/ocultas.png",
   "./assets/barracavermelhaicon.png?v=2",
   "./assets/barracabrancaicon.png?v=1", "./assets/semfoto.jpg?v=1",
@@ -39,8 +41,10 @@ self.addEventListener("fetch", event => {
     url.pathname.includes("/jszip/3.10.1/") ||
     url.pathname.includes("/@zip.js/zip.js@2.7.57/")
   );
+  const isSupabaseClient = url.hostname === "cdn.jsdelivr.net"
+    && url.pathname.startsWith("/npm/@supabase/supabase-js@");
   if (url.origin !== self.location.origin) {
-    if (!isReaderDependency) return;
+    if (!isReaderDependency && !isSupabaseClient) return;
     event.respondWith((async () => {
       const cached = await caches.match(request);
       if (cached) return cached;
@@ -67,15 +71,22 @@ self.addEventListener("fetch", event => {
   const isAppJavascript = url.pathname.includes("/js/") && url.pathname.endsWith(".js");
   if (isAppJavascript || url.pathname.endsWith("/css/style.css") || isCatalogData) {
     event.respondWith((async () => {
+      const cached = await caches.match(request)
+        || await caches.match(request, { ignoreSearch: true });
+      const refresh = fetch(request, { cache: "no-store" }).then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const copy = response.clone();
+        return caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).then(() => response);
+      });
+      if (cached) {
+        // Devolve o arquivo guardado imediatamente; a rede só atualiza o cache em segundo plano.
+        event.waitUntil(refresh.catch(() => {}));
+        return cached;
+      }
       try {
-        const response = await fetch(request, { cache: "no-store" });
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
-        }
-        return response;
+        return await refresh;
       } catch {
-        return caches.match(request).then(cached => cached || new Response("", { status: 504, statusText: "Offline" }));
+        return new Response("", { status: 504, statusText: "Offline" });
       }
     })());
     return;
