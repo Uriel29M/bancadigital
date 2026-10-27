@@ -7604,13 +7604,13 @@
     toast("Cor da coleção atualizada.");
   }
 
-  function seriesCoverFor(item, seriesCoverChoices = null) {
+  function seriesCoverFor(item, seriesCoverChoices = null, variant = "card") {
     const activeChoices = seriesCoverChoices || (state.section === "public-profile" ? state.publicProfile?.seriesCoverChoices : state.seriesCoverChoices);
     const selectedCover = activeChoices?.get?.(item?.seriesId)?.cover_url;
     if (selectedCover && !/^assets\/covers\/milestone\//i.test(String(selectedCover))) return proxiedImageUrl(selectedCover);
     const editorialDefault = window.BancaSeriesDefaults?.get(item?.seriesId)?.cover_url;
     if (editorialDefault) return proxiedImageUrl(editorialDefault);
-    return coverFor(item);
+    return coverFor(item, variant);
   }
 
   function coverCacheKey(item, maxWidth) {
@@ -8658,7 +8658,7 @@
     const editions = isSeries ? seriesEditions(item).length : 0;
     const meta = isSeries ? `${editions || 1} ${editions === 1 ? "edição" : "edições"}` : [itemIssueDisplay(item) ? `Edição ${itemIssueDisplay(item)}` : "Edição única", item.year].filter(Boolean).join(" · ");
     const action = isSeries ? `data-view-series="${escapeHTML(item.seriesId)}"` : `data-open="${escapeHTML(item.id)}" data-open-direct="true"`;
-    const cover = isSeries ? seriesCoverFor(item) : coverFor(item, "card");
+    const cover = isSeries ? seriesCoverFor(item, null, "hero") : coverFor(item, "hero");
     return `<article class="global-recommendation-card global-recommendation-${accent}" ${action} tabindex="0"><div class="global-recommendation-glow"></div><div class="global-recommendation-cover" data-cover-size="hero" data-cover-id="${escapeHTML(item.id)}" style="background-image:url('${escapeHTML(cover)}')"></div><div class="global-recommendation-copy"><div class="global-recommendation-label"><span>${escapeHTML(label)}</span><i></i></div><span class="global-recommendation-xp">✦ +25 XP ao concluir a leitura</span><h3>${escapeHTML(title || "Recomendação da banca")}</h3><p>${escapeHTML(description)}</p><div class="global-recommendation-meta">${escapeHTML(meta)}</div><span class="global-recommendation-cta">${isSeries ? "Explorar série" : "Ler edição"} <b>→</b></span></div></article>`;
   }
 
