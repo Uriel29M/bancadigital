@@ -35,7 +35,7 @@
         window.location.reload();
       });
       // Registra cedo: esperar o evento load pode deixar a aba sem controle se a conexão cair durante o carregamento.
-      navigator.serviceWorker.register("./sw.js?v=368-global-recommendation-covers", { updateViaCache: "none" })
+      navigator.serviceWorker.register("./sw.js?v=369-global-recommendation-covers", { updateViaCache: "none" })
         .then(registration => registration.update())
         .catch(error => console.warn("Modo offline indisponível:", error));
     }
