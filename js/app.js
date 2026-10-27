@@ -510,8 +510,9 @@
        try { return JSON.parse(localStorage.getItem("bancaDigitalComicSectionOrder") || "null"); } catch { return null; }
      })(),
      comicHiddenSectionKeys: (() => {
-       try { return new Set(JSON.parse(localStorage.getItem("bancaDigitalComicHiddenSections") || "[]")); } catch { return new Set(); }
+       try { return new Set(JSON.parse(localStorage.getItem("bancaDigitalComicGlobalHiddenSections") || "[]")); } catch { return new Set(); }
      })(),
+     comicSectionVisibilityLoaded: false,
      comicVisibleSectionKeys: [],
     achievementChecks: new Set(),
     homeHeroId: null,
@@ -2155,15 +2156,48 @@
 
   async function loadHomepageSettings() {
     if (!sb || navigator.onLine === false) return;
-    const result = await sb.from("homepage_settings").select("section_order, hidden_sections, legendary_sunday_enabled, legendary_manual_date, novelty_badge_hours").eq("id", true).maybeSingle();
+    const result = await sb.from("homepage_settings")
+      .select("section_order, hidden_sections, comic_hidden_sections, legendary_sunday_enabled, legendary_manual_date, novelty_badge_hours")
+      .eq("id", true).maybeSingle();
     if (result.error) {
-      console.warn("Não foi possível carregar a ordem da página inicial:", result.error.message);
+      console.warn("Não foi possível carregar as configurações globais das páginas:", result.error.message);
       return;
     }
     state.homeSectionOrder = normalizeHomeSectionOrder(result.data?.section_order);
     state.homeHiddenSectionKeys = new Set(Array.isArray(result.data?.hidden_sections)
       ? result.data.hidden_sections.filter(key => HOME_SECTION_ORDER.includes(key))
       : []);
+
+    let comicHidden = Array.isArray(result.data?.comic_hidden_sections)
+      ? result.data.comic_hidden_sections.filter(key => COMIC_SECTION_ORDER.includes(key))
+      : [];
+    // Migra uma única vez as ocultações antigas do navegador da equipe para a
+    // configuração global compartilhada; as preferências locais de membros não contam.
+    const migrationKey = "bancaDigitalComicHiddenSectionsMigrationV1";
+    let legacyComicHidden = [];
+    try {
+      legacyComicHidden = JSON.parse(localStorage.getItem("bancaDigitalComicHiddenSections") || "[]")
+        .filter(key => COMIC_SECTION_ORDER.includes(key));
+    } catch {}
+    let migrated = false;
+    try { migrated = localStorage.getItem(migrationKey) === "done"; } catch {}
+    if (canManageHomepageOrder() && !migrated) {
+      if (!comicHidden.length && legacyComicHidden.length) {
+        const seeded = await sb.rpc("replace_comic_hidden_sections", { p_hidden_sections: legacyComicHidden });
+        if (seeded.error) {
+          console.warn("Não foi possível migrar as ocultações antigas de Quadrinhos:", seeded.error.message);
+        } else {
+          comicHidden = [...new Set(legacyComicHidden)];
+        }
+      }
+      try { localStorage.setItem(migrationKey, "done"); } catch {}
+    }
+    state.comicHiddenSectionKeys = new Set(comicHidden);
+    state.comicSectionVisibilityLoaded = true;
+    try {
+      localStorage.setItem("bancaDigitalComicGlobalHiddenSections", JSON.stringify(comicHidden));
+    } catch {}
+
     state.legendarySundayEnabled = result.data?.legendary_sunday_enabled !== false;
     state.legendaryManualDate = result.data?.legendary_manual_date || null;
     const noveltyHours = Number(result.data?.novelty_badge_hours);
@@ -3172,6 +3206,11 @@
     // Assim, mesmo que outra rotina visual falhe, os valores salvos ficam
     // disponíveis para a Wiki rápida e para "Configurar personagem".
     await loadCharacterSettingsFromDatabase();
+
+    // Carregue as configurações globais de visibilidade antes do primeiro paint.
+    // Assim, as seções ocultas de Quadrinhos nunca aparecem para membros durante
+    // a janela entre a autenticação e a consulta de homepage_settings.
+    await loadHomepageSettings();
 
     // Só agora o primeiro paint da SPA é liberado. Para visitante, session é
     // nula; para conta autenticada, session e profile já pertencem à mesma
@@ -9330,20 +9369,44 @@
     render();
   }
 
-  function toggleComicSectionVisibility(key, hidden) {
+  async function toggleComicSectionVisibility(key, hidden) {
     if (!canManageHomepageOrder() || !COMIC_SECTION_ORDER.includes(key)) return;
-    const nextHidden = new Set(state.comicHiddenSectionKeys);
+    if (!sb || state.session?.offline || navigator.onLine === false) {
+      return toast("Conecte-se à internet para salvar a visibilidade global das seções de Quadrinhos.");
+    }
+    const previous = new Set(state.comicHiddenSectionKeys);
+    const nextHidden = new Set(previous);
     if (hidden) nextHidden.add(key);
     else nextHidden.delete(key);
     state.comicHiddenSectionKeys = nextHidden;
-    localStorage.setItem("bancaDigitalComicHiddenSections", JSON.stringify([...nextHidden]));
     render();
+    const result = await sb.rpc("update_comic_section_visibility", {
+      p_section_key: key,
+      p_hidden: hidden
+    });
+    if (result.error) {
+      console.error("Não foi possível salvar a visibilidade global de Quadrinhos:", result.error);
+      state.comicHiddenSectionKeys = previous;
+      render();
+      return toast(result.error.message || "Não foi possível salvar a visibilidade global das seções.");
+    }
+    try {
+      localStorage.setItem("bancaDigitalComicGlobalHiddenSections", JSON.stringify([...nextHidden]));
+    } catch {}
   }
 
   function bindComicSectionControls() {
     if (state.section !== "comic") return;
     const content = $("#main .content");
     if (!content) return;
+    // Não pinte a página para membros antes de consultar a lista global de
+    // seções ocultas; evita que os blocos apareçam por um instante no primeiro load.
+    if (!state.comicSectionVisibilityLoaded && sb && navigator.onLine !== false
+      && !canViewHiddenHomepageSections()) {
+      content.style.visibility = "hidden";
+      return;
+    }
+    content.style.visibility = "";
     const teamSection = document.querySelector("#main .wiki-team-carousel-section");
     if (teamSection && teamSection.parentElement !== content) content.appendChild(teamSection);
     const legendaryBanner = $(".legendary-sunday-banner", content);
