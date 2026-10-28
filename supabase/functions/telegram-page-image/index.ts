@@ -4,7 +4,7 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type, range",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Expose-Headers": "Content-Length, Content-Type",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Type, Content-Disposition",
   "Cache-Control": "public, max-age=900, s-maxage=900",
   "X-Content-Type-Options": "nosniff",
 };
@@ -148,17 +148,28 @@ async function handler(request: Request) {
     const url = new URL(request.url);
     const itemId = itemIdValue(url.searchParams.get("item_id"));
     const cover = url.searchParams.get("cover") === "1";
+    const download = url.searchParams.get("download") === "1";
     const pageNumber = cover ? 1 : Number(url.searchParams.get("page"));
     if (!cover && (!Number.isSafeInteger(pageNumber) || pageNumber < 1 || pageNumber > 3000)) throw new PageError("Número de página inválido.", 400);
     const { page } = await lookup(itemId, pageNumber, cover);
+    const fileName = cover ? "capa.jpg" : "pagina-" + String(pageNumber).padStart(3, "0") + ".jpg";
+    const responseHeaders = {
+      ...cors,
+      "Content-Type": "image/jpeg",
+      ...(Number(page.fileSize) > 0 ? { "Content-Length": String(page.fileSize) } : {}),
+      ...(download ? {
+        "Content-Disposition": 'attachment; filename="' + fileName + '"',
+        "Cache-Control": "no-store",
+      } : {}),
+    };
     if (request.method === "HEAD") return new Response(null, {
-      status: 200, headers: { ...cors, "Content-Type": "image/jpeg", ...(Number(page.fileSize) > 0 ? { "Content-Length": String(page.fileSize) } : {}) },
+      status: 200, headers: responseHeaders,
     });
-    const cacheKey = `${itemId}|${cover ? "cover" : pageNumber}|${String(page.fileId)}`;
+    const cacheKey = itemId + "|" + (cover ? "cover" : String(pageNumber)) + "|" + String(page.fileId);
     const cached = await getTelegramImageCached(cacheKey, () => sendToTelegram(String(page.fileId), cover ? "capa" : "página"));
     return new Response(cached.bytes, {
       status: 200,
-      headers: { ...cors, "Content-Type": "image/jpeg", "Content-Length": String(cached.bytes.byteLength), "X-Reader-Cache": cached.cacheStatus },
+      headers: { ...responseHeaders, "Content-Length": String(cached.bytes.byteLength), "X-Reader-Cache": cached.cacheStatus },
     });
   } catch (error) {
     const status = error instanceof PageError ? error.status : 502;
