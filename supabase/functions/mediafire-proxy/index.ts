@@ -7,6 +7,122 @@ const corsHeaders = {
 const MAX_REDIRECTS = 5;
 const MAX_FILE_BYTES = 512 * 1024 * 1024;
 
+const RESOLVED_URL_TTL_MS = 30000;
+const RANGE_CACHE_TTL_MS = 45000;
+const RANGE_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+const RANGE_CACHE_MAX_ENTRY_BYTES = 1024 * 1024;
+type ResolvedUrlEntry = { url: string; expiresAt: number };
+type RangeCacheEntry = { bytes: Uint8Array; status: number; headers: [string, string][]; expiresAt: number };
+type RangeFetchResult = { entry?: RangeCacheEntry; response?: Response; url: URL };
+const resolvedUrlCache = new Map<string, ResolvedUrlEntry>();
+const resolvedUrlInflight = new Map<string, Promise<string>>();
+const rangeCache = new Map<string, RangeCacheEntry>();
+const rangeInflight = new Map<string, Promise<RangeFetchResult>>();
+let rangeCacheBytes = 0;
+async function resolveDownloadShared(url: URL): Promise<URL> {
+  const key = url.toString();
+  const cached = resolvedUrlCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return new URL(cached.url);
+  if (cached) resolvedUrlCache.delete(key);
+  const pending = resolvedUrlInflight.get(key);
+  if (pending) return new URL(await pending);
+  const task = resolveDownload(url).then(result => {
+    resolvedUrlCache.set(key, { url: result.toString(), expiresAt: Date.now() + RESOLVED_URL_TTL_MS });
+    while (resolvedUrlCache.size > 256) {
+      const oldest = resolvedUrlCache.keys().next().value;
+      if (typeof oldest !== "string") break;
+      resolvedUrlCache.delete(oldest);
+    }
+    return result.toString();
+  });
+  resolvedUrlInflight.set(key, task);
+  try { return new URL(await task); }
+  finally { if (resolvedUrlInflight.get(key) === task) resolvedUrlInflight.delete(key); }
+}
+function removeRangeCacheEntry(key: string) {
+  const entry = rangeCache.get(key);
+  if (!entry) return;
+  rangeCacheBytes = Math.max(0, rangeCacheBytes - entry.bytes.byteLength);
+  rangeCache.delete(key);
+}
+function getRangeCacheEntry(key: string): RangeCacheEntry | null {
+  const entry = rangeCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) { removeRangeCacheEntry(key); return null; }
+  rangeCache.delete(key);
+  rangeCache.set(key, entry);
+  return entry;
+}
+function storeRangeCacheEntry(key: string, source: RangeCacheEntry): RangeCacheEntry {
+  removeRangeCacheEntry(key);
+  const entry: RangeCacheEntry = {
+    bytes: new Uint8Array(source.bytes), status: source.status, headers: source.headers,
+    expiresAt: Date.now() + RANGE_CACHE_TTL_MS
+  };
+  for (const [oldKey, oldEntry] of rangeCache) {
+    if (oldEntry.expiresAt <= Date.now()) removeRangeCacheEntry(oldKey);
+  }
+  while (rangeCacheBytes + entry.bytes.byteLength > RANGE_CACHE_MAX_BYTES && rangeCache.size) {
+    const oldest = rangeCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    removeRangeCacheEntry(oldest);
+  }
+  if (entry.bytes.byteLength <= RANGE_CACHE_MAX_BYTES) {
+    rangeCache.set(key, entry);
+    rangeCacheBytes += entry.bytes.byteLength;
+  }
+  return entry;
+}
+function rangeResponse(entry: RangeCacheEntry): Response {
+  const headers = new Headers();
+  for (const [name, value] of entry.headers) headers.set(name, value);
+  return new Response(entry.bytes, { status: entry.status, headers });
+}
+function cacheableResponseHeaders(response: Response): [string, string][] {
+  const headers: [string, string][] = [];
+  for (const name of ["content-type", "content-disposition", "content-length", "content-range", "accept-ranges"]) {
+    const value = response.headers.get(name);
+    if (value !== null) headers.push([name, value]);
+  }
+  return headers;
+}
+async function fetchMediafireRange(url: URL, range: string): Promise<{ response: Response; url: URL; cacheStatus: string }> {
+  const key = url.toString() + "|" + range;
+  const cached = getRangeCacheEntry(key);
+  if (cached) return { response: rangeResponse(cached), url, cacheStatus: "HIT" };
+  const pending = rangeInflight.get(key);
+  if (pending) {
+    const outcome = await pending;
+    if (outcome.entry) return { response: rangeResponse(outcome.entry), url: outcome.url, cacheStatus: "COALESCED" };
+    const retry = await fetchAllowed(url, { method: "GET", headers: { Accept: "application/octet-stream,*/*", Range: range } });
+    return { response: retry.response, url: retry.url, cacheStatus: "BYPASS" };
+  }
+  const task = (async (): Promise<RangeFetchResult> => {
+    const result = await fetchAllowed(url, { method: "GET", headers: { Accept: "application/octet-stream,*/*", Range: range } });
+    const contentType = (result.response.headers.get("content-type") || "").toLowerCase();
+    const length = Number(result.response.headers.get("content-length") || 0);
+    const canCache = result.response.status === 206 && result.response.body !== null && length > 0 &&
+      length <= RANGE_CACHE_MAX_ENTRY_BYTES && !contentType.includes("text/html") && !contentType.startsWith("text/plain");
+    if (!canCache) return { response: result.response, url: result.url };
+    const bytes = new Uint8Array(await result.response.arrayBuffer());
+    if (bytes.byteLength !== length) {
+      const fallbackHeaders = new Headers(result.response.headers);
+      fallbackHeaders.set("content-length", String(bytes.byteLength));
+      return { response: new Response(bytes, { status: result.response.status, headers: fallbackHeaders }), url: result.url };
+    }
+    const entry = storeRangeCacheEntry(key, {
+      bytes, status: result.response.status, headers: cacheableResponseHeaders(result.response), expiresAt: 0
+    });
+    return { entry, url: result.url };
+  })();
+  rangeInflight.set(key, task);
+  try {
+    const outcome = await task;
+    if (outcome.entry) return { response: rangeResponse(outcome.entry), url: outcome.url, cacheStatus: "MISS" };
+    return { response: outcome.response as Response, url: outcome.url, cacheStatus: "BYPASS" };
+  } finally { if (rangeInflight.get(key) === task) rangeInflight.delete(key); }
+}
+
 function responseBody(message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -74,15 +190,18 @@ Deno.serve(async request => {
     if (!input) return responseBody("Informe o parâmetro url.", 400);
 
     const source = parseAllowedUrl(input);
-    const downloadUrl = await resolveDownload(source);
+    const downloadUrl = await resolveDownloadShared(source);
     const range = request.headers.get("range");
-    const upstream = await fetchAllowed(downloadUrl, {
-      method: requestedMethod,
-      headers: {
-        Accept: "application/octet-stream,*/*",
-        ...(range ? { Range: range } : {}),
-      },
-    });
+    let cacheStatus = "BYPASS";
+    const upstream = requestedMethod === "GET" && range && !range.includes(",")
+      ? await fetchMediafireRange(downloadUrl, range).then(result => { cacheStatus = result.cacheStatus; return result; })
+      : await fetchAllowed(downloadUrl, {
+          method: requestedMethod,
+          headers: {
+            Accept: "application/octet-stream,*/*",
+            ...(range ? { Range: range } : {}),
+          },
+        });
 
     if (!upstream.response.ok) {
       const status = upstream.response.status >= 400 && upstream.response.status < 500
@@ -109,6 +228,7 @@ Deno.serve(async request => {
     if (contentRange) headers.set("Content-Range", contentRange);
     headers.set("Accept-Ranges", "bytes");
     headers.set("Vary", "Range");
+    headers.set("X-Reader-Cache", cacheStatus);
     headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     headers.set("Cross-Origin-Resource-Policy", "cross-origin");
 
