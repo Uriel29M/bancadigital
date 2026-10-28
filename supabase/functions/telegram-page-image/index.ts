@@ -9,6 +9,55 @@ const cors = {
   "X-Content-Type-Options": "nosniff",
 };
 class PageError extends Error { constructor(message: string, readonly status = 502) { super(message); } }
+
+type ImageCacheEntry = { bytes: Uint8Array; expiresAt: number };
+const IMAGE_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+const IMAGE_CACHE_TTL_MS = 60000;
+const imageCache = new Map<string, ImageCacheEntry>();
+const imageInflight = new Map<string, Promise<Uint8Array>>();
+let imageCacheBytes = 0;
+function deleteCachedImage(key: string) {
+  const entry = imageCache.get(key);
+  if (!entry) return;
+  imageCacheBytes = Math.max(0, imageCacheBytes - entry.bytes.byteLength);
+  imageCache.delete(key);
+}
+function getCachedImage(key: string): Uint8Array | null {
+  const entry = imageCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) { deleteCachedImage(key); return null; }
+  imageCache.delete(key);
+  imageCache.set(key, entry);
+  return entry.bytes;
+}
+function storeCachedImage(key: string, bytes: Uint8Array): Uint8Array {
+  deleteCachedImage(key);
+  const copy = new Uint8Array(bytes);
+  for (const [oldKey, entry] of imageCache) {
+    if (entry.expiresAt <= Date.now()) deleteCachedImage(oldKey);
+  }
+  while (imageCacheBytes + copy.byteLength > IMAGE_CACHE_MAX_BYTES && imageCache.size) {
+    const oldest = imageCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    deleteCachedImage(oldest);
+  }
+  if (copy.byteLength <= IMAGE_CACHE_MAX_BYTES) {
+    imageCache.set(key, { bytes: copy, expiresAt: Date.now() + IMAGE_CACHE_TTL_MS });
+    imageCacheBytes += copy.byteLength;
+  }
+  return copy;
+}
+async function getTelegramImageCached(key: string, loader: () => Promise<Uint8Array>):
+ Promise<{ bytes: Uint8Array; cacheStatus: "HIT" | "COALESCED" | "MISS" }> {
+  const cached = getCachedImage(key);
+  if (cached) return { bytes: cached, cacheStatus: "HIT" };
+  const pending = imageInflight.get(key);
+  if (pending) return { bytes: await pending, cacheStatus: "COALESCED" };
+  const task = loader().then(bytes => storeCachedImage(key, bytes));
+  imageInflight.set(key, task);
+  try { return { bytes: await task, cacheStatus: "MISS" }; }
+  finally { if (imageInflight.get(key) === task) imageInflight.delete(key); }
+}
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
 function required(name: string) {
@@ -105,10 +154,11 @@ async function handler(request: Request) {
     if (request.method === "HEAD") return new Response(null, {
       status: 200, headers: { ...cors, "Content-Type": "image/jpeg", ...(Number(page.fileSize) > 0 ? { "Content-Length": String(page.fileSize) } : {}) },
     });
-    const bytes = await sendToTelegram(String(page.fileId), cover ? "capa" : "página");
-    return new Response(bytes, {
+    const cacheKey = `${itemId}|${cover ? "cover" : pageNumber}|${String(page.fileId)}`;
+    const cached = await getTelegramImageCached(cacheKey, () => sendToTelegram(String(page.fileId), cover ? "capa" : "página"));
+    return new Response(cached.bytes, {
       status: 200,
-      headers: { ...cors, "Content-Type": "image/jpeg", "Content-Length": String(bytes.byteLength) },
+      headers: { ...cors, "Content-Type": "image/jpeg", "Content-Length": String(cached.bytes.byteLength), "X-Reader-Cache": cached.cacheStatus },
     });
   } catch (error) {
     const status = error instanceof PageError ? error.status : 502;
