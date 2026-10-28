@@ -20,9 +20,8 @@ export function parseRange(value, size) {
   return { start, end: Math.min(end, size - 1) };
 }
 function json(body, status = 200, extra = {}) { return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8', ...extra } }); }
-export function createMediaHandler({ lookup, open, health = async () => ({ ok: true }), maxConcurrent = 8, chunkSize = 262144 }) {
+export function createMediaHandler({ lookup, open, health = async () => ({ ok: true }), chunkSize = 262144 }) {
   if (!Number.isSafeInteger(chunkSize) || chunkSize < 4096 || chunkSize > 1048576) throw new Error('Invalid chunk size');
-  let active = 0;
   return async function handle(request) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (request.method !== 'GET' && request.method !== 'HEAD') return json({ error: 'Método não permitido.' }, 405);
@@ -39,9 +38,8 @@ export function createMediaHandler({ lookup, open, health = async () => ({ ok: t
       const start = range ? range.start : 0; const end = range ? range.end : size - 1;
       const headers = { ...cors, 'Content-Type': formats[format], 'Content-Disposition': `inline; filename="edition.${format}"`, 'Content-Length': String(end - start + 1), 'Accept-Ranges': 'bytes', ...(range ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) };
       if (request.method === 'HEAD') return new Response(null, { status: range ? 206 : 200, headers });
-      if (active >= maxConcurrent) return json({ error: 'Serviço ocupado. Tente novamente.' }, 503, { 'Retry-After': '5' });
-      active++; let source, released = false;
-      const release = async () => { if (released) return; released = true; active--; try { await source?.close?.(); } catch {} };
+      let source, released = false;
+      const release = async () => { if (released) return; released = true; try { await source?.close?.(); } catch {} };
       try {
         source = await open(item, request.signal); let offset = start;
         let first = await source.read(offset, Math.min(chunkSize, end - offset + 1), request.signal);
