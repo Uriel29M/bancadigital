@@ -15,6 +15,217 @@ const configured = () => Boolean(
   Deno.env.get('TELEGRAM_BOT_TOKEN')
 );
 
+type ReaderSourceItem = { id: string; telegramUrl: string; size: number; format: string; fileId?: string };
+type ReaderChunkEntry = { bytes: Uint8Array; expiresAt: number };
+const READER_CHUNK_BYTES = 262144;
+const READER_CACHE_MAX_BYTES = 16 * 1024 * 1024;
+const READER_CACHE_TTL_MS = 45000;
+const DOCUMENT_CACHE_TTL_MS = 120000;
+const CATALOG_CACHE_TTL_MS = 5000;
+const BOT_PATH_CACHE_TTL_MS = 240000;
+const MAX_CONCURRENT_SOURCE_READS = 8;
+
+const readerChunkCache = new Map<string, ReaderChunkEntry>();
+const readerChunkInflight = new Map<string, Promise<Uint8Array>>();
+const telegramDocumentCache = new Map<string, { file: any; expiresAt: number }>();
+const telegramDocumentInflight = new Map<string, Promise<any>>();
+const catalogLookupCache = new Map<string, { item: ReaderSourceItem | null; expiresAt: number }>();
+const catalogLookupInflight = new Map<string, Promise<ReaderSourceItem | null>>();
+const botPathCache = new Map<string, { path: string; expiresAt: number }>();
+const botPathInflight = new Map<string, Promise<string | null>>();
+const sourceReadQueue: Array<() => void> = [];
+let readerCacheBytes = 0;
+let readerCacheHits = 0;
+let readerCacheMisses = 0;
+let readerCacheSharedWaits = 0;
+let activeSourceReads = 0;
+
+function sourceItemKey(item: ReaderSourceItem) {
+  return `${item.id}|${item.fileId || item.telegramUrl}|${item.size}|${item.format}`;
+}
+function deleteReaderChunk(key: string) {
+  const entry = readerChunkCache.get(key);
+  if (!entry) return;
+  readerCacheBytes = Math.max(0, readerCacheBytes - entry.bytes.byteLength);
+  readerChunkCache.delete(key);
+}
+function getReaderChunk(key: string): Uint8Array | null {
+  const entry = readerChunkCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    deleteReaderChunk(key);
+    return null;
+  }
+  readerChunkCache.delete(key);
+  readerChunkCache.set(key, entry);
+  readerCacheHits++;
+  return entry.bytes;
+}
+function storeReaderChunk(key: string, bytes: Uint8Array): Uint8Array {
+  deleteReaderChunk(key);
+  const copy = new Uint8Array(bytes);
+  for (const [oldKey, entry] of readerChunkCache) {
+    if (entry.expiresAt <= Date.now()) deleteReaderChunk(oldKey);
+  }
+  while (readerCacheBytes + copy.byteLength > READER_CACHE_MAX_BYTES && readerChunkCache.size) {
+    const oldestKey = readerChunkCache.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    deleteReaderChunk(oldestKey);
+  }
+  if (copy.byteLength <= READER_CACHE_MAX_BYTES) {
+    readerChunkCache.set(key, { bytes: copy, expiresAt: Date.now() + READER_CACHE_TTL_MS });
+    readerCacheBytes += copy.byteLength;
+  }
+  return copy;
+}
+async function acquireSourceReadSlot() {
+  if (activeSourceReads < MAX_CONCURRENT_SOURCE_READS && sourceReadQueue.length === 0) {
+    activeSourceReads++;
+    return;
+  }
+  await new Promise<void>(resolve => sourceReadQueue.push(resolve));
+}
+function releaseSourceReadSlot() {
+  const next = sourceReadQueue.shift();
+  if (next) next();
+  else activeSourceReads = Math.max(0, activeSourceReads - 1);
+}
+async function withSourceReadSlot<T>(task: () => Promise<T>): Promise<T> {
+  await acquireSourceReadSlot();
+  try {
+    return await task();
+  } finally {
+    releaseSourceReadSlot();
+  }
+}
+async function getSharedReaderChunk(
+  item: ReaderSourceItem,
+  chunkStart: number,
+  rawRead: (offset: number, limit: number, signal: AbortSignal) => Promise<Uint8Array>
+): Promise<Uint8Array> {
+  const length = Math.min(READER_CHUNK_BYTES, item.size - chunkStart);
+  const key = `${sourceItemKey(item)}|${chunkStart}`;
+  const cached = getReaderChunk(key);
+  if (cached) return cached;
+  const pending = readerChunkInflight.get(key);
+  if (pending) {
+    readerCacheSharedWaits++;
+    return await pending;
+  }
+  readerCacheMisses++;
+  const task = (async () => await withSourceReadSlot(async () => {
+    const afterQueue = getReaderChunk(key);
+    if (afterQueue) return afterQueue;
+    const bytes = await rawRead(chunkStart, length, AbortSignal.timeout(90000));
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) {
+      throw new MediaError("O Telegram não entregou um bloco completo.", 502, "telegram_chunk_cache_incomplete");
+    }
+    return storeReaderChunk(key, bytes);
+  }))();
+  readerChunkInflight.set(key, task);
+  try {
+    return await task;
+  } finally {
+    if (readerChunkInflight.get(key) === task) readerChunkInflight.delete(key);
+  }
+}
+async function readSharedRange(
+  item: ReaderSourceItem,
+  rawRead: (offset: number, limit: number, signal: AbortSignal) => Promise<Uint8Array>,
+  offset: number,
+  length: number,
+  signal: AbortSignal
+): Promise<Uint8Array> {
+  if (signal?.aborted) throw new DOMException("Leitura cancelada.", "AbortError");
+  if (length <= 0) return new Uint8Array();
+  const result = new Uint8Array(length);
+  let copied = 0;
+  let position = offset;
+  while (copied < length) {
+    if (signal?.aborted) throw new DOMException("Leitura cancelada.", "AbortError");
+    const chunkStart = Math.floor(position / READER_CHUNK_BYTES) * READER_CHUNK_BYTES;
+    const block = await getSharedReaderChunk(item, chunkStart, rawRead);
+    if (signal?.aborted) throw new DOMException("Leitura cancelada.", "AbortError");
+    const withinBlock = position - chunkStart;
+    const count = Math.min(length - copied, block.byteLength - withinBlock);
+    if (count < 1) throw new MediaError("Bloco em cache incompleto.", 502, "telegram_chunk_cache_incomplete");
+    result.set(block.subarray(withinBlock, withinBlock + count), copied);
+    copied += count;
+    position += count;
+  }
+  return result;
+}
+async function getTelegramDocument(
+  client: TelegramClient,
+  item: ReaderSourceItem,
+  allowed: Set<string>,
+  refresh = false
+) {
+  const key = sourceItemKey(item);
+  if (refresh) telegramDocumentCache.delete(key);
+  else {
+    const cached = telegramDocumentCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.file;
+    if (cached) telegramDocumentCache.delete(key);
+  }
+  const pending = telegramDocumentInflight.get(key);
+  if (pending) return await pending;
+  const task = resolveDocument(client, item, allowed, Long).then(file => {
+    telegramDocumentCache.delete(key);
+    telegramDocumentCache.set(key, { file, expiresAt: Date.now() + DOCUMENT_CACHE_TTL_MS });
+    while (telegramDocumentCache.size > 256) {
+      const oldest = telegramDocumentCache.keys().next().value;
+      if (typeof oldest !== "string") break;
+      telegramDocumentCache.delete(oldest);
+    }
+    return file;
+  });
+  telegramDocumentInflight.set(key, task);
+  try {
+    return await task;
+  } finally {
+    if (telegramDocumentInflight.get(key) === task) telegramDocumentInflight.delete(key);
+  }
+}
+async function getTelegramBotFilePath(token: string, fileId: string): Promise<string | null> {
+  const cached = botPathCache.get(fileId);
+  if (cached && cached.expiresAt > Date.now()) return cached.path;
+  if (cached) botPathCache.delete(fileId);
+  const pending = botPathInflight.get(fileId);
+  if (pending) return await pending;
+  const task = (async () => {
+    const response = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`, {
+      signal: AbortSignal.timeout(12000)
+    });
+    const meta = await response.json().catch(() => null);
+    if (response.ok && meta?.ok && typeof meta.result?.file_path === "string") {
+      const path = String(meta.result.file_path);
+      if (!/^[A-Za-z0-9_./-]+$/.test(path) || path.includes("..")) {
+        throw new MediaError("Caminho de arquivo inválido.", 502, "telegram_file_path_invalid");
+      }
+      botPathCache.set(fileId, { path, expiresAt: Date.now() + BOT_PATH_CACHE_TTL_MS });
+      while (botPathCache.size > 256) {
+        const oldest = botPathCache.keys().next().value;
+        if (typeof oldest !== "string") break;
+        botPathCache.delete(oldest);
+      }
+      return path;
+    }
+    console.warn("telegram_bot_get_file_unavailable", {
+      status: response.status, error_code: meta?.error_code ?? null,
+      description: String(meta?.description || "").slice(0, 180)
+    });
+    return null;
+  })();
+  botPathInflight.set(fileId, task);
+  try {
+    return await task;
+  } finally {
+    if (botPathInflight.get(fileId) === task) botPathInflight.delete(fileId);
+  }
+}
+
+
 class NativeTcpTransport {
   async connect(dc: any, signal: AbortSignal) {
     const conn = await connectTcp({ address: dc.ipAddress, port: dc.port }, signal);
@@ -269,7 +480,7 @@ async function query(path: string) {
   if (!response.ok) throw new MediaError('Não foi possível validar o catálogo.', 502, `catalog_http_${response.status}`);
   return await response.json();
 }
-async function lookup(itemId: string) {
+async function lookupUncached(itemId: string): Promise<ReaderSourceItem | null> {
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(itemId)) {
     throw new MediaError('Identificador de edição inválido.', 400, 'invalid_item_id');
   }
@@ -297,6 +508,32 @@ async function lookup(itemId: string) {
   return { id: itemId, telegramUrl, size, format, fileId };
 }
 
+async function lookup(itemId: string): Promise<ReaderSourceItem | null> {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(itemId)) {
+    throw new MediaError('Identificador de edição inválido.', 400, 'invalid_item_id');
+  }
+  const cached = catalogLookupCache.get(itemId);
+  if (cached && cached.expiresAt > Date.now()) return cached.item;
+  if (cached) catalogLookupCache.delete(itemId);
+  const pending = catalogLookupInflight.get(itemId);
+  if (pending) return await pending;
+  const task = lookupUncached(itemId).then(item => {
+    catalogLookupCache.set(itemId, { item, expiresAt: Date.now() + CATALOG_CACHE_TTL_MS });
+    while (catalogLookupCache.size > 512) {
+      const oldest = catalogLookupCache.keys().next().value;
+      if (typeof oldest !== "string") break;
+      catalogLookupCache.delete(oldest);
+    }
+    return item;
+  });
+  catalogLookupInflight.set(itemId, task);
+  try {
+    return await task;
+  } finally {
+    if (catalogLookupInflight.get(itemId) === task) catalogLookupInflight.delete(itemId);
+  }
+}
+
 const handle = createMediaHandler({
   lookup,
   health: async () => ({
@@ -305,20 +542,28 @@ const handle = createMediaHandler({
     configured: configured(),
     transport: 'native-tcp',
     documentLookup: 'channel-message',
-    chunkBytes: 262144
+    chunkBytes: READER_CHUNK_BYTES,
+    readerCache: {
+      entries: readerChunkCache.size,
+      bytes: readerCacheBytes,
+      maxBytes: READER_CACHE_MAX_BYTES,
+      ttlMs: READER_CACHE_TTL_MS,
+      hits: readerCacheHits,
+      misses: readerCacheMisses,
+      sharedWaits: readerCacheSharedWaits
+    },
+    activeSourceReads,
+    queuedSourceReads: sourceReadQueue.length,
+    cachedTelegramDocuments: telegramDocumentCache.size,
+    cachedCatalogEntries: catalogLookupCache.size
   }),
   open: async (item: { id: string; telegramUrl: string; size: number; format: string; fileId?: string }, signal: AbortSignal) => {
     // Use the already-resolved Bot API file id when Telegram's file endpoint
     // permits it. Fall back to MTProto for large files unsupported by Bot API.
     if (item.fileId && item.size <= 20 * 1024 * 1024) {
       const token = required('TELEGRAM_BOT_TOKEN');
-      const metaResponse = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(item.fileId)}`, {
-        signal: AbortSignal.timeout(12000)
-      });
-      const meta = await metaResponse.json().catch(() => null);
-      if (metaResponse.ok && meta?.ok && typeof meta.result?.file_path === 'string') {
-        const filePath = String(meta.result.file_path);
-        if (!/^[A-Za-z0-9_./-]+$/.test(filePath) || filePath.includes('..')) throw new MediaError('Caminho de arquivo inválido.', 502, 'telegram_file_path_invalid');
+      const filePath = await getTelegramBotFilePath(token, item.fileId);
+      if (filePath) {
         let wholePromise: Promise<Uint8Array> | null = null;
         const read = async (offset: number, limit: number, readSignal: AbortSignal) => {
           const end = Math.min(item.size - 1, offset + limit - 1);
@@ -340,12 +585,12 @@ const handle = createMediaHandler({
           return (await wholePromise).slice(offset, end + 1);
         };
         if (signal?.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
-        return { read, close: async () => {} };
+        return {
+          read: (offset: number, limit: number, readSignal: AbortSignal) =>
+            readSharedRange(item, read, offset, limit, readSignal),
+          close: async () => {}
+        };
       }
-      console.warn('telegram_bot_get_file_unavailable', {
-        status: metaResponse.status, error_code: meta?.error_code ?? null,
-        description: String(meta?.description || '').slice(0, 180)
-      });
     }
     const client = await telegramClient();
     const allowed = new Set(
@@ -355,7 +600,7 @@ const handle = createMediaHandler({
 
     // O file_id da Bot API NÃO é uma FileLocation de MTProto. Resolve a
     // mensagem original para obter document.id, accessHash, fileReference e dcId.
-    let file = await resolveDocument(client, item, allowed, Long);
+    let file = await getTelegramDocument(client, item, allowed);
     let dcId = file.dcId;
 
     const read = async (offset: number, limit: number, readSignal: AbortSignal) => {
@@ -379,7 +624,7 @@ const handle = createMediaHandler({
           return await readAligned(download, offset, limit, item.size, readSignal);
         }
         if (isExpiredReference(error)) {
-          file = await resolveDocument(client, item, allowed, Long);
+          file = await getTelegramDocument(client, item, allowed, true);
           dcId = file.dcId;
           return await readAligned(download, offset, limit, item.size, readSignal);
         }
@@ -388,7 +633,11 @@ const handle = createMediaHandler({
     };
 
     if (signal?.aborted) throw new DOMException('Leitura cancelada.', 'AbortError');
-    return { read, close: async () => {} };
+    return {
+      read: (offset: number, limit: number, readSignal: AbortSignal) =>
+        readSharedRange(item, read, offset, limit, readSignal),
+      close: async () => {}
+    };
   },
 });
 Deno.serve(handle);
